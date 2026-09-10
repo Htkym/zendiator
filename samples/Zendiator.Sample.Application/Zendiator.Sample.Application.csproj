@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Description>Sample handlers depending only on Zendiator.Abstractions.</Description>
+    <!-- ProjectReference consumers do not receive NuGet props; NuGet consumers get this from the package. -->
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Zendiator.Generated.Interceptors</InterceptorsNamespaces>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Zendiator.Sample.Contracts\Zendiator.Sample.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Zendiator.Abstractions\Zendiator.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Zendiator\Zendiator.csproj" />
+    <ProjectReference Include="..\..\src\Zendiator.SourceGenerator\Zendiator.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Description>Sample contracts depending only on Zendiator.Abstractions.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Zendiator.Abstractions\Zendiator.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Description>Compile-time typed mediator with source-generated dispatch, pipelines, and Native AOT support for .NET 10.</Description>
+    <PackageIcon>icon.png</PackageIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Zendiator.Abstractions/Zendiator.Abstractions.csproj" />
+    <ProjectReference Include="../Zendiator.SourceGenerator/Zendiator.SourceGenerator.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="../../docs/icon/icon.png" Pack="true" PackagePath="/" />
+    <None Include="../Zendiator.SourceGenerator/bin/$(Configuration)/netstandard2.0/Zendiator.SourceGenerator.dll" Pack="true" PackagePath="analyzers/dotnet/cs" />
+    <None Include="buildTransitive/Zendiator.props" Pack="true" PackagePath="buildTransitive/" />
+  </ItemGroup>
+</Project>

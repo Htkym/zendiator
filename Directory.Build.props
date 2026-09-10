@@ -1,0 +1,27 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+    <Version>0.1.0</Version>
+    <Authors>tkym</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/Htkym/zendiator</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/Htkym/zendiator</PackageProjectUrl>
+    <PackageTags>mediator;source-generator;CQRS;AOT</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>Zendiator 0.1.0: typed and native-void requests, generic dispatch, sequential notifications, multi dispatch, sync/ref-struct requests, streams, DI-first configuration and Native AOT support. Standard DI lifetime and disposal semantics. See repository release notes and known limitations.</PackageReleaseNotes>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <DebugType>portable</DebugType>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <EnablePackageValidation Condition="'$(PackageValidationBaselineVersion)' != ''">true</EnablePackageValidation>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.111" PrivateAssets="All" />
+  </ItemGroup>
+</Project>

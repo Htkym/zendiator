@@ -1,0 +1,5 @@
+<Project>
+  <!-- Layer over the repo root policy (MSBuild imports only the nearest
+       Directory.Build.props, so re-import the parent explicitly). -->
+  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildProjectDirectory)/../../, 'Directory.Build.props'))/Directory.Build.props" />
+</Project>

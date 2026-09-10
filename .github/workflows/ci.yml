@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Zendiator.slnx
+
+      - name: Build
+        run: dotnet build Zendiator.slnx -c Release --no-restore
+
+      - name: Test
+        run: dotnet test Zendiator.slnx -c Release --no-build
+
+      - name: Format check
+        shell: pwsh
+        run: |
+          foreach ($p in @(
+            "src/Zendiator.Abstractions/Zendiator.Abstractions.csproj",
+            "src/Zendiator/Zendiator.csproj",
+            "src/Zendiator.SourceGenerator/Zendiator.SourceGenerator.csproj",
+            "tests/Zendiator.Tests/Zendiator.Tests.csproj",
+            "tests/Zendiator.AssemblyGen.Tests/Zendiator.AssemblyGen.Tests.csproj",
+            "tests/Zendiator.Configuration.Tests/Zendiator.Configuration.Tests.csproj",
+            "tests/Zendiator.DiConfiguration.Tests/Zendiator.DiConfiguration.Tests.csproj",
+            "tests/Zendiator.Generator.Tests/Zendiator.Generator.Tests.csproj",
+            "tests/Zendiator.Allocation.Tests/Zendiator.Allocation.Tests.csproj",
+            "tests/Zendiator.Benchmark.Tests/Zendiator.Benchmark.Tests.csproj",
+            "tests/Zendiator.CachePolicy.Tests/Zendiator.CachePolicy.Tests.csproj",
+            "tests/Zendiator.RScale.Tests/Zendiator.RScale.Tests.csproj",
+            "tests/Zendiator.PipeDepth.Tests/Zendiator.PipeDepth.Tests.csproj",
+            "samples/Zendiator.Sample.Contracts/Zendiator.Sample.Contracts.csproj",
+            "samples/Zendiator.Sample.Application/Zendiator.Sample.Application.csproj",
+            "samples/Zendiator.Sample.Host/Zendiator.Sample.Host.csproj",
+            "benchmarks/Zendiator.Benchmarks/Zendiator.Benchmarks.csproj",
+            "benchmarks/Zendiator.FeatureBench/Zendiator.FeatureBench.csproj",
+            "benchmarks/Zendiator.DiBench/Zendiator.DiBench.csproj",
+            "benchmarks/Zendiator.RScale.R1/Zendiator.RScale.R1.csproj",
+            "benchmarks/Zendiator.RScale.R32/Zendiator.RScale.R32.csproj",
+            "benchmarks/Zendiator.RScale.R128/Zendiator.RScale.R128.csproj",
+            "benchmarks/Zendiator.PipeDepth/Zendiator.PipeDepth.csproj",
+            "benchmarks/Zendiator.DSoftObs/Zendiator.DSoftObs.csproj")) {
+            dotnet format $p --verify-no-changes --no-restore
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Pack
+        run: |
+          dotnet pack src/Zendiator.Abstractions/Zendiator.Abstractions.csproj -c Release --no-build -o artifacts/packages
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet pack src/Zendiator/Zendiator.csproj -c Release --no-build -o artifacts/packages
+
+      - name: Verify package contents
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
+          $tmp = Join-Path $env:RUNNER_TEMP "pkg-inspect"
+          Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+          Expand-Archive "artifacts/packages/Zendiator.$version.nupkg" "$tmp/main" -Force
+          $analyzer = "$tmp/main/analyzers/dotnet/cs/Zendiator.SourceGenerator.dll"
+          if (-not (Test-Path $analyzer)) { throw "generator analyzer missing from package" }
+          $nuspec = Get-Content "$tmp/main/Zendiator.nuspec" -Raw
+          foreach ($banned in @("MessagePipe", "CodeAnalysis")) {
+            if ($nuspec -match $banned) { throw "banned dependency in nuspec: $banned" }
+          }
+          if ($nuspec -notmatch 'dependency id="Zendiator.Abstractions"') { throw "Abstractions dependency missing" }
+
+      - name: Run sample
+        run: dotnet run --project samples/Zendiator.Sample.Host -c Release --no-build
+
+      - name: Package smoke test (isolated feed, no ProjectReference)
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
+          ./scripts/package-smoke-test.ps1 -PackageVersion $version -PackagesDir artifacts/packages
+          ./scripts/di-package-smoke-test.ps1 -PackageVersion $version -PackagesDir artifacts/packages
+
+      # Native AOT against the packed packages (the supported AOT path).
+      # The in-repo sample uses ProjectReference for the dev loop and is not AOT-published.
+      - name: Native AOT publish and run (package-based sample)
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
+          ./scripts/aot-matrix-test.ps1 -PackageVersion $version -PackagesDir artifacts/packages

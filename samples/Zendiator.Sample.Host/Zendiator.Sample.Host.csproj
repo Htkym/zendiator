@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsAotCompatible>true</IsAotCompatible>
+    <Nullable>enable</Nullable>
+    <Description>Executable multi-assembly sample for Zendiator.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Zendiator.Sample.Contracts\Zendiator.Sample.Contracts.csproj" />
+    <ProjectReference Include="..\Zendiator.Sample.Application\Zendiator.Sample.Application.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
+  </ItemGroup>
+</Project>

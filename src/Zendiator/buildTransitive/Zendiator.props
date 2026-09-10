@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <!--
+    Appends (never overwrites) the interceptor namespace used by Zendiator DI
+    registration shims. Other libraries' InterceptorsNamespaces entries are kept.
+    Consumers need no hand-written MSBuild XML for this to work.
+  -->
+  <PropertyGroup>
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Zendiator.Generated.Interceptors</InterceptorsNamespaces>
+  </PropertyGroup>
+</Project>

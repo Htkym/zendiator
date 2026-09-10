@@ -1,0 +1,34 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Zendiator.Abstractions/Zendiator.Abstractions.csproj" />
+    <Project Path="src/Zendiator/Zendiator.csproj" />
+    <Project Path="src/Zendiator.SourceGenerator/Zendiator.SourceGenerator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Zendiator.Tests/Zendiator.Tests.csproj" />
+    <Project Path="tests/Zendiator.AssemblyGen.Tests/Zendiator.AssemblyGen.Tests.csproj" />
+    <Project Path="tests/Zendiator.Configuration.Tests/Zendiator.Configuration.Tests.csproj" />
+    <Project Path="tests/Zendiator.DiConfiguration.Tests/Zendiator.DiConfiguration.Tests.csproj" />
+    <Project Path="tests/Zendiator.Generator.Tests/Zendiator.Generator.Tests.csproj" />
+    <Project Path="tests/Zendiator.Allocation.Tests/Zendiator.Allocation.Tests.csproj" />
+    <Project Path="tests/Zendiator.Benchmark.Tests/Zendiator.Benchmark.Tests.csproj" />
+    <Project Path="tests/Zendiator.CachePolicy.Tests/Zendiator.CachePolicy.Tests.csproj" />
+    <Project Path="tests/Zendiator.RScale.Tests/Zendiator.RScale.Tests.csproj" />
+    <Project Path="tests/Zendiator.PipeDepth.Tests/Zendiator.PipeDepth.Tests.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Zendiator.Sample.Contracts/Zendiator.Sample.Contracts.csproj" />
+    <Project Path="samples/Zendiator.Sample.Application/Zendiator.Sample.Application.csproj" />
+    <Project Path="samples/Zendiator.Sample.Host/Zendiator.Sample.Host.csproj" />
+  </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Zendiator.Benchmarks/Zendiator.Benchmarks.csproj" />
+    <Project Path="benchmarks/Zendiator.FeatureBench/Zendiator.FeatureBench.csproj" />
+    <Project Path="benchmarks/Zendiator.DiBench/Zendiator.DiBench.csproj" />
+    <Project Path="benchmarks/Zendiator.RScale.R1/Zendiator.RScale.R1.csproj" />
+    <Project Path="benchmarks/Zendiator.RScale.R32/Zendiator.RScale.R32.csproj" />
+    <Project Path="benchmarks/Zendiator.RScale.R128/Zendiator.RScale.R128.csproj" />
+    <Project Path="benchmarks/Zendiator.PipeDepth/Zendiator.PipeDepth.csproj" />
+    <Project Path="benchmarks/Zendiator.DSoftObs/Zendiator.DSoftObs.csproj" />
+  </Folder>
+</Solution>

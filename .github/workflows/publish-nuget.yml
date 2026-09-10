@@ -1,0 +1,256 @@
+# Release (tag-triggered): builds, tests and packs the tagged commit, then publishes
+# the already-verified artifacts to NuGet.org. No rebuild happens before push.
+# Push a tag like v0.1.0 to run this workflow.
+#
+# External preparation (once, outside this workflow):
+# - Confirm ownership of the `Zendiator` and `Zendiator.Abstractions` package IDs.
+# - On nuget.org, add a Trusted Publishing policy for this repo:
+#   Repository Owner: Htkym, Repository: zendiator, Workflow File: publish-nuget.yml
+#   (this file name only; the policy compares the file name, not the full path).
+# - No long-lived API key is stored; NuGet/login exchanges the job OIDC token
+#   for a short-lived key valid for about 1 hour. Keep login close to push.
+# See https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  RELEASE_TAG: ${{ github.ref_name }}
+
+jobs:
+  build-and-pack:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    outputs:
+      source-commit: ${{ steps.source.outputs.commit }}
+    steps:
+      - name: Validate tag format
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -notmatch "^v\d+\.\d+\.\d+(-[0-9A-Za-z.\-]+)?$") {
+            throw "tag must look like v<version>, e.g. v0.1.0-preview.1"
+          }
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Version matches tag
+        id: source
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
+          if ("v$version" -ne $env:RELEASE_TAG) {
+            throw "Directory.Build.props Version ($version) does not match tag ($env:RELEASE_TAG)"
+          }
+          "commit=$(git rev-parse HEAD)" >> $env:GITHUB_OUTPUT
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Zendiator.slnx
+
+      - name: Build
+        run: dotnet build Zendiator.slnx -c Release --no-restore
+
+      - name: Test
+        run: dotnet test Zendiator.slnx -c Release --no-build
+
+      - name: Pack
+        run: |
+          dotnet pack src/Zendiator.Abstractions/Zendiator.Abstractions.csproj -c Release --no-build -o artifacts/packages
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet pack src/Zendiator/Zendiator.csproj -c Release --no-build -o artifacts/packages
+
+      - name: Verify package contents and freeze checksums
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
+          $files = foreach ($id in @('Zendiator.Abstractions', 'Zendiator')) {
+            foreach ($extension in @('nupkg', 'snupkg')) {
+              $file = Get-Item "artifacts/packages/$id.$version.$extension"
+              $archive = [IO.Compression.ZipFile]::OpenRead($file.FullName)
+              try {
+                $entries = @($archive.Entries.FullName)
+                foreach ($required in @("$id.nuspec", '[Content_Types].xml', '_rels/.rels')) {
+                  if ($entries -notcontains $required) { throw "Missing $required in $file" }
+                }
+                if ($extension -eq 'nupkg') {
+                  foreach ($required in @('README.md', "lib/net10.0/$id.dll", "lib/net10.0/$id.xml")) {
+                    if ($entries -notcontains $required) { throw "Missing $required in $file" }
+                  }
+                  if ($id -eq 'Zendiator') {
+                    foreach ($required in @('analyzers/dotnet/cs/Zendiator.SourceGenerator.dll', 'buildTransitive/Zendiator.props')) {
+                      if ($entries -notcontains $required) { throw "Missing $required in $file" }
+                    }
+                  }
+                }
+                if ($entries -match '(?i)(Microsoft.CodeAnalysis|MessagePipe|(^|/)(tests|benchmarks|\.local|temp)/)') {
+                  throw "Unexpected package asset in $file"
+                }
+                $allowedEntries = @("$id.nuspec", '[Content_Types].xml', '_rels/.rels', 'package/services/metadata/core-properties/nuget.psmdcp')
+                if ($extension -eq 'nupkg') {
+                  $allowedEntries += @('README.md', 'icon.png', "lib/net10.0/$id.dll", "lib/net10.0/$id.xml")
+                  if ($id -eq 'Zendiator') { $allowedEntries += @('analyzers/dotnet/cs/Zendiator.SourceGenerator.dll', 'buildTransitive/Zendiator.props') }
+                } else { $allowedEntries += "lib/net10.0/$id.pdb" }
+                $normalizedEntries = $entries | ForEach-Object {
+                  if ($_ -match '^package/services/metadata/core-properties/(?:[0-9a-f]{32}|nuget)\.psmdcp$') { 'package/services/metadata/core-properties/nuget.psmdcp' } else { $_ }
+                }
+                if (Compare-Object ($normalizedEntries | Sort-Object) ($allowedEntries | Sort-Object)) { throw "Unexpected package entry set in $file" }
+                if ($extension -eq 'snupkg') {
+                  $pdbStream = [IO.MemoryStream]::new()
+                  try {
+                    $entryStream = $archive.GetEntry("lib/net10.0/$id.pdb").Open()
+                    try { $entryStream.CopyTo($pdbStream) } finally { $entryStream.Dispose() }
+                    $pdbStream.Position = 0
+                    $pdb = [Reflection.Metadata.MetadataReaderProvider]::FromPortablePdbStream($pdbStream, [Reflection.Metadata.MetadataStreamOptions]::LeaveOpen, 0)
+                    try {
+                      $pdbReader = $pdb.GetMetadataReader([Reflection.Metadata.MetadataReaderOptions]::Default, $null)
+                      foreach ($document in $pdbReader.Documents) {
+                        $documentName = $pdbReader.GetString($pdbReader.GetDocument($document).Name)
+                        if ($documentName -match '^(?:[A-Za-z]:[\\/]|\\\\|/home/|/Users/)') { throw "Machine-local symbol path in $file" }
+                      }
+                    } finally { $pdb.Dispose() }
+                  } finally { $pdbStream.Dispose() }
+                }
+                $reader = [IO.StreamReader]::new($archive.GetEntry("$id.nuspec").Open())
+                try { $metadata = ([xml]$reader.ReadToEnd()).package.metadata } finally { $reader.Dispose() }
+                if ($metadata.version -ne $version -or $metadata.repository.commit -ne '${{ steps.source.outputs.commit }}') {
+                  throw "Package version/source mismatch in $file"
+                }
+                if ($extension -eq 'nupkg' -and $metadata.icon -ne 'icon.png') {
+                  throw "Missing package icon metadata in $file"
+                }
+                $dependencies = @($metadata.dependencies.group.dependency | Where-Object { $_ })
+                $allowed = if ($id -eq 'Zendiator') { @('Zendiator.Abstractions', 'Microsoft.Extensions.DependencyInjection.Abstractions') } else { @() }
+                if (@($dependencies).Count -ne $allowed.Count -or @($dependencies | Where-Object { $_.id -notin $allowed }).Count) {
+                  throw "Unexpected package dependencies in $file"
+                }
+                foreach ($dependency in $dependencies) {
+                  $expectedVersion = if ($dependency.id -eq 'Zendiator.Abstractions') { $version } else { '10.0.0' }
+                  if ($dependency.version -ne $expectedVersion) { throw "Unexpected dependency version in $file" }
+                }
+              } finally { $archive.Dispose() }
+              [ordered]@{ Name = $file.Name; Size = $file.Length; SHA256 = (Get-FileHash $file.FullName -Algorithm SHA256).Hash; Dependencies = @($dependencies | ForEach-Object { [ordered]@{ Id = $_.id; Version = $_.version } }) }
+            }
+          }
+          $sources = foreach ($path in @('src/Zendiator.SourceGenerator/ZendiatorGenerator.cs', 'src/Zendiator/Configuration.cs', 'src/Zendiator.Abstractions/Contracts.cs')) {
+            [ordered]@{ Path = $path; SHA256 = (Get-FileHash $path -Algorithm SHA256).Hash }
+          }
+          [ordered]@{ Version = $version; SourceCommit = '${{ steps.source.outputs.commit }}'; Sources = @($sources); Build = [ordered]@{ Job = $env:GITHUB_JOB; Run = $env:GITHUB_RUN_ID; Attempt = $env:GITHUB_RUN_ATTEMPT }; Verification = 'Pending'; Files = @($files) } |
+            ConvertTo-Json -Depth 6 | Set-Content artifacts/packages/manifest.json
+
+      - name: Verify the frozen packages with consumers and Native AOT
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
+          ./scripts/package-smoke-test.ps1 -PackageVersion $version -PackagesDir artifacts/packages
+          ./scripts/di-package-smoke-test.ps1 -PackageVersion $version -PackagesDir artifacts/packages
+          ./scripts/aot-matrix-test.ps1 -PackageVersion $version -PackagesDir artifacts/packages
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $manifest = Get-Content artifacts/packages/manifest.json -Raw | ConvertFrom-Json
+          $manifest.Verification = [ordered]@{ Consumer = 'Passed'; DI = 'Passed'; AOT = 'AOT01-AOT12 win-x64 passed; open-generic value-type closure LIMIT' }
+          $manifest | ConvertTo-Json -Depth 6 | Set-Content artifacts/packages/manifest.json
+
+      - name: Upload verified artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: |
+            artifacts/packages/*.nupkg
+            artifacts/packages/*.snupkg
+            artifacts/packages/manifest.json
+          if-no-files-found: error
+
+  publish:
+    runs-on: windows-latest
+    needs: build-and-pack
+    permissions:
+      contents: read
+      id-token: write # Required for the GitHub OIDC token used by NuGet/login.
+    steps:
+      - name: Download verified artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-packages
+          path: artifacts/packages
+
+      - name: Match downloaded packages to the verified manifest
+        shell: pwsh
+        run: |
+          $manifest = Get-Content artifacts/packages/manifest.json -Raw | ConvertFrom-Json
+          if ("v$($manifest.Version)" -ne $env:RELEASE_TAG -or $manifest.SourceCommit -ne '${{ needs.build-and-pack.outputs.source-commit }}') {
+            throw 'Manifest version/source mismatch'
+          }
+          if ($manifest.Verification.Consumer -ne 'Passed' -or $manifest.Verification.DI -ne 'Passed' -or $manifest.Verification.AOT -notlike 'AOT01-AOT12 win-x64 passed;*') {
+            throw 'Manifest consumer verification missing'
+          }
+          $expected = foreach ($id in @('Zendiator.Abstractions', 'Zendiator')) {
+            foreach ($extension in @('nupkg', 'snupkg')) { "$id.$($manifest.Version).$extension" }
+          }
+          if ($manifest.Files.Count -ne 4 -or (Compare-Object ($manifest.Files.Name | Sort-Object) ($expected | Sort-Object))) {
+            throw 'Manifest package set mismatch'
+          }
+          foreach ($entry in $manifest.Files) {
+            $file = Get-Item "artifacts/packages/$($entry.Name)"
+            if ($file.Length -ne $entry.Size -or (Get-FileHash $file.FullName -Algorithm SHA256).Hash -ne $entry.SHA256) {
+              throw "Package checksum mismatch: $($entry.Name)"
+            }
+          }
+
+      # Short-lived key; request it immediately before push (valid ~1 hour,
+      # one token yields one key). `user` is the nuget.org profile name.
+      - name: NuGet login (OIDC)
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push packages with symbols
+        shell: pwsh
+        run: |
+          # Pushing a .nupkg also pushes the adjacent .snupkg to the symbol server.
+          $version = $env:RELEASE_TAG.TrimStart('v')
+          dotnet nuget push "artifacts/packages/Zendiator.Abstractions.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet nuget push "artifacts/packages/Zendiator.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+
+  verify-public-restore:
+    runs-on: windows-latest
+    needs: publish
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore minimal sample from NuGet.org with a fresh cache
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
+          # Empty local feed: restore must fetch Zendiator from NuGet.org.
+          # Indexing can lag after push, so retry for a while.
+          $emptyFeed = Join-Path $env:RUNNER_TEMP "empty-feed"
+          New-Item -ItemType Directory -Path $emptyFeed -Force | Out-Null
+          $deadline = (Get-Date).AddMinutes(30)
+          while ($true) {
+            try {
+              ./scripts/package-smoke-test.ps1 -PackageVersion $version -PackagesDir $emptyFeed
+              break
+            } catch {
+              if ((Get-Date) -gt $deadline) { throw }
+              Write-Host "Retrying after publish indexing lag: $($_.Exception.Message)"
+              Start-Sleep -Seconds 120
+            }
+          }
