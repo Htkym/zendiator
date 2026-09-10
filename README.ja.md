@@ -9,7 +9,7 @@ Roslyn Incremental Source Generator がリクエストごとの `SendAsync` オ�
 
 - 対象: .NET 10（C# 14、nullable 有効）
 - 配布: `Zendiator.Abstractions` と `Zendiator` の 2 パッケージ（同バージョン管理）
-- 初版: `0.1.0`
+- 現行版: [0.1.1](docs/release/0.1.1-release-notes.md)
 - リポジトリ: https://github.com/Htkym/zendiator
 - ライセンス: MIT
 
@@ -17,8 +17,8 @@ Roslyn Incremental Source Generator がリクエストごとの `SendAsync` オ�
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="Zendiator.Abstractions" Version="0.1.0" />
-  <PackageReference Include="Zendiator" Version="0.1.0" />
+  <PackageReference Include="Zendiator.Abstractions" Version="0.1.1" />
+  <PackageReference Include="Zendiator" Version="0.1.1" />
 </ItemGroup>
 ```
 
@@ -280,7 +280,7 @@ dotnet run --project samples/Zendiator.Sample.Host -c Release
 利用側コンパイルごとの生成コード（`IZendiator`、`Zendiator`、属性方式の登録拡張
 または DI 方式の registrar＋interceptor）は製品の一部として扱います。
 安定版の公開後は直前の安定版を基準にパッケージ互換性を検証します。
-`0.1.0` は `0.x` の公開であり、API を永久に固定するものではなく、`1.0.0` の前に変更される場合があります。
+`0.1.1` は `0.x` の公開であり、API を永久に固定するものではなく、`1.0.0` の前に変更される場合があります。
 契約・ハンドラー・管路・属性の一覧は、上記の Public API 節のとおりです。
 
 ## 性能

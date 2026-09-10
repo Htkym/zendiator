@@ -774,6 +774,26 @@ public sealed class GeneratorTests
     }
 
     [Fact]
+    public void Changed_requests_do_not_reuse_previous_analysis_state()
+    {
+        var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(Head + Request + Handler), out _, out var diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Contains("global::App.Ping request", driver.GetRunResult().GeneratedTrees.Single().ToString());
+
+        var changedRequest = Request.Replace("Ping", "Changed");
+        driver = driver.RunGeneratorsAndUpdateCompilation(Compilation(Head + changedRequest), out _, out diagnostics);
+        Assert.Contains(diagnostics, d => d.Id == "ZEN0001");
+        Assert.Empty(driver.GetRunResult().GeneratedTrees);
+
+        driver = driver.RunGeneratorsAndUpdateCompilation(Compilation(Head + changedRequest + Handler.Replace("Ping", "Changed")), out var output, out diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        var source = driver.GetRunResult().GeneratedTrees.Single().ToString();
+        Assert.Contains("global::App.Changed request", source);
+        Assert.DoesNotContain("global::App.Ping", source);
+    }
+
+    [Fact]
     public void Unrelated_edits_reuse_source_output()
     {
         var compilation = Compilation(Head + Request + Handler);

@@ -1,0 +1,19 @@
+using Microsoft.Extensions.DependencyInjection;
+using Zendiator;
+
+namespace Zendiator.CachePolicy.Tests;
+
+public sealed class AddHandler : IRequestHandler<AddReq, int>
+{
+    public static int FactoryCalls;
+    public static int Constructions;
+    public int Seen;
+
+    public AddHandler() => Interlocked.Increment(ref Constructions);
+
+    public ValueTask<int> HandleAsync(AddReq request, CancellationToken cancellationToken)
+    {
+        Seen = request.Value;
+        return new(request.Value);
+    }
+}

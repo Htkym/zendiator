@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <IsPackable>false</IsPackable>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Authors>tkym</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/Htkym/zendiator</RepositoryUrl>
@@ -13,7 +13,7 @@
     <PackageProjectUrl>https://github.com/Htkym/zendiator</PackageProjectUrl>
     <PackageTags>mediator;source-generator;CQRS;AOT</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Zendiator 0.1.0: typed and native-void requests, generic dispatch, sequential notifications, multi dispatch, sync/ref-struct requests, streams, DI-first configuration and Native AOT support. Standard DI lifetime and disposal semantics. See repository release notes and known limitations.</PackageReleaseNotes>
+    <PackageReleaseNotes>Zendiator 0.1.1: organize source files by type and split source generation by responsibility. Public APIs and generated consumer code are unchanged. Add regression coverage for analysis-state isolation and include all product sources in the release manifest. Existing limitations remain unchanged.</PackageReleaseNotes>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>

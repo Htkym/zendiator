@@ -9,7 +9,7 @@ reflection calls, or `dynamic`.
 
 - Targets: .NET 10 (C# 14, nullable enabled)
 - Distribution: 2 packages, `Zendiator.Abstractions` and `Zendiator` (versioned together)
-- First release: `0.1.0`
+- Current release: [0.1.1](docs/release/0.1.1-release-notes.md)
 - Repository: https://github.com/Htkym/zendiator
 - License: MIT
 
@@ -17,8 +17,8 @@ reflection calls, or `dynamic`.
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="Zendiator.Abstractions" Version="0.1.0" />
-  <PackageReference Include="Zendiator" Version="0.1.0" />
+  <PackageReference Include="Zendiator.Abstractions" Version="0.1.1" />
+  <PackageReference Include="Zendiator" Version="0.1.1" />
 </ItemGroup>
 ```
 
@@ -286,7 +286,7 @@ Generated code per consumer compilation (`IZendiator`, `Zendiator`, and either
 `ZendiatorServiceCollectionExtensions.AddZendiator` or the DI registrar plus
 interceptors) is treated as part of the product.
 After a stable release, package compatibility is verified against the previous stable release.
-`0.1.0` is a `0.x` release: its API is not frozen permanently and may change before `1.0.0`.
+`0.1.1` is a `0.x` release: its API is not frozen permanently and may change before `1.0.0`.
 The full list of contracts, handlers, pipelines, and attributes is in the Public API section above.
 
 ## Performance

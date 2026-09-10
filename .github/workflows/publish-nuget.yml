@@ -141,7 +141,9 @@ jobs:
               [ordered]@{ Name = $file.Name; Size = $file.Length; SHA256 = (Get-FileHash $file.FullName -Algorithm SHA256).Hash; Dependencies = @($dependencies | ForEach-Object { [ordered]@{ Id = $_.id; Version = $_.version } }) }
             }
           }
-          $sources = foreach ($path in @('src/Zendiator.SourceGenerator/ZendiatorGenerator.cs', 'src/Zendiator/Configuration.cs', 'src/Zendiator.Abstractions/Contracts.cs')) {
+          $sourcePaths = git ls-files -- 'src/**/*.cs'
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to enumerate package sources.' }
+          $sources = foreach ($path in ($sourcePaths | Sort-Object)) {
             [ordered]@{ Path = $path; SHA256 = (Get-FileHash $path -Algorithm SHA256).Hash }
           }
           [ordered]@{ Version = $version; SourceCommit = '${{ steps.source.outputs.commit }}'; Sources = @($sources); Build = [ordered]@{ Job = $env:GITHUB_JOB; Run = $env:GITHUB_RUN_ID; Attempt = $env:GITHUB_RUN_ATTEMPT }; Verification = 'Pending'; Files = @($files) } |

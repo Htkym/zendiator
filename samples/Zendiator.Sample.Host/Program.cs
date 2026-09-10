@@ -58,9 +58,3 @@ return 0;
 
 static ValueTask<int> LoadCount<TMarker>(IZendiator sender, CancellationToken cancellationToken) =>
     sender.SendAsync(new GetHouseholdCount<TMarker>(), cancellationToken);
-
-namespace Zendiator.Sample.Host
-{
-    /// <summary>Marker proving the generic caller lives in another assembly.</summary>
-    public sealed class HostMarker;
-}

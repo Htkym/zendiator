@@ -1,6 +1,6 @@
-# Known limitations (0.1.0)
+# Known limitations (0.1.1)
 
-0.1.0 の現行制限。性能値は `0.1.0-release-notes.md` に記載の正式測定だけを根拠にする。
+0.1.1 の現行制限。0.1.0 から制限の変更はない。性能値は `0.1.0-release-notes.md` に記載の正式測定だけを根拠にする。
 RC1／Hardening-1 の旧数値は現行値として使用しない。
 
 ## Async Stream allocation — KL-01 / OPT-stream-async
@@ -46,6 +46,6 @@ have different costs and are reported separately. No fastest or general allocati
 ## Publication boundary
 
 Local package/AOT/manifest checks do not establish GitHub-hosted workflow execution, OIDC or NuGet ownership.
-The final publication must use the verified CI artifact from the final tag commit (`v0.1.0`).
-`0.1.0` is a `0.x` release: its API is not frozen permanently and may change before `1.0.0`.
+The final publication must use the verified CI artifact from the final tag commit (`v0.1.1`).
+`0.1.1` is a `0.x` release: its API is not frozen permanently and may change before `1.0.0`.
 Preview-to-preview binary compatibility is not guaranteed.
