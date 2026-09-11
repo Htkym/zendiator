@@ -61,14 +61,20 @@ internal static partial class SourceEmitter
             b.AppendLine("            _enumToken = enumToken;");
             b.AppendLine("        }");
             b.Append("        public ").Append(item).AppendLine(" Current => _inner != null ? _inner.Current : default!;");
-            b.AppendLine("        public async global::System.Threading.Tasks.ValueTask<bool> MoveNextAsync()");
+            // Steady-state MoveNext is a synchronous passthrough: awaiting the inner
+            // enumerator here would allocate an async state machine per item.
+            // Only the first call (pipeline startup) uses an async method, once per enumeration.
+            b.AppendLine("        public global::System.Threading.Tasks.ValueTask<bool> MoveNextAsync()");
             b.AppendLine("        {");
-            b.AppendLine("            if (_done) return false;");
-            b.AppendLine("            if (!_started)");
-            b.AppendLine("            {");
-            b.AppendLine("                _started = true;");
+            b.AppendLine("            if (_done) return new global::System.Threading.Tasks.ValueTask<bool>(false);");
+            b.AppendLine("            if (!_started) return StartAndMoveNextAsync();");
+            b.AppendLine("            return _inner!.MoveNextAsync();");
+            b.AppendLine("        }");
+            b.AppendLine("        private async global::System.Threading.Tasks.ValueTask<bool> StartAndMoveNextAsync()");
+            b.AppendLine("        {");
+            b.AppendLine("            _started = true;");
             if (route.Request.IsReferenceType)
-                b.AppendLine("                global::System.ArgumentNullException.ThrowIfNull(_request);");
+                b.AppendLine("            global::System.ArgumentNullException.ThrowIfNull(_request);");
             b.AppendLine("                var effective = MergeStreamTokens(_apiToken, _enumToken, out var linked);");
             b.AppendLine("                _linked = linked;");
             b.AppendLine("                effective.ThrowIfCancellationRequested();");
@@ -76,7 +82,6 @@ internal static partial class SourceEmitter
             b.AppendLine("");
             b.Append("                _inner = pipeline.GetAsyncEnumerator(effective);");
             b.AppendLine("");
-            b.AppendLine("            }");
             b.AppendLine("            try");
             b.AppendLine("            {");
             b.AppendLine("                var ok = await _inner!.MoveNextAsync().ConfigureAwait(false);");
