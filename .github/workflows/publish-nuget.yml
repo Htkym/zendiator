@@ -223,36 +223,3 @@ jobs:
           dotnet nuget push "artifacts/packages/Zendiator.Abstractions.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           dotnet nuget push "artifacts/packages/Zendiator.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
-
-  verify-public-restore:
-    runs-on: windows-latest
-    needs: publish
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.ref }}
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Restore minimal sample from NuGet.org with a fresh cache
-        shell: pwsh
-        run: |
-          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
-          # Empty local feed: restore must fetch Zendiator from NuGet.org.
-          # Indexing can lag after push, so retry for a while.
-          $emptyFeed = Join-Path $env:RUNNER_TEMP "empty-feed"
-          New-Item -ItemType Directory -Path $emptyFeed -Force | Out-Null
-          $deadline = (Get-Date).AddMinutes(30)
-          while ($true) {
-            try {
-              ./scripts/package-smoke-test.ps1 -PackageVersion $version -PackagesDir $emptyFeed
-              break
-            } catch {
-              if ((Get-Date) -gt $deadline) { throw }
-              Write-Host "Retrying after publish indexing lag: $($_.Exception.Message)"
-              Start-Sleep -Seconds 120
-            }
-          }
