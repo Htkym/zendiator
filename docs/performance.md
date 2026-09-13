@@ -1,9 +1,13 @@
 # 0.1.0 Formal Measurements
 
-2026-09-10. The current 0.1.0 performance values use only the formal RC2 measurements:
+This is a historical record for 0.1.0, not a measurement of 0.2.0. The dispatch and
+dependency-capture architecture has changed. Do not use these figures as current
+performance claims or competitor rankings. See the [0.2.0 release notes](release/0.2.0-release-notes.md).
+
+2026-09-10. The 0.1.0 performance values use only the formal RC2 measurements:
 20 Send routes and 34 Stream routes.
-The product implementation has not changed since the RC2 baseline, so the values are
-carried over without remeasurement.
+The 0.1.0 product implementation was unchanged from the RC2 baseline, so those values
+were carried over without remeasurement for that release.
 Older RC1/Hardening-1 numbers are not used as current values.
 All measured values are kept; there were no failures, reruns, or exclusions. Conditions are
 BenchmarkDotNet 0.15.8, Release, Throughput,
@@ -14,7 +18,7 @@ including launch/pilot/overhead/warmup operation counts and times) are retained 
 The headline numbers are also in `docs/release/0.1.0-release-notes.md`. For limits, see
 [known limitations](release/known-limitations.md).
 
-## Summary (current claims)
+## Summary (0.1.0 only)
 
 Values apply only to the measured routes and environment. They are not latency
 guarantees or competitor rankings.

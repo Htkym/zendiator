@@ -1,51 +1,72 @@
-# Known limitations (0.1.1)
+# Known limitations (0.2.0)
 
-0.1.1 における現行の制限事項です。0.1.0 から制限事項の変更はありません。性能値は `0.1.0-release-notes.md` に記載の正式な測定値のみを根拠とします。
-RC1／Hardening-1 の旧数値は現行値として使用しません。
+These boundaries apply to the 0.2.0 design. See the [release notes](0.2.0-release-notes.md)
+and [construction and dispatch lifetime](../optimized-dispatch.md) before upgrading.
 
-## Async Stream allocation — KL-01 / OPT-stream-async
+## Dependency capture and lifetime
 
-The async 1024-item, zero-behavior run allocates 113,959 B versus 360 B direct: an additional 110.94 B/item. Current measurements,
-including the direct baseline and behavior count, are in [the 0.1.0 release notes](0.1.0-release-notes.md).
-The old Hardening-1 value of approximately 109 B/item is `HistoricalSuperseded` and is not inherited as a current value.
-This is a performance concern, not a correctness rollback reason. Optimization is deferred to a separate phase (`Deferred`,
-not a 0.1.0 blocker, no correctness defect).
+Each mediator lazily captures the first resolved instance of each handler or behavior
+service type, including Transient registrations. A new send or retry does not imply a
+new instance. DI still constructs and disposes dependencies and may share Scoped or
+Singleton instances across mediators according to its registrations.
 
-## Native AOT generic value-type closure — KL-02
+Keep the scope alive until dispatch and stream enumeration finish. Do not use a
+mediator after it or its scope is disposed. Disposal does not cancel or join ongoing
+operations. Concurrent initialization is synchronized, but handlers and behaviors
+must support any application-level concurrent use themselves.
 
-Native AOT cannot dynamically construct the tested open-generic DI handlers closed over value types.
-The request and stream probes report the same documented LIMIT. Reference-type closures pass AOT04/AOT10.
-The verified scope is AOT01-AOT12 on win-x64 (verified at release with package consumers); it is not an every-RID guarantee.
+Lazy resolution means `ValidateOnBuild` alone cannot validate every dispatch dependency.
+Exercise the routes used by the application, especially when changing service lifetimes.
+Do not use a Singleton mediator to capture Scoped services.
 
-## Stream enumeration — KL-03 / KL-04
+## Performance evidence and stream allocation - KL-01
 
-Re-enumerating the same returned stream and concurrently enumerating it are not guaranteed.
-Call `StreamAsync` again for a fresh stream. Early termination and disposal are covered separately by tests.
+The [0.1.0 formal measurements](../performance.md) describe an older implementation,
+including its async-stream allocation costs. They do not establish current timings or
+allocation counts. No new formal cross-library ranking is published for 0.2.0.
+Distinguish cold resolution, warm dispatch, scope lifecycle, stream startup, and
+steady-state enumeration; not every operation or user handler is allocation-free.
 
-## Unsupported dispatch — KL-05 / KL-06
+## Native AOT generic value-type closure - KL-02
+
+The tested open-generic DI handlers closed over value types require runtime generic
+construction that is unavailable under Native AOT. Both request and stream probes
+report this limitation. Reference-type closures are covered by AOT04/AOT10.
+The release verification target is AOT01-AOT12 on win-x64 with package consumers;
+it is not an every-RID guarantee.
+
+## Stream enumeration - KL-03 / KL-04
+
+Re-enumerating the same returned stream and concurrently enumerating it are not
+guaranteed. Call `StreamAsync` again for a fresh stream. Early termination and disposal
+are covered separately by tests.
+
+## Unsupported dispatch - KL-05 / KL-06
 
 Parallel Publish is unsupported; notification dispatch is sequential.
-Runtime-object request/stream dispatch is unsupported. The notification erasure route is a separate supported path.
+Runtime-object request/stream dispatch is unsupported. Notification erasure is a
+separate supported path. Parallel continuation calls and retention of continuations
+after completion are not guaranteed.
 
-## IDE behavior — KL-07
+## IDE behavior - KL-07
 
-IDE integration is `UnverifiedCurrent`. CLI diagnostics and generated consumers do not establish IDE behavior.
+IDE behavior is not established by CLI diagnostics and generated-consumer tests.
+No separate IDE verification is claimed for this release.
 
-## Other RIDs — KL-08
+## Other RIDs - KL-08
 
-Native AOT beyond win-x64 is unverified. Other RIDs remain future work and are not 0.1.0 blockers.
+Native AOT beyond win-x64 is unverified.
 
-## Send performance after the correctness fix
+## Incremental generation
 
-Removing the custom lifetime cache changes the cost of each invoked node. Standard DI remains the source of truth.
-Current [Send measurements](0.1.0-release-notes.md) replace prior RC1 numbers; Send is measured,
-not unmeasured.
-Scoped/Singleton warm sends with synchronously completing handlers, full scope lifecycle and generic responses
-have different costs and are reported separately. No fastest or general allocation-free claim is made.
+Compilation changes still rerun semantic analysis. Equal value-based emission models
+skip template expansion; this is not per-type incremental analysis. A handler change
+affecting output regenerates the mediator body. Interceptor locations are tracked
+separately so moving a registration call need not regenerate that body.
 
 ## Publication boundary
 
-Local package/AOT/manifest checks do not establish GitHub-hosted workflow execution, OIDC or NuGet ownership.
-The final publication must use the verified CI artifact from the final tag commit (`v0.1.1`).
-`0.1.1` is a `0.x` release: its API is not frozen permanently and may change before `1.0.0`.
-Preview-to-preview binary compatibility is not guaranteed.
+Local checks do not establish GitHub-hosted workflow execution, OIDC authentication,
+or public-feed availability. Publication uses the verified CI artifacts built from
+the final `v0.2.0` tag commit. `0.2.0` is a pre-V1 release: APIs and architecture may
+change before `1.0.0`, and preview-to-preview binary compatibility is not guaranteed.

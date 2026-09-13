@@ -51,22 +51,35 @@ internal sealed class EmissionModelFactory(GenerationContracts contracts, Func<I
         var method = route.IsSync ? "Handle" : "HandleAsync";
         return new EmissionRoute
         {
-            Request = Type(route.Request), Response = Type(route.Response),
-            Handler = Service(route.Handler, handler, method), IsVoid = route.IsVoid, IsSync = route.IsSync,
-            IsOpen = route.IsOpen, OpenTypeParams = new(route.OpenTypeParams), MethodConstraints = new(route.MethodConstraints),
-            RequestDisplay = route.RequestDisplay, ResponseDisplay = route.ResponseDisplay,
-            HandlerDisplay = route.HandlerDisplay, HandlerContractDisplay = route.HandlerContractDisplay,
+            Request = Type(route.Request),
+            Response = Type(route.Response),
+            Handler = Service(route.Handler, handler, method),
+            IsVoid = route.IsVoid,
+            IsSync = route.IsSync,
+            IsOpen = route.IsOpen,
+            OpenTypeParams = new(route.OpenTypeParams),
+            MethodConstraints = new(route.MethodConstraints),
+            RequestDisplay = route.RequestDisplay,
+            ResponseDisplay = route.ResponseDisplay,
+            HandlerDisplay = route.HandlerDisplay,
+            HandlerContractDisplay = route.HandlerContractDisplay,
             Behaviors = new(route.Behaviors.Select(b => Service(b, behavior, method))),
-            BehaviorDisplays = new(route.BehaviorDisplays), BehaviorContractDisplays = new(route.BehaviorContractDisplays)
+            BehaviorDisplays = new(route.BehaviorDisplays),
+            BehaviorContractDisplays = new(route.BehaviorContractDisplays)
         };
     }
 
     internal EmissionMultiRoute Multiple(MultiRoute route) => new()
     {
-        Request = Type(route.Request), Response = Type(route.Response), IsVoid = route.IsVoid,
-        IsSync = route.IsSync, IsOpen = route.IsOpen,
-        OpenTypeParams = new(route.OpenTypeParams), MethodConstraints = new(route.MethodConstraints),
-        RequestDisplay = route.RequestDisplay, ResponseDisplay = route.ResponseDisplay,
+        Request = Type(route.Request),
+        Response = Type(route.Response),
+        IsVoid = route.IsVoid,
+        IsSync = route.IsSync,
+        IsOpen = route.IsOpen,
+        OpenTypeParams = new(route.OpenTypeParams),
+        MethodConstraints = new(route.MethodConstraints),
+        RequestDisplay = route.RequestDisplay,
+        ResponseDisplay = route.ResponseDisplay,
         Branches = new(route.Branches.Select(b => Branch(b, route)))
     };
 
@@ -77,19 +90,24 @@ internal sealed class EmissionModelFactory(GenerationContracts contracts, Func<I
         return new EmissionBranch
         {
             Handler = Service(branch.Handler, route.IsVoid ? family.VoidHandler : family.Handler, method),
-            HandlerIsOpen = branch.HandlerIsOpen, HandlerDisplay = branch.HandlerDisplay,
+            HandlerIsOpen = branch.HandlerIsOpen,
+            HandlerDisplay = branch.HandlerDisplay,
             HandlerContractDisplay = branch.HandlerContractDisplay,
             Behaviors = new(branch.Behaviors.Select(b => Service(b, route.IsVoid ? family.VoidBehavior : family.Behavior, method))),
-            BehaviorDisplays = new(branch.BehaviorDisplays), BehaviorContractDisplays = new(branch.BehaviorContractDisplays)
+            BehaviorDisplays = new(branch.BehaviorDisplays),
+            BehaviorContractDisplays = new(branch.BehaviorContractDisplays)
         };
     }
 
     internal EmissionNotificationRoute Notification(NotificationRoute route) => new()
     {
-        Notification = Type(route.Notification), IsOpen = route.IsOpen,
+        Notification = Type(route.Notification),
+        IsOpen = route.IsOpen,
         Subscribers = new(route.Subscribers.Select(s => new EmissionSubscriber(Service(s.Handler, contracts.NotificationHandler, "HandleAsync")))),
-        OpenTypeParams = new(route.OpenTypeParams), MethodConstraints = new(route.MethodConstraints),
-        NotificationDisplay = route.NotificationDisplay, HandlerDisplays = new(route.HandlerDisplays),
+        OpenTypeParams = new(route.OpenTypeParams),
+        MethodConstraints = new(route.MethodConstraints),
+        NotificationDisplay = route.NotificationDisplay,
+        HandlerDisplays = new(route.HandlerDisplays),
         HandlerContractDisplays = new(route.HandlerContractDisplays)
     };
 }
