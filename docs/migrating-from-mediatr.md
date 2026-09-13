@@ -2,8 +2,14 @@
 
 [日本語](migrating-from-mediatr.ja.md)
 
+See also the [README](../README.md) and [design principles](../Constitution.md).
+
 Procedures for moving MediatR 12 code to Zendiator. Covers API correspondences,
 required rewrites, and unsupported features.
+
+This guide describes the current repository. Published packages may differ;
+check the release notes for the version you install before applying the lifetime
+and configuration guidance below.
 
 The current preview uses standard DI construction and captures Handler/Behavior dependencies lazily per mediator instance, including Transient dependencies. Resolve a new transient mediator for a fresh composition. Custom provider APIs were removed. The generated mediator now implements IDisposable to invalidate its cache; DI still owns dependency disposal. See [construction and dispatch lifetime](optimized-dispatch.md).
 
@@ -11,8 +17,9 @@ Assumptions:
 
 - The migration source is MediatR 12 (the `IMediator`, `ISender`, `IPublisher` setup).
 - The target requires .NET 10 (C# 14, nullable enabled).
-- Newer MediatR major versions need a commercial license. Zendiator makes no competitor
-  ranking; current performance claims are in [the 0.1.0 release notes](release/0.1.0-release-notes.md).
+- Zendiator makes no competitor ranking. The [performance record](performance.md)
+  contains measurements for specific revisions, not evidence of the current
+  lazy-capture architecture's performance.
 
 ## API correspondence
 
@@ -44,21 +51,33 @@ subscribers.
 
 ## Packages and project layout
 
-Drop the MediatR package reference and reference two packages instead.
+Replace the MediatR package reference with `Zendiator` in the project containing
+generation configuration:
 
-```xml
-<ItemGroup>
-  <PackageReference Include="Zendiator.Abstractions" Version="0.1.0" />
-  <PackageReference Include="Zendiator" Version="0.1.0" />
-</ItemGroup>
+```shell
+dotnet add package Zendiator
 ```
+
+`Zendiator` includes the Abstractions dependency and source generator. Projects
+that only define contracts can reference `Zendiator.Abstractions` alone. Pin the
+versions used by your application and keep both packages aligned.
 
 Responsibilities follow the README: message definitions and handlers reference
 only `Zendiator.Abstractions`, while the project holding the generation settings
 references `Zendiator`.
 
-The standard composition is DI configuration code. No project, empty class,
-or configuration attribute exists just for the generation target.
+For the current compilation with default settings, registration is one call:
+
+```csharp
+using Zendiator.DependencyInjection;
+
+services.AddZendiator();
+```
+
+Build the provider or host using standard APIs. No custom provider or extra
+initialization is required. A configuration lambda is needed only for settings
+such as additional assemblies, behaviors, or an explicit generated namespace.
+An `AddApplication` wrapper is optional and helps organize multi-project applications:
 
 ```csharp
 // Composition root in a regular Application project.
@@ -92,8 +111,8 @@ Notes:
 
 - `RegisterServicesFromAssemblyContaining` is optional when a single assembly is involved.
 - Omitting `Namespace` defaults to `{AssemblyName}.Generated`.
-- The old empty-partial-class and assembly-attribute styles keep working as
-  migration routes. Mixing them with DI configuration lambdas in one
+- Partial-class and assembly-attribute configuration are also supported.
+  Mixing them with DI configuration lambdas in one
   compilation is diagnosed (ZEN0015).
 - Only the target's compilation and explicitly listed assemblies are inspected.
   Request types referenced by handler contracts are picked up automatically.
@@ -112,6 +131,11 @@ services.AddZendiator(static configuration =>
 - The specified lifetime is the default for the mediator, handlers, and Behaviors. Pre-registrations can override it; enable ValidateScopes to detect invalid scoped dependencies.
 - Stateful handlers are reused within a mediator even when registered as Transient. For fresh transient dependencies, resolve a new transient mediator; AddTransient on the handler alone is insufficient.
 - Enable `ValidateScopes` and `ValidateOnBuild` for post-migration verification.
+
+Lazy resolution means that `ValidateOnBuild` alone cannot check every captured
+dependency. Exercise the relevant dispatch routes and verify constructor counts,
+state across repeated sends, concurrent use where supported, and disposal.
+Keep each scope alive until its sends and stream enumeration have finished.
 
 ## Rewriting requests and handlers
 
@@ -226,10 +250,12 @@ Notes:
 
 ## Rewriting registration
 
-Drop assembly-scan registration and write generation settings with ordinary DI
-composition code. The recommended route needs no empty partial class or
-configuration attribute (the old class/assembly attribute routes keep working
-for compatibility; do not mix them with DI configuration in one compilation).
+Replace runtime assembly-scan registration with `AddZendiator`. For default
+configuration in the current compilation, use the parameterless call shown above.
+For explicit settings, use ordinary DI configuration code as below. No empty
+partial class or configuration attribute is required; attribute-based
+configuration is an alternative that cannot be combined with DI configuration
+lambdas in one compilation.
 
 ```csharp
 // Before
@@ -274,8 +300,8 @@ using MyApp.Application.Generated;
 var zendiator = scope.ServiceProvider.GetRequiredService<IZendiator>();
 ```
 
-The old empty-partial-class and assembly-attribute styles remain as
-migration-period compatibility routes.
+The wrapper organizes application registration; it is not an additional
+initialization step required by Zendiator.
 
 ## Rewriting send sites
 
@@ -475,7 +501,9 @@ services.AddZendiator(static configuration =>
 });
 ```
 
-Behavior semantics carry over:
+Continuation control flow maps as follows. Dependency lifetime is a separate
+contract: downstream handlers and behaviors already captured by a mediator are
+reused across retries and subsequent sends, including Transient registrations.
 
 - Short-circuit by simply not calling `next`. Downstream Behaviors and handlers are not resolved.
 - Retries use sequential repeated `next.InvokeAsync` calls. Parallel calls are out of scope.
@@ -546,13 +574,13 @@ Zendiator has no equivalents below. Decide replacements before migrating.
 
 ## Migration checklist
 
-1. Swap package references to the two packages.
+1. Replace the MediatR reference with `Zendiator` in the generation project; use `Zendiator.Abstractions` alone for contracts-only projects. Pin matching package versions.
 2. Replace `using MediatR;` with `using Zendiator;`.
 3. Change `Handle` to `HandleAsync` and `Task<T>` to `ValueTask<T>`.
 4. Drop `Unit` for void requests: one-argument handlers with `ValueTask`
    (the old `Unit` shape still builds, but mixing old and new is diagnosed).
-5. Place generation settings in a DI configuration lambda, moving targets, Behaviors, and orders across.
-6. Change `AddMediatR` to `AddZendiator` via an `AddApplication`-style wrapper and check the lifetime default difference.
+5. Move any explicit assemblies, behaviors, and orders into a DI configuration lambda. Use `AddZendiator()` alone when the defaults are sufficient.
+6. Replace `AddMediatR` with `AddZendiator`. An `AddApplication`-style wrapper is optional. Check the lifetime defaults and reuse within each mediator, including Transient dependencies.
 7. Change send sites to the purpose-built API
    (`SendAsync` / `PublishAsync` / `SendAllAsync` / `SendSync` / `StreamAsync`).
    Streams are lazy (start on first `MoveNextAsync`), cancel via the API token or
@@ -565,8 +593,11 @@ Zendiator has no equivalents below. Decide replacements before migrating.
     where order matters.
 11. Mark fan-out requests with `IMultiRequest` and switch to `SendAllAsync`.
 12. Move `ref struct` requests to the sync contract (`ISyncRequest` + `SendSync`).
-13. Enable `ValidateScopes` and `ValidateOnBuild` and pass the tests.
+13. Enable `ValidateScopes` and `ValidateOnBuild`, exercise lazy dispatch routes, and check dependency construction, retained state, and disposal. Keep scopes alive until sends and stream enumeration finish.
 14. For generation errors (`ZEN0001`–`ZEN0020`), review type visibility, duplication, constraints, and configuration expressions.
 
-Existing tests carry over. Verify unchanged expected return values, Behavior invocation counts,
-and invocation order.
+Reuse existing tests for response values, Behavior invocation counts, and
+invocation order. Review tests that assume a new Handler or Behavior instance per
+send or retry: Transient dependencies are reused within one mediator. Also check
+sharing and isolation across mediators and scopes according to their registrations,
+concurrent use where supported, and disposal ownership.

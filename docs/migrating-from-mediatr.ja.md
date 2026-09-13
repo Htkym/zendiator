@@ -2,8 +2,13 @@
 
 [English](migrating-from-mediatr.md)
 
+[README](../README.ja.md) と [設計方針](../Constitution.ja.md) も参照してください。
+
 MediatR 12 を使ったコードを Zendiator へ移す手順です。API の対応関係と、
 書き換えが必要な箇所、対応していない機能をまとめています。
+
+このガイドは現在のリポジトリを対象とします。公開済みパッケージとは異なる場合があるため、
+以下の有効期間や構成の説明を適用する前に、インストールする版のリリースノートを確認してください。
 
 現在のプレビュー版は標準 DI で構築し、Transient を含む Handler・Behavior を Mediator 単位で遅延取得して再利用します。新しい構成が必要な場合は Transient の Mediator を新たに解決してください。独自 Provider API は削除しました。生成される Mediator はキャッシュを無効化するために IDisposable を実装しますが、依存サービスの破棄は DI が担当します。詳細は [構築と有効期間](optimized-dispatch.md) を参照してください。
 
@@ -11,8 +16,8 @@ MediatR 12 を使ったコードを Zendiator へ移す手順です。API の対
 
 - 移行元は MediatR 12（`IMediator`、`ISender`、`IPublisher` の構成）を想定しています。
 - 移行先は .NET 10（C# 14、nullable 有効）が必要です。
-- MediatR の新しいメジャーバージョンには商用ライセンスが必要です。Zendiator は競合順位を主張しません。
-  現行の性能値は[0.1.0 release notes](release/0.1.0-release-notes.md)を見てください。
+- Zendiator は競合順位を主張しません。[性能の記録](performance.md) は測定時の版を対象とし、
+  現在の遅延キャッシュ方式の性能を示すものではありません。
 
 ## 対応関係の概要
 
@@ -43,21 +48,31 @@ MediatR 12 を使ったコードを Zendiator へ移す手順です。API の対
 
 ## パッケージとプロジェクト構成
 
-MediatR のパッケージ参照を外し、2 つのパッケージを参照します。
+生成設定を置くプロジェクトで、MediatR のパッケージ参照を `Zendiator` に置き換えます。
 
-```xml
-<ItemGroup>
-  <PackageReference Include="Zendiator.Abstractions" Version="0.1.0" />
-  <PackageReference Include="Zendiator" Version="0.1.0" />
-</ItemGroup>
+```shell
+dotnet add package Zendiator
 ```
+
+`Zendiator` は Abstractions への依存と Source Generator を含みます。
+契約だけを置くプロジェクトは `Zendiator.Abstractions` のみを参照できます。
+アプリケーションで使うバージョンは固定し、両パッケージでそろえてください。
 
 役割分担の目安は README のとおりです。メッセージ定義とハンドラーは
 `Zendiator.Abstractions` だけを参照し、生成設定を置くプロジェクトが
 `Zendiator` を参照します。
 
-標準の構成は DI 構成コードです。生成先のためのプロジェクトや空のクラス、
-構成属性は要りません。
+現在のコンパイルを既定の設定で使う場合、登録は次の呼び出し 1 つで行えます。
+
+```csharp
+using Zendiator.DependencyInjection;
+
+services.AddZendiator();
+```
+
+Provider やホストは標準の方法で構築します。独自 Provider や追加の初期化は不要です。
+別アセンブリ、Behavior、生成先 namespace などを指定する場合だけ、構成ラムダを使います。
+`AddApplication` のラッパーは任意で、複数プロジェクトの登録をまとめるために使えます。
 
 ```csharp
 // 通常の Application プロジェクトの構成ルート
@@ -91,7 +106,7 @@ services.AddApplication();
 
 - 同じアセンブリだけなら `RegisterServicesFromAssemblyContaining` は省略できます。
 - `Namespace` を省略すると `{AssemblyName}.Generated` になります。
-- 旧来の空 partial クラス方式とアセンブリ属性方式も引き続き使えます。
+- partial クラスとアセンブリ属性による構成も使えます。
   DI 構成ラムダとの併用は診断（ZEN0015）になります。
 - 生成先のコンパイルと明示したアセンブリだけを調べます。
   ハンドラーが参照するリクエスト型は自動で取り込みます。
@@ -109,10 +124,14 @@ services.AddZendiator(static configuration =>
 ```
 - 指定したライフタイムは Zendiator、ハンドラー、Behavior の既定値です。
   事前登録で異なる指定もできるため、`ValidateScopes` で不適切な Scoped 依存を検出してください。
-- 状態を持つハンドラーは Transient でも Mediator インスタンスの間で再利用されます。
+- Handler・Behavior は Transient でも同一 Mediator インスタンス内で再利用されます。
   新しい構成が必要な場合は Transient の Mediator を新たに解決してください。
   ハンドラーだけを `AddTransient` で登録しても送信ごとには生成されません。
 - 移行直後の検証では `ValidateScopes` と `ValidateOnBuild` の有効化を推奨します。
+
+依存は遅延解決されるため、`ValidateOnBuild` だけではすべてを検証できません。
+対象の配送経路を実際に呼び出し、インスタンスの構築回数、複数回の送信にわたって保持される状態、
+サポートされている場合の並行利用、破棄の動作を確認してください。送信とストリーム列挙が完了するまでスコープを維持します。
 
 ## リクエストとハンドラーの書き換え
 
@@ -226,9 +245,11 @@ await zendiator.SendAsync(new DeleteUser(userId), cancellationToken);
 
 ## 登録の書き換え
 
-MediatR のアセンブリスキャン登録をやめ、通常の DI 構成コードで生成設定を書きます。
-推奨経路では空の partial クラスや構成属性は要りません（旧クラス・旧アセンブリ属性経路も
-互換のために残っています。同一コンパイルで DI 構成と混ぜないでください）。
+MediatR の実行時アセンブリ走査による登録を `AddZendiator` に置き換えます。
+現在のコンパイルに対する既定の構成なら、前述の引数なしの呼び出しを使えます。
+明示的な設定が必要な場合は、次のように通常の DI 構成コードで指定します。
+空の partial クラスや構成属性は不要です。属性による構成は別の選択肢として使えますが、
+同一コンパイルで DI 構成ラムダとは併用できません。
 
 ```csharp
 // 移行前
@@ -273,7 +294,7 @@ using MyApp.Application.Generated;
 var zendiator = scope.ServiceProvider.GetRequiredService<IZendiator>();
 ```
 
-旧来の空 partial クラス方式とアセンブリ属性方式は、移行期間の互換経路として残ります。
+このラッパーはアプリケーションの登録をまとめるためのもので、Zendiator が要求する追加の初期化ではありません。
 
 ## 送信側の書き換え
 
@@ -469,7 +490,9 @@ services.AddZendiator(static configuration =>
 });
 ```
 
-Behavior の意味はそのまま移せます。
+継続の制御は次のように移行できます。ただし、依存の有効期間は別の仕様です。
+Mediator が一度取得した後続の Handler や Behavior は、再試行や同一 Mediator からの以降の送信でも再利用されます。
+Transient として登録されている場合も同様です。
 
 - 早期終了は `next` を呼ばないだけです。後続 Behavior とハンドラーは解決されません。
 - 再試行は `next.InvokeAsync` の逐次複数回呼び出しで書けます。並列呼び出しは対象外です。
@@ -480,8 +503,51 @@ Behavior の意味はそのまま移せます。
   MediatR での登録順に頼っていた順序は、`Order` で明示し直します。
 - DI コンストラクター注入はそのまま使えます。
 - 戻り値なし要求には 1 型引数の `IPipelineBehavior<T>` を使います。
-  同期要求には `ISyncPipelineBehavior` を使います。
+  同期要求には `ISyncPipelineBehavior`、ストリームには `IStreamPipelineBehavior` を使います。
 - 複数配送では各ハンドラーの分岐に Pipeline が適用されます。
+
+## ストリームの書き換え
+
+MediatR の `IStreamRequest<T>`／`IStreamRequestHandler<T, R>` は、遅延実行される Zendiator のストリームに置き換えます。
+
+```csharp
+// 移行前 (MediatR)
+public sealed record GetNames(int Count) : IStreamRequest<string>;
+public sealed class GetNamesHandler : IStreamRequestHandler<GetNames, string>
+{
+    public async IEnumerable<string> Handle(GetNames request, CancellationToken ct)
+    {
+        for (var i = 0; i < request.Count; i++) yield return $"n-{i}";
+        await Task.CompletedTask;
+    }
+}
+await foreach (var name in mediator.CreateStream(new GetNames(3))) { }
+```
+
+```csharp
+// 移行後 (Zendiator)
+public sealed record GetNames(int Count) : IStreamRequest<string>;
+public sealed class GetNamesHandler : IStreamRequestHandler<GetNames, string>
+{
+    public async IAsyncEnumerable<string> HandleAsync(GetNames request, CancellationToken ct)
+    {
+        for (var i = 0; i < request.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            await Task.Yield();
+            yield return $"n-{i}";
+        }
+    }
+}
+await foreach (var name in zendiator.StreamAsync(new GetNames(3))) { }
+```
+
+主な注意点は次のとおりです。
+
+- 1 つのストリーム要求に対応するハンドラーは 1 つだけです。複数ハンドラーへのファンアウトには対応していません。
+- `StreamAsync` を呼び出した時点では何も実行されません。ハンドラーは最初の `MoveNextAsync` で開始します。
+- ストリーム用 Behavior は `IStreamPipelineBehavior<TRequest, TItem>` を実装し、`AddOpenStreamBehavior` で登録します。
+- API トークンと `WithCancellation` のどちらでもキャンセルできます。`ref struct` のストリームは診断エラーになります。
 
 ## 対応していない機能
 
@@ -497,13 +563,13 @@ Behavior の意味はそのまま移せます。
 
 ## 移行チェックリスト
 
-1. パッケージ参照を 2 つに置き換える。
+1. 生成するプロジェクトの MediatR 参照を `Zendiator` に置き換える。契約だけのプロジェクトは `Zendiator.Abstractions` のみを参照し、パッケージのバージョンをそろえて固定する。
 2. `using MediatR;` を `using Zendiator;` に置き換える。
 3. `Handle` を `HandleAsync` に、`Task<T>` を `ValueTask<T>` に直す。
 4. 戻り値なしは `Unit` をやめ、1 型引数 Handler と `ValueTask` に直す
    （旧 `Unit` 形式は残せるが、新旧の混在は診断される）。
-5. 生成設定を DI 構成ラムダに置き、必要な対象・Behavior・順序を移す。
-6. `AddMediatR` を `AddApplication` 等のラッパー経由の `AddZendiator` に直し、ライフタイム既定値の差を確認する。
+5. 対象アセンブリ・Behavior・順序の指定が必要なら DI 構成ラムダに移す。既定の構成でよければ `AddZendiator()` だけを使う。
+6. `AddMediatR` を `AddZendiator` に直す。`AddApplication` 等のラッパーは任意とし、ライフタイムの既定値と、Transient を含む同一 Mediator 内での再利用を確認する。
 7. 送信側を用途別の API（`SendAsync`／`PublishAsync`／`SendAllAsync`／`SendSync`／`StreamAsync`）に直す。
    ストリームは遅延実行（初回 `MoveNextAsync` で開始）、API トークンか `WithCancellation` で取消し、
    `await using` で破棄し、再列挙は呼び直す。
@@ -513,8 +579,10 @@ Behavior の意味はそのまま移せます。
 10. 通知の購読者を `INotificationHandler` に直し、順序が必要なら `HandlerOrder` を付ける。
 11. 複数配送が必要な要求に `IMultiRequest` を付け、`SendAllAsync` に直す。
 12. `ref struct` 要求を同期契約（`ISyncRequest` + `SendSync`）に直す。
-13. `ValidateScopes` と `ValidateOnBuild` を有効にしてテストを通す。
+13. `ValidateScopes` と `ValidateOnBuild` を有効にし、遅延解決される配送経路を呼び出して、依存の構築・状態保持・破棄を確認する。送信とストリーム列挙の完了までスコープを維持する。
 14. 生成時エラー（`ZEN0001`〜`ZEN0020`）が出たら、型の公開範囲・重複・制約・構成式を見直す。
 
-テストは既存のものを流用できます。戻り値の期待値、Behavior の呼び出し回数、
-呼び出し順序が変わっていないことを確認してください。
+戻り値の期待値、Behavior の呼び出し回数、呼び出し順序には既存のテストを流用できます。
+送信や再試行のたびに Handler や Behavior が新しく生成される前提のテストは見直してください。
+Transient の依存も同一 Mediator 内で再利用されます。登録に応じた Mediator やスコープ間の
+共有と分離、サポートされている場合の並行利用、破棄の所有関係も確認します。
