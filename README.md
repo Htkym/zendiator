@@ -308,7 +308,7 @@ Different spellings that resolve to the same assembly set share one generation u
   `AddNotification<T>()`, `ConfigureHandlerOrder(Type, int)`, `Snapshot()`
 - `ZendiatorConfigurationSnapshot`: frozen recorded values plus `GetFingerprint()`
 - `ZendiatorServiceCollectionExtensions.AddZendiator` (parameterless and
-  configuration-lambda overloads; uninterrupted calls fail fast)
+  configuration-lambda overloads; unintercepted calls fail fast)
 
 Generated code per consumer compilation (`IZendiator`, `Zendiator`, and either
 `ZendiatorServiceCollectionExtensions.AddZendiator` or the DI registrar plus

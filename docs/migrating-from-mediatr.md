@@ -30,7 +30,7 @@ Assumptions:
 | Void `Send` (`Task`) | `SendAsync` (`ValueTask`) | Requires `await` |
 | `IPipelineBehavior<T, R>` (`next()` delegate) | `IPipelineBehavior<T, R>` (struct continuation) | Rewrite required |
 | Void Behavior | `IPipelineBehavior<T>` (struct continuation) | One type argument |
-| Ordering | Depends on registration order | `Order` (smaller wraps outer) | Restate ordering explicitly and verify with tests |
+| Ordering | `Order` (smaller wraps outer) | MediatR depends on registration order; restate explicitly and verify with tests |
 | `INotification`, `Publish` | `INotification`, `PublishAsync` / `Publish` | Sequential dispatch. Zero subscribers complete normally |
 | Multiple handlers per request | `IMultiRequest<T>` / `IMultiRequest` + `SendAllAsync` | Only marked requests fan out |
 | Generic requests | Open generics in supported patterns | Closed/open overlap is diagnosed (ZEN0010) |

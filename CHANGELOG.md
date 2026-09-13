@@ -2,23 +2,23 @@
 
 ## 0.1.2
 
-生成されるストリーム列挙子の初回起動と定常移動を分離し、項目ごとの async state machine をなくした。公開APIと他の生成コードは不変。
+生成されるストリーム列挙子の初回起動と定常移動を分離し、項目ごとの async state machine を解消した。公開 API と他の生成コードに変更はない。
 
 - `MoveNextAsync` を同期パススルーにし、初回だけ `StartAndMoveNextAsync` (列挙ごとに1回) でパイプラインを起動する。
 - 完了後の `MoveNextAsync` は完了済み `ValueTask(false)` を返す。
 - 列挙子ライフサイクルのテストを追加した。
-- 259テストが通過。利用側のコード変更は不要。
+- 259 件のテストが通過。利用側のコード変更は不要。
 
 ## 0.1.1
 
-公開APIと生成される利用側コードを維持した、内部構成の整理。
+公開 API と生成される利用側コードを維持した、内部構成の整理。
 
-- ライブラリ、サンプル、テスト、手書きのベンチマークを原則1ファイル1型に整理した。
+- ライブラリ、サンプル、テスト、手書きのベンチマークを原則 1 ファイル 1 型に整理した。
   同名のインターフェース、必要な入れ子型、生成済みのベンチマークデータは維持した。
 - Source Generator を型解析、DI設定、配送経路、通知、同期処理、ストリーム、コード出力の役割ごとに分割した。
   解析状態は生成処理ごとに保持し、入力変更時に前回の状態が残らないことを確認するテストを追加した。
 - リリースのソースマニフェストを、固定した3ファイルから `src` 配下の全C#ソースへ変更した。
-- 252テストと、13構成における変更前後の生成コード・診断の一致を確認した。
+- 252 件のテストと、13 構成における変更前後の生成コード・診断の一致を確認した。
   利用側のコード変更は不要。既知の制限は継続する。
 
 ## 0.1.0
@@ -40,8 +40,8 @@
 - 公開 workflow は tag commit から CI で生成・検証した artifact を使い、
   consumer／DI／AOT 検証と SHA256 manifest 照合を経て、同じ bytes を publish する。
   再 pack と `--skip-duplicate` は使わない。
-- 251 テスト、24 プロジェクトの format、win-x64 Native AOT AOT01〜AOT12、
-  package consumer 検証を通過した。既知の制限は `docs/release/known-limitations.md` を見る。
+- 251 件のテスト、24 プロジェクトの format、win-x64 Native AOT（AOT01〜AOT12）、
+  package consumer 検証を通過した。既知の制限は `docs/release/known-limitations.md` を参照。
 
 ## 0.1.0-preview.1
 
@@ -60,12 +60,12 @@
 - `AddZendiator()` は `TryAdd` で登録し、事前登録と `Transient` を尊重する。
   登録の冪等性、`IZendiator` と `Zendiator` の同一性、スコープ分離、非同期破棄をテストで固定した。
 - `configuration.ServiceLifetime` で Singleton と Transient を選べる。
-  既定は Scoped のまま。全登録が同じ有効期間を共有し、先勝ちで置き換えない。
+  既定は Scoped のまま。すべての登録が同じ有効期間を共有し、先に行われた登録を優先して置き換えない。
 - 同期完了する無割り当てのハンドラー／Behavior で、0 段・1 段の送信あたり追加割り当て 0 B を確認した。
   Behavior のない経路は継続 struct を介さず直接送る。`SendAsync` 入口の重複した
   キャンセル確認をなくし、各ノードの確認は残した。
 - フルモードのトリム公開と実行を確認した。Native AOT リンクは
-  `scripts/aot-matrix-test.ps1` でパッケージ経由に検証する（AOT01-AOT12）。
+  `scripts/aot-matrix-test.ps1` でパッケージ経由で検証する（AOT01〜AOT12）。
 - 通知（逐次 `PublishAsync`）とストリーム（`StreamAsync`、遅延・取消・破棄対応）、
   `IMultiRequest` による複数配送、`ISyncRequest` による同期と ref struct に対応した。
 - MessagePipe への直接・推移的依存を製品・テスト・サンプルから除いた。

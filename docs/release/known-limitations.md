@@ -1,7 +1,7 @@
 # Known limitations (0.1.1)
 
-0.1.1 の現行制限。0.1.0 から制限の変更はない。性能値は `0.1.0-release-notes.md` に記載の正式測定だけを根拠にする。
-RC1／Hardening-1 の旧数値は現行値として使用しない。
+0.1.1 における現行の制限事項です。0.1.0 から制限事項の変更はありません。性能値は `0.1.0-release-notes.md` に記載の正式な測定値のみを根拠とします。
+RC1／Hardening-1 の旧数値は現行値として使用しません。
 
 ## Async Stream allocation — KL-01 / OPT-stream-async
 

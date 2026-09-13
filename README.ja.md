@@ -39,7 +39,7 @@ dotnet add package Zendiator
 
 ## 使い方
 
-現在のコンパイルに対する登録は、次の 1 呼び出しで行えます。
+現在のコンパイルに対する登録は、次の呼び出し 1 つで行えます。
 別の初期化や独自 Provider は不要です。
 
 ```csharp
@@ -128,7 +128,7 @@ var result = await zendiator.SendAsync(new GetTargetYearQuery(2026));
 
 ## ストリーミング
 
-ストリーム要求とハンドラーを定義します。1要求には1ハンドラーが対応します。
+ストリーム要求とハンドラーを定義します。1 つの要求には 1 つのハンドラーが対応します。
 
 ```csharp
 public sealed record GetHouseholdNames(int Count) : IStreamRequest<string>;
@@ -149,14 +149,14 @@ public sealed class GetHouseholdNamesHandler : IStreamRequestHandler<GetHousehol
 }
 ```
 
-通常のBehaviorと並べてstream用Behaviorを登録します。
+通常の Behavior と並べてストリーム用の Behavior を登録します。
 
 ```csharp
 configuration.AddOpenBehavior(typeof(LoggingBehavior<,>), order: 0);
 configuration.AddOpenStreamBehavior(typeof(StreamLoggingBehavior<,>), order: 2);
 ```
 
-列挙は遅延実行です。ハンドラーは`StreamAsync`呼び出し時ではなく、最初の`MoveNextAsync`で開始します。APIトークンと`WithCancellation`のどちらでも取り消しできます。異なる取り消し可能トークンのときだけ連結します。
+列挙は遅延実行です。ハンドラーは `StreamAsync` 呼び出し時ではなく、最初の `MoveNextAsync` で開始します。API トークンと `WithCancellation` のどちらでも取り消しできます。両方が取り消し可能かつ異なるトークンである場合のみ連結します。
 
 ```csharp
 await foreach (var name in zendiator.StreamAsync(new GetHouseholdNames(3), cancellationToken))
@@ -165,7 +165,7 @@ await foreach (var name in zendiator.StreamAsync(new GetHouseholdNames(3), cance
 }
 ```
 
-`ref struct`の要求は同期契約（`ISyncRequest`＋`SendSync`）を使います。非同期経路とストリーム要素は診断します（ZEN0012）。再列挙は保証しないため、新しい列挙には`StreamAsync`を呼び直します。値型で閉じたオープンジェネリックはNativeAOTで不可です（[既知の制限](docs/release/known-limitations.md)）。
+`ref struct` の要求は同期契約（`ISyncRequest` ＋ `SendSync`）を使います。非同期経路とストリーム要素は診断します（ZEN0012）。再列挙は保証しないため、新しい列挙には `StreamAsync` を呼び直します。値型で閉じたオープンジェネリックは Native AOT では動作しません（[既知の制限](docs/release/known-limitations.md)）。
 
 ## ライフタイム
 
@@ -186,7 +186,7 @@ services.AddZendiator(static configuration =>
 - 指定した有効期間は、新しく追加する Zendiator、ハンドラー、Behavior の登録に適用されます。
   既存登録とその依存サービスの有効期間は変わりません。スコープ検証を有効にして、
   Singleton が Scoped の依存を保持していないことを確認してください。
-- 先に登録した方が勝ちます。後からの登録は既存登録を置き換えません。
+- 先に行われた登録が優先されます。後からの登録によって既存の登録が置き換わることはありません。
 - 範囲外の値は、定数なら生成時（ZEN0018）に診断されます。
 - Handler・Behavior は初めて必要になったときに取得し、同一 Mediator インスタンス内で再利用します。Transient も同じです。新しい構成が必要な場合は Transient の Mediator を新たに解決します。
   早期終了での未構築保証（後続 Behavior とハンドラーを解決しない）も変わりません。
@@ -217,7 +217,7 @@ public interface IPipelineBehavior<TRequest, TResponse>
 
 規則です。
 
-- 小さい `Order` が外側に巻きます。
+- `Order` の値が小さい Behavior ほど外側に適用されます。
 - 同じ Behavior 型や同じ `Order` 値の重複はエラー（ZEN0004）です。
 - 閉じた Behavior と `Behavior<TRequest, TResponse>` の 2 引数オープン Behavior に対応します。
   オープン Behavior は制約（`struct`、`class`、`notnull`、`new()`、基底・インターフェイス、
@@ -315,9 +315,9 @@ dotnet run --project samples/Zendiator.Sample.Host -c Release
 送信あたりの追加割り当て 0 B を確認しています（0 段・1 段の同期経路はテストでも固定）。
 初回DI解決、ログ出力、非同期中断は、この0 Bの主張に含めません。レイテンシの数値保証はしません。
 
-実行経路は Mediator 単位の遅延キャッシュに一本化しています。`services.AddZendiator()` と通常の `BuildServiceProvider()` またはホスト構築で利用でき、独自 Provider や高速化の切り替えは不要です。Transient の変更点と破棄の扱いは [構築と有効期間](docs/optimized-dispatch.md) を参照してください。過去のリリースの測定値は、現在の実装の性能を示すものではありません。
+実行経路は Mediator 単位の遅延キャッシュに一本化しています。`services.AddZendiator()` と通常の `BuildServiceProvider()` またはホスト構築で利用でき、独自 Provider や高速化の切り替えは不要です。Transient の変更点と破棄の扱いは [構築と有効期間](docs/optimized-dispatch.md) を参照してください。
 
-過去のリリースの測定は [0.1.0 release notes](docs/release/0.1.0-release-notes.md) と
+過去のリリースの測定値は [0.1.0 release notes](docs/release/0.1.0-release-notes.md) と
 [性能の記録](docs/performance.md) にあります。これらは測定時の版を対象とし、
 現在の遅延キャッシュ方式の性能を示すものではありません。
 結果は測定した経路と環境に限定します。ジェネリック応答の生成、スコープ全体の作成・破棄、
@@ -348,7 +348,7 @@ CI はパッケージを参照する consumer で smoke test と Native AOT の�
 
 ## 対象外（後続）
 
-並列配信、fire-and-forget、永続化やoutbox、要求の `Send(object)`、循環検出、CodeFix、CodeLens、組み込み `Result` 管路、組み込みログ・検証は初版の対象外です。逐次 `PublishAsync` による通知、`StreamAsync` によるストリーム、通常の `TResponse` 値としての利用者独自 `Result` 型は対応済みです。
+並列配信、fire-and-forget、永続化や outbox、要求の `Send(object)`、循環検出、CodeFix、CodeLens、組み込みの `Result` パイプライン変換、組み込みログ・検証は初版の対象外です。逐次 `PublishAsync` による通知、`StreamAsync` によるストリーム、通常の `TResponse` 値としての利用者独自 `Result` 型は対応済みです。
 
 MediatR からの移行は [移行ガイド](docs/migrating-from-mediatr.ja.md) を参照してください。
 

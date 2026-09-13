@@ -5,7 +5,7 @@
 MediatR 12 を使ったコードを Zendiator へ移す手順です。API の対応関係と、
 書き換えが必要な箇所、対応していない機能をまとめています。
 
-現在のプレビュー版は標準 DI で構築し、Transient を含む Handler・Behavior を Mediator 単位で遅延取得して再利用します。新しい構成が必要な場合は Transient の Mediator を新たに解決してください。独自 Provider API は削除しました。生成 Mediator はキャッシュを無効化するために IDisposable を実装しますが、依存サービスの破棄は DI が担当します。詳細は [構築と有効期間](optimized-dispatch.md) を参照してください。
+現在のプレビュー版は標準 DI で構築し、Transient を含む Handler・Behavior を Mediator 単位で遅延取得して再利用します。新しい構成が必要な場合は Transient の Mediator を新たに解決してください。独自 Provider API は削除しました。生成される Mediator はキャッシュを無効化するために IDisposable を実装しますが、依存サービスの破棄は DI が担当します。詳細は [構築と有効期間](optimized-dispatch.md) を参照してください。
 
 前提は次のとおりです。
 
@@ -20,10 +20,10 @@ MediatR 12 を使ったコードを Zendiator へ移す手順です。API の対
 |---|---|---|
 | `IRequest<TResponse>` | `IRequest<TResponse>` | そのまま置き換え |
 | `IRequest`（`Unit` を返す） | `IRequest`（戻り値なし、`ValueTask`） | `Unit` を書かない形が標準。旧 `Unit` 形式は互換経路として残る |
-| `ICommand<T>`、`IQuery<T>` | `ICommand<T>`、`IQuery<T>` | そのまま置き換え |
+| `ICommand<T>`, `IQuery<T>` | `ICommand<T>`, `IQuery<T>` | そのまま置き換え |
 | `IRequestHandler<T, R>`（`Task<R> Handle`） | `IRequestHandler<T, R>`（`ValueTask<R> HandleAsync`） | 戻り値とメソッド名が変わる |
 | `IRequestHandler<T>`（`Task Handle`） | `IRequestHandler<T>`（`ValueTask HandleAsync`） | 戻り値なし用。`Unit` 不要 |
-| `ICommandHandler`、`IQueryHandler` | 同名あり（応答あり）。戻り値なしコマンドは `IRequestHandler<T>` を使う | 旧 `ICommandHandler<T>`（`Unit` 返し）は互換経路 |
+| `ICommandHandler`, `IQueryHandler` | 同名あり（応答あり）。戻り値なしコマンドは `IRequestHandler<T>` を使う | 旧 `ICommandHandler<T>`（`Unit` 返し）は互換経路 |
 | `AddMediatR(cfg => cfg.RegisterServicesFromAssembly(...))` | `AddZendiator(configuration => ...)` | 通常の DI 構成で生成まで行う。手書きの生成先クラスは不要 |
 | `IMediator` / `ISender` | `IZendiator` | 解決して使う点は同じ |
 | `Send(request)`（`Task<R>`） | `SendAsync(request)`（`ValueTask<R>`） | `await` が必要 |
@@ -31,7 +31,7 @@ MediatR 12 を使ったコードを Zendiator へ移す手順です。API の対
 | `IPipelineBehavior<T, R>`（`next()` デリゲート） | `IPipelineBehavior<T, R>`（struct の継続） | 書き換えが必要 |
 | 戻り値なし Behavior | `IPipelineBehavior<T>`（struct の継続） | 1 型引数で書く |
 | 実行順 | 登録順序に依存するため、`Order`（小さいほど外側）で明示し直す | テストで順序を確認する |
-| `INotification`、`Publish` | `INotification`、`PublishAsync`／`Publish` | 順次配送。購読者なしは正常終了 |
+| `INotification`, `Publish` | `INotification`, `PublishAsync`／`Publish` | 順次配送。購読者なしは正常終了 |
 | 1 リクエスト複数ハンドラー | `IMultiRequest<T>`／`IMultiRequest` + `SendAllAsync` | 明示した要求だけ複数配送する |
 | ジェネリック要求 | 対応パターンのオープンジェネリックに対応 | 閉じた型との重複は診断（ZEN0010） |
 | `ref struct` 要求 | 同期要求（`ISyncRequest`）+ `SendSync` | 非同期経路では使えない |
@@ -87,7 +87,7 @@ public static class DependencyInjection
 services.AddApplication();
 ```
 
-注意点です。
+主な注意点は次のとおりです。
 
 - 同じアセンブリだけなら `RegisterServicesFromAssemblyContaining` は省略できます。
 - `Namespace` を省略すると `{AssemblyName}.Generated` になります。
@@ -216,7 +216,7 @@ public sealed class DeleteUserHandler : IRequestHandler<DeleteUser>
 await zendiator.SendAsync(new DeleteUser(userId), cancellationToken);
 ```
 
-注意点です。
+主な注意点は次のとおりです。
 
 - 戻り値なし要求の Handler・Behavior・継続は 1 型引数で書きます。
   旧来の `IRequestHandler<T, Unit>`／`ValueTask<Unit>` の形も互換経路として
@@ -303,10 +303,10 @@ var zendiator = scope.ServiceProvider.GetRequiredService<IZendiator>();
 var user = await zendiator.SendAsync(new GetUserQuery(1), cancellationToken);
 ```
 
-注意点です。
+主な注意点は次のとおりです。
 
 - 非同期の戻り値は `ValueTask` 系です。必ず `await` します。
-  戻り値の再利用（複数回 await）はしません。
+  戻り値の再利用（複数回の await）は行いません。
 - `SendAsync` は具体的なリクエスト型ごとのオーバーロードだけを生成します。
   `object` や `IRequest<T>` 型の変数からの送信はできません。
   変数の静的な型が具体型になるよう呼び出し側を直します。
@@ -340,11 +340,11 @@ public sealed class AuditLog : INotificationHandler<UserCreated>
 await zendiator.PublishAsync(new UserCreated(1), cancellationToken);
 ```
 
-注意点です。
+主な注意点は次のとおりです。
 
-- 配送は順次です。前の購読者の完了後に次を開始します。
+- 配送は順次行われます。前の購読者の処理が完了した後に次の購読者を開始します。
 - 順序は `[HandlerOrder(Order = ...)]` の昇順です。未指定は 0 で、
-  同順位は安定した決定的順序になります。
+  同順位の場合は決定的で安定した順序になります。
 - 最初の失敗で停止し、後続の購読者は構築されません。
 - 既知の通知型に購読者がいなければ正常終了します。構成にない未知の型は例外です。
 - `INotification` 型の変数からの送信もできます（登録済みの閉じた型が対象）。
@@ -365,9 +365,9 @@ public sealed record GetQuotes(string ProductCode) : IMultiRequest<Quote>;
 IReadOnlyList<Quote> quotes = await zendiator.SendAllAsync(new GetQuotes("P1"), cancellationToken);
 ```
 
-注意点です。
+主な注意点は次のとおりです。
 
-- 単一要求のままハンドラーを複数にすると従来どおり生成時エラー（ZEN0002）です。
+- 単一要求のまま複数のハンドラーを実装すると、従来どおり生成時エラー（ZEN0002）になります。
 - 各ハンドラーに Pipeline が適用され、応答は実行順に集めます。
 - 応答なしの複数配送は `ValueTask` だけを返し、`Unit` の一覧は作りません。
 - 順序は通知と同じ規則（`HandlerOrder` 昇順＋決定的な同順位規則）です。
@@ -397,10 +397,10 @@ public sealed class ParseYearHandler : ISyncRequestHandler<ParseYear, int>
 int year = zendiator.SendSync(new ParseYear(buffer), cancellationToken);
 ```
 
-注意点です。
+主な注意点は次のとおりです。
 
 - 要求を `object` や interface 型へ変換する書き方はコンパイルできません。
-- 要求を保持する（field、lambda 捕捉、`await` 跨ぎ）書き方もコンパイルできません。
+- 要求を保持する（フィールドへの保持、ラムダ式でのキャプチャ、`await` を跨ぐ保持など）書き方もコンパイルできません。
 - ジェネリックな `ref struct` 要求は `allows ref struct` の境界で書きます。
 - 応答型は通常の型に限ります。`ref` 構造体の応答や `ref return` は未対応です。
 
