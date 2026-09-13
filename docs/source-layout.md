@@ -17,14 +17,25 @@ configuration processing, discovery, and route analysis in separate subfolders.
 `Models` holds the data passed between analysis and emission. `Emission` contains
 the raw-string templates and code-fragment helpers, grouped by generated feature.
 
-`Models/Emission` defines the read-only handoff to code generation:
-`GenerationModel` groups the target, route collections, and contract symbols.
-Analysis snapshots the collections after pipeline construction and no longer
-mutates their route objects. A new `SourceEmitter` reads this model for each run;
-output builders stay local to each call. Feature methods receive only their
-output builder, route, and route index when needed. Small string helpers remain
-static and take explicit inputs. The incremental output remains source strings
-and diagnostics; the model is not stored in a shared or static cache.
+`Models/Emission` defines the immutable handoff to code generation.
+`GenerationModel` groups the target and symbol-free route snapshots, using records
+and `EquatableArray<T>` for structural equality. `EmissionModelFactory` projects
+the completed analysis into these values. The contract-definition helpers
+(`GenerationContracts`, `RequestContracts`, and `PipelineContracts`) are used only
+during that projection; their Roslyn symbols do not enter the cached model.
+
+`ZendiatorGenerator` compares models before invoking `SourceEmitter`. Unchanged
+models reuse emission; semantic analysis still runs when the compilation changes.
+Interceptor locations have a separate model so moving a registration call does
+not regenerate the mediator body. Diagnostics retain their current locations.
+
+Each emitter reads one completed model. Output builders stay local to each call;
+feature methods receive only their builder, route, and route index when needed.
+Small string helpers remain static and take explicit inputs. Symbol and type-name
+indexes belong to one analysis, not a shared or static cache.
+
+The repository-wide design and maintenance rules are in
+[Constitution.md](../Constitution.md).
 
 ## Tests
 

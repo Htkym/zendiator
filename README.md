@@ -1,44 +1,64 @@
 # Zendiator
 
-[日本語](README.ja.md)
+[日本語](README.ja.md) | [Design and maintenance principles](Constitution.md)
 
 A small Mediator for .NET 10 that generates typed dispatch at compile time.
 A Roslyn Incremental Source Generator produces per-request `SendAsync` overloads,
-struct continuation nodes, and DI registration. No runtime type switches,
-reflection calls, or `dynamic`.
+struct continuation nodes, and DI registration. Typed request dispatch needs no
+runtime assembly scanning, reflective invocation, or `dynamic`.
 
 - Targets: .NET 10 (C# 14, nullable enabled)
 - Distribution: 2 packages, `Zendiator.Abstractions` and `Zendiator` (versioned together)
-- Current release: [0.1.1](docs/release/0.1.1-release-notes.md)
+- Status: pre-1.0 preview; breaking changes are allowed
 - Repository: https://github.com/Htkym/zendiator
 - License: MIT
 
 ## Installation
 
-```xml
-<ItemGroup>
-  <PackageReference Include="Zendiator.Abstractions" Version="0.1.1" />
-  <PackageReference Include="Zendiator" Version="0.1.1" />
-</ItemGroup>
+```shell
+dotnet add package Zendiator
 ```
+
+`Zendiator` includes an Abstractions dependency and the source generator. A
+contracts-only project can reference `Zendiator.Abstractions` instead. Pin the
+package versions used by your application and keep both packages aligned.
+
+This README describes the current repository, which may differ from published
+packages. Consult the release notes for the version you use; do not assume that
+installing a released package includes every change described here.
 
 Suggested project responsibilities:
 
 | Project | References |
 |---|---|
 | Contracts (message definitions) | `Zendiator.Abstractions` only |
-| Application (handlers, Behaviors, DI configuration) | `Zendiator.Abstractions` + `Zendiator` (for `AddZendiator`) |
+| Application (handlers, Behaviors, DI configuration) | `Zendiator` (includes Abstractions transitively) |
 | Host (startup, composition) | Application (calls `AddApplication()`-style wrappers) |
 
 Place configuration where it won't create a back-reference from the handler side. Roslyn is not a runtime dependency. The generator itself ships inside the `Zendiator` package under `analyzers/dotnet/cs`.
 
 ## Usage
 
+Register the current compilation with one call. No separate initialization or
+custom provider is required:
+
+```csharp
+using Zendiator.DependencyInjection;
+
+services.AddZendiator();
+```
+
+Use the normal host `builder.Build()` or standard DI container construction. Use
+the configuration lambda shown below when you need other assemblies, behaviors,
+or an explicit generated namespace.
+
 Define messages and handlers. You can use `class`, `record`, `struct`, and `record struct`.
 Responses may use your own `Result` types or nullable types.
 
 ```csharp
 using Zendiator;
+
+public sealed record MemorialTargetDto(int Year, IReadOnlyList<string> Names);
 
 public readonly record struct GetTargetYearQuery(int Year) : IQuery<MemorialTargetDto>;
 
@@ -52,7 +72,8 @@ public sealed class GetTargetYearQueryHandler : IQueryHandler<GetTargetYearQuery
 }
 ```
 
-Configure from your composition root — no attributes, no empty classes:
+For a multi-project application, configure from the composition root. Attributes
+and an empty mediator class are not required:
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
@@ -82,17 +103,22 @@ services.AddApplication();
 ```
 
 - `IZendiator` is generated into the configured namespace.
-- `SendAsync` generates overloads only for concrete request types.
+- `SendAsync` generates request-specific overloads, including supported generic request shapes.
   There is no generic send API taking `IRequest<T>` or `object`.
   Sending from a variable declared with a derived contract (such as `ICommand<T>`) is not supported. Only calls whose static type is the concrete type are covered.
 - Attribute-based configuration (`[GenerateZendiator]` class or assembly
-  attributes) remains available as a alternative declaration style; it cannot be combined
+  attributes) remains available as an alternative declaration style; it cannot be combined
   with `AddZendiator` configuration lambdas in one compilation.
 
 Calling code:
 
 ```csharp
+using MyApp.Application.Generated;
+
+var services = new ServiceCollection();
 services.AddApplication();
+await using var provider = services.BuildServiceProvider(
+    new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
 await using var scope = provider.CreateAsyncScope();
 var zendiator = scope.ServiceProvider.GetRequiredService<IZendiator>();
 var result = await zendiator.SendAsync(new GetTargetYearQuery(2026));
@@ -111,7 +137,9 @@ public sealed record GetHouseholdNames(int Count) : IStreamRequest<string>;
 
 public sealed class GetHouseholdNamesHandler : IStreamRequestHandler<GetHouseholdNames, string>
 {
-    public async IAsyncEnumerable<string> HandleAsync(GetHouseholdNames request, CancellationToken ct)
+    public async IAsyncEnumerable<string> HandleAsync(
+        GetHouseholdNames request,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
         for (var i = 0; i < request.Count; i++)
         {
@@ -285,9 +313,8 @@ Different spellings that resolve to the same assembly set share one generation u
 Generated code per consumer compilation (`IZendiator`, `Zendiator`, and either
 `ZendiatorServiceCollectionExtensions.AddZendiator` or the DI registrar plus
 interceptors) is treated as part of the product.
-After a stable release, package compatibility is verified against the previous stable release.
-`0.1.1` is a `0.x` release: its API is not frozen permanently and may change before `1.0.0`.
-The full list of contracts, handlers, pipelines, and attributes is in the Public API section above.
+Before `1.0.0`, APIs and architecture may change without a compatibility mode.
+Document breaking changes explicitly rather than retaining an obsolete execution path.
 
 ## Performance
 
@@ -298,30 +325,35 @@ First-time DI resolution, logging, and async suspension are outside that 0 B cla
 
 Dispatch uses one lazy, mediator-instance cache with standard DI construction. Use `services.AddZendiator()` and normal `BuildServiceProvider()` or host construction; no custom provider or fast-mode switch is required. See [construction and dispatch lifetime](docs/optimized-dispatch.md) for the Transient breaking change, disposal rules, and measurement boundaries.
 
-Current formal measurements (BenchmarkDotNet, Release, Throughput, three launches,
-MemoryDiagnoser) are summarized in the [0.1.0 release notes](docs/release/0.1.0-release-notes.md),
-with full tables in [formal measurements](docs/performance.md).
-Values apply only to the measured routes and environment; generic response creation,
-full scope lifecycle and asynchronously suspending streams have separate allocation costs.
+Historical release measurements are in the [0.1.0 release notes](docs/release/0.1.0-release-notes.md)
+and [performance record](docs/performance.md). They describe their measured revisions,
+not the current lazy-capture architecture. Values apply only to the measured
+routes and environment; generic response creation, full scope lifecycle, and
+asynchronously suspending streams have separate allocation costs.
 No competitor ranking or general allocation-free claim is made.
-See also [known limitations](docs/release/known-limitations.md), including `OPT-stream-async`.
+
+The generator also uses structural comparison of immutable, symbol-free models
+to skip template expansion when output is unchanged. Moving a DI registration
+updates interceptor locations independently of the mediator body. Semantic
+analysis still runs on compilation changes; this is not per-type incremental
+analysis. See the [constitution](Constitution.md) for the design and measurement rules.
 
 ## AOT and trimming
 
 `IsAotCompatible` is set, and generated code uses no reflection.
 AOT/trim warnings are treated as errors, not suppressed.
-A full native AOT link needs the C++ workload. To publish an app as Native AOT
-(adapt the project path to your own app):
+A full native AOT link needs the native toolchain. For your own app referencing
+the NuGet package, publish with `PublishAot` enabled (replace the example path):
 
 ```powershell
-dotnet publish samples/Zendiator.Sample.Host -c Release -r win-x64 `
-  -p:PublishTrimmed=true -p:TrimMode=full --self-contained
+dotnet publish MyApp/MyApp.csproj -c Release -r win-x64 -p:PublishAot=true
 ```
 
-The verified matrix (AOT01-AOT12: typed, void, pipeline, generic, notification, multi,
-sync/ref, stream, stream pipeline, generic stream, DI-first, assembly compat) and the one known
-boundary (open generics closed over value types) are summarized in
-[known limitations](docs/release/known-limitations.md).
+CI uses package-based consumers for smoke tests and the Native AOT matrix, rather
+than treating the in-repository ProjectReference sample as proof of package support.
+See the [CI workflow](.github/workflows/ci.yml) for the checks and
+[known limitations](docs/release/known-limitations.md) for release-specific evidence
+and the open-generic/value-type boundary.
 
 ## Out of scope (follow-ups)
 
@@ -331,4 +363,12 @@ and built-in logging/validation are out of scope for the first release.
 Sequential `PublishAsync`, streams via `StreamAsync`, and your own
 `Result` types as ordinary `TResponse` values are supported.
 
-For migrating from MediatR, see `docs/migrating-from-mediatr.md`.
+For migrating from MediatR, see [the migration guide](docs/migrating-from-mediatr.md).
+
+## Development
+
+Start with [Constitution.md](Constitution.md) for library and generator design,
+dependency lifetime, performance acceptance criteria, test scope, and source
+management. See [source layout](docs/source-layout.md) for file placement.
+The [CI workflow](.github/workflows/ci.yml) defines integration checks; package
+versions are defined in [Directory.Build.props](Directory.Build.props).

@@ -1,44 +1,63 @@
 # Zendiator
 
-[English](README.md)
+[English](README.md) | [設計・保守の方針](Constitution.ja.md)
 
 コンパイル時に型付きディスパッチを生成する、.NET 10 向けの小さな Mediator です。
 Roslyn Incremental Source Generator がリクエストごとの `SendAsync` オーバーロード、
-構造体の継続ノード、DI 登録を生成します。実行時の型 switch、リフレクション呼び出し、
-`dynamic` は使いません。
+構造体の継続ノード、DI 登録を生成します。型付きの要求配送に、実行時のアセンブリ走査、
+リフレクション呼び出し、`dynamic` は使いません。
 
 - 対象: .NET 10（C# 14、nullable 有効）
 - 配布: `Zendiator.Abstractions` と `Zendiator` の 2 パッケージ（同バージョン管理）
-- 現行版: [0.1.1](docs/release/0.1.1-release-notes.md)
+- 状態: V1 前のプレビュー。破壊的変更を許容します
 - リポジトリ: https://github.com/Htkym/zendiator
 - ライセンス: MIT
 
 ## インストール
 
-```xml
-<ItemGroup>
-  <PackageReference Include="Zendiator.Abstractions" Version="0.1.1" />
-  <PackageReference Include="Zendiator" Version="0.1.1" />
-</ItemGroup>
+```shell
+dotnet add package Zendiator
 ```
+
+`Zendiator` は Abstractions への依存と Source Generator を含みます。
+契約だけを置くプロジェクトは `Zendiator.Abstractions` のみを参照できます。
+アプリケーションで使うパッケージのバージョンは固定し、両パッケージでそろえてください。
+
+この README は現在のリポジトリを説明しており、公開済みパッケージとは異なる場合があります。
+利用する版のリリースノートも確認してください。公開済みパッケージのインストールだけで、
+ここに記載する開発中の変更がすべて利用できるとは限りません。
 
 役割分担の目安です。
 
 | プロジェクト | 参照 |
 |---|---|
 | Contracts（メッセージ定義） | `Zendiator.Abstractions` のみ |
-| Application（ハンドラー・Behavior・DI 構成） | `Zendiator.Abstractions` + `Zendiator`（`AddZendiator` 用） |
+| Application（ハンドラー・Behavior・DI 構成） | `Zendiator`（Abstractions は推移的に参照） |
 | Host（起動側・構成用） | Application（`AddApplication()` 形式のラッパーを呼ぶ） |
 
 構成はハンドラー側から逆参照を作らない場所に置きます。Roslyn は実行時依存になりません。Generator 自体は `Zendiator` パッケージに `analyzers/dotnet/cs` として同梱されます。
 
 ## 使い方
 
+現在のコンパイルに対する登録は、次の 1 呼び出しで行えます。
+別の初期化や独自 Provider は不要です。
+
+```csharp
+using Zendiator.DependencyInjection;
+
+services.AddZendiator();
+```
+
+ホストは通常の `builder.Build()`、DI コンテナは標準の構築方法を使います。
+別アセンブリ、Behavior、生成先 namespace を指定する場合は、後述の構成ラムダを使います。
+
 メッセージとハンドラーを定義します。`class`、`record`、`struct`、`record struct` を使えます。
 応答には利用側の `Result` 型や null 許容型も使えます。
 
 ```csharp
 using Zendiator;
+
+public sealed record MemorialTargetDto(int Year, IReadOnlyList<string> Names);
 
 public readonly record struct GetTargetYearQuery(int Year) : IQuery<MemorialTargetDto>;
 
@@ -52,7 +71,8 @@ public sealed class GetTargetYearQueryHandler : IQueryHandler<GetTargetYearQuery
 }
 ```
 
-構成ルートから設定します。属性も空クラスも要りません。
+複数プロジェクトのアプリケーションでは、構成ルートから設定します。
+属性や空の Mediator クラスは要りません。
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
@@ -82,16 +102,21 @@ services.AddApplication();
 ```
 
 - `IZendiator` は設定した namespace に生成されます。
-- `SendAsync` は具体的なリクエスト型ごとのオーバーロードだけを生成します。
+- `SendAsync` はリクエスト型に対応するオーバーロードを生成します。対応するジェネリック要求の形も含みます。
   `IRequest<T>` や `object` を受ける汎用送信 API はありません。
   派生契約（`ICommand<T>` など）で宣言した変数からの送信はできません。静的な型が具体型である呼び出しだけが対象です。
 - 属性による構成（`[GenerateZendiator]` のクラス／アセンブリ属性）は
-  互換経路として残ります。同一コンパイルで DI 構成ラムダとは併用できません。
+  別の宣言方法として利用できます。同一コンパイルで DI 構成ラムダとは併用できません。
 
 呼び出し側です。
 
 ```csharp
+using MyApp.Application.Generated;
+
+var services = new ServiceCollection();
 services.AddApplication();
+await using var provider = services.BuildServiceProvider(
+    new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
 await using var scope = provider.CreateAsyncScope();
 var zendiator = scope.ServiceProvider.GetRequiredService<IZendiator>();
 var result = await zendiator.SendAsync(new GetTargetYearQuery(2026));
@@ -110,7 +135,9 @@ public sealed record GetHouseholdNames(int Count) : IStreamRequest<string>;
 
 public sealed class GetHouseholdNamesHandler : IStreamRequestHandler<GetHouseholdNames, string>
 {
-    public async IAsyncEnumerable<string> HandleAsync(GetHouseholdNames request, CancellationToken ct)
+    public async IAsyncEnumerable<string> HandleAsync(
+        GetHouseholdNames request,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
         for (var i = 0; i < request.Count; i++)
         {
@@ -143,7 +170,6 @@ await foreach (var name in zendiator.StreamAsync(new GetHouseholdNames(3), cance
 ## ライフタイム
 
 既定は Scoped です。登録ごとに Singleton と Transient も選べます。
-MediatR の `Lifetime` 設定に相当します（MediatR の既定は Transient）。
 
 ```csharp
 services.AddZendiator(static configuration =>
@@ -162,7 +188,7 @@ services.AddZendiator(static configuration =>
   Singleton が Scoped の依存を保持していないことを確認してください。
 - 先に登録した方が勝ちます。後からの登録は既存登録を置き換えません。
 - 範囲外の値は、定数なら生成時（ZEN0018）に診断されます。
-- Handler・Behavior は初めて必要になったときに取得し、Mediator インスタンスの間で再利用します。Transient も同じです。新しい構成が必要な場合は Transient の Mediator を新たに解決します。
+- Handler・Behavior は初めて必要になったときに取得し、同一 Mediator インスタンス内で再利用します。Transient も同じです。新しい構成が必要な場合は Transient の Mediator を新たに解決します。
   早期終了での未構築保証（後続 Behavior とハンドラーを解決しない）も変わりません。
 
 Singleton は、ハンドラー、Behavior、その依存サービスを並行した呼び出しで安全に共有できる場合に使います。
@@ -279,9 +305,8 @@ dotnet run --project samples/Zendiator.Sample.Host -c Release
 
 利用側コンパイルごとの生成コード（`IZendiator`、`Zendiator`、属性方式の登録拡張
 または DI 方式の registrar＋interceptor）は製品の一部として扱います。
-安定版の公開後は直前の安定版を基準にパッケージ互換性を検証します。
-`0.1.1` は `0.x` の公開であり、API を永久に固定するものではなく、`1.0.0` の前に変更される場合があります。
-契約・ハンドラー・管路・属性の一覧は、上記の Public API 節のとおりです。
+`1.0.0` より前は、互換モードを設けずに API やアーキテクチャを変更する場合があります。
+古い実行経路を残す代わりに、破壊的変更の内容を明記します。
 
 ## 性能
 
@@ -292,33 +317,45 @@ dotnet run --project samples/Zendiator.Sample.Host -c Release
 
 実行経路は Mediator 単位の遅延キャッシュに一本化しています。`services.AddZendiator()` と通常の `BuildServiceProvider()` またはホスト構築で利用でき、独自 Provider や高速化の切り替えは不要です。Transient の変更点と破棄の扱いは [構築と有効期間](docs/optimized-dispatch.md) を参照してください。過去のリリースの測定値は、現在の実装の性能を示すものではありません。
 
-現在の正式測定（BenchmarkDotNet、Release、Throughput、3回起動、MemoryDiagnoser）は
-[0.1.0 release notes](docs/release/0.1.0-release-notes.md)に概要を、
-[正式測定（英語）](docs/performance.md)に全表をまとめています。
-結果は測定した経路と環境に限定します。generic応答の生成、スコープ全体の作成・破棄、
-非同期中断を伴うStreamの割り当ては、それぞれ分けて記録しています。
-競合順位や一般的なallocation-freeは主張しません。
-`OPT-stream-async` を含む[既知の制限](docs/release/known-limitations.md)も参照してください。
+過去のリリースの測定は [0.1.0 release notes](docs/release/0.1.0-release-notes.md) と
+[性能の記録](docs/performance.md) にあります。これらは測定時の版を対象とし、
+現在の遅延キャッシュ方式の性能を示すものではありません。
+結果は測定した経路と環境に限定します。ジェネリック応答の生成、スコープ全体の作成・破棄、
+非同期中断を伴うストリームの割り当ては別のコストです。
+競合順位や、あらゆる条件でのゼロ割り当ては主張しません。
+
+Generator 自体も、不変でシンボルを含まないモデルを要素単位で比較し、出力が同じなら
+テンプレート展開を省きます。DI 登録位置の変更は interceptor の更新と本体の生成を分けます。
+Compilation の変更時には意味解析を行うため、型単位の増分解析ではありません。
+設計と測定の方針は [Constitution](Constitution.ja.md) を参照してください。
 
 ## AOT とトリミング
 
 `IsAotCompatible` を設定し、生成コードはリフレクションを使いません。
 AOT・トリミング警告は抑制せず、エラーとして扱います。
-完全な Native AOT リンクには C++ ワークロードが必要です。アプリを Native AOT で発行する例
-（プロジェクトのパスは自分のアプリに読み替えてください）:
+完全な Native AOT リンクにはネイティブのビルドツールが必要です。
+NuGet パッケージを参照する自分のアプリで `PublishAot` を有効にします。
+次のパスは実際のプロジェクトに読み替えてください。
 
 ```powershell
-dotnet publish samples/Zendiator.Sample.Host -c Release -r win-x64 `
-  -p:PublishTrimmed=true -p:TrimMode=full --self-contained
+dotnet publish MyApp/MyApp.csproj -c Release -r win-x64 -p:PublishAot=true
 ```
 
-検証済みの行列（AOT01-AOT12。型付き、void、管路、汎用、通知、複数、同期と ref、
-ストリーム、ストリーム管路、汎用ストリーム、DI-first、Assembly 互換）と既知の境界
-（値型で閉じたオープンジェネリック）の概要は
-[既知の制限](docs/release/known-limitations.md)を見てください。
+CI はパッケージを参照する consumer で smoke test と Native AOT の行列を検証します。
+リポジトリ内の ProjectReference のサンプルだけで、パッケージ利用時の対応を保証しません。
+確認項目は [CI ワークフロー](.github/workflows/ci.yml)、各リリースの検証記録と
+値型で閉じるオープンジェネリックの境界は [既知の制限](docs/release/known-limitations.md) を参照してください。
 
 ## 対象外（後続）
 
 並列配信、fire-and-forget、永続化やoutbox、要求の `Send(object)`、循環検出、CodeFix、CodeLens、組み込み `Result` 管路、組み込みログ・検証は初版の対象外です。逐次 `PublishAsync` による通知、`StreamAsync` によるストリーム、通常の `TResponse` 値としての利用者独自 `Result` 型は対応済みです。
 
-MediatR からの移行は `docs/migrating-from-mediatr.ja.md` を見てください。
+MediatR からの移行は [移行ガイド](docs/migrating-from-mediatr.ja.md) を参照してください。
+
+## 開発
+
+[Constitution.ja.md](Constitution.ja.md) に、ライブラリと Generator の設計、依存の有効期間、
+性能改善の採用条件、テストの範囲、ソース管理の方針をまとめています。
+ファイルの配置は [ソース構成](docs/source-layout.md) を参照してください。
+統合検証は [CI ワークフロー](.github/workflows/ci.yml)、
+パッケージのバージョン定義は [Directory.Build.props](Directory.Build.props) にあります。
