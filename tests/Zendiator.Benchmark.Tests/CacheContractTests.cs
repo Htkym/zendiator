@@ -33,7 +33,7 @@ public sealed class CacheContractTests
     }
 
     [Fact]
-    public async Task ZeroBehavior_Transient_resolves_fresh_per_send()
+    public async Task ZeroBehavior_Transient_is_captured_once_per_mediator()
     {
         var services = new ServiceCollection();
         var calls = 0;
@@ -49,7 +49,7 @@ public sealed class CacheContractTests
         Assert.Equal(42, await mediator.SendAsync(new Zp0(41)));
         Assert.Equal(42, await mediator.SendAsync(new Zp0(41)));
         Assert.Equal(42, await mediator.SendAsync(new Zp0(41)));
-        Assert.Equal(3, calls);
+        Assert.Equal(1, calls);
         var h1 = scope.ServiceProvider.GetRequiredService<Zp0Handler>();
         var h2 = scope.ServiceProvider.GetRequiredService<Zp0Handler>();
         Assert.NotSame(h1, h2);

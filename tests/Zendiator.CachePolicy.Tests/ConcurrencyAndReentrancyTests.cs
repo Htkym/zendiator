@@ -29,7 +29,7 @@ public sealed class ConcurrencyAndReentrancyTests
     }
 
     [Fact]
-    public async Task Concurrent_transient_use_constructs_per_send()
+    public async Task Concurrent_transient_use_captures_once()
     {
         TestCounters.ResetAll();
         var services = new ServiceCollection();
@@ -46,7 +46,7 @@ public sealed class ConcurrencyAndReentrancyTests
             Task.Run(async () => await mediator.SendAsync(new Val0(i)))));
         for (var i = 0; i < 8; i++)
             Assert.Equal(i + 1, results[i]);
-        Assert.Equal(8, Val0Handler.FactoryCalls);
+        Assert.Equal(1, Val0Handler.FactoryCalls);
     }
 
     [Fact]

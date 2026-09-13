@@ -98,7 +98,7 @@ var result = await zendiator.SendAsync(new GetTargetYearQuery(2026));
 ```
 
 `services.AddZendiator()` は `TryAdd` で登録します。事前登録があれば置き換えません。
-`Transient` で事前登録したハンドラーは `Transient` のまま使われます。
+事前登録の有効期間は維持しますが、Mediator は `Transient` を含めて最初に取得した Handler・Behavior を自身の有効期間中に再利用します。
 登録を繰り返しても重複しません。`IZendiator` は同じ有効期間の `Zendiator` を返します。
 
 ## ストリーミング
@@ -162,7 +162,7 @@ services.AddZendiator(static configuration =>
   Singleton が Scoped の依存を保持していないことを確認してください。
 - 先に登録した方が勝ちます。後からの登録は既存登録を置き換えません。
 - 範囲外の値は、定数なら生成時（ZEN0018）に診断されます。
-- 解決の意味は DI どおりです。Transient では送信ごとに新しいハンドラーが作られます。
+- Handler・Behavior は初めて必要になったときに取得し、Mediator インスタンスの間で再利用します。Transient も同じです。新しい構成が必要な場合は Transient の Mediator を新たに解決します。
   早期終了での未構築保証（後続 Behavior とハンドラーを解決しない）も変わりません。
 
 Singleton は、ハンドラー、Behavior、その依存サービスを並行した呼び出しで安全に共有できる場合に使います。
@@ -290,10 +290,7 @@ dotnet run --project samples/Zendiator.Sample.Host -c Release
 送信あたりの追加割り当て 0 B を確認しています（0 段・1 段の同期経路はテストでも固定）。
 初回DI解決、ログ出力、非同期中断は、この0 Bの主張に含めません。レイテンシの数値保証はしません。
 
-ハンドラーとBehaviorは呼び出すたびに、紐付いたDI Providerから解決します。
-ScopedとSingletonの再利用はDIコンテナーが担当します。同じ登録一覧から複数のProviderを
-作った場合にも有効期間を守るため、Mediator側の独自キャッシュを削除しました。
-以前の約1〜4 nsという数値は、現在の送信経路には適用できません。
+実行経路は Mediator 単位の遅延キャッシュに一本化しています。`services.AddZendiator()` と通常の `BuildServiceProvider()` またはホスト構築で利用でき、独自 Provider や高速化の切り替えは不要です。Transient の変更点と破棄の扱いは [構築と有効期間](docs/optimized-dispatch.md) を参照してください。過去のリリースの測定値は、現在の実装の性能を示すものではありません。
 
 現在の正式測定（BenchmarkDotNet、Release、Throughput、3回起動、MemoryDiagnoser）は
 [0.1.0 release notes](docs/release/0.1.0-release-notes.md)に概要を、

@@ -5,12 +5,7 @@
 Procedures for moving MediatR 12 code to Zendiator. Covers API correspondences,
 required rewrites, and unsupported features.
 
-RC2 resolves each invoked handler and Behavior through standard DI. Scoped/Singleton reuse,
-Transient creation, validation, and disposal belong to the provider. Do not migrate code to
-the removed generated `CachePolicy`, route holders, or mediator `IDisposable` implementation.
-Prior send/stream numbers are superseded; current measurements and limitations are in
-[the 0.1.0 release notes](release/0.1.0-release-notes.md) and
-[known limitations](release/known-limitations.md).
+The current preview uses standard DI construction and captures Handler/Behavior dependencies lazily per mediator instance, including Transient dependencies. Resolve a new transient mediator for a fresh composition. Custom provider APIs were removed. The generated mediator now implements IDisposable to invalidate its cache; DI still owns dependency disposal. See [construction and dispatch lifetime](optimized-dispatch.md).
 
 Assumptions:
 
@@ -114,10 +109,8 @@ services.AddZendiator(static configuration =>
     configuration.ServiceLifetime = ServiceLifetime.Singleton;
 });
 ```
-- The specified lifetime applies to all of Zendiator, handlers, and Behaviors.
-  Since they are never mixed, captive dependencies cannot occur.
-- Stateful handlers (call counters etc.) are reused when moving from Transient
-  to Scoped, so behavior changes. Pre-register with `AddTransient` to keep it.
+- The specified lifetime is the default for the mediator, handlers, and Behaviors. Pre-registrations can override it; enable ValidateScopes to detect invalid scoped dependencies.
+- Stateful handlers are reused within a mediator even when registered as Transient. For fresh transient dependencies, resolve a new transient mediator; AddTransient on the handler alone is insufficient.
 - Enable `ValidateScopes` and `ValidateOnBuild` for post-migration verification.
 
 ## Rewriting requests and handlers

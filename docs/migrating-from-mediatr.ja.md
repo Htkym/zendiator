@@ -5,12 +5,7 @@
 MediatR 12 を使ったコードを Zendiator へ移す手順です。API の対応関係と、
 書き換えが必要な箇所、対応していない機能をまとめています。
 
-RC2では、呼び出すハンドラーとBehaviorを標準DIで解決します。Scoped／Singletonの再利用、
-Transientの生成、検証、破棄はProviderが担当します。削除した生成内部型 `CachePolicy`、
-route holder、Mediatorの `IDisposable` には依存しないでください。
-以前のSend／Stream数値は過去の記録です。現在の測定結果と制限は
-[0.1.0 release notes](release/0.1.0-release-notes.md)と
-[既知の制限](release/known-limitations.md)にまとめています。
+現在のプレビュー版は標準 DI で構築し、Transient を含む Handler・Behavior を Mediator 単位で遅延取得して再利用します。新しい構成が必要な場合は Transient の Mediator を新たに解決してください。独自 Provider API は削除しました。生成 Mediator はキャッシュを無効化するために IDisposable を実装しますが、依存サービスの破棄は DI が担当します。詳細は [構築と有効期間](optimized-dispatch.md) を参照してください。
 
 前提は次のとおりです。
 
@@ -112,11 +107,11 @@ services.AddZendiator(static configuration =>
     configuration.ServiceLifetime = ServiceLifetime.Singleton;
 });
 ```
-- 指定したライフタイムは Zendiator、ハンドラー、Behavior のすべてに適用されます。
-  混在しないため、捕捉的依存は生じません。
-- 状態を持つハンドラー（呼び出し回数のカウンターなど）は、
-  Transient から Scoped に変わると使い回されるため、動作が変わります。
-  必要なら事前に `AddTransient` で登録しておくと、その指定が残ります。
+- 指定したライフタイムは Zendiator、ハンドラー、Behavior の既定値です。
+  事前登録で異なる指定もできるため、`ValidateScopes` で不適切な Scoped 依存を検出してください。
+- 状態を持つハンドラーは Transient でも Mediator インスタンスの間で再利用されます。
+  新しい構成が必要な場合は Transient の Mediator を新たに解決してください。
+  ハンドラーだけを `AddTransient` で登録しても送信ごとには生成されません。
 - 移行直後の検証では `ValidateScopes` と `ValidateOnBuild` の有効化を推奨します。
 
 ## リクエストとハンドラーの書き換え

@@ -86,7 +86,7 @@ services.AddApplication();
   There is no generic send API taking `IRequest<T>` or `object`.
   Sending from a variable declared with a derived contract (such as `ICommand<T>`) is not supported. Only calls whose static type is the concrete type are covered.
 - Attribute-based configuration (`[GenerateZendiator]` class or assembly
-  attributes) remains available as a compatibility route; it cannot be combined
+  attributes) remains available as a alternative declaration style; it cannot be combined
   with `AddZendiator` configuration lambdas in one compilation.
 
 Calling code:
@@ -99,7 +99,7 @@ var result = await zendiator.SendAsync(new GetTargetYearQuery(2026));
 ```
 
 Registration uses `TryAdd`. Pre-existing registrations are not replaced.
-Handlers pre-registered as `Transient` stay `Transient`.
+Pre-registered lifetimes are preserved, but each mediator lazily captures its first Handler and Behavior instance, including `Transient` dependencies.
 Repeated registration does not duplicate. `IZendiator` resolves the `Zendiator` with the same lifetime.
 
 ## Streaming
@@ -166,7 +166,7 @@ Rules:
   lifetimes; validate scopes to catch Singleton services capturing Scoped dependencies.
 - First registration wins. A later registration does not replace existing registrations.
 - Out-of-range values are diagnosed at generation (`ZEN0018`) when constant.
-- Resolution follows DI semantics. With Transient, a new handler is created per send.
+- Each mediator captures dependencies on first use and reuses them, including Transient dependencies. Resolve a new transient mediator for a fresh composition.
   The no-construction guarantee on short-circuit (downstream Behaviors and handlers are not resolved) is unchanged.
 
 Use Singleton only when the mediator, handlers, Behaviors, and their dependencies are
@@ -296,10 +296,7 @@ With warmed-up scopes and synchronously completing allocation-free handlers/Beha
 0 B of additional allocation per send is verified (the 0- and 1-stage sync paths are also pinned by tests).
 First-time DI resolution, logging, and async suspension are outside that 0 B claim. No latency numbers are guaranteed.
 
-Handlers and Behaviors are resolved through the bound DI provider for each invocation.
-Scoped and Singleton reuse belongs to the container. The former mediator-side cache
-was removed to preserve lifetime semantics when a service collection is used to build
-multiple providers. The previous 1–4 ns figures no longer describe the current send path.
+Dispatch uses one lazy, mediator-instance cache with standard DI construction. Use `services.AddZendiator()` and normal `BuildServiceProvider()` or host construction; no custom provider or fast-mode switch is required. See [construction and dispatch lifetime](docs/optimized-dispatch.md) for the Transient breaking change, disposal rules, and measurement boundaries.
 
 Current formal measurements (BenchmarkDotNet, Release, Throughput, three launches,
 MemoryDiagnoser) are summarized in the [0.1.0 release notes](docs/release/0.1.0-release-notes.md),

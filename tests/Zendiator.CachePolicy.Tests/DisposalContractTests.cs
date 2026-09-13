@@ -102,7 +102,7 @@ public sealed class DisposalContractTests
         var a2 = await mediatorA.SendAsync(new Guid0());
         var b2 = await mediatorB.SendAsync(new Guid0());
         Assert.Equal(a1, a2);
-        Assert.NotEqual(b1, b2);
+        Assert.Equal(b1, b2);
         Assert.NotEqual(a1, b1);
     }
 }

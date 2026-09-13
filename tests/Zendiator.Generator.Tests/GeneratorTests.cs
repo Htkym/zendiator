@@ -568,7 +568,7 @@ public sealed class GeneratorTests
         Assert.DoesNotContain("SendAsync(global::App.ParseRequest", text);
         Assert.DoesNotContain("SendAsync(global::App.Flush", text);
         Assert.DoesNotContain("object request", text);
-        Assert.Contains("SyncRoute0Node0(global::System.IServiceProvider services)", text);
+        Assert.Contains("SyncRoute0Node0(global::Zendiator.DependencyInjection.ZendiatorServiceResolver services)", text);
         Assert.DoesNotContain("static global::App.ParseRequest", text);
     }
 

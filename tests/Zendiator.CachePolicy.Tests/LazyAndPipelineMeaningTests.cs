@@ -94,7 +94,7 @@ public sealed class LazyAndPipelineMeaningTests
     }
 
     [Fact]
-    public async Task Retry_transient_constructs_per_invocation()
+    public async Task Retry_transient_reuses_the_mediator_dependency()
     {
         TestCounters.ResetAll();
         var services = new ServiceCollection();
@@ -107,10 +107,10 @@ public sealed class LazyAndPipelineMeaningTests
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         await using var scope = provider.CreateAsyncScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        Assert.Equal(1, await mediator.SendAsync(new RetryReq()));
-        Assert.Equal(2, RetryHandler.FactoryCalls);
-        Assert.Equal(1, await mediator.SendAsync(new RetryReq()));
-        Assert.Equal(4, RetryHandler.FactoryCalls);
+        Assert.Equal(2, await mediator.SendAsync(new RetryReq()));
+        Assert.Equal(1, RetryHandler.FactoryCalls);
+        Assert.Equal(4, await mediator.SendAsync(new RetryReq()));
+        Assert.Equal(1, RetryHandler.FactoryCalls);
     }
 
     [Fact]
