@@ -1,27 +1,19 @@
-using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
 
 namespace Zendiator.SourceGenerator;
 
-internal static partial class SourceEmitter
+internal sealed partial class SourceEmitter
 {
-    private static void EmitInterface(
-        StringBuilder b,
-        List<Route> routes,
-        List<NotificationRoute> notifications,
-        List<MultiRoute> multiRoutes,
-        List<Route> syncRoutes,
-        List<MultiRoute> syncMultiRoutes,
-        List<Route> streamRoutes)
+    private void EmitInterface(StringBuilder b)
     {
         b.AppendLine("""
             /// <summary>Typed request dispatch for this composition.</summary>
             public interface IZendiator
             {
             """);
-        foreach (var route in routes)
+        foreach (var route in _model.Routes.Requests.Single)
         {
             b.AppendLine($$"""
                     /// <summary>Dispatches the request through its configured pipeline.</summary>
@@ -29,7 +21,7 @@ internal static partial class SourceEmitter
                 """);
         }
 
-        foreach (var notification in notifications)
+        foreach (var notification in _model.Routes.Notifications)
         {
             b.AppendLine($$"""
                     /// <summary>Publishes the notification to subscribers in order.</summary>
@@ -38,7 +30,7 @@ internal static partial class SourceEmitter
                 """);
         }
 
-        if (notifications.Any(static n => !n.IsOpen))
+        if (_model.Routes.Notifications.Any(static n => !n.IsOpen))
         {
             b.AppendLine($$"""
                     /// <summary>Publishes a registered notification by its runtime type.</summary>
@@ -47,7 +39,7 @@ internal static partial class SourceEmitter
                 """);
         }
 
-        foreach (var multi in multiRoutes)
+        foreach (var multi in _model.Routes.Requests.Multiple)
         {
             b.AppendLine($$"""
                     /// <summary>Dispatches the request to every handler in order.</summary>
@@ -55,7 +47,7 @@ internal static partial class SourceEmitter
                 """);
         }
 
-        foreach (var sync in syncRoutes)
+        foreach (var sync in _model.Routes.Synchronous.Single)
         {
             b.AppendLine($$"""
                     /// <summary>Dispatches the request synchronously without retaining it.</summary>
@@ -63,7 +55,7 @@ internal static partial class SourceEmitter
                 """);
         }
 
-        foreach (var sync in syncMultiRoutes)
+        foreach (var sync in _model.Routes.Synchronous.Multiple)
         {
             b.AppendLine($$"""
                     /// <summary>Dispatches the request to every handler in order, synchronously.</summary>
@@ -71,7 +63,7 @@ internal static partial class SourceEmitter
                 """);
         }
 
-        foreach (var stream in streamRoutes)
+        foreach (var stream in _model.Routes.Streams)
         {
             b.AppendLine($$"""
                     /// <summary>Streams items for the request through its configured pipeline. Enumeration is lazy and scope-safe.</summary>

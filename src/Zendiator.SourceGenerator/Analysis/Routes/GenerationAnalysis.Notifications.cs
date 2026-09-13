@@ -58,7 +58,7 @@ internal sealed partial class GenerationAnalysis
                 Error(12, $"Notification {Name(declared)} is a ref struct. Ref struct notifications are not supported.", declared);
                 continue;
             }
-            if (!declared.AllInterfaces.Any(i => Same(i.OriginalDefinition, notificationDefinition)))
+            if (!(GetContracts(declared, notificationDefinition).Length != 0))
             {
                 Error(13, $"Notification {Name(declared)} must implement Zendiator.INotification.", declared);
                 continue;

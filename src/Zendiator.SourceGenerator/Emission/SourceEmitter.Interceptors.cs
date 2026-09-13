@@ -1,21 +1,20 @@
-using System.Collections.Generic;
 using System.Text;
 
 namespace Zendiator.SourceGenerator;
 
-internal static partial class SourceEmitter
+internal sealed partial class SourceEmitter
 {
     private static string EscapeString(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
-    internal static string EmitInterceptorFile(List<(int Version, string Data, bool IsLambda, bool IsExtensionForm)> shims, string registrarPrefix)
+    internal static string EmitInterceptors(GenerationTarget target)
     {
-        if (shims.Count == 0)
+        if (target.CallSites.Count == 0)
             return "";
         var b = CreateSourceBuilder();
-        EmitShims(b, shims, registrarPrefix);
+        EmitShims(b, target);
         return b.ToString();
     }
 
-    private static void EmitShims(StringBuilder b, List<(int Version, string Data, bool IsLambda, bool IsExtensionForm)> shims, string registrarPrefix)
+    private static void EmitShims(StringBuilder b, GenerationTarget target)
     {
         b.AppendLine("""
             namespace System.Runtime.CompilerServices
@@ -32,7 +31,7 @@ internal static partial class SourceEmitter
                 {
             """);
         var index = 0;
-        foreach (var (version, data, isLambda, isExtensionForm) in shims)
+        foreach (var (version, data, isLambda, isExtensionForm) in target.CallSites)
         {
             var name = "Shim" + index++;
             var receiver = isExtensionForm ? "this " : "";
@@ -45,7 +44,7 @@ internal static partial class SourceEmitter
                                 global::System.ArgumentNullException.ThrowIfNull(configure);
                                 var configuration = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
                                 configure(configuration);
-                                return {{registrarPrefix}}ZendiatorGeneratedRegistrar.Add(services, configuration.Snapshot());
+                                return {{target.Prefix}}ZendiatorGeneratedRegistrar.Add(services, configuration.Snapshot());
                             }
                     """);
             }
@@ -55,7 +54,7 @@ internal static partial class SourceEmitter
                             public static global::Microsoft.Extensions.DependencyInjection.IServiceCollection {{name}}({{receiver}}global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)
                             {
                                 var configuration = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
-                                return {{registrarPrefix}}ZendiatorGeneratedRegistrar.Add(services, configuration.Snapshot());
+                                return {{target.Prefix}}ZendiatorGeneratedRegistrar.Add(services, configuration.Snapshot());
                             }
                     """);
             }

@@ -23,16 +23,22 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
             },
             static (ctx, _) => (InvocationExpressionSyntax)ctx.Node).Collect();
         var result = declarations.Combine(invocations).Combine(context.CompilationProvider)
-            .Select(static (input, ct) => new GenerationAnalysis(input.Left.Left, input.Left.Right, input.Right, ct).Generate());
+            .Select(static (input, ct) => new GenerationAnalysis(input.Left.Left, input.Left.Right, input.Right, ct).Generate()).WithTrackingName("Analysis");
 
-        // Keep symbols in semantic analysis only; source output is a value-equatable string.
-        var source = result.Select(static (r, _) => r.Source).WithTrackingName("SourceText");
+        // Structural equality stops template expansion before allocating generated text.
+        var model = result.Select(static (r, _) => r.Model).WithTrackingName("EmissionModel");
+        var source = model.Select(static (m, _) => m == null ? "" : new SourceEmitter(m).Emit())
+            .WithTrackingName("SourceEmission")
+            .Select(static (text, _) => text).WithTrackingName("SourceText");
         context.RegisterSourceOutput(source, static (ctx, text) =>
         {
             if (text.Length != 0)
                 ctx.AddSource("Zendiator.g.cs", SourceText.From(text, Encoding.UTF8));
         });
-        var interceptors = result.Select(static (r, _) => r.Interceptors).WithTrackingName("InterceptorsText");
+        var target = result.Select(static (r, _) => r.Target).WithTrackingName("InterceptorModel");
+        var interceptors = target.Select(static (t, _) => t == null ? "" : SourceEmitter.EmitInterceptors(t))
+            .WithTrackingName("InterceptorsEmission")
+            .Select(static (text, _) => text).WithTrackingName("InterceptorsText");
         context.RegisterSourceOutput(interceptors, static (ctx, text) =>
         {
             if (text.Length != 0)

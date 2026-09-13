@@ -11,7 +11,7 @@ internal sealed partial class GenerationAnalysis
     {
         if (openNotifications.Contains(reqDef)) return true;
         if (!IsOpenDefinition(reqDef) || !IsPublicDefinition(reqDef) ||
-            !reqDef.AllInterfaces.Any(i => Same(i.OriginalDefinition, notificationDefinition)))
+            !(GetContracts(reqDef, notificationDefinition).Length != 0))
         {
             Error(3, $"Notification {Name(reqDef)} must be a public generic definition implementing Zendiator.INotification.", reqDef);
             return false;

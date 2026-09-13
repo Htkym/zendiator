@@ -1,14 +1,13 @@
-using System.Collections.Generic;
 using System.Text;
 
 namespace Zendiator.SourceGenerator;
 
-internal static partial class SourceEmitter
+internal sealed partial class SourceEmitter
 {
-    private static void EmitStreamTokenMerge(StringBuilder b, List<Route> streamRoutes)
+    private void EmitStreamTokenMerge(StringBuilder b)
     {
         // Shared token-merge helper: link only when both tokens are cancellable and different.
-        if (streamRoutes.Count != 0)
+        if (_model.Routes.Streams.Count != 0)
         {
             b.AppendLine("""
                     private static global::System.Threading.CancellationToken MergeStreamTokens(global::System.Threading.CancellationToken apiToken, global::System.Threading.CancellationToken enumeratorToken, out global::System.Threading.CancellationTokenSource? linked)
@@ -24,15 +23,13 @@ internal static partial class SourceEmitter
         }
     }
 
-    private static void EmitStreamEnumerable(
-        StringBuilder b,
-        Route route,
-        string tp,
-        string req,
-        string item,
-        string enumerable,
-        string enumerator)
+    private static void EmitStreamEnumerable(StringBuilder b, EmissionRoute route, int index)
     {
+        var tp = TypeParameters(route);
+        var req = route.IsOpen ? route.RequestDisplay : Name(route.Request);
+        var item = route.IsOpen ? route.ResponseDisplay : Name(route.Response);
+        var enumerator = $"StreamRoute{index}Enumerator";
+        var enumerable = $"StreamRoute{index}Enumerable";
         // Typed enumerable: lightweight, no shared mutable state on the mediator.
         b.AppendLine($$"""
                 private sealed class {{enumerable}}{{TypeParameters(route)}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver services, {{req}} request, global::System.Threading.CancellationToken apiToken) : global::System.Collections.Generic.IAsyncEnumerable<{{item}}>{{TypeConstraints(route)}}
@@ -42,15 +39,12 @@ internal static partial class SourceEmitter
             """);
     }
 
-    private static void EmitStreamEnumerator(
-        StringBuilder b,
-        Route route,
-        int index,
-        string tp,
-        string req,
-        string item,
-        string enumerator)
+    private static void EmitStreamEnumerator(StringBuilder b, EmissionRoute route, int index)
     {
+        var tp = TypeParameters(route);
+        var req = route.IsOpen ? route.RequestDisplay : Name(route.Request);
+        var item = route.IsOpen ? route.ResponseDisplay : Name(route.Response);
+        var enumerator = $"StreamRoute{index}Enumerator";
         // Typed enumerator: resolves pipeline once on first MoveNext, merges tokens only when different.
         b.AppendLine($$"""
                 private sealed class {{enumerator}}{{TypeParameters(route)}} : global::System.Collections.Generic.IAsyncEnumerator<{{item}}>{{TypeConstraints(route)}}

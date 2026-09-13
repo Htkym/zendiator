@@ -16,7 +16,7 @@ internal sealed partial class GenerationAnalysis
             Error(3, $"Request {Name(reqDef)} must be a public generic definition with exactly one response contract.", reqDef);
             return false;
         }
-        var rc = reqDef.AllInterfaces.Where(i => Same(i.OriginalDefinition, requestDefinition)).ToArray();
+        var rc = GetContracts(reqDef, requestDefinition);
         if (rc.Length != 1 || !IsPublicDefinition(reqDef) || !LeavesPublicOrParam(rc[0].TypeArguments[0], reqDef))
         {
             Error(3, $"Request {Name(reqDef)} must be a public generic definition with exactly one response contract over public or type-parameter types.", reqDef);
@@ -106,7 +106,7 @@ internal sealed partial class GenerationAnalysis
                 return;
             }
         }
-        else if (!pattern.AllInterfaces.Any(i => Same(i.OriginalDefinition, voidRequestDefinition)))
+        else if (!(GetContracts(pattern, voidRequestDefinition).Length != 0))
         {
             Error(3, $"Handler {Name(type)} request {Name(pattern)} must implement Zendiator.IRequest.", type);
             return;

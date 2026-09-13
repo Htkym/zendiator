@@ -19,15 +19,21 @@ public sealed class GeneratorTests
     private static GeneratorDriver Driver() => CSharpGeneratorDriver.Create([new ZendiatorGenerator().AsSourceGenerator()],
         parseOptions: new CSharpParseOptions(LanguageVersion.Preview), driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, true));
 
-    private static GeneratorDriverRunResult Run(CSharpCompilation input, bool success)
+    private static GeneratorDriverRunResult Run(CSharpCompilation input, bool success, bool emit = false)
     {
         var driver = Driver().RunGeneratorsAndUpdateCompilation(input, out var output, out var diagnostics);
         if (success)
         {
             Assert.Empty(diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error));
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
-            using var stream = new MemoryStream();
-            Assert.True(output.Emit(stream).Success, string.Join("\n", output.GetDiagnostics()));
+            // Runtime integration projects already compile generated code. Emit IL here
+            // only for the representative explicit-interface case, not every fixture.
+            if (emit)
+            {
+                using var stream = new MemoryStream();
+                var result = output.Emit(stream);
+                Assert.True(result.Success, string.Join("\n", result.Diagnostics));
+            }
         }
         return driver.GetRunResult();
     }
@@ -35,9 +41,21 @@ public sealed class GeneratorTests
     [Fact]
     public void Typed_source_compiles_and_explicit_handlers_work()
     {
-        var result = Run(Compilation(Head + Request + Handler.Replace("public ValueTask<int> HandleAsync", "ValueTask<int> IRequestHandler<Ping,int>.HandleAsync")), true);
+        var nullableResponses = """
+            public sealed record ANullable : IRequest<string?>;
+            public sealed record BNonNullable : IRequest<string>;
+            public sealed class AHandler : IRequestHandler<ANullable,string?> {
+                public ValueTask<string?> HandleAsync(ANullable r, CancellationToken ct) => new((string?)null);
+            }
+            public sealed class BHandler : IRequestHandler<BNonNullable,string> {
+                public ValueTask<string> HandleAsync(BNonNullable r, CancellationToken ct) => new("");
+            }
+            """;
+        var result = Run(Compilation(Head + Request + Handler.Replace("public ValueTask<int> HandleAsync", "ValueTask<int> IRequestHandler<Ping,int>.HandleAsync") + nullableResponses), true, emit: true);
         var source = result.GeneratedTrees.Single().ToString();
         Assert.Contains("SendAsync(global::App.Ping request", source);
+        Assert.Contains("ValueTask<string?> SendAsync(global::App.ANullable request", source);
+        Assert.Contains("ValueTask<string> SendAsync(global::App.BNonNullable request", source);
         Assert.DoesNotContain("MakeGeneric", source);
         Assert.DoesNotContain("MessagePipe", source);
         // Only concrete overloads are generated; no generic object/IRequest dispatch.
@@ -656,15 +674,6 @@ public sealed class GeneratorTests
     }
 
     [Fact]
-    public void Output_is_deterministic_across_runs()
-    {
-        var compilation = Compilation(Head + Request + Handler);
-        var first = Driver().RunGenerators(compilation).GetRunResult().GeneratedTrees.Single().ToString();
-        var second = Driver().RunGenerators(compilation).GetRunResult().GeneratedTrees.Single().ToString();
-        Assert.Equal(first, second);
-    }
-
-    [Fact]
     public void Zero_behaviors_generate_direct_handler_nodes()
     {
         var text = Run(Compilation(Head + Request + Handler), true).GeneratedTrees.Single().ToString();
@@ -774,35 +783,70 @@ public sealed class GeneratorTests
     }
 
     [Fact]
-    public void Changed_requests_do_not_reuse_previous_analysis_state()
+    public void Incremental_edits_reuse_emission_and_refresh_contracts_and_diagnostics()
     {
-        var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(Head + Request + Handler), out _, out var diagnostics);
-        Assert.Empty(diagnostics);
-        Assert.Contains("global::App.Ping request", driver.GetRunResult().GeneratedTrees.Single().ToString());
+        var input = Compilation(Head + Request + Handler);
+        var driver = Driver().RunGenerators(input);
+        var first = Source(driver);
+        Assert.Equal(first, Source(Driver().RunGenerators(input)));
 
-        var changedRequest = Request.Replace("Ping", "Changed");
-        driver = driver.RunGeneratorsAndUpdateCompilation(Compilation(Head + changedRequest), out _, out diagnostics);
-        Assert.Contains(diagnostics, d => d.Id == "ZEN0001");
-        Assert.Empty(driver.GetRunResult().GeneratedTrees);
+        input = input.AddSyntaxTrees(CSharpSyntaxTree.ParseText("namespace Other { class Unrelated {} }", new CSharpParseOptions(LanguageVersion.Preview)));
+        driver = driver.RunGenerators(input);
+        Assert.Equal(first, Source(driver));
+        AssertEmission(driver, IncrementalStepRunReason.Cached);
 
-        driver = driver.RunGeneratorsAndUpdateCompilation(Compilation(Head + changedRequest + Handler.Replace("Ping", "Changed")), out var output, out diagnostics);
+        var bodyEdit = input.ReplaceSyntaxTree(input.SyntaxTrees[0], CSharpSyntaxTree.ParseText(
+            Head + Request + Handler.Replace("new(1)", "new(2)"), new CSharpParseOptions(LanguageVersion.Preview)));
+        driver = driver.RunGenerators(bodyEdit);
+        Assert.Equal(first, Source(driver));
+        AssertEmission(driver, IncrementalStepRunReason.Cached);
+
+        var explicitHandler = Compilation(Head + Request + Handler.Replace("public ValueTask<int> HandleAsync", "ValueTask<int> IRequestHandler<Ping,int>.HandleAsync"));
+        driver = driver.RunGeneratorsAndUpdateCompilation(explicitHandler, out var output, out var diagnostics);
         Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
-        var source = driver.GetRunResult().GeneratedTrees.Single().ToString();
-        Assert.Contains("global::App.Changed request", source);
-        Assert.DoesNotContain("global::App.Ping", source);
-    }
+        Assert.NotEqual(first, Source(driver));
+        AssertEmission(driver, IncrementalStepRunReason.Modified);
 
+        var changedRequest = Request.Replace("Ping", "Changed");
+        var invalid = Compilation(Head + changedRequest);
+        driver = driver.RunGenerators(invalid);
+        var error = Assert.Single(driver.GetRunResult().Diagnostics, d => d.Id == "ZEN0001");
+        Assert.Empty(driver.GetRunResult().GeneratedTrees);
+
+        var moved = Compilation("\n\n" + Head + changedRequest);
+        driver = driver.RunGenerators(moved);
+        var movedError = Assert.Single(driver.GetRunResult().Diagnostics, d => d.Id == "ZEN0001");
+        Assert.Same(moved.SyntaxTrees[0], movedError.Location.SourceTree);
+        Assert.Equal(error.Location.SourceSpan.Start + 2, movedError.Location.SourceSpan.Start);
+        AssertEmission(driver, IncrementalStepRunReason.Cached);
+
+        driver = driver.RunGeneratorsAndUpdateCompilation(Compilation(Head + changedRequest + Handler.Replace("Ping", "Changed")), out output, out diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Contains("global::App.Changed request", Source(driver));
+        Assert.DoesNotContain("global::App.Ping", Source(driver));
+
+        static string Source(GeneratorDriver value) => value.GetRunResult().GeneratedTrees.Single().ToString();
+        static void AssertEmission(GeneratorDriver value, IncrementalStepRunReason reason) =>
+            Assert.All(value.GetRunResult().Results.Single().TrackedSteps["SourceEmission"].SelectMany(s => s.Outputs),
+                output => Assert.Equal(reason, output.Reason));
+    }
     [Fact]
-    public void Unrelated_edits_reuse_source_output()
+    public void Shared_generator_keeps_parallel_compositions_isolated()
     {
-        var compilation = Compilation(Head + Request + Handler);
-        var driver = Driver().RunGenerators(compilation);
-        var first = driver.GetRunResult().GeneratedTrees.Single().ToString();
-        driver = driver.RunGenerators(compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText("namespace Other { class Unrelated {} }", new CSharpParseOptions(LanguageVersion.Preview))));
-        Assert.Equal(first, driver.GetRunResult().GeneratedTrees.Single().ToString());
-        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["SourceText"].SelectMany(s => s.Outputs),
-            output => Assert.Contains(output.Reason, new[] { IncrementalStepRunReason.Unchanged, IncrementalStepRunReason.Cached }));
+        var generator = new ZendiatorGenerator();
+        System.Threading.Tasks.Parallel.For(0, 8, index =>
+        {
+            var requestName = "ParallelPing" + index;
+            var input = Compilation((Head + Request + Handler).Replace("Ping", requestName));
+            var driver = CSharpGeneratorDriver.Create([generator.AsSourceGenerator()],
+                parseOptions: new CSharpParseOptions(LanguageVersion.Preview));
+            var result = driver.RunGeneratorsAndUpdateCompilation(input, out var output, out var diagnostics).GetRunResult();
+            Assert.Empty(diagnostics);
+            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+            Assert.Contains($"global::App.{requestName} request", result.GeneratedTrees.Single().ToString());
+        });
     }
 
     [Fact]

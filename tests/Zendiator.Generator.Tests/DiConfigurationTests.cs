@@ -82,6 +82,30 @@ public sealed class DiConfigurationTests
         """;
 
     [Fact]
+    public void Moving_registration_refreshes_interceptors_but_reuses_mediator_emission()
+    {
+        var source = Head + """
+            public sealed class App
+            {
+                public void Register(IServiceCollection services) =>
+                    services.AddZendiator(static configuration => configuration.Namespace = "App.Generated");
+            }
+            """;
+        var input = Compilation(source);
+        var driver = Driver().RunGenerators(input);
+        var first = driver.GetRunResult().GeneratedTrees.Select(t => t.ToString()).ToArray();
+        driver = driver.RunGeneratorsAndUpdateCompilation(Compilation("\n" + source), out var output, out var diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        var changed = driver.GetRunResult().GeneratedTrees.Select(t => t.ToString()).ToArray();
+        Assert.Equal(first.Single(t => t.Contains("interface IZendiator")), changed.Single(t => t.Contains("interface IZendiator")));
+        Assert.NotEqual(first.Single(t => t.Contains("AddZendiatorShims")), changed.Single(t => t.Contains("AddZendiatorShims")));
+        var steps = driver.GetRunResult().Results.Single().TrackedSteps;
+        Assert.All(steps["SourceEmission"].SelectMany(s => s.Outputs), o => Assert.Equal(IncrementalStepRunReason.Cached, o.Reason));
+        Assert.All(steps["InterceptorsEmission"].SelectMany(s => s.Outputs), o => Assert.Equal(IncrementalStepRunReason.Modified, o.Reason));
+    }
+
+    [Fact]
     public void Bare_call_without_attributes_is_silent_for_now()
     {
         var result = Run(Head + Fixtures + "public sealed class App { public void Register(" + Services + " services) { services.AddZendiator(); } }", true);

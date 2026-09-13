@@ -1,14 +1,12 @@
-using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
-using static Zendiator.SourceGenerator.SymbolUtilities;
 
 namespace Zendiator.SourceGenerator;
 
-internal static partial class SourceEmitter
+internal sealed partial class SourceEmitter
 {
-    private static string NotificationSignature(NotificationRoute route, bool publish)
+    private static string NotificationSignature(EmissionNotificationRoute route, bool publish)
     {
         var verb = publish ? "Publish" : "PublishAsync";
         if (route.IsOpen)
@@ -32,66 +30,11 @@ internal static partial class SourceEmitter
             """;
     }
 
-    private static void EmitNotifications(StringBuilder b, List<NotificationRoute> notifications, INamedTypeSymbol notificationHandlerDefinition)
+    private void EmitNotifications(StringBuilder b)
     {
-        foreach (var route in notifications)
-        {
-            b.AppendLine("""    /// <summary>Publishes the notification to subscribers in order.</summary>""");
-            if (route.Subscribers.Count == 0)
-            {
-                b.AppendLine($$"""
-                        public {{NotificationSignature(route, publish: false)}}
-                        {
-                    """);
-                if (route.Notification.IsReferenceType)
-                    b.AppendLine("""        global::System.ArgumentNullException.ThrowIfNull(notification);""");
-                b.AppendLine("""
-                            cancellationToken.ThrowIfCancellationRequested();
-                            return default;
-                        }
-                    """);
-            }
-            else
-            {
-                b.AppendLine($$"""
-                        public async {{NotificationSignature(route, publish: false)}}
-                        {
-                    """);
-                if (route.Notification.IsReferenceType)
-                    b.AppendLine("""        global::System.ArgumentNullException.ThrowIfNull(notification);""");
-                b.AppendLine("""        cancellationToken.ThrowIfCancellationRequested();""");
-                for (var i = 0; i < route.Subscribers.Count; i++)
-                {
-                    var sub = route.Subscribers[i];
-                    string handlerName, contract;
-                    if (route.IsOpen)
-                    {
-                        handlerName = route.HandlerDisplays[i];
-                        contract = route.HandlerContractDisplays[i];
-                    }
-                    else
-                    {
-                        handlerName = Name(sub.Handler);
-                        contract = $$"""global::Zendiator.INotificationHandler<{{route.NotificationDisplay}}>""";
-                    }
-
-                    var direct = UseDirectCall(sub.Handler, notificationHandlerDefinition);
-                    var recv = ServiceReceiver(handlerName, contract, direct, "_services");
-                    b.AppendLine($$"""
-                                cancellationToken.ThrowIfCancellationRequested();
-                                await {{recv}}.HandleAsync(notification, cancellationToken).ConfigureAwait(false);
-                        """);
-                }
-
-                b.AppendLine("""    }""");
-            }
-
-            b.AppendLine($$"""
-                    public {{NotificationSignature(route, publish: true)}} => PublishAsync(notification, cancellationToken);
-                """);
-        }
-
-        var closed = notifications.Where(static n => !n.IsOpen).ToList();
+        foreach (var route in _model.Routes.Notifications)
+            EmitNotification(b, route);
+        var closed = _model.Routes.Notifications.Where(static n => !n.IsOpen).ToList();
         if (closed.Count != 0)
         {
             b.AppendLine($$"""
@@ -112,5 +55,62 @@ internal static partial class SourceEmitter
                     public {{ErasedSignature(publish: true)}} => PublishAsync(notification, cancellationToken);
                 """);
         }
+    }
+
+    private void EmitNotification(StringBuilder b, EmissionNotificationRoute route)
+    {
+        b.AppendLine("""    /// <summary>Publishes the notification to subscribers in order.</summary>""");
+        if (route.Subscribers.Count == 0)
+        {
+            b.AppendLine($$"""
+                    public {{NotificationSignature(route, publish: false)}}
+                    {
+                """);
+            if (route.Notification.IsReferenceType)
+                b.AppendLine("""        global::System.ArgumentNullException.ThrowIfNull(notification);""");
+            b.AppendLine("""
+                        cancellationToken.ThrowIfCancellationRequested();
+                        return default;
+                    }
+                """);
+        }
+        else
+        {
+            b.AppendLine($$"""
+                    public async {{NotificationSignature(route, publish: false)}}
+                    {
+                """);
+            if (route.Notification.IsReferenceType)
+                b.AppendLine("""        global::System.ArgumentNullException.ThrowIfNull(notification);""");
+            b.AppendLine("""        cancellationToken.ThrowIfCancellationRequested();""");
+            for (var i = 0; i < route.Subscribers.Count; i++)
+            {
+                var sub = route.Subscribers[i];
+                string handlerName, contract;
+                if (route.IsOpen)
+                {
+                    handlerName = route.HandlerDisplays[i];
+                    contract = route.HandlerContractDisplays[i];
+                }
+                else
+                {
+                    handlerName = Name(sub.Handler);
+                    contract = $$"""global::Zendiator.INotificationHandler<{{route.NotificationDisplay}}>""";
+                }
+
+                var direct = sub.Handler.DirectCall;
+                var recv = ServiceReceiver(handlerName, contract, direct, "_services");
+                b.AppendLine($$"""
+                            cancellationToken.ThrowIfCancellationRequested();
+                            await {{recv}}.HandleAsync(notification, cancellationToken).ConfigureAwait(false);
+                    """);
+            }
+
+            b.AppendLine("""    }""");
+        }
+
+        b.AppendLine($$"""
+                public {{NotificationSignature(route, publish: true)}} => PublishAsync(notification, cancellationToken);
+            """);
     }
 }

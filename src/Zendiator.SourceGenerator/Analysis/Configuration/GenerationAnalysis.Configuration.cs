@@ -37,7 +37,7 @@ internal sealed partial class GenerationAnalysis
         if (assemblyGenAttributes.Length > 1)
         {
             Error(6, "Only one assembly-level [GenerateZendiator] attribute is allowed per compilation.");
-            return new GenerationResult("", "", errors);
+            return new GenerationResult(null, null, errors);
         }
         var assemblyGen = assemblyGenAttributes.FirstOrDefault();
         var boundDiCalls = new List<(InvocationExpressionSyntax Invocation, LambdaExpressionSyntax? Lambda, bool IsExtensionForm)>();
@@ -117,16 +117,16 @@ internal sealed partial class GenerationAnalysis
                 boundDiCalls.Add((invocation, lambda, method.ReducedFrom != null));
             }
         }
-        if (declarations.Length == 0 && assemblyGen == null && !hasBareDiCall && !hasLambdaDiCall) return new GenerationResult("", "", errors);
+        if (declarations.Length == 0 && assemblyGen == null && !hasBareDiCall && !hasLambdaDiCall) return new GenerationResult(null, null, errors);
         if (declarations.Length != 0 && assemblyGen != null)
         {
             Error(6, "Cannot combine class-level [GenerateZendiator] with assembly-level [GenerateZendiator]. Keep one configuration mode.", assemblyGen.AttributeClass);
-            return new GenerationResult("", "", errors);
+            return new GenerationResult(null, null, errors);
         }
         if (declarations.Length > 1)
         {
             Error(5, "Exactly one [GenerateZendiator] declaration is allowed per compilation.");
-            return new GenerationResult("", "", errors);
+            return new GenerationResult(null, null, errors);
         }
         assemblyMode = assemblyGen != null;
 
@@ -138,7 +138,7 @@ internal sealed partial class GenerationAnalysis
         if (assemblyMode)
         {
             assemblyNamespace = ResolveAssemblyNamespace(assemblyGen!, compilation, errors);
-            if (assemblyNamespace == null) return new GenerationResult("", "", errors);
+            if (assemblyNamespace == null) return new GenerationResult(null, null, errors);
         }
         else if (declarations.Length != 0)
         {
@@ -147,7 +147,7 @@ internal sealed partial class GenerationAnalysis
             if (classGenAttr != null && classGenAttr.NamedArguments.Any(static p => p.Key == "Namespace" && p.Value.Value is string s && s.Length != 0))
             {
                 Error(5, "Namespace is only valid on assembly-level [GenerateZendiator].", mediator);
-                return new GenerationResult("", "", errors);
+                return new GenerationResult(null, null, errors);
             }
             var syntax = mediator.DeclaringSyntaxReferences.Select(r => r.GetSyntax(ct)).OfType<ClassDeclarationSyntax>().ToArray();
             if (mediator.Name != "Zendiator" || mediator.Arity != 0 || mediator.ContainingType != null ||
@@ -159,7 +159,7 @@ internal sealed partial class GenerationAnalysis
                 mediator.ContainingNamespace.GetTypeMembers("ZendiatorServiceCollectionExtensions").Length != 0)
             {
                 Error(5, "Declare an empty, top-level public sealed partial class Zendiator; IZendiator and ZendiatorServiceCollectionExtensions are reserved.", mediator);
-                return new GenerationResult("", "", errors);
+                return new GenerationResult(null, null, errors);
             }
         }
         var diSettings = new List<DiSetting>();
@@ -255,7 +255,7 @@ internal sealed partial class GenerationAnalysis
                         continue;
                     }
                     var notificationMarker = compilation.GetTypeByMetadataName("Zendiator.INotification");
-                    if (notificationMarker == null || !notification.AllInterfaces.Any(i => Same(i.OriginalDefinition, notificationMarker)))
+                    if (notificationMarker == null || !(GetContracts(notification, notificationMarker).Length != 0))
                     {
                         ErrorAt(13, $"Notification {name} must implement Zendiator.INotification.", representative.CallLocation);
                         continue;

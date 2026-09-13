@@ -10,13 +10,13 @@ internal sealed partial class GenerationAnalysis
 {
     private readonly List<Route> routes = new List<Route>();
 
-    private bool IsResponseMulti(ITypeSymbol type) => type.AllInterfaces.Any(i => Same(i.OriginalDefinition, multiResponseDefinition));
+    private bool IsResponseMulti(ITypeSymbol type) => (GetContracts(type, multiResponseDefinition).Length != 0);
 
-    private bool IsVoidMulti(ITypeSymbol type) => type.AllInterfaces.Any(i => Same(i.OriginalDefinition, multiVoidDefinition));
+    private bool IsVoidMulti(ITypeSymbol type) => (GetContracts(type, multiVoidDefinition).Length != 0);
 
-    private bool IsSyncResponseMulti(ITypeSymbol type) => type.AllInterfaces.Any(i => Same(i.OriginalDefinition, syncMultiResponseDefinition));
+    private bool IsSyncResponseMulti(ITypeSymbol type) => (GetContracts(type, syncMultiResponseDefinition).Length != 0);
 
-    private bool IsSyncVoidMulti(ITypeSymbol type) => type.AllInterfaces.Any(i => Same(i.OriginalDefinition, syncMultiVoidDefinition));
+    private bool IsSyncVoidMulti(ITypeSymbol type) => (GetContracts(type, syncMultiVoidDefinition).Length != 0);
 
     private void BuildRequests()
     {

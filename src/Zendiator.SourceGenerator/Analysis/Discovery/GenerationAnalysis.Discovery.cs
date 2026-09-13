@@ -88,7 +88,7 @@ internal sealed partial class GenerationAnalysis
             streamRequestDefinition == null || streamHandlerDefinition == null || streamBehaviorDefinition == null)
         {
             Error(3, "Reference Zendiator.Abstractions.");
-            return new GenerationResult("", "", errors);
+            return new GenerationResult(null, null, errors);
         }
         var assemblies = new HashSet<IAssemblySymbol>(SymbolEqualityComparer.Default) { compilation.Assembly };
         if (diMode)
@@ -125,12 +125,13 @@ internal sealed partial class GenerationAnalysis
             }
             pipelines.Add((type, order, type.IsUnboundGenericType));
         }
-        var allTypes = assemblies.SelectMany(a => Types(a.GlobalNamespace, ct)).OrderBy(Name, StringComparer.Ordinal).ToArray();
+        var allTypes = assemblies.SelectMany(a => Types(a.GlobalNamespace, ct))
+            .Where(static type => type.TypeKind is TypeKind.Class or TypeKind.Struct && !type.IsAbstract && !type.AllInterfaces.IsEmpty)
+            .OrderBy(Name, StringComparer.Ordinal).ToArray();
         foreach (var type in allTypes)
         {
             ct.ThrowIfCancellationRequested();
-            if (type.TypeKind is not (TypeKind.Class or TypeKind.Struct) || type.IsAbstract) continue;
-            var contracts = type.AllInterfaces.Where(i => Same(i.OriginalDefinition, requestDefinition)).ToArray();
+            var contracts = GetContracts(type, requestDefinition);
             if (contracts.Length > 0)
             {
                 if (IsOpenDefinition(type))
@@ -149,7 +150,7 @@ internal sealed partial class GenerationAnalysis
                     Error(3, $"Request {Name(type)} must be public, non-generic and have exactly one public response contract.", type);
                 else requests[type] = contracts[0].TypeArguments[0];
             }
-            foreach (var contract in type.AllInterfaces.Where(i => Same(i.OriginalDefinition, handlerDefinition)))
+            foreach (var contract in GetContracts(type, handlerDefinition))
             {
                 if (IsOpenDefinition(type))
                 {
@@ -177,7 +178,7 @@ internal sealed partial class GenerationAnalysis
                 if (!handlers.TryGetValue(request, out var list)) handlers[request] = list = new();
                 if (!list.Any(h => Same(h, type))) list.Add(type);
                 // A handler may refer to contracts from a separate assembly; include its exact request.
-                var responseContracts = request.AllInterfaces.Where(i => Same(i.OriginalDefinition, requestDefinition)).ToArray();
+                var responseContracts = GetContracts(request, requestDefinition);
                 if (responseContracts.Length != 1 || !Public(request) || !Public(contract.TypeArguments[1]))
                 {
                     Error(3, $"Invalid request contract on {Name(type)}.", type);
@@ -192,7 +193,7 @@ internal sealed partial class GenerationAnalysis
                 }
                 else requests[request] = contract.TypeArguments[1];
             }
-            foreach (var contract in type.AllInterfaces.Where(i => Same(i.OriginalDefinition, voidHandlerDefinition)))
+            foreach (var contract in GetContracts(type, voidHandlerDefinition))
             {
                 if (IsOpenDefinition(type))
                 {
@@ -212,7 +213,7 @@ internal sealed partial class GenerationAnalysis
                     Error(12, $"Handler {Name(type)} targets ref struct request {Name(request)}. Ref struct requests require synchronous dispatch (SendSync).", type);
                     continue;
                 }
-                if (!request.AllInterfaces.Any(i => Same(i.OriginalDefinition, voidRequestDefinition)))
+                if (!(GetContracts(request, voidRequestDefinition).Length != 0))
                 {
                     Error(3, $"Handler {Name(type)} request {Name(request)} must implement Zendiator.IRequest.", type);
                     continue;
@@ -221,7 +222,7 @@ internal sealed partial class GenerationAnalysis
                 if (!vlist.Any(h => Same(h, type))) vlist.Add(type);
                 // Mirror the response-contract tracking so a void request reached only
                 // through its handler still forms a route.
-                var voidContracts = request.AllInterfaces.Where(i => Same(i.OriginalDefinition, requestDefinition)).ToArray();
+                var voidContracts = GetContracts(request, requestDefinition);
                 if (voidContracts.Length != 1 || !Public(request) || !Public(voidContracts[0].TypeArguments[0]))
                 {
                     Error(3, $"Invalid request contract on {Name(type)}.", type);
@@ -232,7 +233,7 @@ internal sealed partial class GenerationAnalysis
                 }
                 else requests[request] = voidContracts[0].TypeArguments[0];
             }
-            var syncContracts = type.AllInterfaces.Where(i => Same(i.OriginalDefinition, syncRequestDefinition)).ToArray();
+            var syncContracts = GetContracts(type, syncRequestDefinition);
             if (syncContracts.Length > 0)
             {
                 if (IsOpenDefinition(type))
@@ -253,7 +254,7 @@ internal sealed partial class GenerationAnalysis
                 }
                 else syncRequests[type] = syncContracts[0].TypeArguments[0];
             }
-            if (type.AllInterfaces.Any(i => Same(i.OriginalDefinition, syncVoidRequestDefinition)))
+            if ((GetContracts(type, syncVoidRequestDefinition).Length != 0))
             {
                 if (IsOpenDefinition(type))
                 {
@@ -267,7 +268,7 @@ internal sealed partial class GenerationAnalysis
                 }
                 else syncVoidRequests.Add(type);
             }
-            foreach (var contract in type.AllInterfaces.Where(i => Same(i.OriginalDefinition, syncHandlerDefinition)))
+            foreach (var contract in GetContracts(type, syncHandlerDefinition))
             {
                 if (IsOpenDefinition(type))
                 {
@@ -282,10 +283,10 @@ internal sealed partial class GenerationAnalysis
                     Error(3, $"Handler {Name(type)} must be an accessible non-generic class for a concrete sync request.", type);
                     continue;
                 }
-                var reqSync = request.AllInterfaces.Where(i => Same(i.OriginalDefinition, syncRequestDefinition)).ToArray();
+                var reqSync = GetContracts(request, syncRequestDefinition);
                 if (reqSync.Length != 1 || !Public(request) || !Public(contract.TypeArguments[1]))
                 {
-                    if (reqSync.Length == 0 && request.AllInterfaces.Any(i => Same(i.OriginalDefinition, syncVoidRequestDefinition)))
+                    if (reqSync.Length == 0 && (GetContracts(request, syncVoidRequestDefinition).Length != 0))
                         Error(8, $"Handler {Name(type)} targets void sync request {Name(request)}. Use one-argument ISyncRequestHandler<{Name(request)}>.", type);
                     else if (request.AllInterfaces.Any(i => Same(i.OriginalDefinition, requestDefinition) || Same(i.OriginalDefinition, voidRequestDefinition)))
                         Error(8, $"Handler {Name(type)} targets async request {Name(request)}. Async requests require SendAsync; synchronous dispatch only accepts ISyncRequest.", type);
@@ -311,7 +312,7 @@ internal sealed partial class GenerationAnalysis
                 }
                 else syncRequests[request] = contract.TypeArguments[1];
             }
-            foreach (var contract in type.AllInterfaces.Where(i => Same(i.OriginalDefinition, syncVoidHandlerDefinition)))
+            foreach (var contract in GetContracts(type, syncVoidHandlerDefinition))
             {
                 if (IsOpenDefinition(type))
                 {
@@ -326,7 +327,7 @@ internal sealed partial class GenerationAnalysis
                     Error(3, $"Handler {Name(type)} must be an accessible non-generic class for a concrete void sync request.", type);
                     continue;
                 }
-                if (!request.AllInterfaces.Any(i => Same(i.OriginalDefinition, syncVoidRequestDefinition)))
+                if (!(GetContracts(request, syncVoidRequestDefinition).Length != 0))
                 {
                     if (request.AllInterfaces.Any(i => Same(i.OriginalDefinition, requestDefinition) || Same(i.OriginalDefinition, voidRequestDefinition)))
                         Error(8, $"Handler {Name(type)} targets async request {Name(request)}. Async requests require SendAsync; synchronous dispatch only accepts ISyncRequest.", type);
@@ -343,7 +344,7 @@ internal sealed partial class GenerationAnalysis
                 if (!vlist.Any(h => Same(h, type))) vlist.Add(type);
                 syncVoidRequests.Add(request);
             }
-            var streamContracts = type.AllInterfaces.Where(i => Same(i.OriginalDefinition, streamRequestDefinition)).ToArray();
+            var streamContracts = GetContracts(type, streamRequestDefinition);
             if (streamContracts.Length > 0)
             {
                 if (IsOpenDefinition(type))
@@ -366,7 +367,7 @@ internal sealed partial class GenerationAnalysis
                     Error(12, $"Stream request {Name(type)} has a ref-like item. Ref struct stream items are not supported; use an ownable item type.", type);
                 else streamRequests[type] = streamContracts[0].TypeArguments[0];
             }
-            foreach (var contract in type.AllInterfaces.Where(i => Same(i.OriginalDefinition, streamHandlerDefinition)))
+            foreach (var contract in GetContracts(type, streamHandlerDefinition))
             {
                 if (IsOpenDefinition(type))
                 {
@@ -393,7 +394,7 @@ internal sealed partial class GenerationAnalysis
                 }
                 if (!streamHandlers.TryGetValue(streamReq, out var slist)) streamHandlers[streamReq] = slist = new();
                 if (!slist.Any(h => Same(h, type))) slist.Add(type);
-                var streamResponseContracts = streamReq.AllInterfaces.Where(i => Same(i.OriginalDefinition, streamRequestDefinition)).ToArray();
+                var streamResponseContracts = GetContracts(streamReq, streamRequestDefinition);
                 if (streamResponseContracts.Length != 1 || !Public(streamReq) || !Public(contract.TypeArguments[1]))
                 {
                     Error(3, $"Invalid stream request contract on {Name(type)}.", type);
@@ -408,7 +409,7 @@ internal sealed partial class GenerationAnalysis
                 }
                 else streamRequests[streamReq] = contract.TypeArguments[1];
             }
-            var notificationContracts = type.AllInterfaces.Where(i => Same(i.OriginalDefinition, notificationDefinition)).ToArray();
+            var notificationContracts = GetContracts(type, notificationDefinition);
             if (notificationContracts.Length > 0 && !type.IsRefLikeType)
             {
                 if (IsOpenDefinition(type))
@@ -423,7 +424,7 @@ internal sealed partial class GenerationAnalysis
                 }
                 else knownNotifications.Add(type);
             }
-            foreach (var contract in type.AllInterfaces.Where(i => Same(i.OriginalDefinition, notificationHandlerDefinition)))
+            foreach (var contract in GetContracts(type, notificationHandlerDefinition))
             {
                 if (IsOpenDefinition(type))
                 {
@@ -443,7 +444,7 @@ internal sealed partial class GenerationAnalysis
                     Error(12, $"Subscriber {Name(type)} targets ref struct notification {Name(target)}. Ref struct notifications are not supported.", type);
                     continue;
                 }
-                if (!target.AllInterfaces.Any(i => Same(i.OriginalDefinition, notificationDefinition)))
+                if (!(GetContracts(target, notificationDefinition).Length != 0))
                 {
                     Error(13, $"Subscriber {Name(type)} target {Name(target)} must implement Zendiator.INotification.", type);
                     continue;

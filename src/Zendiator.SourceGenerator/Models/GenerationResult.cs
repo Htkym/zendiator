@@ -3,9 +3,9 @@ using Microsoft.CodeAnalysis;
 
 namespace Zendiator.SourceGenerator;
 
-internal sealed class GenerationResult(string source, string interceptors, List<Diagnostic> diagnostics)
+internal sealed class GenerationResult(GenerationModel? model, GenerationTarget? target, List<Diagnostic> diagnostics)
 {
-    public string Source { get; } = source;
-    public string Interceptors { get; } = interceptors;
+    public GenerationModel? Model { get; } = model;
+    public GenerationTarget? Target { get; } = target;
     public List<Diagnostic> Diagnostics { get; } = diagnostics;
 }

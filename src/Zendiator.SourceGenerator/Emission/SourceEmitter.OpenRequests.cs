@@ -1,19 +1,10 @@
 using System.Text;
-using Microsoft.CodeAnalysis;
-using static Zendiator.SourceGenerator.SymbolUtilities;
 
 namespace Zendiator.SourceGenerator;
 
-internal static partial class SourceEmitter
+internal sealed partial class SourceEmitter
 {
-    private static void EmitOpenRoute(
-        StringBuilder b,
-        Route route,
-        int index,
-        INamedTypeSymbol handlerDefinition,
-        INamedTypeSymbol behaviorDefinition,
-        INamedTypeSymbol voidHandlerDefinition,
-        INamedTypeSymbol voidBehaviorDefinition)
+    private void EmitOpenRoute(StringBuilder b, EmissionRoute route, int index)
     {
         // Each closed service type has its own lazy dependency slot on the mediator.
         var tp = string.Join(", ", route.OpenTypeParams);
@@ -40,14 +31,14 @@ internal static partial class SourceEmitter
             Guard(b, route, "            ");
             if (node == route.Behaviors.Count)
             {
-                var directH = UseDirectCall(route.Handler, route.IsVoid ? voidHandlerDefinition : handlerDefinition);
+                var directH = route.Handler.DirectCall;
                 b.AppendLine($$"""
                                 return {{(ServiceReceiver(route.HandlerDisplay, route.HandlerContractDisplay, directH))}}.HandleAsync(request, cancellationToken);
                     """);
             }
             else
             {
-                var directB = UseDirectCall(route.Behaviors[node], route.IsVoid ? voidBehaviorDefinition : behaviorDefinition);
+                var directB = route.Behaviors[node].DirectCall;
                 b.Append($$"""
                                 return {{(ServiceReceiver(route.BehaviorDisplays[node], route.BehaviorContractDisplays[node], directB))}}.HandleAsync(request, new OpenRoute{{index}}Node{{node + 1}}<{{tp}}>(services), cancellationToken);
                     """);

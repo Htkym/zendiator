@@ -15,11 +15,11 @@ internal sealed partial class GenerationAnalysis
             var type = pipeline.Type;
             var isOpenBehavior = pipeline.IsOpenBehavior;
             var definition = isOpenBehavior ? type.OriginalDefinition : type;
-            var contracts = definition.AllInterfaces.Where(i => Same(i.OriginalDefinition, behaviorDefinition)).ToArray();
-            var voidContracts = definition.AllInterfaces.Where(i => Same(i.OriginalDefinition, voidBehaviorDefinition)).ToArray();
-            var syncContracts = definition.AllInterfaces.Where(i => Same(i.OriginalDefinition, syncBehaviorDefinition)).ToArray();
-            var syncVoidContracts = definition.AllInterfaces.Where(i => Same(i.OriginalDefinition, syncVoidBehaviorDefinition)).ToArray();
-            var streamContracts = definition.AllInterfaces.Where(i => Same(i.OriginalDefinition, streamBehaviorDefinition)).ToArray();
+            var contracts = GetContracts(definition, behaviorDefinition);
+            var voidContracts = GetContracts(definition, voidBehaviorDefinition);
+            var syncContracts = GetContracts(definition, syncBehaviorDefinition);
+            var syncVoidContracts = GetContracts(definition, syncVoidBehaviorDefinition);
+            var streamContracts = GetContracts(definition, streamBehaviorDefinition);
             var accessible = compilation.IsSymbolAccessibleWithin(definition, accessContext);
             var validAsync = definition.TypeKind == TypeKind.Class && !definition.IsAbstract && accessible && contracts.Length == 1 &&
                 (!isOpenBehavior ||

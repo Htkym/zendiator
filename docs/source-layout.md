@@ -17,6 +17,15 @@ configuration processing, discovery, and route analysis in separate subfolders.
 `Models` holds the data passed between analysis and emission. `Emission` contains
 the raw-string templates and code-fragment helpers, grouped by generated feature.
 
+`Models/Emission` defines the read-only handoff to code generation:
+`GenerationModel` groups the target, route collections, and contract symbols.
+Analysis snapshots the collections after pipeline construction and no longer
+mutates their route objects. A new `SourceEmitter` reads this model for each run;
+output builders stay local to each call. Feature methods receive only their
+output builder, route, and route index when needed. Small string helpers remain
+static and take explicit inputs. The incremental output remains source strings
+and diagnostics; the model is not stored in a shared or static cache.
+
 ## Tests
 
 Runtime dispatch tests are grouped under `Dispatch`, `Streams`, and `Lifetimes`.

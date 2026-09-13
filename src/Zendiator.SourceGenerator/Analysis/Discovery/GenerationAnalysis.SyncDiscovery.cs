@@ -16,7 +16,7 @@ internal sealed partial class GenerationAnalysis
             Error(3, $"Request {Name(reqDef)} must be a public generic definition with exactly one response contract.", reqDef);
             return false;
         }
-        var rc = reqDef.AllInterfaces.Where(i => Same(i.OriginalDefinition, syncRequestDefinition)).ToArray();
+        var rc = GetContracts(reqDef, syncRequestDefinition);
         if (rc.Length != 1 || !IsPublicDefinition(reqDef) || !LeavesPublicOrParam(rc[0].TypeArguments[0], reqDef))
         {
             Error(3, $"Request {Name(reqDef)} must be a public generic definition with exactly one response contract over public or type-parameter types.", reqDef);
@@ -92,7 +92,7 @@ internal sealed partial class GenerationAnalysis
         if (isVoid)
         {
             if (!IsOpenDefinition(reqDef) || !IsPublicDefinition(reqDef) ||
-                !reqDef.AllInterfaces.Any(i => Same(i.OriginalDefinition, syncVoidRequestDefinition)))
+                !(GetContracts(reqDef, syncVoidRequestDefinition).Length != 0))
             {
                 Error(3, $"Request {Name(reqDef)} must be a public generic definition implementing ISyncRequest.", reqDef);
                 return;
@@ -121,7 +121,7 @@ internal sealed partial class GenerationAnalysis
                 return;
             }
         }
-        else if (!pattern.AllInterfaces.Any(i => Same(i.OriginalDefinition, syncVoidRequestDefinition)))
+        else if (!(GetContracts(pattern, syncVoidRequestDefinition).Length != 0))
         {
             Error(8, $"Handler {Name(type)} targets response request {Name(pattern)}. Use two-argument ISyncRequestHandler<{Name(pattern)}, TResponse>.", type);
             return;

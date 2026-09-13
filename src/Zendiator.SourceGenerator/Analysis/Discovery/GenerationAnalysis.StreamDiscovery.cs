@@ -15,7 +15,7 @@ internal sealed partial class GenerationAnalysis
             Error(3, $"Stream request {Name(reqDef)} must be a public generic definition with exactly one item contract.", reqDef);
             return false;
         }
-        var rc = reqDef.AllInterfaces.Where(i => Same(i.OriginalDefinition, streamRequestDefinition)).ToArray();
+        var rc = GetContracts(reqDef, streamRequestDefinition);
         if (rc.Length != 1 || !IsPublicDefinition(reqDef) || !LeavesPublicOrParam(rc[0].TypeArguments[0], reqDef))
         {
             Error(3, $"Stream request {Name(reqDef)} must be a public generic definition with exactly one item contract over public or type-parameter types.", reqDef);
