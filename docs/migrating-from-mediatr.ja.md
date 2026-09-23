@@ -10,7 +10,7 @@ MediatR 12 を使ったコードを Zendiator へ移す手順です。API の対
 このガイドは現在のリポジトリを対象とします。公開済みパッケージとは異なる場合があるため、
 以下の有効期間や構成の説明を適用する前に、インストールする版のリリースノートを確認してください。
 
-現在のプレビュー版は標準 DI で構築し、Transient を含む Handler・Behavior を Mediator 単位で遅延取得して再利用します。新しい構成が必要な場合は Transient の Mediator を新たに解決してください。独自 Provider API は削除しました。生成される Mediator はキャッシュを無効化するために IDisposable を実装しますが、依存サービスの破棄は DI が担当します。詳細は [構築と有効期間](optimized-dispatch.md) を参照してください。
+現在のプレビュー版は標準 DI で構築し、Transient を含む Handler・Behavior を Mediator 単位で遅延取得して再利用します。新しい構成が必要な場合は Transient の Mediator を新たに解決してください。独自 Provider API は削除しました。生成される Mediator は `IDisposable` を実装せず、依存サービスの破棄は DI が担当します。送信やストリーム列挙が終わるまでスコープを維持してください。詳細は [構築と有効期間](optimized-dispatch.md) を参照してください。
 
 前提は次のとおりです。
 

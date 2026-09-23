@@ -45,7 +45,7 @@ internal sealed partial class SourceEmitter
             : _model.Target.InheritServiceResolver ? "global::Zendiator.DependencyInjection.ZendiatorServiceResolver, " : "";
         b.AppendLine($$"""
             /// <summary>Generated mediator with lazily captured dependencies.</summary>
-            public sealed partial class Zendiator : {{resolverBase}}IZendiator, global::System.IDisposable
+            public sealed partial class Zendiator : {{resolverBase}}IZendiator
             {
             """);
         if (_model.Target.InheritServiceResolver)
@@ -53,11 +53,6 @@ internal sealed partial class SourceEmitter
                     /// <summary>Creates a mediator bound to the supplied scope.</summary>
                     public Zendiator(global::System.IServiceProvider services)
                         : base(services ?? throw new global::System.ArgumentNullException(nameof(services)))
-                    {
-                    }
-                    /// <summary>Creates a mediator with the root lifetime supplied by DI.</summary>
-                    public Zendiator(global::System.IServiceProvider services, global::Zendiator.DependencyInjection.ZendiatorRootLifetime root)
-                        : base(services, root)
                     {
                     }
                 """);
@@ -70,15 +65,8 @@ internal sealed partial class SourceEmitter
                         global::System.ArgumentNullException.ThrowIfNull(services);
                         _services = new global::Zendiator.DependencyInjection.ZendiatorServiceResolver(services);
                     }
-                    /// <summary>Creates a mediator with the root lifetime supplied by DI.</summary>
-                    public Zendiator(global::System.IServiceProvider services, global::Zendiator.DependencyInjection.ZendiatorRootLifetime root)
-                    {
-                        _services = new global::Zendiator.DependencyInjection.ZendiatorServiceResolver(services, root);
-                    }
                 """);
-        var disposeReceiver = _model.Target.InheritServiceResolver ? "base" : "_services";
-        b.AppendLine($$"""
-                void global::System.IDisposable.Dispose() => {{disposeReceiver}}.Dispose();
+        b.AppendLine("""
                 // Keep the token's address out of the inlined dispatch path.
                 [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
                 private static void ThrowDispatchCancellation(global::System.Threading.CancellationToken cancellationToken) => cancellationToken.ThrowIfCancellationRequested();

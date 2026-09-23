@@ -71,21 +71,20 @@ constructor and dispatch APIs rather than depend on that base type.
 
 ## Ownership and disposal
 
-DI owns Handler and Behavior disposal. The generated mediator implements
-`IDisposable` only to invalidate its cache; it does not dispose those dependencies.
-Normal mediator/scope disposal and normal root-provider disposal reject subsequent
-service resolution, including warmed routes. Already-running operations are not
-canceled or joined by disposal. Keep the scope alive until sends and stream
-enumeration finish. Let DI construct and dispose the mediator.
+DI owns Handler and Behavior disposal. The generated mediator does not implement
+`IDisposable` and does not dispose cached dependencies. Keep its scope alive until
+sends and stream enumeration finish. Sending after scope or root-provider disposal
+is unsupported: a cached route may still call its former handler, while a route
+that needs a new service may fail through DI. Disposal does not cancel or join
+operations already running.
 
 Enable `ValidateScopes` to catch scoped dependencies used from singleton mediators.
 Because dependencies are lazy, some validation occurs on first dispatch rather
 than during `ValidateOnBuild`.
 
 Disposal follows the standard container. If a service throws while disposing, DI
-may stop before the mediator or root marker is notified. Do not reuse a scope or
-mediator after disposal starts, whether disposal succeeds or throws. There is no
-custom wrapper promising invalidation before a failing cleanup.
+may stop before disposing later services. Do not reuse a scope or mediator after
+disposal starts, whether disposal succeeds or throws.
 
 ## Preview breaking changes
 
@@ -105,8 +104,15 @@ Replace concrete-type resolution or injection with `IZendiator`. For a custom
 factory, change `AddScoped<Zendiator>(...)` to `AddScoped<IZendiator>(...)` before
 `AddZendiator()`; the generated `TryAdd` registration preserves it. See the
 [registration example](../README.md#usage). Apply the same change for Singleton or
-Transient factories. Direct `new Zendiator(provider)` remains supported; its caller
-owns mediator disposal, while DI continues to own its dependencies.
+Transient factories. Direct `new Zendiator(provider)` remains supported; DI owns
+the dependencies it creates.
+
+The generated mediator and its resolver base types no longer implement
+`IDisposable`. The overloads accepting `ZendiatorRootLifetime` and that root
+marker type were removed. Code that explicitly disposes or casts a mediator to
+`IDisposable` must stop doing so and instead dispose its DI scope. Cached sends
+after the scope or root provider has ended no longer have a guaranteed
+`ObjectDisposedException`.
 
 ## Measurements
 

@@ -6,38 +6,6 @@ namespace Zendiator.CachePolicy.Tests;
 
 public sealed class ConcurrencyAndReentrancyTests
 {
-    [Theory]
-    [InlineData(false, 1, 1)]
-    [InlineData(false, 1, 2)]
-    [InlineData(false, 8, 2)]
-    [InlineData(true, 1, 1)]
-    [InlineData(true, 1, 2)]
-    [InlineData(true, 8, 2)]
-    public async Task Completed_disposal_rejects_warm_and_cold_routes(bool disposeRoot, int workers, int repetitions)
-    {
-        var services = new ServiceCollection();
-        services.AddZendiator();
-        using var provider = services.BuildServiceProvider();
-        using var scope = provider.CreateScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        Assert.Equal(42, await mediator.SendAsync(new Val0(41)));
-        IDisposable target = disposeRoot
-            ? provider.GetRequiredService<global::Zendiator.DependencyInjection.ZendiatorRootLifetime>()
-            : (IDisposable)mediator;
-        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var disposals = Enumerable.Range(0, workers).Select(_ => Task.Run(async () =>
-        {
-            await start.Task;
-            for (var i = 0; i < repetitions; i++)
-                target.Dispose();
-        })).ToArray();
-        start.SetResult();
-        // Joining the disposing workers establishes completion before either dispatch.
-        await Task.WhenAll(disposals);
-        await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await mediator.SendAsync(new Val0(41)));
-        await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await mediator.SendAsync(new Guid0()));
-    }
-
     [Fact]
     public async Task External_monitor_on_mediator_does_not_block_dispatch()
     {

@@ -107,14 +107,12 @@ public sealed class ScaleAndAllocationTests
         services.AddZendiator();
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
-        var root = provider.GetRequiredService<global::Zendiator.DependencyInjection.ZendiatorRootLifetime>();
         Zendiator? retained = null;
         var allocated = Measure(() =>
         {
-            retained = new Zendiator(scope.ServiceProvider, root);
-            ((IDisposable)retained).Dispose();
+            retained = new Zendiator(scope.ServiceProvider);
         });
-        // Includes mediator state and its private lock, but not the supplied provider/root.
+        // Includes mediator state and its private lock, but not the supplied provider.
         Assert.InRange(allocated, 1, 80L * 1024);
         Assert.NotNull(retained);
     }

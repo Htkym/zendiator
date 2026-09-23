@@ -41,8 +41,6 @@ public sealed class StandardContainerTests
             first = await mediator.SendAsync(new Guid0());
             Assert.Equal(first, await mediator.SendAsync(new Guid0()));
             Assert.Equal(1, calls);
-            scope.Dispose();
-            await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await mediator.SendAsync(new Guid0()));
         }
         using (var scope = factory.CreateScope())
         {
@@ -74,9 +72,6 @@ public sealed class StandardContainerTests
         Assert.Equal(0, calls);
         Assert.Equal(await mediator.SendAsync(new Guid0()), await mediator.SendAsync(new Guid0()));
         Assert.Equal(1, calls);
-        scope.Dispose();
-        var error = await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await mediator.SendAsync(new Guid0()));
-        Assert.Equal(typeof(global::Zendiator.DependencyInjection.ZendiatorServiceResolver).FullName, error.ObjectName);
     }
 
     [Fact]
@@ -97,23 +92,6 @@ public sealed class StandardContainerTests
         Assert.Same(concrete, scope.ServiceProvider.GetRequiredService<Zendiator>());
         Assert.Equal(1, factoryCalls);
         Assert.Equal(await mediator.SendAsync(new Guid0()), await concrete.SendAsync(new Guid0()));
-        scope.Dispose();
-        await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await mediator.SendAsync(new Guid0()));
-        await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await concrete.SendAsync(new Guid0()));
-    }
-
-    [Fact]
-    public async Task Root_disposal_invalidates_a_mediator_in_an_undisposed_scope()
-    {
-        var services = new ServiceCollection();
-        services.AddZendiator();
-        using var provider = services.BuildServiceProvider();
-        using var scope = provider.CreateScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        await mediator.SendAsync(new Guid0());
-        provider.Dispose();
-        var error = await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await mediator.SendAsync(new Guid0()));
-        Assert.Equal(typeof(global::Zendiator.DependencyInjection.ZendiatorServiceResolver).FullName, error.ObjectName);
     }
 
     [Fact]

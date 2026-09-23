@@ -9,13 +9,12 @@ public sealed class SingleServiceResolverTests
     private static IServiceCollection Services()
     {
         var services = new ServiceCollection();
-        services.AddSingleton<ZendiatorRootLifetime>();
         services.AddScoped<ZendiatorServiceResolver>();
         services.AddScoped<ZendiatorSingleServiceResolver<Probe>>();
         return services;
     }
 
-    private static (Func<Probe> Get, IDisposable Resolver) Resolve(IServiceProvider provider, bool specialized)
+    private static (Func<Probe> Get, object Resolver) Resolve(IServiceProvider provider, bool specialized)
     {
         if (specialized)
         {
@@ -46,9 +45,7 @@ public sealed class SingleServiceResolverTests
         Assert.Equal(41, value.Id);
         Assert.Same(value, capture.Get());
         Assert.Equal(1, calls);
-        capture.Resolver.Dispose();
         Assert.Equal(0, value.DisposeCalls);
-        Assert.Equal(typeof(ZendiatorServiceResolver).FullName, Assert.Throws<ObjectDisposedException>(() => capture.Get()).ObjectName);
         scope.Dispose();
         Assert.Equal(lifetime == ServiceLifetime.Singleton ? 0 : 1, value.DisposeCalls);
         provider.Dispose();
@@ -120,27 +117,6 @@ public sealed class SingleServiceResolverTests
         Assert.Equal(2, calls);
     }
 
-    [Theory]
-    [InlineData(false, false)]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public async Task Completed_container_disposal_rejects_a_warmed_capture(bool specialized, bool disposeRoot)
-    {
-        var services = Services();
-        services.AddTransient<Probe>(_ => new Probe(41));
-        using var provider = services.BuildServiceProvider();
-        using var scope = provider.CreateScope();
-        var capture = Resolve(scope.ServiceProvider, specialized);
-        _ = capture.Get();
-        await Task.Run(() =>
-        {
-            if (disposeRoot) provider.Dispose();
-            else scope.Dispose();
-        });
-        Assert.Equal(typeof(ZendiatorServiceResolver).FullName, Assert.Throws<ObjectDisposedException>(() => capture.Get()).ObjectName);
-    }
-
     [Fact]
     public async Task External_monitor_does_not_block_single_service_initialization()
     {
@@ -172,11 +148,10 @@ public sealed class SingleServiceResolverTests
     public void Single_service_construction_stays_within_72_bytes()
     {
         using var provider = Services().BuildServiceProvider();
-        var root = provider.GetRequiredService<ZendiatorRootLifetime>();
         var retained = new ZendiatorSingleServiceResolver<Probe>[1024];
-        new ZendiatorSingleServiceResolver<Probe>(provider, root).Dispose();
+        _ = new ZendiatorSingleServiceResolver<Probe>(provider);
         var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < retained.Length; i++) retained[i] = new(provider, root);
+        for (var i = 0; i < retained.Length; i++) retained[i] = new(provider);
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Assert.InRange(allocated, 1, 72L * retained.Length);
         GC.KeepAlive(retained);
@@ -205,11 +180,7 @@ public sealed class SingleServiceResolverTests
     [Fact]
     public void Constructors_preserve_null_argument_guards()
     {
-        using var provider = Services().BuildServiceProvider();
-        var root = provider.GetRequiredService<ZendiatorRootLifetime>();
         Assert.Equal("provider", Assert.Throws<ArgumentNullException>(() => new ZendiatorSingleServiceResolver<Probe>(null!)).ParamName);
-        Assert.Equal("provider", Assert.Throws<ArgumentNullException>(() => new ZendiatorSingleServiceResolver<Probe>(null!, root)).ParamName);
-        Assert.Equal("root", Assert.Throws<ArgumentNullException>(() => new ZendiatorSingleServiceResolver<Probe>(provider, null!)).ParamName);
     }
 
     [Fact]
@@ -224,7 +195,7 @@ public sealed class SingleServiceResolverTests
         });
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
-        using var capture = new ZendiatorSingleServiceResolver<SlotFirst>(scope.ServiceProvider);
+        var capture = new ZendiatorSingleServiceResolver<SlotFirst>(scope.ServiceProvider);
         _ = capture.GetRequiredService();
 
         static int Slot(Type type) => (int)typeof(ZendiatorServiceResolver)

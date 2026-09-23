@@ -55,7 +55,7 @@ If a marker declaration explicitly specifies `object` as its base class, the res
 - Do not share instances through static caches or another provider's or mediator's cache. Sharing performed by DI itself for Singleton or Scoped registrations follows the container's registrations.
 - Short-circuiting must not resolve or construct downstream behaviors or handlers that have not been reached. Do not break this property through eager resolution of all dependencies.
 - Synchronize cold resolution per mediator. Warm retrieval avoids the initialization lock. Thread safety of user-defined handlers and behaviors remains a separate responsibility.
-- Do not dispose DI-owned dependencies twice. Disposing a mediator prevents subsequent dispatch; it does not cancel or join operations already running.
+- DI disposes handlers and behaviors. The mediator does not implement `IDisposable`. Disposing a scope does not cancel or join operations already running.
 - Keep the scope alive until sends and stream enumeration finish. Do not reuse a mediator or scope after disposal starts, even if disposal throws.
 - Avoid Singleton mediators capturing Scoped dependencies. Explain that lazy resolution can defer some validation until the first dispatch.
 
@@ -68,7 +68,7 @@ Behaviors are DI-resolved classes; generated continuation nodes are `readonly st
 - Lower behavior `Order` values wrap outermost. Diagnose duplicate types or orders and incompatible contracts.
 - Check type-argument mappings and constraints when applying open generics. Do not skip constraint checks for speed.
 - Preserve request and CancellationToken replacement and sequential repeated `next` calls. Parallel continuation calls or retention after completion are not guaranteed.
-- Do not change null handling, cancellation, exceptions, handler ordering, short-circuiting, or disposal through optimization or code movement.
+- Do not change null handling, cancellation, exceptions, handler ordering, short-circuiting, or dependency disposal ownership through optimization or code movement.
 - Notifications have an erased dispatch route for known notification types. Do not confuse this with concrete request APIs or claim that every API is free of runtime type checks.
 - Handle `ref struct` requests through synchronous routes. Diagnose invalid combinations involving asynchronous routes, ref-like responses, or stream items.
 - Start streams on the first `MoveNextAsync`. Handle both API and enumeration cancellation, linking tokens only when necessary. Distinguish stream startup from steady-state enumeration costs.

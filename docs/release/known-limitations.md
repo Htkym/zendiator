@@ -11,7 +11,7 @@ new instance. DI still constructs and disposes dependencies and may share Scoped
 Singleton instances across mediators according to its registrations.
 
 Keep the scope alive until dispatch and stream enumeration finish. Do not use a
-mediator after it or its scope is disposed. Disposal does not cancel or join ongoing
+mediator after its scope is disposed. Disposal does not cancel or join ongoing
 operations. Concurrent initialization is synchronized, but handlers and behaviors
 must support any application-level concurrent use themselves.
 

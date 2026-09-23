@@ -18,9 +18,6 @@ internal sealed partial class SourceEmitter
     private void EmitRegistrationEntries(StringBuilder b, string lifetime, string dependencyLifetime)
     {
         var mediatorNameLocal = _model.Target.MediatorName;
-        b.AppendLine("""
-                    global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton<global::Zendiator.DependencyInjection.ZendiatorRootLifetime>(services);
-            """);
         Register(b, $$"""typeof({{_model.Target.Prefix}}IZendiator), typeof({{mediatorNameLocal}})""", lifetime);
         b.AppendLine($$"""            var serviceLifetime = {{dependencyLifetime}};""");
         foreach (var service in _model.Routes.Requests.Single.SelectMany(r => r.Behaviors.Concat(new[] { r.Handler }).Select(s => (Route: r, Service: s))).Select(p => p.Route.IsOpen ? $$"""typeof({{OpenTypeofName(p.Service)}}), typeof({{OpenTypeofName(p.Service)}})""" : $$"""typeof({{Name(p.Service)}}), typeof({{Name(p.Service)}})""").Distinct().OrderBy(n => n, StringComparer.Ordinal))

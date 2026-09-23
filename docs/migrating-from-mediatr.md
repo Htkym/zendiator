@@ -11,7 +11,7 @@ This guide describes the current repository. Published packages may differ;
 check the release notes for the version you install before applying the lifetime
 and configuration guidance below.
 
-The current preview uses standard DI construction and captures Handler/Behavior dependencies lazily per mediator instance, including Transient dependencies. Resolve a new transient mediator for a fresh composition. Custom provider APIs were removed. The generated mediator now implements IDisposable to invalidate its cache; DI still owns dependency disposal. See [construction and dispatch lifetime](optimized-dispatch.md).
+The current preview uses standard DI construction and captures Handler/Behavior dependencies lazily per mediator instance, including Transient dependencies. Resolve a new transient mediator for a fresh composition. Custom provider APIs were removed. The generated mediator does not implement `IDisposable`; DI owns dependency disposal. Keep the scope alive until sends and stream enumeration finish. See [construction and dispatch lifetime](optimized-dispatch.md).
 
 Assumptions:
 
