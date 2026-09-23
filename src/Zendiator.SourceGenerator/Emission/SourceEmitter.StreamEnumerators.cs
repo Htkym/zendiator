@@ -85,7 +85,7 @@ internal sealed partial class SourceEmitter
         b.AppendLine($$"""
                             var effective = MergeStreamTokens(_apiToken, _enumToken, out var linked);
                             _linked = linked;
-                            effective.ThrowIfCancellationRequested();
+                            if (effective.IsCancellationRequested) ThrowDispatchCancellation(effective);
                             global::System.Collections.Generic.IAsyncEnumerable<{{item}}> pipeline = new StreamRoute{{index}}Node0{{tp}}(_services).InvokeAsync(_request, effective);
                             _inner = pipeline.GetAsyncEnumerator(effective);
                         try

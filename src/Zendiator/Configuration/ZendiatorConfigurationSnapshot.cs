@@ -12,6 +12,7 @@ public sealed class ZendiatorConfigurationSnapshot
     internal ZendiatorConfigurationSnapshot(
         string? @namespace,
         ServiceLifetime serviceLifetime,
+        ServiceLifetime? dependencyLifetime,
         List<(string MarkerType, string Assembly)> assemblyMarkers,
         List<string> assemblies,
         List<(string BehaviorType, int Order)> behaviors,
@@ -20,6 +21,7 @@ public sealed class ZendiatorConfigurationSnapshot
     {
         Namespace = @namespace;
         ServiceLifetime = serviceLifetime;
+        DependencyLifetime = dependencyLifetime;
         AssemblyMarkers = assemblyMarkers;
         Assemblies = assemblies;
         Behaviors = behaviors;
@@ -30,8 +32,11 @@ public sealed class ZendiatorConfigurationSnapshot
     /// <summary>Gets the generation namespace, or null for the default.</summary>
     public string? Namespace { get; }
 
-    /// <summary>Gets the registration lifetime.</summary>
+    /// <summary>Gets the mediator lifetime.</summary>
     public ServiceLifetime ServiceLifetime { get; }
+
+    /// <summary>Gets the optional Handler and Behavior registration lifetime override.</summary>
+    public ServiceLifetime? DependencyLifetime { get; }
 
     /// <summary>Gets marker types with their assemblies, sorted by marker type.</summary>
     public IReadOnlyList<(string MarkerType, string Assembly)> AssemblyMarkers { get; }

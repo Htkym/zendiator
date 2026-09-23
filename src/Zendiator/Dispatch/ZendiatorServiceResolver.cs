@@ -6,14 +6,13 @@ namespace Zendiator.DependencyInjection;
 
 /// <summary>Lazily captures dispatch dependencies for one mediator instance. DI owns their disposal.</summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public sealed class ZendiatorServiceResolver : IDisposable
+public class ZendiatorServiceResolver : IDisposable
 {
     private const int PageBits = 5;
     private const int PageSize = 1 << PageBits;
     private static int _nextSlot;
-    private readonly IServiceProvider _provider;
     private readonly ZendiatorRootLifetime _root;
-    private readonly object _initializationLock = new();
+    private readonly ZendiatorInitializationLock _initializationLock;
     private object?[]?[] _pages = [];
     private int _firstSlot = -1;
     private object? _firstValue;
@@ -23,8 +22,17 @@ public sealed class ZendiatorServiceResolver : IDisposable
     public ZendiatorServiceResolver(IServiceProvider provider)
     {
         ArgumentNullException.ThrowIfNull(provider);
-        _provider = provider;
+        _initializationLock = new(provider);
         _root = provider.GetRequiredService<ZendiatorRootLifetime>();
+    }
+
+    /// <summary>Creates a dependency cache with the root lifetime supplied by DI.</summary>
+    public ZendiatorServiceResolver(IServiceProvider provider, ZendiatorRootLifetime root)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        ArgumentNullException.ThrowIfNull(root);
+        _initializationLock = new(provider);
+        _root = root;
     }
 
     private static class ServiceSlot<T>
@@ -32,11 +40,14 @@ public sealed class ZendiatorServiceResolver : IDisposable
         internal static readonly int Index = Interlocked.Increment(ref _nextSlot) - 1;
     }
 
+    internal static void ReserveServiceSlot<T>() => _ = ServiceSlot<T>.Index;
+
     /// <summary>Gets the first instance resolved for this service type, regardless of its DI lifetime.</summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public T GetRequiredService<T>() where T : notnull
     {
-        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0 || _root.IsDisposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0 || _root.IsDisposed, typeof(ZendiatorServiceResolver));
         var slot = ServiceSlot<T>.Index;
         if (Volatile.Read(ref _firstSlot) == slot)
             return (T)_firstValue!;
@@ -53,16 +64,17 @@ public sealed class ZendiatorServiceResolver : IDisposable
     {
         // ponytail: cold activations serialize per mediator; split locks only if cold contention warrants it.
         // Monitor is reentrant so a synchronous factory can dispatch to a different route.
-        lock (_initializationLock)
+        var initialization = _initializationLock;
+        lock (initialization)
         {
-            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0 || _root.IsDisposed, this);
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0 || _root.IsDisposed, typeof(ZendiatorServiceResolver));
             if (_firstSlot == slot) return (T)_firstValue!;
             var pageIndex = slot >> PageBits;
             var offset = slot & (PageSize - 1);
             if (pageIndex < _pages.Length && _pages[pageIndex]?[offset] is { } existing)
                 return (T)existing;
 
-            var service = _provider.GetRequiredService<T>();
+            var service = initialization.Provider.GetRequiredService<T>();
             // A reentrant factory may have populated another slot while resolving this service.
             if (_firstSlot == -1)
             {
@@ -89,7 +101,8 @@ public sealed class ZendiatorServiceResolver : IDisposable
     }
 
     /// <summary>Stops dispatch without disposing dependencies owned by DI.</summary>
-    public void Dispose() => Interlocked.Exchange(ref _disposed, 1);
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public void Dispose() => Volatile.Write(ref _disposed, 1);
 }
 
 /// <summary>Tracks normal root-container disposal for generated mediators.</summary>
@@ -100,5 +113,5 @@ public sealed class ZendiatorRootLifetime : IDisposable
     internal bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
     /// <summary>Marks the root container as disposed.</summary>
-    public void Dispose() => Interlocked.Exchange(ref _disposed, 1);
+    public void Dispose() => Volatile.Write(ref _disposed, 1);
 }

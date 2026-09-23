@@ -124,7 +124,17 @@ var result = await zendiator.SendAsync(new GetTargetYearQuery(2026));
 
 `services.AddZendiator()` は `TryAdd` で登録します。事前登録があれば置き換えません。
 事前登録の有効期間は維持しますが、Mediator は `Transient` を含めて最初に取得した Handler・Behavior を自身の有効期間中に再利用します。
-登録を繰り返しても重複しません。`IZendiator` は同じ有効期間の `Zendiator` を返します。
+登録を繰り返しても重複しません。Mediator は `IZendiator` から `Zendiator` への型登録を
+1 つ持ち、具体型の `Zendiator` は別途登録しません。解決・注入には `IZendiator` を使います。
+生成方法を差し替える場合は、Factory の登録先を `Zendiator` から `IZendiator` に変えてください。
+
+```csharp
+services.AddScoped<IZendiator>(provider => new Zendiator(provider));
+services.AddZendiator();
+```
+
+直接 `new Zendiator(provider)` で生成する方法も引き続き使えます。
+具体型を個別に登録しても、`IZendiator` の生成方法は変わりません。
 
 ## ストリーミング
 
@@ -183,9 +193,14 @@ services.AddZendiator(static configuration =>
 
 - `ServiceLifetime` の既定は Scoped です。この値は実行時に流れるだけで、
   生成構造は変わらないため、Provider ごとに変えられます。
-- 指定した有効期間は、新しく追加する Zendiator、ハンドラー、Behavior の登録に適用されます。
-  既存登録とその依存サービスの有効期間は変わりません。スコープ検証を有効にして、
-  Singleton が Scoped の依存を保持していないことを確認してください。
+- `ServiceLifetime` は Mediator の有効期間です。Mediator が Scoped の場合、生成される
+  ハンドラーと Behavior は既定で Transient として登録されます。ただし、同じ Mediator は
+  初回に取得したインスタンスを再利用します。Singleton と Transient の Mediator では、
+  生成される依存も指定した有効期間で登録されます。既存登録の有効期間は変わりません。
+- 同じ Scope 内の別の利用者ともインスタンスを共有する場合は、
+  `configuration.DependencyLifetime = ServiceLifetime.Scoped` を指定するか、
+  対象の依存を `AddZendiator()` より前に Scoped で登録してください。
+  スコープ検証で Singleton が Scoped の依存を保持していないことを確認してください。
 - 先に行われた登録が優先されます。後からの登録によって既存の登録が置き換わることはありません。
 - 範囲外の値は、定数なら生成時（ZEN0018）に診断されます。
 - Handler・Behavior は初めて必要になったときに取得し、同一 Mediator インスタンス内で再利用します。Transient も同じです。新しい構成が必要な場合は Transient の Mediator を新たに解決します。

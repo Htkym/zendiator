@@ -29,7 +29,7 @@ public sealed class FactoryAndLifetimeTests
         var secondB = await secondMediator.SendAsync(new Guid0());
         Assert.Equal(secondA, secondB);
         Assert.NotSame(secondScope.ServiceProvider.GetRequiredService<Guid0Handler>(), secondScope.ServiceProvider.GetRequiredService<Guid0Handler>());
-        Assert.Same(firstScope.ServiceProvider.GetRequiredService<Guid0Handler>(), firstScope.ServiceProvider.GetRequiredService<Guid0Handler>());
+        Assert.NotSame(firstScope.ServiceProvider.GetRequiredService<Guid0Handler>(), firstScope.ServiceProvider.GetRequiredService<Guid0Handler>());
         var firstA = await firstMediator.SendAsync(new Guid0());
         Assert.Equal(firstA, await firstMediator.SendAsync(new Guid0()));
         if (original.HasValue) Assert.Equal(original.Value, firstA);

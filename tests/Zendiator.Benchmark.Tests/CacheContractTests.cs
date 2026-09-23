@@ -10,12 +10,13 @@ public sealed class CacheContractTests
     public async Task ZeroBehavior_Scoped_reuses_within_scope_and_isolates_across_scopes()
     {
         var services = new ServiceCollection();
+        services.AddScoped<Zp0Handler>();
         services.AddZendiator();
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         object? firstScopeHandler;
         await using (var scope = provider.CreateAsyncScope())
         {
-            var mediator = scope.ServiceProvider.GetRequiredService<global::Zendiator.Benchmarks.Zendiator>();
+            var mediator = scope.ServiceProvider.GetRequiredService<global::Zendiator.Benchmarks.IZendiator>();
             Assert.Equal(42, await mediator.SendAsync(new Zp0(41)));
             Assert.Equal(42, await mediator.SendAsync(new Zp0(41)));
             Assert.Equal(42, await mediator.SendAsync(new Zp0(41)));
@@ -26,7 +27,7 @@ public sealed class CacheContractTests
         }
         await using (var scope = provider.CreateAsyncScope())
         {
-            var mediator = scope.ServiceProvider.GetRequiredService<global::Zendiator.Benchmarks.Zendiator>();
+            var mediator = scope.ServiceProvider.GetRequiredService<global::Zendiator.Benchmarks.IZendiator>();
             Assert.Equal(42, await mediator.SendAsync(new Zp0(41)));
             Assert.NotSame(firstScopeHandler, scope.ServiceProvider.GetRequiredService<Zp0Handler>());
         }
@@ -45,7 +46,7 @@ public sealed class CacheContractTests
         services.AddZendiator();
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<global::Zendiator.Benchmarks.Zendiator>();
+        var mediator = scope.ServiceProvider.GetRequiredService<global::Zendiator.Benchmarks.IZendiator>();
         Assert.Equal(42, await mediator.SendAsync(new Zp0(41)));
         Assert.Equal(42, await mediator.SendAsync(new Zp0(41)));
         Assert.Equal(42, await mediator.SendAsync(new Zp0(41)));
@@ -63,15 +64,15 @@ public sealed class CacheContractTests
         await using var provider = services.BuildServiceProvider();
         await using (var scope = provider.CreateAsyncScope())
         {
-            var mediator = scope.ServiceProvider.GetRequiredService<global::Zendiator.Benchmarks.Zendiator>();
+            var mediator = scope.ServiceProvider.GetRequiredService<global::Zendiator.Benchmarks.IZendiator>();
             Assert.Equal(42, await mediator.SendAsync(new Zp0(41)));
             Assert.Equal(42, await mediator.SendAsync(new Zp0(41)));
         }
         await using (var scope = provider.CreateAsyncScope())
         {
-            var mediator = scope.ServiceProvider.GetRequiredService<global::Zendiator.Benchmarks.Zendiator>();
+            var mediator = scope.ServiceProvider.GetRequiredService<global::Zendiator.Benchmarks.IZendiator>();
             Assert.Equal(42, await mediator.SendAsync(new Zp0(41)));
-            Assert.Same(provider.GetRequiredService<global::Zendiator.Benchmarks.Zendiator>(), mediator);
+            Assert.Same(provider.GetRequiredService<global::Zendiator.Benchmarks.IZendiator>(), mediator);
         }
     }
 

@@ -234,6 +234,7 @@ public sealed class DiConfigurationTests
     [InlineData("configuration.AddNotification<UserCreated>(); configuration.AddNotification<UserCreated>();")]
     [InlineData("configuration.ConfigureHandlerOrder(typeof(AuditHandler), order: 0); configuration.ConfigureHandlerOrder(typeof(AuditHandler), order: 1);")]
     [InlineData("configuration.ServiceLifetime = (ServiceLifetime)42;")]
+    [InlineData("configuration.DependencyLifetime = (ServiceLifetime)42;")]
     public void Invalid_values_are_diagnosed(string body)
     {
         var source = Head + Fixtures + "public sealed class App { public void Register(" + Services + " services) { "

@@ -29,6 +29,7 @@ public sealed class StreamDispatchTests
         services.AddScoped<Trace>();
         services.AddScoped<AuditLog>();
         services.AddScoped<Gate>();
+        services.AddScoped<ThrowingDisposeStreamHandler>();
         services.AddZendiator();
         return services;
     }

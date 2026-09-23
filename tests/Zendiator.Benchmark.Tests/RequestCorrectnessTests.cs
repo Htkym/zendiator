@@ -19,7 +19,7 @@ public sealed class RequestCorrectnessTests
         Assert.Equal(42, await zrMediator.SendAsync(new Zp3(41)));
         Assert.Equal(42, await zrMediator.SendAsync(new Zp5(41)));
         Assert.Equal(42, await zrMediator.SendAsync(new ZpAsync(41)));
-        Assert.Equal(42, await zrScope.ServiceProvider.GetRequiredService<global::Zendiator.Benchmarks.Zendiator>().SendAsync(new Zp0(41)));
+        Assert.Equal(42, await ((global::Zendiator.Benchmarks.Zendiator)zrMediator).SendAsync(new Zp0(41)));
 
         using var zrSingle = ZrHost.CreateSingleton();
         var zrSingleMediator = zrSingle.GetRequiredService<global::Zendiator.Benchmarks.IZendiator>();

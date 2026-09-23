@@ -21,7 +21,8 @@ public sealed class DispatchTests
         await using var provider = Services().BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
         await using var scope = provider.CreateAsyncScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        Assert.Same(mediator, scope.ServiceProvider.GetRequiredService<Zendiator>());
+        Assert.Same(mediator, scope.ServiceProvider.GetRequiredService<IZendiator>());
+        Assert.Null(scope.ServiceProvider.GetService<Zendiator>());
         Assert.Equal(7, await mediator.SendAsync(new Sum(3, 4)));
         Assert.Equal(["outer", "middle", "inner", "handler", "/inner", "/middle", "/outer"], scope.ServiceProvider.GetRequiredService<Trace>().Events);
         Assert.Null(await mediator.SendAsync(new Echo(null)));

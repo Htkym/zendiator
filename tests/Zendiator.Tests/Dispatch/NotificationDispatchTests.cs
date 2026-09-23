@@ -5,6 +5,47 @@ namespace Zendiator.Tests;
 
 public sealed class NotificationDispatchTests
 {
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 0)]
+    [InlineData(false, 1)]
+    [InlineData(true, 1)]
+    [InlineData(false, 2)]
+    [InlineData(true, 2)]
+    public async Task Publish_consumes_value_task_source_once_and_restores_callers_context(bool suspend, int outcome)
+    {
+        await using var provider = Services().BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        using var cancellation = new CancellationTokenSource();
+        Exception? error = outcome switch
+        {
+            1 => new InvalidOperationException("subscriber failure"),
+            2 => new OperationCanceledException(cancellation.Token),
+            _ => null,
+        };
+        var completion = new NotificationCompletion();
+        var context = new AsyncLocal<string?> { Value = "caller" };
+        if (!suspend) completion.Complete(error);
+        var pending = mediator.PublishAsync(new ControlledNotification(completion, completion.Version, context));
+        Assert.Equal("caller", context.Value);
+        if (suspend)
+        {
+            Assert.False(pending.IsCompleted);
+            Assert.Equal(0, completion.Consumptions);
+            completion.Complete(error);
+        }
+        if (error is null) await pending;
+        else if (error is OperationCanceledException)
+        {
+            var observed = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
+            Assert.Equal(cancellation.Token, observed.CancellationToken);
+        }
+        else Assert.Same(error, await Assert.ThrowsAsync<InvalidOperationException>(async () => await pending));
+        Assert.Equal(1, completion.Consumptions);
+        Assert.Equal("caller", context.Value);
+    }
+
     private static ServiceCollection Services()
     {
         var services = new ServiceCollection();

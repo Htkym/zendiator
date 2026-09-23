@@ -12,7 +12,7 @@ internal sealed partial class SourceEmitter
     {
         if (route.Request.IsReferenceType)
             b.AppendLine($$"""{{indent}}global::System.ArgumentNullException.ThrowIfNull(request);""");
-        b.AppendLine($$"""{{indent}}cancellationToken.ThrowIfCancellationRequested();""");
+        b.AppendLine($$"""{{indent}}if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
     }
 
     private static void HandlerCall(StringBuilder b, EmissionRoute route, string services, string indent)

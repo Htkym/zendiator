@@ -42,7 +42,7 @@ internal sealed partial class SourceEmitter
                     public {{ErasedSignature(publish: false)}}
                     {
                         global::System.ArgumentNullException.ThrowIfNull(notification);
-                        cancellationToken.ThrowIfCancellationRequested();
+                        if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);
                         var notificationType = notification.GetType();
                 """);
             foreach (var route in closed)
@@ -69,7 +69,7 @@ internal sealed partial class SourceEmitter
             if (route.Notification.IsReferenceType)
                 b.AppendLine("""        global::System.ArgumentNullException.ThrowIfNull(notification);""");
             b.AppendLine("""
-                        cancellationToken.ThrowIfCancellationRequested();
+                        if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);
                         return default;
                     }
                 """);
@@ -82,7 +82,7 @@ internal sealed partial class SourceEmitter
                 """);
             if (route.Notification.IsReferenceType)
                 b.AppendLine("""        global::System.ArgumentNullException.ThrowIfNull(notification);""");
-            b.AppendLine("""        cancellationToken.ThrowIfCancellationRequested();""");
+            b.AppendLine("""        if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
             for (var i = 0; i < route.Subscribers.Count; i++)
             {
                 var sub = route.Subscribers[i];
@@ -99,9 +99,10 @@ internal sealed partial class SourceEmitter
                 }
 
                 var direct = sub.Handler.DirectCall;
-                var recv = ServiceReceiver(handlerName, contract, direct, "_services");
+                var recv = ServiceReceiver(handlerName, contract, direct, MediatorServices);
+                if (i != 0)
+                    b.AppendLine("""        if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
                 b.AppendLine($$"""
-                            cancellationToken.ThrowIfCancellationRequested();
                             await {{recv}}.HandleAsync(notification, cancellationToken).ConfigureAwait(false);
                     """);
             }

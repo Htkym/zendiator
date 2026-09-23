@@ -42,7 +42,14 @@ Consumers can keep Contracts, Application, and Host separate. Contracts referenc
 
 There is one execution path, using a lazy cache per mediator. DI constructs and disposes dependencies; a mediator retains the first resolved instance for its own lifetime.
 
+Generated mediators inherit the resolver infrastructure so the mediator and its dependency state occupy one object. The infrastructure base type is not an extension point; use the generated dispatch API. Initialization still uses a private lock, not the mediator object's monitor.
+
+Closed request routes without behaviors can use a compact typed cache when they share one public reference-type handler and the mediator has no other route kinds. Other configurations retain the general cache. Both preserve lazy capture, dependency ownership, and service-slot ordering across mediators.
+
+If a marker declaration explicitly specifies `object` as its base class, the resolver remains a separate object to preserve compatibility between partial declarations.
+
 - Register with `TryAdd` and preserve existing registrations. New registrations default to Scoped.
+- Register `IZendiator` directly to the generated implementation type. The concrete mediator is not registered automatically; customize the interface registration or construct the implementation manually.
 - `ZendiatorServiceResolver` belongs to a mediator instance. Resolve each service type from that mediator's bound provider when first needed.
 - Reuse Transient handlers and behaviors within the same mediator too. This is not a contract of resolving a new Transient instance for every send.
 - Do not share instances through static caches or another provider's or mediator's cache. Sharing performed by DI itself for Singleton or Scoped registrations follows the container's registrations.

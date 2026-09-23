@@ -14,9 +14,9 @@ internal sealed partial class SourceEmitter
                 public {{Signature(route)}}
                 {
             """);
-        Guard(b, route, "        ");
+        // Node0 validates the request and token before resolving any dependency.
         b.Append($$"""
-                    return new OpenRoute{{index}}Node0<{{tp}}>(_services).InvokeAsync(request, cancellationToken);
+                    return new OpenRoute{{index}}Node0<{{tp}}>({{MediatorServices}}).InvokeAsync(request, cancellationToken);
                 }
             """);
         for (var node = 0; node <= route.Behaviors.Count; node++)

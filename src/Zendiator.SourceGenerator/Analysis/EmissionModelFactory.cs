@@ -27,7 +27,7 @@ internal sealed class EmissionModelFactory(GenerationContracts contracts, Func<I
             }
         }
         type = new EmissionType(name, openName,
-            symbol.IsReferenceType, symbol.IsRefLikeType);
+            symbol.IsReferenceType, symbol.IsRefLikeType, IsPublic: Public(symbol));
         _types.Add(symbol, type);
         return type;
     }

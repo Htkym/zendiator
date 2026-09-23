@@ -111,9 +111,13 @@ services.AddApplication();
 - 生成先のコンパイルと明示したアセンブリだけを調べます。
   ハンドラーが参照するリクエスト型は自動で取り込みます。
 - `AddZendiator()` は `TryAdd` で登録します。事前登録があれば置き換えません。
-- ライフタイムの既定が違います。MediatR の既定は Transient、
-  Zendiator の既定は Scoped です。引数なしは Scoped と同じです。
-  Singleton と Transient は構成で選びます。
+- 解決・注入には `IZendiator` を使います。実装型の `Zendiator` は別途登録しません。
+  Mediator の生成方法を差し替える Factory も `IZendiator` に登録します。
+  [登録例](../README.ja.md#使い方)を参照してください。
+- Mediator の既定の有効期間は、MediatR が Transient、Zendiator が Scoped です。
+  Zendiator が生成する Handler・Behavior は、Mediator が Scoped の場合、既定で
+  Transient として登録され、同じ Mediator 内で再利用されます。
+  他の有効期間は構成で選びます。
 
 ```csharp
 services.AddZendiator(static configuration =>

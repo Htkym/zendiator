@@ -43,7 +43,7 @@ internal sealed partial class SourceEmitter
         if (!route.IsVoid)
             b.Append("""return """);
         b.Append($$"""
-            new SyncRoute{{index}}Node0{{tp}}(_services).Invoke(request, cancellationToken);
+            new SyncRoute{{index}}Node0{{tp}}({{MediatorServices}}).Invoke(request, cancellationToken);
                 }
             """);
         for (var node = 0; node <= route.Behaviors.Count; node++)

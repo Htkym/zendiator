@@ -68,7 +68,8 @@ public sealed class VoidDispatchTests
         Assert.Same(BoomHandler.Failure, await Assert.ThrowsAsync<InvalidOperationException>(async () => await mediator.SendAsync(new Boom())));
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await mediator.SendAsync(new DeleteUser(1), cancellation.Token));
+        var canceled = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await mediator.SendAsync(new DeleteUser(1), cancellation.Token));
+        Assert.Equal(cancellation.Token, canceled.CancellationToken);
     }
 
     [Fact]

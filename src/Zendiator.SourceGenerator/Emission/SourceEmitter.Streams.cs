@@ -36,7 +36,7 @@ internal sealed partial class SourceEmitter
             """);
         // Lazy: no handler execution, no DI resolution here. Only capture scope provider + request + token.
         b.AppendLine($$"""
-                    return new {{enumerable}}{{tp}}(_services, request, cancellationToken);
+                    return new {{enumerable}}{{tp}}({{MediatorServices}}, request, cancellationToken);
                 }
             """);
         EmitStreamEnumerable(b, route, index);

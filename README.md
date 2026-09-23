@@ -126,7 +126,18 @@ var result = await zendiator.SendAsync(new GetTargetYearQuery(2026));
 
 Registration uses `TryAdd`. Pre-existing registrations are not replaced.
 Pre-registered lifetimes are preserved, but each mediator lazily captures its first Handler and Behavior instance, including `Transient` dependencies.
-Repeated registration does not duplicate. `IZendiator` resolves the `Zendiator` with the same lifetime.
+Repeated registration does not duplicate. The mediator has one type registration,
+`IZendiator` to `Zendiator`; the concrete `Zendiator` type is not registered separately.
+Resolve or inject `IZendiator`. To customize construction, register the factory for
+`IZendiator` instead of `Zendiator`:
+
+```csharp
+services.AddScoped<IZendiator>(provider => new Zendiator(provider));
+services.AddZendiator();
+```
+
+Direct `new Zendiator(provider)` remains supported. A separate concrete-type
+registration does not change how `IZendiator` is created.
 
 ## Streaming
 
@@ -189,9 +200,14 @@ Rules:
 
 - The default `ServiceLifetime` is Scoped. The value flows at runtime and never
   changes the generated structure, so providers may differ.
-- The specified lifetime applies to newly added Zendiator, handler, and Behavior
-  registrations. Existing registrations and their dependencies retain their own
-  lifetimes; validate scopes to catch Singleton services capturing Scoped dependencies.
+- `ServiceLifetime` controls the mediator. Generated handlers and Behaviors default
+  to Transient when the mediator is Scoped; they are still resolved once per
+  mediator. Singleton and Transient mediators use their selected lifetime for
+  generated dependencies. Existing registrations retain their own lifetimes.
+- To retain scope-wide sharing with other DI consumers, set
+  `configuration.DependencyLifetime = ServiceLifetime.Scoped` or register the
+  affected dependency as Scoped before `AddZendiator()`. Validate scopes to catch
+  Singleton services capturing Scoped dependencies.
 - First registration wins. A later registration does not replace existing registrations.
 - Out-of-range values are diagnosed at generation (`ZEN0018`) when constant.
 - Each mediator captures dependencies on first use and reuses them, including Transient dependencies. Resolve a new transient mediator for a fresh composition.

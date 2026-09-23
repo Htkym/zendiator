@@ -117,9 +117,13 @@ Notes:
 - Only the target's compilation and explicitly listed assemblies are inspected.
   Request types referenced by handler contracts are picked up automatically.
 - `AddZendiator()` registers with `TryAdd`. Pre-existing registrations are not replaced.
-- Default lifetimes differ. MediatR defaults to Transient,
-  Zendiator defaults to Scoped. A bare call equals Scoped.
-  Select Singleton and Transient through configuration.
+- Resolve or inject `IZendiator`; `Zendiator` is its implementation type and is not
+  registered separately. Custom mediator factories must register `IZendiator`.
+  See the [registration example](../README.md#usage).
+- Mediator lifetimes differ: MediatR defaults to Transient, while Zendiator
+  defaults to Scoped. Generated Zendiator handlers and Behaviors default to
+  Transient for a Scoped mediator and are reused within that mediator.
+  Select other lifetimes through configuration.
 
 ```csharp
 services.AddZendiator(static configuration =>

@@ -32,7 +32,7 @@ public class RequestBenchmarks
         var zr = ZrHost.CreateScoped();
         var zrScope = zr.CreateScope();
         _zrScoped = zrScope.ServiceProvider.GetRequiredService<IZendiator>();
-        _zrScopedConcrete = zrScope.ServiceProvider.GetRequiredService<Zendiator>();
+        _zrScopedConcrete = (Zendiator)_zrScoped;
 
         var zrSingle = ZrHost.CreateSingleton();
         _zrSingleton = zrSingle.GetRequiredService<IZendiator>();

@@ -26,7 +26,7 @@ internal sealed partial class SourceEmitter
             """);
         if (route.Request.IsReferenceType)
             b.AppendLine("""        global::System.ArgumentNullException.ThrowIfNull(request);""");
-        b.AppendLine("""        cancellationToken.ThrowIfCancellationRequested();""");
+        b.AppendLine("""        if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
         if (!route.IsVoid)
             b.AppendLine($$"""
                         var results = new global::System.Collections.Generic.List<{{resp}}>({{route.Branches.Count}});
@@ -35,9 +35,9 @@ internal sealed partial class SourceEmitter
         {
             var node0 = $$"""SyncMultiRoute{{index}}Branch{{bh}}Node0{{tp}}""";
             if (route.IsVoid)
-                b.AppendLine($$"""        new {{node0}}(_services).Invoke(request, cancellationToken);""");
+                b.AppendLine($$"""        new {{node0}}({{MediatorServices}}).Invoke(request, cancellationToken);""");
             else
-                b.AppendLine($$"""        results.Add(new {{node0}}(_services).Invoke(request, cancellationToken));""");
+                b.AppendLine($$"""        results.Add(new {{node0}}({{MediatorServices}}).Invoke(request, cancellationToken));""");
         }
 
         if (!route.IsVoid)
@@ -60,7 +60,7 @@ internal sealed partial class SourceEmitter
                     """);
                 if (route.Request.IsReferenceType)
                     b.AppendLine("""            global::System.ArgumentNullException.ThrowIfNull(request);""");
-                b.AppendLine("""            cancellationToken.ThrowIfCancellationRequested();""");
+                b.AppendLine("""            if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
                 if (node == branch.Behaviors.Count)
                 {
                     var handlerName = route.IsOpen || branch.HandlerIsOpen ? branch.HandlerDisplay : Name(branch.Handler);
