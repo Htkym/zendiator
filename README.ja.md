@@ -283,6 +283,11 @@ dotnet run --project samples/Zendiator.Sample.Host -c Release
 | ZEN0018 | 不正な構成値（namespace、重複、lifetime 範囲、順序競合） |
 | ZEN0019 | 曖昧な登録束縛（予約） |
 | ZEN0020 | 生成登録へ接続できない `AddZendiator` 呼び出し |
+| ZEN0021 | 生成 Mediator を明示的に `IDisposable` として扱う |
+| ZEN0022 | `using` スコープから取得した Mediator をそのメソッドから返す |
+| ZEN0023 | 同じメソッド内でスコープを明示的に破棄した後に送信する |
+
+ZEN0021～ZEN0023 は警告です。静的に確定できる形だけを検出し、スコープの安全性を網羅的に証明するものではありません。修正方法は[移行ガイド](docs/migrating-from-mediatr.ja.md)を参照してください。
 
 ## 公開 API
 

@@ -15,7 +15,7 @@ public sealed class DisposalContractTests
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         var scope = provider.CreateAsyncScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        Assert.False(mediator is IDisposable);
+        Assert.DoesNotContain(typeof(IDisposable), mediator.GetType().GetInterfaces());
         Assert.Equal(5, await mediator.SendAsync(new DispReq()));
         Assert.Equal(5, await mediator.SendAsync(new DispReq()));
         await scope.DisposeAsync();

@@ -114,6 +114,12 @@ marker type were removed. Code that explicitly disposes or casts a mediator to
 after the scope or root provider has ended no longer have a guaranteed
 `ObjectDisposedException`.
 
+The generator package includes analyzer warnings ZEN0021–ZEN0023 for direct,
+provable misuse of this lifetime contract. They cover explicit `IDisposable`
+treatment, returning a mediator from a local `using` scope, and sending after
+explicit scope disposal in the same method. They do not establish safety for
+other control flow, asynchronous work, or mediators stored in fields.
+
 ## Measurements
 
 Use the working-tree ProjectReference in `.local/benchmarks2/public-benchmarks` for

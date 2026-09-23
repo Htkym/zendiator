@@ -291,6 +291,11 @@ Different spellings that resolve to the same assembly set share one generation u
 | ZEN0018 | Invalid configuration value (namespace, duplicates, lifetime range, order conflicts) |
 | ZEN0019 | Ambiguous registration binding (reserved) |
 | ZEN0020 | `AddZendiator` call cannot be connected to generated registration |
+| ZEN0021 | Explicitly treating a generated mediator as `IDisposable` |
+| ZEN0022 | Returning a mediator resolved from a `using` scope |
+| ZEN0023 | Sending after explicitly disposing its scope in the same method |
+
+ZEN0021–ZEN0023 are warnings for directly provable cases, not a complete proof of scope safety. See the [migration guide](docs/migrating-from-mediatr.md) for fixes.
 
 ## Public API
 

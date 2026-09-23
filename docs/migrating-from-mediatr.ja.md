@@ -12,6 +12,16 @@ MediatR 12 を使ったコードを Zendiator へ移す手順です。API の対
 
 現在のプレビュー版は標準 DI で構築し、Transient を含む Handler・Behavior を Mediator 単位で遅延取得して再利用します。新しい構成が必要な場合は Transient の Mediator を新たに解決してください。独自 Provider API は削除しました。生成される Mediator は `IDisposable` を実装せず、依存サービスの破棄は DI が担当します。送信やストリーム列挙が終わるまでスコープを維持してください。詳細は [構築と有効期間](optimized-dispatch.md) を参照してください。
 
+以前の生成 Mediator を `Dispose()` していたコードは、DI スコープを破棄する形に直します。スコープを作るメソッドでは、送信の完了を待ってからスコープを抜けてください。
+
+```csharp
+await using var scope = provider.CreateAsyncScope();
+var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+var user = await mediator.SendAsync(new GetUserQuery(1), cancellationToken);
+```
+
+生成器パッケージに同梱された Analyzer は、明示的な `IDisposable` 扱い（ZEN0021）、`using` スコープからの Mediator の返却（ZEN0022）、同じメソッド内でスコープを明示的に破棄した後の送信（ZEN0023）を、関係を確実に追える場合だけ警告します。複雑な非同期処理やフィールドをまたぐ寿命は判定しません。警告がないことは、破棄後の利用が安全である証明ではありません。破棄済みスコープやルート Provider からの送信はサポート外で、以前の `ObjectDisposedException` 保証はなくなりました。
+
 前提は次のとおりです。
 
 - 移行元は MediatR 12（`IMediator`、`ISender`、`IPublisher` の構成）を想定しています。

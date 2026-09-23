@@ -152,6 +152,46 @@ try {
         if ($deps -match $banned) { throw "banned entry in deps.json: $banned" }
     }
 
+    # The package must load the lifetime analyzer as well as the generator.
+    $misuse = "$WorkingDir/host/LifetimeMisuse.cs"
+    @"
+using System;
+using Microsoft.Extensions.DependencyInjection;
+using Smoke.Contracts;
+
+namespace Smoke.Host;
+
+public static class LifetimeMisuse
+{
+    public static bool Disposable(IZendiator mediator) => mediator is IDisposable;
+
+    public static IZendiator Escape(IServiceProvider provider)
+    {
+        using var scope = provider.CreateScope();
+        return scope.ServiceProvider.GetRequiredService<IZendiator>();
+    }
+
+    public static async Task<int> SendAfterDispose(IServiceProvider provider)
+    {
+        var scope = provider.CreateScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        scope.Dispose();
+        return await mediator.SendAsync(new Ping(21));
+    }
+}
+"@ | Set-Content $misuse -Encoding UTF8
+    try {
+        $diagnostics = dotnet build "$WorkingDir/host/host.csproj" -c Release --no-restore -p:TreatWarningsAsErrors=false -v minimal 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) { throw "analyzer smoke build failed: $diagnostics" }
+        foreach ($id in @("ZEN0021", "ZEN0022", "ZEN0023")) {
+            if ($diagnostics -notmatch $id) { throw "package analyzer did not report $id`: $diagnostics" }
+        }
+        Write-Host "Package analyzer warnings passed (ZEN0021-ZEN0023)."
+    }
+    finally {
+        Remove-Item -LiteralPath $misuse -Force
+    }
+
     if ($Aot) {
         dotnet publish "$WorkingDir/host/host.csproj" -c Release -r win-x64 -p:PublishAot=true --self-contained -v minimal
         if ($LASTEXITCODE -ne 0) { throw "AOT publish failed" }

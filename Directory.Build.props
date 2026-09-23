@@ -13,7 +13,7 @@
     <PackageProjectUrl>https://github.com/Htkym/zendiator</PackageProjectUrl>
     <PackageTags>mediator;source-generator;CQRS;AOT</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Zendiator 0.2.0: unified lazy dispatch with standard DI and AddZendiator(), incremental source generation improvements, and updated design and migration guides. Breaking change: each mediator reuses the first resolved handler and behavior instance per service type, including Transient registrations. See https://github.com/Htkym/zendiator/blob/v0.2.0/docs/release/0.2.0-release-notes.md</PackageReleaseNotes>
+    <PackageReleaseNotes>Zendiator 0.2.0: unified lazy dispatch with standard DI and AddZendiator(), incremental source generation improvements, and lifetime analyzer warnings. Breaking changes: each mediator reuses the first resolved handler and behavior instance per service type, including Transient registrations; generated mediators no longer implement IDisposable. See https://github.com/Htkym/zendiator/blob/v0.2.0/docs/release/0.2.0-release-notes.md</PackageReleaseNotes>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>

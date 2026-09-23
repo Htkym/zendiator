@@ -13,6 +13,16 @@ and configuration guidance below.
 
 The current preview uses standard DI construction and captures Handler/Behavior dependencies lazily per mediator instance, including Transient dependencies. Resolve a new transient mediator for a fresh composition. Custom provider APIs were removed. The generated mediator does not implement `IDisposable`; DI owns dependency disposal. Keep the scope alive until sends and stream enumeration finish. See [construction and dispatch lifetime](optimized-dispatch.md).
 
+Replace explicit mediator disposal with disposal of its DI scope. Await the send before leaving that scope:
+
+```csharp
+await using var scope = provider.CreateAsyncScope();
+var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+var user = await mediator.SendAsync(new GetUserQuery(1), cancellationToken);
+```
+
+The analyzer bundled with the generator warns when it can prove explicit `IDisposable` treatment (ZEN0021), returning a mediator from a `using` scope (ZEN0022), or sending after explicit scope disposal in the same method (ZEN0023). It does not prove safety across complex asynchronous work or fields. No warning is not a guarantee of safe lifetime use. Sending after scope or root-provider disposal is unsupported, and the previous `ObjectDisposedException` guarantee is gone.
+
 Assumptions:
 
 - The migration source is MediatR 12 (the `IMediator`, `ISender`, `IPublisher` setup).

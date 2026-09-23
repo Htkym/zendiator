@@ -45,6 +45,7 @@ internal sealed partial class SourceEmitter
             : _model.Target.InheritServiceResolver ? "global::Zendiator.DependencyInjection.ZendiatorServiceResolver, " : "";
         b.AppendLine($$"""
             /// <summary>Generated mediator with lazily captured dependencies.</summary>
+            [global::System.CodeDom.Compiler.GeneratedCode("Zendiator.SourceGenerator", "0.2.0")]
             public sealed partial class Zendiator : {{resolverBase}}IZendiator
             {
             """);
