@@ -7,62 +7,7 @@ namespace Zendiator.CachePolicy.Tests;
 public sealed class DisposalContractTests
 {
     [Fact]
-    public async Task Disposed_scope_rejects_zero_stage_send_in_every_state()
-    {
-        foreach (var warmSends in new[] { 0, 1, 3 })
-        {
-            TestCounters.ResetAll();
-            var services = new ServiceCollection();
-            services.AddZendiator();
-            await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-            var scope = provider.CreateAsyncScope();
-            var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-            for (var i = 0; i < warmSends; i++)
-                Assert.Equal(42, await mediator.SendAsync(new Val0(41)));
-            await scope.DisposeAsync();
-            await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await mediator.SendAsync(new Val0(41)));
-            await provider.DisposeAsync();
-        }
-    }
-
-    [Fact]
-    public async Task Disposed_scope_rejects_pipeline_send_in_every_state()
-    {
-        foreach (var warmSends in new[] { 0, 1, 3 })
-        {
-            TestCounters.ResetAll();
-            var services = new ServiceCollection();
-            services.AddZendiator();
-            await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-            var scope = provider.CreateAsyncScope();
-            var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-            for (var i = 0; i < warmSends; i++)
-                Assert.Equal(1001, await mediator.SendAsync(new PipeReq(1)));
-            await scope.DisposeAsync();
-            await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await mediator.SendAsync(new PipeReq(1)));
-            await provider.DisposeAsync();
-        }
-    }
-
-    [Fact]
-    public async Task Disposed_root_rejects_singleton_send()
-    {
-        TestCounters.ResetAll();
-        var services = new ServiceCollection();
-        services.AddZendiator(ServiceLifetime.Singleton);
-        var provider = services.BuildServiceProvider();
-        var mediator = provider.GetRequiredService<IZendiator>();
-        Assert.Equal(42, await mediator.SendAsync(new Val0(41)));
-        Assert.Equal(42, await mediator.SendAsync(new Val0(41)));
-        Assert.Equal(1001, await mediator.SendAsync(new PipeReq(1)));
-        Assert.Equal(1001, await mediator.SendAsync(new PipeReq(1)));
-        await provider.DisposeAsync();
-        await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await mediator.SendAsync(new Val0(41)));
-        await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await mediator.SendAsync(new PipeReq(1)));
-    }
-
-    [Fact]
-    public async Task Async_dispose_owns_single_dispose_and_rejects_reuse()
+    public async Task Async_dispose_owns_single_handler_dispose()
     {
         TestCounters.ResetAll();
         var services = new ServiceCollection();
@@ -70,12 +15,13 @@ public sealed class DisposalContractTests
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         var scope = provider.CreateAsyncScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        Assert.DoesNotContain(typeof(IDisposable), mediator.GetType().GetInterfaces());
         Assert.Equal(5, await mediator.SendAsync(new DispReq()));
         Assert.Equal(5, await mediator.SendAsync(new DispReq()));
         await scope.DisposeAsync();
         Assert.Equal(1, DispHandler.DisposeCount);
-        await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await mediator.SendAsync(new DispReq()));
         await provider.DisposeAsync();
+        Assert.Equal(1, DispHandler.DisposeCount);
     }
 
     [Fact]

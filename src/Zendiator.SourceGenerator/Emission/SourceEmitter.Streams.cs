@@ -36,7 +36,7 @@ internal sealed partial class SourceEmitter
             """);
         // Lazy: no handler execution, no DI resolution here. Only capture scope provider + request + token.
         b.AppendLine($$"""
-                    return new {{enumerable}}{{tp}}(_services, request, cancellationToken);
+                    return new {{enumerable}}{{tp}}({{MediatorServices}}, request, cancellationToken);
                 }
             """);
         EmitStreamEnumerable(b, route, index);
@@ -44,7 +44,7 @@ internal sealed partial class SourceEmitter
         for (var node = 0; node <= route.Behaviors.Count; node++)
         {
             b.AppendLine($$"""
-                    private readonly struct StreamRoute{{index}}Node{{node}}{{TypeParameters(route)}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver services) : {{cont}}{{TypeConstraints(route)}}
+                    private readonly struct StreamRoute{{index}}Node{{node}}{{TypeParameters(route)}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> services) : {{cont}}{{TypeConstraints(route)}}
                     {
                         [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
                         public global::System.Collections.Generic.IAsyncEnumerable<{{item}}> InvokeAsync({{req}} request, global::System.Threading.CancellationToken cancellationToken)

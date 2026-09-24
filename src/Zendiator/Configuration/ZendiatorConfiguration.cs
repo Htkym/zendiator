@@ -13,6 +13,7 @@ public sealed class ZendiatorConfiguration
     private bool _frozen;
     private string? _namespace;
     private ServiceLifetime _serviceLifetime = ServiceLifetime.Scoped;
+    private ServiceLifetime? _dependencyLifetime;
     private readonly List<string> _assemblyMarkers = new();
     private readonly List<string> _assemblyMarkerAssemblies = new();
     private readonly List<string> _assemblies = new();
@@ -31,7 +32,7 @@ public sealed class ZendiatorConfiguration
         }
     }
 
-    /// <summary>Gets or sets the registration lifetime. Scoped by default. This value flows at runtime and never changes the generated structure.</summary>
+    /// <summary>Gets or sets the mediator lifetime. Scoped by default. This value flows at runtime and never changes the generated structure.</summary>
     public ServiceLifetime ServiceLifetime
     {
         get => _serviceLifetime;
@@ -39,6 +40,17 @@ public sealed class ZendiatorConfiguration
         {
             ThrowIfFrozen();
             _serviceLifetime = value;
+        }
+    }
+
+    /// <summary>Overrides the lifetime of generated Handler and Behavior registrations. Null uses Transient for a Scoped mediator, or the mediator lifetime otherwise.</summary>
+    public ServiceLifetime? DependencyLifetime
+    {
+        get => _dependencyLifetime;
+        set
+        {
+            ThrowIfFrozen();
+            _dependencyLifetime = value;
         }
     }
 
@@ -99,6 +111,7 @@ public sealed class ZendiatorConfiguration
         return new ZendiatorConfigurationSnapshot(
             _namespace,
             _serviceLifetime,
+            _dependencyLifetime,
             _assemblyMarkers
                 .Select((marker, index) => (MarkerType: marker, Assembly: _assemblyMarkerAssemblies[index]))
                 .OrderBy(static entry => entry.MarkerType, StringComparer.Ordinal).ToList(),
@@ -118,6 +131,9 @@ public sealed class ZendiatorConfiguration
 
     private void Validate()
     {
+        if (_dependencyLifetime is { } dependencyLifetime &&
+            dependencyLifetime is not (ServiceLifetime.Singleton or ServiceLifetime.Scoped or ServiceLifetime.Transient))
+            throw new ArgumentOutOfRangeException(nameof(DependencyLifetime), dependencyLifetime, null);
         var duplicateBehavior = _behaviors.GroupBy(static entry => entry.BehaviorType, StringComparer.Ordinal).FirstOrDefault(static group => group.Count() != 1);
         if (duplicateBehavior != null)
             throw new InvalidOperationException($"Behavior {duplicateBehavior.Key} is registered more than once. Register each behavior type once.");

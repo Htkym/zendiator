@@ -1,0 +1,402 @@
+[
+  {
+    "Type": "ZendiatorSend0",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend0",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend0",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend0",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend0",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend0",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend0",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend0",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend0",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend0",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend0",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend0",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend0",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend0",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend0",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend0",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend0",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend0",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend0",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend0",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend1",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend1",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend1",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend1",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend1",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend1",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend1",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend1",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend1",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend1",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend1",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend1",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend1",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend1",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend1",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend1",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend1",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend1",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend1",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend1",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend3",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend3",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend3",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend3",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend3",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend3",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend3",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend3",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend3",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend3",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend3",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend3",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend3",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend3",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend3",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend3",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend3",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend3",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend3",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend3",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend5",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend5",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend5",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend5",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend5",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend5",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend5",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend5",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend5",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend5",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend5",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend5",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend5",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend5",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend5",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend5",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  }
+]

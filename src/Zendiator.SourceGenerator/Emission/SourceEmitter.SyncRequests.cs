@@ -32,6 +32,9 @@ internal sealed partial class SourceEmitter
         var task = route.IsVoid ? "void" : resp;
         var cont = route.IsVoid ? $$"""global::Zendiator.ISyncRequestContinuation<{{req}}>""" : $$"""global::Zendiator.ISyncRequestContinuation<{{req}}, {{resp}}>""";
         var scoped = NeedsScoped(route) ? "scoped " : "";
+        var resolver = _singleServiceTypeName is { } singleServiceTypeName
+            ? $$"""global::Zendiator.DependencyInjection.ZendiatorSingleServiceResolver<{{singleServiceTypeName}}>"""
+            : "global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator>";
         b.AppendLine($$"""
                 /// <summary>Dispatches the request synchronously without retaining it.</summary>
                 [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
@@ -43,13 +46,13 @@ internal sealed partial class SourceEmitter
         if (!route.IsVoid)
             b.Append("""return """);
         b.Append($$"""
-            new SyncRoute{{index}}Node0{{tp}}(_services).Invoke(request, cancellationToken);
+            new SyncRoute{{index}}Node0{{tp}}({{MediatorServices}}).Invoke(request, cancellationToken);
                 }
             """);
         for (var node = 0; node <= route.Behaviors.Count; node++)
         {
             b.AppendLine($$"""
-                    private readonly struct SyncRoute{{index}}Node{{node}}{{TypeParameters(route)}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver services) : {{cont}}{{TypeConstraints(route)}}
+                    private readonly struct SyncRoute{{index}}Node{{node}}{{TypeParameters(route)}}({{resolver}} services) : {{cont}}{{TypeConstraints(route)}}
                     {
                         [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
                         public {{task}} Invoke({{scoped}}{{req}} request, global::System.Threading.CancellationToken cancellationToken)
@@ -71,7 +74,11 @@ internal sealed partial class SourceEmitter
                 }
 
                 var direct = route.Handler.DirectCall;
-                var recv = ServiceReceiver(handlerName, contract, direct);
+                var recv = _singleServiceTypeName != null
+                    ? "services.GetRequiredService()"
+                    : "services.GetRequiredService<" + handlerName + ">()";
+                if (!direct)
+                    recv = "((" + contract + ")" + recv + ")";
                 b.Append("""            """);
                 if (!route.IsVoid)
                     b.Append("""return """);

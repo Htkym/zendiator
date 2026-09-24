@@ -5,6 +5,20 @@ namespace Zendiator.Tests;
 
 public sealed class GenericDispatchTests
 {
+    [Fact]
+    public async Task Open_route_checks_arguments_before_resolving_the_pipeline()
+    {
+        await using var provider = Services().BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.Throws<ArgumentNullException>(() => { _ = mediator.SendAsync((GetById<User>)null!, cancellation.Token); });
+        var error = Assert.Throws<OperationCanceledException>(() => { _ = mediator.SendAsync(new GetById<User>(1), cancellation.Token); });
+        Assert.Equal(cancellation.Token, error.CancellationToken);
+        Assert.Empty(scope.ServiceProvider.GetRequiredService<Trace>().Events);
+    }
+
     private static ServiceCollection Services()
     {
         var services = new ServiceCollection();
@@ -13,6 +27,8 @@ public sealed class GenericDispatchTests
         services.AddScoped<Gate>();
         services.AddScoped<IRepository<User>, UserRepository>();
         services.AddScoped<IRepository<Product>, ProductRepository>();
+        services.AddScoped<GetByIdHandler<User>>();
+        services.AddScoped<GetByIdHandler<Product>>();
         services.AddZendiator();
         return services;
     }
@@ -20,6 +36,15 @@ public sealed class GenericDispatchTests
     private static ValueTask<T> Load<T>(IZendiator sender, int id, CancellationToken cancellationToken)
         where T : class =>
         sender.SendAsync(new GetById<T>(id), cancellationToken);
+
+    [Fact]
+    public void Generated_registration_can_restore_scoped_dependencies()
+    {
+        var services = new ServiceCollection();
+        services.AddZendiator(ServiceLifetime.Scoped, ServiceLifetime.Scoped);
+        Assert.Equal(ServiceLifetime.Scoped,
+            Assert.Single(services, d => d.ServiceType == typeof(BoomHandler)).Lifetime);
+    }
 
     [Fact]
     public async Task Closed_constructions_resolve_through_the_open_route()

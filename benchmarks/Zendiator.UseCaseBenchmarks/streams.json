@@ -1,0 +1,722 @@
+[
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "Creation",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "Cancellation",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalStream0",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalStream0",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalStream0",
+    "Method": "Creation",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalStream0",
+    "Method": "Cancellation",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorStream0",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorStream0",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorStream0",
+    "Method": "Creation",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorStream0",
+    "Method": "Cancellation",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRStream0",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRStream0",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRStream0",
+    "Method": "Creation",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRStream0",
+    "Method": "Cancellation",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream0",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream0",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream0",
+    "Method": "Creation",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream0",
+    "Method": "Cancellation",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream1",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream1",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalStream1",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalStream1",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorStream1",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorStream1",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRStream1",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRStream1",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream1",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream1",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream3",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream3",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalStream3",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalStream3",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorStream3",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorStream3",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRStream3",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRStream3",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream3",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream3",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "Creation",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "Cancellation",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalStream5",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalStream5",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalStream5",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalStream5",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalStream5",
+    "Method": "Creation",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalStream5",
+    "Method": "Cancellation",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorStream5",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorStream5",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorStream5",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorStream5",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorStream5",
+    "Method": "Creation",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorStream5",
+    "Method": "Cancellation",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRStream5",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRStream5",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRStream5",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRStream5",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRStream5",
+    "Method": "Creation",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRStream5",
+    "Method": "Cancellation",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "First",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "Creation",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "Cancellation",
+    "Count": 16,
+    "Asynchronous": true
+  }
+]

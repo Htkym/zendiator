@@ -26,8 +26,10 @@ public sealed class LazyAndPipelineMeaningTests
         Assert.Equal(1, TokHandler.FactoryCalls);
         using var dead = new CancellationTokenSource();
         dead.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+        var canceled = await Assert.ThrowsAnyAsync<OperationCanceledException>(
             async () => await mediator.SendAsync(new TokReq(dead.Token)));
+        Assert.Equal(dead.Token, canceled.CancellationToken);
+        Assert.Equal(1, TokHandler.FactoryCalls);
     }
 
     [Fact]
@@ -35,6 +37,7 @@ public sealed class LazyAndPipelineMeaningTests
     {
         TestCounters.ResetAll();
         var services = new ServiceCollection();
+        services.AddScoped<AddHandler>();
         services.AddZendiator();
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         await using var scope = provider.CreateAsyncScope();

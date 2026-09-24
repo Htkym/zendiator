@@ -19,6 +19,7 @@ public sealed class ConfigurationTests
         var snapshot = new ZendiatorConfiguration().Snapshot();
         Assert.Null(snapshot.Namespace);
         Assert.Equal(ServiceLifetime.Scoped, snapshot.ServiceLifetime);
+        Assert.Null(snapshot.DependencyLifetime);
         Assert.Empty(snapshot.AssemblyMarkers);
         Assert.Empty(snapshot.Behaviors);
         Assert.Empty(snapshot.Notifications);
@@ -68,7 +69,17 @@ public sealed class ConfigurationTests
         _ = configuration.Snapshot();
         Assert.Throws<InvalidOperationException>(() => configuration.Snapshot());
         Assert.Throws<InvalidOperationException>(() => configuration.Namespace = "X");
+        Assert.Throws<InvalidOperationException>(() => configuration.DependencyLifetime = ServiceLifetime.Scoped);
         Assert.Throws<InvalidOperationException>(() => configuration.RegisterServicesFromAssemblyContaining<MarkerA>());
+    }
+
+    [Fact]
+    public void Dependency_lifetime_override_is_recorded_and_validated()
+    {
+        var configuration = new ZendiatorConfiguration { DependencyLifetime = ServiceLifetime.Scoped };
+        Assert.Equal(ServiceLifetime.Scoped, configuration.Snapshot().DependencyLifetime);
+        var invalid = new ZendiatorConfiguration { DependencyLifetime = (ServiceLifetime)42 };
+        Assert.Throws<ArgumentOutOfRangeException>(() => invalid.Snapshot());
     }
 
     [Theory]

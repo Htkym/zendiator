@@ -89,8 +89,9 @@ public sealed class SyncDispatchTests
         using var scope = provider.CreateScope();
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
-        Assert.ThrowsAny<OperationCanceledException>(() =>
+        var canceled = Assert.ThrowsAny<OperationCanceledException>(() =>
             scope.ServiceProvider.GetRequiredService<IZendiator>().SendSync(new AddOne(1), cancellation.Token));
+        Assert.Equal(cancellation.Token, canceled.CancellationToken);
     }
 
     [Fact]

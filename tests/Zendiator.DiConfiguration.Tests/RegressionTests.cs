@@ -10,7 +10,7 @@ public sealed class RegressionTests
     [Fact]
     public async Task Mixed_handler_contracts_dispatch_through_the_correct_implementation()
     {
-        using var provider = DiRuntimeTests.CreateServices().BuildServiceProvider();
+        using var provider = DiRuntimeTests.CreateServices(dependencyLifetime: ServiceLifetime.Scoped).BuildServiceProvider();
         using var scope = provider.CreateScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
         Assert.Equal(1, await mediator.SendAsync(new MixedFirst()));
@@ -48,7 +48,7 @@ public sealed class RegressionTests
     [Fact]
     public void Generic_sync_void_and_combined_ref_constraints_dispatch()
     {
-        using var provider = DiRuntimeTests.CreateServices().BuildServiceProvider();
+        using var provider = DiRuntimeTests.CreateServices(dependencyLifetime: ServiceLifetime.Scoped).BuildServiceProvider();
         using var scope = provider.CreateScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
         mediator.SendSync(new GenericReset<int>());

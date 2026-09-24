@@ -1,6 +1,6 @@
 # Zendiator
 
-[English](README.md) | [設計・保守の方針](Constitution.ja.md)
+[English](README.md)
 
 コンパイル時に型付きディスパッチを生成する、.NET 10 向けの小さな Mediator です。
 Roslyn Incremental Source Generator がリクエストごとの `SendAsync` オーバーロード、
@@ -124,7 +124,17 @@ var result = await zendiator.SendAsync(new GetTargetYearQuery(2026));
 
 `services.AddZendiator()` は `TryAdd` で登録します。事前登録があれば置き換えません。
 事前登録の有効期間は維持しますが、Mediator は `Transient` を含めて最初に取得した Handler・Behavior を自身の有効期間中に再利用します。
-登録を繰り返しても重複しません。`IZendiator` は同じ有効期間の `Zendiator` を返します。
+登録を繰り返しても重複しません。Mediator は `IZendiator` から `Zendiator` への型登録を
+1 つ持ち、具体型の `Zendiator` は別途登録しません。解決・注入には `IZendiator` を使います。
+生成方法を差し替える場合は、Factory の登録先を `Zendiator` から `IZendiator` に変えてください。
+
+```csharp
+services.AddScoped<IZendiator>(provider => new Zendiator(provider));
+services.AddZendiator();
+```
+
+直接 `new Zendiator(provider)` で生成する方法も引き続き使えます。
+具体型を個別に登録しても、`IZendiator` の生成方法は変わりません。
 
 ## ストリーミング
 
@@ -183,12 +193,17 @@ services.AddZendiator(static configuration =>
 
 - `ServiceLifetime` の既定は Scoped です。この値は実行時に流れるだけで、
   生成構造は変わらないため、Provider ごとに変えられます。
-- 指定した有効期間は、新しく追加する Zendiator、ハンドラー、Behavior の登録に適用されます。
-  既存登録とその依存サービスの有効期間は変わりません。スコープ検証を有効にして、
-  Singleton が Scoped の依存を保持していないことを確認してください。
+- `ServiceLifetime` は Mediator の有効期間です。Mediator が Scoped の場合、生成される
+  ハンドラーと Behavior は既定で Transient として登録されます。ただし、同じ Mediator は
+  初回に取得したインスタンスを再利用します。Singleton と Transient の Mediator では、
+  生成される依存も指定した有効期間で登録されます。既存登録の有効期間は変わりません。
+- 同じ Scope 内の別の利用者ともインスタンスを共有する場合は、
+  `configuration.DependencyLifetime = ServiceLifetime.Scoped` を指定するか、
+  対象の依存を `AddZendiator()` より前に Scoped で登録してください。
+  スコープ検証で Singleton が Scoped の依存を保持していないことを確認してください。
 - 先に行われた登録が優先されます。後からの登録によって既存の登録が置き換わることはありません。
 - 範囲外の値は、定数なら生成時（ZEN0018）に診断されます。
-- Handler・Behavior は初めて必要になったときに取得し、同一 Mediator インスタンス内で再利用します。Transient も同じです。新しい構成が必要な場合は Transient の Mediator を新たに解決します。
+- Handler・Behavior は初めて必要になったときに取得し、同一 Mediator インスタンス内で再利用します。Transient も同じです。既定の Scoped Mediator で新しい構成が必要なら新しいスコープを作り、解決するたびに新しい構成が必要なら Mediator を Transient に設定します。
   早期終了での未構築保証（後続 Behavior とハンドラーを解決しない）も変わりません。
 
 Singleton は、ハンドラー、Behavior、その依存サービスを並行した呼び出しで安全に共有できる場合に使います。
@@ -268,6 +283,11 @@ dotnet run --project samples/Zendiator.Sample.Host -c Release
 | ZEN0018 | 不正な構成値（namespace、重複、lifetime 範囲、順序競合） |
 | ZEN0019 | 曖昧な登録束縛（予約） |
 | ZEN0020 | 生成登録へ接続できない `AddZendiator` 呼び出し |
+| ZEN0021 | 生成 Mediator を明示的に `IDisposable` として扱う |
+| ZEN0022 | `using` スコープから取得した Mediator をそのメソッドから返す |
+| ZEN0023 | 同じメソッド内でスコープを明示的に破棄した後に送信する |
+
+ZEN0021～ZEN0023 は警告です。静的に確定できる形だけを検出し、スコープの安全性を網羅的に証明するものではありません。修正方法は[移行ガイド](docs/migrating-from-mediatr.ja.md)を参照してください。
 
 ## 公開 API
 
@@ -310,24 +330,14 @@ dotnet run --project samples/Zendiator.Sample.Host -c Release
 
 ## 性能
 
-`benchmarks/Zendiator.Benchmarks` で直接呼び出しと型付き送信を比べられます。
 ウォームアップ済みスコープと同期完了する無割り当てハンドラー／Behavior で、
 送信あたりの追加割り当て 0 B を確認しています（0 段・1 段の同期経路はテストでも固定）。
 初回DI解決、ログ出力、非同期中断は、この0 Bの主張に含めません。レイテンシの数値保証はしません。
 
-実行経路は Mediator 単位の遅延キャッシュに一本化しています。`services.AddZendiator()` と通常の `BuildServiceProvider()` またはホスト構築で利用でき、独自 Provider や高速化の切り替えは不要です。Transient の変更点と破棄の扱いは [構築と有効期間](docs/optimized-dispatch.md) を参照してください。
-
-過去のリリースの測定値は [0.1.0 release notes](docs/release/0.1.0-release-notes.md) と
-[性能の記録](docs/performance.md) にあります。これらは測定時の版を対象とし、
-現在の遅延キャッシュ方式の性能を示すものではありません。
-結果は測定した経路と環境に限定します。ジェネリック応答の生成、スコープ全体の作成・破棄、
-非同期中断を伴うストリームの割り当ては別のコストです。
-競合順位や、あらゆる条件でのゼロ割り当ては主張しません。
-
-Generator 自体も、不変でシンボルを含まないモデルを要素単位で比較し、出力が同じなら
-テンプレート展開を省きます。DI 登録位置の変更は interceptor の更新と本体の生成を分けます。
-Compilation の変更時には意味解析を行うため、型単位の増分解析ではありません。
-設計と測定の方針は [Constitution](Constitution.ja.md) を参照してください。
+実行経路は Mediator 単位の遅延キャッシュに一本化しています。依存の再利用、生成される依存の
+Transient 既定、破棄の扱いは [構築と有効期間](docs/optimized-dispatch.md) を参照してください。
+[ユースケース別ベンチマーク](benchmarks/README.ja.md)で Send、Notification、Stream の比較を
+再現できます。測定結果と改善の記録はローカルに置きます。
 
 ## AOT とトリミング
 
@@ -346,16 +356,13 @@ CI はパッケージを参照する consumer で smoke test と Native AOT の�
 確認項目は [CI ワークフロー](.github/workflows/ci.yml)、各リリースの検証記録と
 値型で閉じるオープンジェネリックの境界は [既知の制限](docs/release/known-limitations.md) を参照してください。
 
-## 対象外（後続）
+## 対応しない操作
 
-並列配信、fire-and-forget、永続化や outbox、要求の `Send(object)`、循環検出、CodeFix、CodeLens、組み込みの `Result` パイプライン変換、組み込みログ・検証は初版の対象外です。逐次 `PublishAsync` による通知、`StreamAsync` によるストリーム、通常の `TResponse` 値としての利用者独自 `Result` 型は対応済みです。
+並列配信、fire-and-forget、永続化や outbox、要求の `Send(object)`、循環検出、CodeFix、CodeLens、組み込みの `Result` パイプライン変換、組み込みログ・検証は提供しません。逐次 `PublishAsync` による通知、`StreamAsync` によるストリーム、通常の `TResponse` 値としての利用者独自 `Result` 型は対応しています。
 
 MediatR からの移行は [移行ガイド](docs/migrating-from-mediatr.ja.md) を参照してください。
 
 ## 開発
 
-[Constitution.ja.md](Constitution.ja.md) に、ライブラリと Generator の設計、依存の有効期間、
-性能改善の採用条件、テストの範囲、ソース管理の方針をまとめています。
-ファイルの配置は [ソース構成](docs/source-layout.md) を参照してください。
 統合検証は [CI ワークフロー](.github/workflows/ci.yml)、
 パッケージのバージョン定義は [Directory.Build.props](Directory.Build.props) にあります。

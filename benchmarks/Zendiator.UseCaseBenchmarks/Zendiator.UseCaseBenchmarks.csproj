@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Zendiator.CompetitiveBenchmarks</RootNamespace><BuildInParallel>false</BuildInParallel><OutputType>Exe</OutputType><DefineConstants>$(DefineConstants);MATCHED_SCOPED</DefineConstants>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Zendiator.Generated.Interceptors</InterceptorsNamespaces>
+    <!-- Notice0 intentionally has no handlers in the notification benchmark. -->
+    <NoWarn>$(NoWarn);MSG0005</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Zendiator/Zendiator.csproj" />
+    <ProjectReference Include="../../src/Zendiator.SourceGenerator/Zendiator.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <PackageReference Include="MediatR" Version="[14.2.0]" />
+    <PackageReference Include="Mediator.SourceGenerator" Version="[3.0.2]" PrivateAssets="all" />
+    <PackageReference Include="Mediator.Abstractions" Version="[3.0.2]" />
+    <PackageReference Include="DispatchR.Mediator" Version="[2.3.1]" />
+    <PackageReference Include="DispatchR.Mediator.Abstractions" Version="[2.3.1]" />
+    <PackageReference Include="Immediate.Handlers" Version="[4.2.0]" />
+    <PackageReference Include="BenchmarkDotNet" Version="[0.15.8]" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.0.12]" />
+  </ItemGroup>
+</Project>

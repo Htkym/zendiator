@@ -2,7 +2,7 @@
 
 [日本語](migrating-from-mediatr.ja.md)
 
-See also the [README](../README.md) and [design principles](../Constitution.md).
+See also the [README](../README.md).
 
 Procedures for moving MediatR 12 code to Zendiator. Covers API correspondences,
 required rewrites, and unsupported features.
@@ -11,15 +11,24 @@ This guide describes the current repository. Published packages may differ;
 check the release notes for the version you install before applying the lifetime
 and configuration guidance below.
 
-The current preview uses standard DI construction and captures Handler/Behavior dependencies lazily per mediator instance, including Transient dependencies. Resolve a new transient mediator for a fresh composition. Custom provider APIs were removed. The generated mediator now implements IDisposable to invalidate its cache; DI still owns dependency disposal. See [construction and dispatch lifetime](optimized-dispatch.md).
+The current preview uses standard DI construction and captures Handler/Behavior dependencies lazily per mediator instance, including Transient dependencies. Use a new scope for a new default Scoped mediator, or configure a Transient mediator when each resolution needs a fresh composition. Custom provider APIs were removed. The generated mediator does not implement `IDisposable`; DI owns dependency disposal. Keep the scope alive until sends and stream enumeration finish. See [construction and dispatch lifetime](optimized-dispatch.md).
+
+Replace explicit mediator disposal with disposal of its DI scope. Await the send before leaving that scope:
+
+```csharp
+await using var scope = provider.CreateAsyncScope();
+var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+var user = await mediator.SendAsync(new GetUserQuery(1), cancellationToken);
+```
+
+The analyzer bundled with the generator warns when it can prove explicit `IDisposable` treatment (ZEN0021), returning a mediator from a `using` scope (ZEN0022), or sending after explicit scope disposal in the same method (ZEN0023). It does not prove safety across complex asynchronous work or fields. No warning is not a guarantee of safe lifetime use. Sending after scope or root-provider disposal is unsupported, and the previous `ObjectDisposedException` guarantee is gone.
 
 Assumptions:
 
 - The migration source is MediatR 12 (the `IMediator`, `ISender`, `IPublisher` setup).
 - The target requires .NET 10 (C# 14, nullable enabled).
-- Zendiator makes no competitor ranking. The [performance record](performance.md)
-  contains measurements for specific revisions, not evidence of the current
-  lazy-capture architecture's performance.
+- Performance depends on the call pattern and handler work; benchmark results do not
+  predict the performance of every application being migrated.
 
 ## API correspondence
 
@@ -117,9 +126,13 @@ Notes:
 - Only the target's compilation and explicitly listed assemblies are inspected.
   Request types referenced by handler contracts are picked up automatically.
 - `AddZendiator()` registers with `TryAdd`. Pre-existing registrations are not replaced.
-- Default lifetimes differ. MediatR defaults to Transient,
-  Zendiator defaults to Scoped. A bare call equals Scoped.
-  Select Singleton and Transient through configuration.
+- Resolve or inject `IZendiator`; `Zendiator` is its implementation type and is not
+  registered separately. Custom mediator factories must register `IZendiator`.
+  See the [registration example](../README.md#usage).
+- Mediator lifetimes differ: MediatR defaults to Transient, while Zendiator
+  defaults to Scoped. Generated Zendiator handlers and Behaviors default to
+  Transient for a Scoped mediator and are reused within that mediator.
+  Select other lifetimes through configuration.
 
 ```csharp
 services.AddZendiator(static configuration =>

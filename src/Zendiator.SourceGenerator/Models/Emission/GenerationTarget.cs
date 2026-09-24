@@ -23,5 +23,6 @@ internal sealed record GenerationTarget
     public string MediatorName { get; }
     public string? ConfigurationFingerprint { get; }
     public bool EmitExtensions => ConfigurationFingerprint == null;
+    public bool InheritServiceResolver { get; init; } = true;
     public EquatableArray<(int Version, string Data, bool IsLambda, bool IsExtensionForm)> CallSites { get; init; }
 }

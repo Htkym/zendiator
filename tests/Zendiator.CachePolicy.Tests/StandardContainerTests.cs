@@ -6,6 +6,24 @@ namespace Zendiator.CachePolicy.Tests;
 
 public sealed class StandardContainerTests
 {
+    [Theory]
+    [InlineData(ServiceLifetime.Scoped)]
+    [InlineData(ServiceLifetime.Singleton)]
+    [InlineData(ServiceLifetime.Transient)]
+    public void Registration_adds_one_interface_type_descriptor_and_keeps_the_first_lifetime(ServiceLifetime lifetime)
+    {
+        var services = new ServiceCollection();
+        services.AddZendiator(lifetime);
+        var count = services.Count;
+        services.AddZendiator(lifetime == ServiceLifetime.Singleton ? ServiceLifetime.Transient : ServiceLifetime.Singleton);
+        Assert.Equal(count, services.Count);
+        var descriptor = Assert.Single(services, d => d.ServiceType == typeof(IZendiator));
+        Assert.Equal(typeof(Zendiator), descriptor.ImplementationType);
+        Assert.Null(descriptor.ImplementationFactory);
+        Assert.Equal(lifetime, descriptor.Lifetime);
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(Zendiator));
+    }
+
     [Fact]
     public async Task Web_host_and_injected_scope_factory_use_the_same_cached_path()
     {
@@ -23,8 +41,6 @@ public sealed class StandardContainerTests
             first = await mediator.SendAsync(new Guid0());
             Assert.Equal(first, await mediator.SendAsync(new Guid0()));
             Assert.Equal(1, calls);
-            scope.Dispose();
-            await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await mediator.SendAsync(new Guid0()));
         }
         using (var scope = factory.CreateScope())
         {
@@ -34,35 +50,48 @@ public sealed class StandardContainerTests
         }
     }
 
-    [Fact]
-    public async Task Custom_mediator_factory_keeps_the_cached_path_and_di_ownership()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Custom_mediator_factory_keeps_the_cached_path_and_di_ownership(bool registerAfter)
     {
         var services = new ServiceCollection();
-        services.AddScoped<Zendiator>(static provider => new Zendiator(provider));
+        var factoryCalls = 0;
+        IZendiator Factory(IServiceProvider provider) { factoryCalls++; return new Zendiator(provider); }
+        if (!registerAfter) services.AddScoped<IZendiator>(Factory);
         services.AddZendiator();
+        if (registerAfter) services.AddScoped<IZendiator>(Factory);
         var calls = 0;
         services.AddTransient<Guid0Handler>(_ => { calls++; return new(); });
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        Assert.Same(mediator, scope.ServiceProvider.GetRequiredService<Zendiator>());
+        Assert.Same(mediator, scope.ServiceProvider.GetRequiredService<IZendiator>());
+        Assert.Null(scope.ServiceProvider.GetService<Zendiator>());
+        Assert.Equal(1, factoryCalls);
+        Assert.Equal(0, calls);
         Assert.Equal(await mediator.SendAsync(new Guid0()), await mediator.SendAsync(new Guid0()));
         Assert.Equal(1, calls);
-        scope.Dispose();
-        await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await mediator.SendAsync(new Guid0()));
     }
 
     [Fact]
-    public async Task Root_disposal_invalidates_a_mediator_in_an_undisposed_scope()
+    public async Task Concrete_factory_is_independent_of_interface_registration_and_owned_by_di()
     {
         var services = new ServiceCollection();
+        var factoryCalls = 0;
+        services.AddScoped<Guid0Handler>();
+        services.AddScoped<Zendiator>(provider => { factoryCalls++; return new Zendiator(provider); });
         services.AddZendiator();
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        await mediator.SendAsync(new Guid0());
-        provider.Dispose();
-        await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await mediator.SendAsync(new Guid0()));
+        Assert.Equal(0, factoryCalls);
+        var concrete = scope.ServiceProvider.GetRequiredService<Zendiator>();
+        Assert.Equal(1, factoryCalls);
+        Assert.NotSame(mediator, concrete);
+        Assert.Same(concrete, scope.ServiceProvider.GetRequiredService<Zendiator>());
+        Assert.Equal(1, factoryCalls);
+        Assert.Equal(await mediator.SendAsync(new Guid0()), await concrete.SendAsync(new Guid0()));
     }
 
     [Fact]

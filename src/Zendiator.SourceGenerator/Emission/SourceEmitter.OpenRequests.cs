@@ -14,15 +14,15 @@ internal sealed partial class SourceEmitter
                 public {{Signature(route)}}
                 {
             """);
-        Guard(b, route, "        ");
+        // Node0 validates the request and token before resolving any dependency.
         b.Append($$"""
-                    return new OpenRoute{{index}}Node0<{{tp}}>(_services).InvokeAsync(request, cancellationToken);
+                    return new OpenRoute{{index}}Node0<{{tp}}>({{MediatorServices}}).InvokeAsync(request, cancellationToken);
                 }
             """);
         for (var node = 0; node <= route.Behaviors.Count; node++)
         {
             b.AppendLine($$"""
-                    private readonly struct OpenRoute{{index}}Node{{node}}<{{tp}}>(global::Zendiator.DependencyInjection.ZendiatorServiceResolver services) : {{ContinuationContract(route)}}{{string.Concat(route.MethodConstraints)}}
+                    private readonly struct OpenRoute{{index}}Node{{node}}<{{tp}}>(global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> services) : {{ContinuationContract(route)}}{{string.Concat(route.MethodConstraints)}}
                     {
                         [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
                         public {{TaskContract(route)}} InvokeAsync({{route.RequestDisplay}} request, global::System.Threading.CancellationToken cancellationToken)

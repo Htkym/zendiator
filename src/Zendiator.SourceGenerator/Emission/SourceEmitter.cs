@@ -5,9 +5,31 @@ namespace Zendiator.SourceGenerator;
 internal sealed partial class SourceEmitter
 {
     private readonly GenerationModel _model;
+    private readonly string? _singleServiceTypeName;
+    private string MediatorServices => _model.Target.InheritServiceResolver ? "this" : "_services";
     internal SourceEmitter(GenerationModel model)
     {
         _model = model;
+        _singleServiceTypeName = SingleServiceTypeName(model);
+    }
+
+    private static string? SingleServiceTypeName(GenerationModel model)
+    {
+        var routes = model.Routes;
+        if (!model.Target.InheritServiceResolver || routes.Requests.Single.Count == 0
+            || routes.Requests.Multiple.Count != 0
+            || routes.Synchronous.Multiple.Count != 0 || routes.Notifications.Count != 0 || routes.Streams.Count != 0)
+            return null;
+        var handler = routes.Requests.Single[0].Handler;
+        // The generated public mediator cannot expose an internal type in its generic base.
+        if (!handler.IsReferenceType || !handler.IsPublic) return null;
+        foreach (var route in routes.Requests.Single)
+            if (route.IsOpen || route.Behaviors.Count != 0 || route.Handler.Name != handler.Name)
+                return null;
+        foreach (var route in routes.Synchronous.Single)
+            if (route.IsOpen || route.Behaviors.Count != 0 || route.Handler.Name != handler.Name)
+                return null;
+        return handler.Name;
     }
 
     private static StringBuilder CreateSourceBuilder() => new StringBuilder().AppendLine("""
@@ -21,18 +43,37 @@ internal sealed partial class SourceEmitter
         if (_model.Target.Namespace != null)
             b.AppendLine($$"""namespace {{_model.Target.Namespace}};""");
         EmitInterface(b);
-        b.AppendLine("""
+        var resolverBase = _singleServiceTypeName is { } singleServiceTypeName
+            ? $$"""global::Zendiator.DependencyInjection.ZendiatorSingleServiceResolver<{{singleServiceTypeName}}>, """
+            : _model.Target.InheritServiceResolver ? "global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator>, " : "";
+        b.AppendLine($$"""
             /// <summary>Generated mediator with lazily captured dependencies.</summary>
-            public sealed partial class Zendiator : IZendiator, global::System.IDisposable
+            [global::System.CodeDom.Compiler.GeneratedCode("Zendiator.SourceGenerator", "0.3.0")]
+            public sealed partial class Zendiator : {{resolverBase}}IZendiator
             {
-                private readonly global::Zendiator.DependencyInjection.ZendiatorServiceResolver _services;
-                /// <summary>Creates a mediator bound to the supplied scope.</summary>
-                public Zendiator(global::System.IServiceProvider services)
-                {
-                    global::System.ArgumentNullException.ThrowIfNull(services);
-                    _services = new global::Zendiator.DependencyInjection.ZendiatorServiceResolver(services);
-                }
-                void global::System.IDisposable.Dispose() => _services.Dispose();
+            """);
+        if (_model.Target.InheritServiceResolver)
+            b.AppendLine("""
+                    /// <summary>Creates a mediator bound to the supplied scope.</summary>
+                    public Zendiator(global::System.IServiceProvider services)
+                        : base(services ?? throw new global::System.ArgumentNullException(nameof(services)))
+                    {
+                    }
+                """);
+        else
+            b.AppendLine("""
+                    private readonly global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> _services;
+                    /// <summary>Creates a mediator bound to the supplied scope.</summary>
+                    public Zendiator(global::System.IServiceProvider services)
+                    {
+                        global::System.ArgumentNullException.ThrowIfNull(services);
+                        _services = new global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator>(services);
+                    }
+                """);
+        b.AppendLine("""
+                // Keep the token's address out of the inlined dispatch path.
+                [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+                private static void ThrowDispatchCancellation(global::System.Threading.CancellationToken cancellationToken) => cancellationToken.ThrowIfCancellationRequested();
             """);
         EmitRequests(b);
         EmitNotifications(b);

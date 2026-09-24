@@ -1,6 +1,6 @@
 # Zendiator
 
-[日本語](README.ja.md) | [Design and maintenance principles](Constitution.md)
+[日本語](README.ja.md)
 
 A small Mediator for .NET 10 that generates typed dispatch at compile time.
 A Roslyn Incremental Source Generator produces per-request `SendAsync` overloads,
@@ -126,7 +126,18 @@ var result = await zendiator.SendAsync(new GetTargetYearQuery(2026));
 
 Registration uses `TryAdd`. Pre-existing registrations are not replaced.
 Pre-registered lifetimes are preserved, but each mediator lazily captures its first Handler and Behavior instance, including `Transient` dependencies.
-Repeated registration does not duplicate. `IZendiator` resolves the `Zendiator` with the same lifetime.
+Repeated registration does not duplicate. The mediator has one type registration,
+`IZendiator` to `Zendiator`; the concrete `Zendiator` type is not registered separately.
+Resolve or inject `IZendiator`. To customize construction, register the factory for
+`IZendiator` instead of `Zendiator`:
+
+```csharp
+services.AddScoped<IZendiator>(provider => new Zendiator(provider));
+services.AddZendiator();
+```
+
+Direct `new Zendiator(provider)` remains supported. A separate concrete-type
+registration does not change how `IZendiator` is created.
 
 ## Streaming
 
@@ -189,12 +200,17 @@ Rules:
 
 - The default `ServiceLifetime` is Scoped. The value flows at runtime and never
   changes the generated structure, so providers may differ.
-- The specified lifetime applies to newly added Zendiator, handler, and Behavior
-  registrations. Existing registrations and their dependencies retain their own
-  lifetimes; validate scopes to catch Singleton services capturing Scoped dependencies.
+- `ServiceLifetime` controls the mediator. Generated handlers and Behaviors default
+  to Transient when the mediator is Scoped; they are still resolved once per
+  mediator. Singleton and Transient mediators use their selected lifetime for
+  generated dependencies. Existing registrations retain their own lifetimes.
+- To retain scope-wide sharing with other DI consumers, set
+  `configuration.DependencyLifetime = ServiceLifetime.Scoped` or register the
+  affected dependency as Scoped before `AddZendiator()`. Validate scopes to catch
+  Singleton services capturing Scoped dependencies.
 - First registration wins. A later registration does not replace existing registrations.
 - Out-of-range values are diagnosed at generation (`ZEN0018`) when constant.
-- Each mediator captures dependencies on first use and reuses them, including Transient dependencies. Resolve a new transient mediator for a fresh composition.
+- Each mediator captures dependencies on first use and reuses them, including Transient dependencies. Use a new scope for a new default Scoped mediator, or configure a Transient mediator for a fresh composition on each resolution.
   The no-construction guarantee on short-circuit (downstream Behaviors and handlers are not resolved) is unchanged.
 
 Use Singleton only when the mediator, handlers, Behaviors, and their dependencies are
@@ -275,6 +291,11 @@ Different spellings that resolve to the same assembly set share one generation u
 | ZEN0018 | Invalid configuration value (namespace, duplicates, lifetime range, order conflicts) |
 | ZEN0019 | Ambiguous registration binding (reserved) |
 | ZEN0020 | `AddZendiator` call cannot be connected to generated registration |
+| ZEN0021 | Explicitly treating a generated mediator as `IDisposable` |
+| ZEN0022 | Returning a mediator resolved from a `using` scope |
+| ZEN0023 | Sending after explicitly disposing its scope in the same method |
+
+ZEN0021–ZEN0023 are warnings for directly provable cases, not a complete proof of scope safety. See the [migration guide](docs/migrating-from-mediatr.md) for fixes.
 
 ## Public API
 
@@ -318,25 +339,15 @@ Document breaking changes explicitly rather than retaining an obsolete execution
 
 ## Performance
 
-`benchmarks/Zendiator.Benchmarks` compares direct calls against typed sends.
 With warmed-up scopes and synchronously completing allocation-free handlers/Behaviors,
 0 B of additional allocation per send is verified (the 0- and 1-stage sync paths are also pinned by tests).
 First-time DI resolution, logging, and async suspension are outside that 0 B claim. No latency numbers are guaranteed.
 
-Dispatch uses one lazy, mediator-instance cache with standard DI construction. Use `services.AddZendiator()` and normal `BuildServiceProvider()` or host construction; no custom provider or fast-mode switch is required. See [construction and dispatch lifetime](docs/optimized-dispatch.md) for the Transient breaking change, disposal rules, and measurement boundaries.
-
-Historical release measurements are in the [0.1.0 release notes](docs/release/0.1.0-release-notes.md)
-and [performance record](docs/performance.md). They describe their measured revisions,
-not the current lazy-capture architecture. Values apply only to the measured
-routes and environment; generic response creation, full scope lifecycle, and
-asynchronously suspending streams have separate allocation costs.
-No competitor ranking or general allocation-free claim is made.
-
-The generator also uses structural comparison of immutable, symbol-free models
-to skip template expansion when output is unchanged. Moving a DI registration
-updates interceptor locations independently of the mediator body. Semantic
-analysis still runs on compilation changes; this is not per-type incremental
-analysis. See the [constitution](Constitution.md) for the design and measurement rules.
+Dispatch uses one lazy, mediator-instance cache with standard DI construction.
+See [construction and dispatch lifetime](docs/optimized-dispatch.md) for dependency
+reuse, the Transient default for generated dependencies, and disposal rules.
+The [use-case benchmark](benchmarks/README.md) can reproduce comparisons for Send,
+Notification, and Stream. Measurement data and improvement notes stay local.
 
 ## AOT and trimming
 
@@ -355,11 +366,11 @@ See the [CI workflow](.github/workflows/ci.yml) for the checks and
 [known limitations](docs/release/known-limitations.md) for release-specific evidence
 and the open-generic/value-type boundary.
 
-## Out of scope (follow-ups)
+## Unsupported operations
 
 Parallel publish, fire-and-forget, persistence/outbox, `Send(object)` for requests,
 cycle detection, CodeFix, CodeLens, built-in `Result` pipeline mapping,
-and built-in logging/validation are out of scope for the first release.
+and built-in logging/validation are not provided.
 Sequential `PublishAsync`, streams via `StreamAsync`, and your own
 `Result` types as ordinary `TResponse` values are supported.
 
@@ -367,8 +378,5 @@ For migrating from MediatR, see [the migration guide](docs/migrating-from-mediat
 
 ## Development
 
-Start with [Constitution.md](Constitution.md) for library and generator design,
-dependency lifetime, performance acceptance criteria, test scope, and source
-management. See [source layout](docs/source-layout.md) for file placement.
 The [CI workflow](.github/workflows/ci.yml) defines integration checks; package
 versions are defined in [Directory.Build.props](Directory.Build.props).

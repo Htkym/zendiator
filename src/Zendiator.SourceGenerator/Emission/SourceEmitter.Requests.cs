@@ -63,7 +63,9 @@ internal sealed partial class SourceEmitter
         {
             Guard(b, route, "        ");
             var direct = route.Handler.DirectCall;
-            var receiver = $$"""_services.GetRequiredService<{{Name(route.Handler)}}>()""";
+            var receiver = _singleServiceTypeName != null
+                ? $$"""{{MediatorServices}}.GetRequiredService()"""
+                : $$"""{{MediatorServices}}.GetRequiredService<{{Name(route.Handler)}}>()""";
             if (!direct)
                 receiver = "((" + HandlerContract(route) + ")" + receiver + ")";
             b.AppendLine($$"""
@@ -74,13 +76,13 @@ internal sealed partial class SourceEmitter
         }
 
         b.AppendLine($$"""
-                    return new Route{{index}}Node0(_services).InvokeAsync(request, cancellationToken);
+                    return new Route{{index}}Node0({{MediatorServices}}).InvokeAsync(request, cancellationToken);
                 }
             """);
         for (var node = 0; node <= route.Behaviors.Count; node++)
         {
             b.AppendLine($$"""
-                    private readonly struct Route{{index}}Node{{node}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver services) : {{ContinuationContract(route)}}
+                    private readonly struct Route{{index}}Node{{node}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> services) : {{ContinuationContract(route)}}
                     {
                         [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
                         public {{TaskContract(route)}} InvokeAsync({{Name(route.Request)}} request, global::System.Threading.CancellationToken cancellationToken)

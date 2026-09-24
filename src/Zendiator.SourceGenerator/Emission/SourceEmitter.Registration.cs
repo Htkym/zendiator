@@ -15,18 +15,13 @@ internal sealed partial class SourceEmitter
             """);
     }
 
-    private void EmitRegistrationEntries(StringBuilder b, string lifetime)
+    private void EmitRegistrationEntries(StringBuilder b, string lifetime, string dependencyLifetime)
     {
         var mediatorNameLocal = _model.Target.MediatorName;
-        b.AppendLine("""
-                    global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton<global::Zendiator.DependencyInjection.ZendiatorRootLifetime>(services);
-            """);
-        Register(b, $$"""typeof({{mediatorNameLocal}}), typeof({{mediatorNameLocal}})""", lifetime);
-        b.AppendLine($$"""
-                    global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services, global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Describe(typeof({{_model.Target.Prefix}}IZendiator), static provider => (object)provider.GetRequiredService<{{_model.Target.MediatorName}}>(), {{lifetime}}));
-            """);
+        Register(b, $$"""typeof({{_model.Target.Prefix}}IZendiator), typeof({{mediatorNameLocal}})""", lifetime);
+        b.AppendLine($$"""            var serviceLifetime = {{dependencyLifetime}};""");
         foreach (var service in _model.Routes.Requests.Single.SelectMany(r => r.Behaviors.Concat(new[] { r.Handler }).Select(s => (Route: r, Service: s))).Select(p => p.Route.IsOpen ? $$"""typeof({{OpenTypeofName(p.Service)}}), typeof({{OpenTypeofName(p.Service)}})""" : $$"""typeof({{Name(p.Service)}}), typeof({{Name(p.Service)}})""").Distinct().OrderBy(n => n, StringComparer.Ordinal))
-            Register(b, service, lifetime);
+            Register(b, service, "serviceLifetime");
         var notificationServices = new List<string>();
         foreach (var notification in _model.Routes.Notifications)
         {
@@ -43,7 +38,7 @@ internal sealed partial class SourceEmitter
         }
 
         foreach (var service in notificationServices.Distinct().OrderBy(n => n, StringComparer.Ordinal))
-            Register(b, service, lifetime);
+            Register(b, service, "serviceLifetime");
         var multiServices = new List<string>();
         foreach (var multi in _model.Routes.Requests.Multiple)
         {
@@ -58,7 +53,7 @@ internal sealed partial class SourceEmitter
         }
 
         foreach (var service in multiServices.Distinct().OrderBy(n => n, StringComparer.Ordinal))
-            Register(b, service, lifetime);
+            Register(b, service, "serviceLifetime");
         var syncServices = new List<string>();
         foreach (var route in _model.Routes.Synchronous.Single)
         {
@@ -83,7 +78,7 @@ internal sealed partial class SourceEmitter
         }
 
         foreach (var service in syncServices.Distinct().OrderBy(n => n, StringComparer.Ordinal))
-            Register(b, service, lifetime);
+            Register(b, service, "serviceLifetime");
         var streamServices = new List<string>();
         foreach (var route in _model.Routes.Streams)
         {
@@ -96,7 +91,7 @@ internal sealed partial class SourceEmitter
         }
 
         foreach (var service in streamServices.Distinct().OrderBy(n => n, StringComparer.Ordinal))
-            Register(b, service, lifetime);
+            Register(b, service, "serviceLifetime");
     }
 
     private void EmitRegistrar(StringBuilder b)
@@ -113,7 +108,8 @@ internal sealed partial class SourceEmitter
                     if (snapshot.GetFingerprint() != StructureFingerprint)
                         throw new global::System.InvalidOperationException("AddZendiator configuration does not match the generated structure. Keep one configuration per compilation.");
             """);
-        EmitRegistrationEntries(b, "snapshot.ServiceLifetime");
+        EmitRegistrationEntries(b, "snapshot.ServiceLifetime",
+            "snapshot.DependencyLifetime ?? (snapshot.ServiceLifetime == global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped ? global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient : snapshot.ServiceLifetime)");
         b.AppendLine("""
                     return services;
                 }
@@ -135,14 +131,22 @@ internal sealed partial class SourceEmitter
                         global::System.ArgumentNullException.ThrowIfNull(services);
                         return AddZendiator(services, global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped);
                     }
-                    /// <summary>Adds defaults with the selected lifetime without replacing existing registrations. All registrations share the lifetime.</summary>
+                    /// <summary>Adds defaults with the selected mediator lifetime without replacing existing registrations.</summary>
                     public static global::Microsoft.Extensions.DependencyInjection.IServiceCollection AddZendiator(this global::Microsoft.Extensions.DependencyInjection.IServiceCollection services, global::Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime)
+                    {
+                        return AddZendiator(services, lifetime, lifetime == global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped
+                            ? global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient : lifetime);
+                    }
+                    /// <summary>Adds defaults with separate mediator and dependency lifetimes without replacing existing registrations.</summary>
+                    public static global::Microsoft.Extensions.DependencyInjection.IServiceCollection AddZendiator(this global::Microsoft.Extensions.DependencyInjection.IServiceCollection services, global::Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime, global::Microsoft.Extensions.DependencyInjection.ServiceLifetime dependencyLifetime)
                     {
                         global::System.ArgumentNullException.ThrowIfNull(services);
                         if (lifetime is not (global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton or global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped or global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient))
                             throw new global::System.ArgumentOutOfRangeException(nameof(lifetime), lifetime, null);
+                        if (dependencyLifetime is not (global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton or global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped or global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient))
+                            throw new global::System.ArgumentOutOfRangeException(nameof(dependencyLifetime), dependencyLifetime, null);
                 """);
-            EmitRegistrationEntries(b, "lifetime");
+            EmitRegistrationEntries(b, "lifetime", "dependencyLifetime");
             b.AppendLine("""
                         return services;
                     }

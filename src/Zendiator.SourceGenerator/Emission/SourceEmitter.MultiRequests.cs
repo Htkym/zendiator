@@ -49,7 +49,7 @@ internal sealed partial class SourceEmitter
             """);
         if (route.Request.IsReferenceType)
             b.AppendLine("""        global::System.ArgumentNullException.ThrowIfNull(request);""");
-        b.AppendLine("""        cancellationToken.ThrowIfCancellationRequested();""");
+        b.AppendLine("""        if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
         if (!route.IsVoid)
             b.AppendLine($$"""
                         var results = new global::System.Collections.Generic.List<{{respDisplay}}>({{route.Branches.Count}});
@@ -59,11 +59,11 @@ internal sealed partial class SourceEmitter
             var node0 = $$"""MultiRoute{{index}}Branch{{bh}}Node0{{tp}}""";
             if (route.IsVoid)
                 b.AppendLine($$"""
-                            await new {{node0}}(_services).InvokeAsync(request, cancellationToken).ConfigureAwait(false);
+                            await new {{node0}}({{MediatorServices}}).InvokeAsync(request, cancellationToken).ConfigureAwait(false);
                     """);
             else
                 b.AppendLine($$"""
-                            results.Add(await new {{node0}}(_services).InvokeAsync(request, cancellationToken).ConfigureAwait(false));
+                            results.Add(await new {{node0}}({{MediatorServices}}).InvokeAsync(request, cancellationToken).ConfigureAwait(false));
                     """);
         }
 
@@ -77,7 +77,7 @@ internal sealed partial class SourceEmitter
             for (var node = 0; node <= branch.Behaviors.Count; node++)
             {
                 b.AppendLine($$"""
-                        private readonly struct {{prefix}}Node{{node}}{{TypeParameters(route)}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver services) : {{contDisplay}}{{TypeConstraints(route)}}
+                        private readonly struct {{prefix}}Node{{node}}{{TypeParameters(route)}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> services) : {{contDisplay}}{{TypeConstraints(route)}}
                         {
                             [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
                             public {{taskDisplay}} InvokeAsync({{reqDisplay}} request, global::System.Threading.CancellationToken cancellationToken)
@@ -85,7 +85,7 @@ internal sealed partial class SourceEmitter
                     """);
                 if (route.Request.IsReferenceType)
                     b.AppendLine("""            global::System.ArgumentNullException.ThrowIfNull(request);""");
-                b.AppendLine("""            cancellationToken.ThrowIfCancellationRequested();""");
+                b.AppendLine("""            if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
                 if (node == branch.Behaviors.Count)
                 {
                     var handlerName = route.IsOpen || branch.HandlerIsOpen ? branch.HandlerDisplay : Name(branch.Handler);

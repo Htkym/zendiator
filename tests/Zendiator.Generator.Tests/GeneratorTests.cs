@@ -9,6 +9,115 @@ namespace Zendiator.Generator.Tests;
 public sealed class GeneratorTests
 {
     private const string Head = "using Zendiator; using System; using System.Threading; using System.Threading.Tasks; namespace App; [GenerateZendiator] public sealed partial class Zendiator; ";
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void One_handler_for_two_requests_uses_one_typed_capture(bool explicitSecond)
+    {
+        var second = explicitSecond
+            ? "ValueTask<int> IRequestHandler<Pong,int>.HandleAsync(Pong request, CancellationToken ct) => new(2);"
+            : "public ValueTask<int> HandleAsync(Pong request, CancellationToken ct) => new(2);";
+        var source = Head + Request + "public readonly record struct Pong : IRequest<int>; "
+            + "public sealed class Handler : IRequestHandler<Ping,int>, IRequestHandler<Pong,int> { "
+            + "public ValueTask<int> HandleAsync(Ping request, CancellationToken ct) => new(1); " + second + " }";
+        var text = Run(Compilation(source), true).GeneratedTrees.Single().ToString();
+        Assert.Contains("ZendiatorSingleServiceResolver<global::App.Handler>", text);
+        Assert.Equal(2, text.Split("this.GetRequiredService()", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("GetRequiredService<global::App.Handler>", text);
+        if (explicitSecond) Assert.Contains("((global::Zendiator.IRequestHandler<global::App.Pong, int>)", text);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void One_handler_for_async_and_sync_requests_uses_one_typed_capture(bool explicitSync)
+    {
+        var sync = explicitSync
+            ? "int ISyncRequestHandler<Pong,int>.Handle(Pong request, CancellationToken ct) => 2;"
+            : "public int Handle(Pong request, CancellationToken ct) => 2;";
+        var source = Head + Request + "public readonly record struct Pong : ISyncRequest<int>; "
+            + "public sealed class Handler : IRequestHandler<Ping,int>, ISyncRequestHandler<Pong,int> { "
+            + "public ValueTask<int> HandleAsync(Ping request, CancellationToken ct) => new(1); " + sync + " }";
+        var text = Run(Compilation(source), true, emit: true).GeneratedTrees.Single().ToString();
+        Assert.Contains("ZendiatorSingleServiceResolver<global::App.Handler>", text);
+        Assert.Contains("SyncRoute0Node0(global::Zendiator.DependencyInjection.ZendiatorSingleServiceResolver<global::App.Handler> services)", text);
+        Assert.Equal(2, text.Split("GetRequiredService()", StringSplitOptions.None).Length - 1);
+        if (explicitSync) Assert.Contains("((global::Zendiator.ISyncRequestHandler<global::App.Pong, int>)services.GetRequiredService())", text);
+    }
+
+    [Fact]
+    public void Different_sync_handler_keeps_the_general_resolver()
+    {
+        var source = Head + Request + Handler
+            + "public readonly record struct Pong : ISyncRequest<int>; "
+            + "public sealed class SyncHandler : ISyncRequestHandler<Pong,int> { "
+            + "public int Handle(Pong request, CancellationToken ct) => 2; }";
+        var text = Run(Compilation(source), true, emit: true).GeneratedTrees.Single().ToString();
+        Assert.Contains("class Zendiator : global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator>,", text);
+        Assert.Contains("services.GetRequiredService<global::App.SyncHandler>()", text);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Non_public_handler_keeps_the_general_resolver(bool nested)
+    {
+        var handler = nested
+            ? "internal static class Outer { " + Handler + " }"
+            : Handler.Replace("public sealed class Handler", "internal sealed class Handler");
+        var text = Run(Compilation(Head + Request + handler), true).GeneratedTrees.Single().ToString();
+        Assert.Contains("class Zendiator : global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator>,", text);
+        Assert.DoesNotContain("ZendiatorSingleServiceResolver<", text);
+    }
+
+    [Fact]
+    public void Incremental_handler_count_edits_refresh_single_service_specialization()
+    {
+        var driver = Driver();
+        const string other = "public readonly record struct Pong : IRequest<int>; public sealed class Other : IRequestHandler<Pong,int> { public ValueTask<int> HandleAsync(Pong r, CancellationToken ct) => new(2); }";
+        foreach (var twoHandlers in new[] { false, true, false })
+        {
+            var input = Compilation(Head + Request + Handler + (twoHandlers ? other : ""));
+            driver = driver.RunGeneratorsAndUpdateCompilation(input, out var output, out var diagnostics);
+            Assert.Empty(diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error));
+            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+            var baseType = output.GetTypeByMetadataName("App.Zendiator")!.BaseType!;
+            Assert.Equal(twoHandlers ? "ZendiatorServiceResolver" : "ZendiatorSingleServiceResolver", baseType.Name);
+        }
+    }
+
+    [Theory]
+    [InlineData("object")]
+    [InlineData("global::System.Object")]
+    [InlineData("ObjectAlias")]
+    public void Explicit_object_base_on_marker_keeps_compiling(string baseType)
+    {
+        var source = "using ObjectAlias = System.Object; " + Head.Replace("partial class Zendiator;", $"partial class Zendiator : {baseType};") + Request + Handler;
+        Run(Compilation(source), true);
+    }
+
+    [Fact]
+    public void Explicit_object_base_on_another_partial_declaration_keeps_compiling()
+    {
+        Run(Compilation(Head + Request + Handler + "partial class Zendiator : object;"), true);
+    }
+
+    [Fact]
+    public void Incremental_object_base_edits_refresh_the_generated_layout()
+    {
+        var driver = Driver();
+        foreach (var explicitBase in new[] { false, true, false })
+        {
+            var head = explicitBase ? Head.Replace("partial class Zendiator;", "partial class Zendiator : object;") : Head;
+            driver = driver.RunGeneratorsAndUpdateCompilation(Compilation(head + Request + Handler), out var output, out var diagnostics);
+            Assert.Empty(diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error));
+            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+            var baseType = output.GetTypeByMetadataName("App.Zendiator")!.BaseType!;
+            Assert.Equal(explicitBase, baseType.SpecialType == SpecialType.System_Object);
+        }
+    }
+
     private const string Request = "public readonly record struct Ping : IRequest<int>; ";
     private const string Handler = "public sealed class Handler : IRequestHandler<Ping,int> { public ValueTask<int> HandleAsync(Ping request, CancellationToken ct) => new(1); } ";
     private static readonly MetadataReference[] References = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
@@ -586,7 +695,7 @@ public sealed class GeneratorTests
         Assert.DoesNotContain("SendAsync(global::App.ParseRequest", text);
         Assert.DoesNotContain("SendAsync(global::App.Flush", text);
         Assert.DoesNotContain("object request", text);
-        Assert.Contains("SyncRoute0Node0(global::Zendiator.DependencyInjection.ZendiatorServiceResolver services)", text);
+        Assert.Contains("SyncRoute0Node0(global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> services)", text);
         Assert.DoesNotContain("static global::App.ParseRequest", text);
     }
 
@@ -679,7 +788,8 @@ public sealed class GeneratorTests
         var text = Run(Compilation(Head + Request + Handler), true).GeneratedTrees.Single().ToString();
         Assert.DoesNotContain("Route0Node", text);
         Assert.DoesNotContain("IRequestContinuation", text);
-        Assert.Contains("GetRequiredService<global::App.Handler>", text);
+        Assert.Contains("ZendiatorSingleServiceResolver<global::App.Handler>", text);
+        Assert.Contains("this.GetRequiredService().HandleAsync(request, cancellationToken)", text);
     }
 
     [Fact]
@@ -859,7 +969,7 @@ public sealed class GeneratorTests
             }
             """;
         var text = Run(Compilation(source), true).GeneratedTrees.Single().ToString();
-        Assert.Contains("_services.GetRequiredService<global::App.Handler>().HandleAsync(request, cancellationToken)", text);
+        Assert.Contains("this.GetRequiredService<global::App.Handler>().HandleAsync(request, cancellationToken)", text);
         Assert.Contains("((global::Zendiator.IRequestHandler<global::App.Pong, int>)", text);
     }
 }

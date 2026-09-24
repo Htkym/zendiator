@@ -32,7 +32,7 @@ internal sealed partial class SourceEmitter
         var enumerable = $"StreamRoute{index}Enumerable";
         // Typed enumerable: lightweight, no shared mutable state on the mediator.
         b.AppendLine($$"""
-                private sealed class {{enumerable}}{{TypeParameters(route)}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver services, {{req}} request, global::System.Threading.CancellationToken apiToken) : global::System.Collections.Generic.IAsyncEnumerable<{{item}}>{{TypeConstraints(route)}}
+                private sealed class {{enumerable}}{{TypeParameters(route)}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> services, {{req}} request, global::System.Threading.CancellationToken apiToken) : global::System.Collections.Generic.IAsyncEnumerable<{{item}}>{{TypeConstraints(route)}}
                 {
                     public global::System.Collections.Generic.IAsyncEnumerator<{{item}}> GetAsyncEnumerator(global::System.Threading.CancellationToken cancellationToken = default) => new {{enumerator}}{{tp}}(services, request, apiToken, cancellationToken);
                 }
@@ -49,7 +49,7 @@ internal sealed partial class SourceEmitter
         b.AppendLine($$"""
                 private sealed class {{enumerator}}{{TypeParameters(route)}} : global::System.Collections.Generic.IAsyncEnumerator<{{item}}>{{TypeConstraints(route)}}
                 {
-                    private readonly global::Zendiator.DependencyInjection.ZendiatorServiceResolver _services;
+                    private readonly global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> _services;
                     private readonly {{req}} _request;
                     private readonly global::System.Threading.CancellationToken _apiToken;
                     private readonly global::System.Threading.CancellationToken _enumToken;
@@ -57,7 +57,7 @@ internal sealed partial class SourceEmitter
                     private global::System.Collections.Generic.IAsyncEnumerator<{{item}}>? _inner;
                     private bool _started;
                     private bool _done;
-                    public {{enumerator}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver services, {{req}} request, global::System.Threading.CancellationToken apiToken, global::System.Threading.CancellationToken enumToken)
+                    public {{enumerator}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> services, {{req}} request, global::System.Threading.CancellationToken apiToken, global::System.Threading.CancellationToken enumToken)
                     {
                         _services = services;
                         _request = request;
@@ -85,7 +85,7 @@ internal sealed partial class SourceEmitter
         b.AppendLine($$"""
                             var effective = MergeStreamTokens(_apiToken, _enumToken, out var linked);
                             _linked = linked;
-                            effective.ThrowIfCancellationRequested();
+                            if (effective.IsCancellationRequested) ThrowDispatchCancellation(effective);
                             global::System.Collections.Generic.IAsyncEnumerable<{{item}}> pipeline = new StreamRoute{{index}}Node0{{tp}}(_services).InvokeAsync(_request, effective);
                             _inner = pipeline.GetAsyncEnumerator(effective);
                         try

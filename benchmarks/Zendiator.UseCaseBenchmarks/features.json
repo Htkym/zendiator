@@ -1,0 +1,222 @@
+[
+  {
+    "Type": "ZendiatorVoid0",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatRHistoricalVoid0",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatorVoid0",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "DispatchRVoid0",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ImmediateVoid0",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ZendiatorVoid1",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatRHistoricalVoid1",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatorVoid1",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "DispatchRVoid1",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ImmediateVoid1",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ZendiatorVoid3",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatRHistoricalVoid3",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatorVoid3",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "DispatchRVoid3",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ImmediateVoid3",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ZendiatorVoid5",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatRHistoricalVoid5",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatorVoid5",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "DispatchRVoid5",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ImmediateVoid5",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ZendiatorClosed",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatRHistoricalClosed",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "DispatchRClosed",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ImmediateClosed",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ZendiatorOpen",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatRHistoricalOpen",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "DispatchROpen",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ZendiatorNotification0",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatRHistoricalNotification0",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatorNotification0",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "DispatchRNotification0",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ZendiatorNotification1",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ZendiatorNotification1",
+    "Method": "DispatchAsync"
+  },
+  {
+    "Type": "MediatRHistoricalNotification1",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatRHistoricalNotification1",
+    "Method": "DispatchAsync"
+  },
+  {
+    "Type": "MediatorNotification1",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatorNotification1",
+    "Method": "DispatchAsync"
+  },
+  {
+    "Type": "DispatchRNotification1",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "DispatchRNotification1",
+    "Method": "DispatchAsync"
+  },
+  {
+    "Type": "ZendiatorNotification4",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ZendiatorNotification4",
+    "Method": "DispatchAsync"
+  },
+  {
+    "Type": "MediatRHistoricalNotification4",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatRHistoricalNotification4",
+    "Method": "DispatchAsync"
+  },
+  {
+    "Type": "MediatorNotification4",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatorNotification4",
+    "Method": "DispatchAsync"
+  },
+  {
+    "Type": "DispatchRNotification4",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "DispatchRNotification4",
+    "Method": "DispatchAsync"
+  },
+  {
+    "Type": "ZendiatorNotification16",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ZendiatorNotification16",
+    "Method": "DispatchAsync"
+  },
+  {
+    "Type": "MediatRHistoricalNotification16",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatRHistoricalNotification16",
+    "Method": "DispatchAsync"
+  },
+  {
+    "Type": "MediatorNotification16",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatorNotification16",
+    "Method": "DispatchAsync"
+  },
+  {
+    "Type": "DispatchRNotification16",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "DispatchRNotification16",
+    "Method": "DispatchAsync"
+  }
+]

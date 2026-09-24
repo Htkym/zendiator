@@ -2,7 +2,7 @@
 
 [English](migrating-from-mediatr.md)
 
-[README](../README.ja.md) と [設計方針](../Constitution.ja.md) も参照してください。
+[README](../README.ja.md) も参照してください。
 
 MediatR 12 を使ったコードを Zendiator へ移す手順です。API の対応関係と、
 書き換えが必要な箇所、対応していない機能をまとめています。
@@ -10,14 +10,24 @@ MediatR 12 を使ったコードを Zendiator へ移す手順です。API の対
 このガイドは現在のリポジトリを対象とします。公開済みパッケージとは異なる場合があるため、
 以下の有効期間や構成の説明を適用する前に、インストールする版のリリースノートを確認してください。
 
-現在のプレビュー版は標準 DI で構築し、Transient を含む Handler・Behavior を Mediator 単位で遅延取得して再利用します。新しい構成が必要な場合は Transient の Mediator を新たに解決してください。独自 Provider API は削除しました。生成される Mediator はキャッシュを無効化するために IDisposable を実装しますが、依存サービスの破棄は DI が担当します。詳細は [構築と有効期間](optimized-dispatch.md) を参照してください。
+現在のプレビュー版は標準 DI で構築し、Transient を含む Handler・Behavior を Mediator 単位で遅延取得して再利用します。既定の Scoped Mediator で新しい構成が必要なら新しいスコープを作ります。解決するたびに新しい構成が必要な場合は Mediator を Transient に設定してください。独自 Provider API は削除しました。生成される Mediator は `IDisposable` を実装せず、依存サービスの破棄は DI が担当します。送信やストリーム列挙が終わるまでスコープを維持してください。詳細は [構築と有効期間](optimized-dispatch.md) を参照してください。
+
+以前の生成 Mediator を `Dispose()` していたコードは、DI スコープを破棄する形に直します。スコープを作るメソッドでは、送信の完了を待ってからスコープを抜けてください。
+
+```csharp
+await using var scope = provider.CreateAsyncScope();
+var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+var user = await mediator.SendAsync(new GetUserQuery(1), cancellationToken);
+```
+
+生成器パッケージに同梱された Analyzer は、明示的な `IDisposable` 扱い（ZEN0021）、`using` スコープからの Mediator の返却（ZEN0022）、同じメソッド内でスコープを明示的に破棄した後の送信（ZEN0023）を、関係を確実に追える場合だけ警告します。複雑な非同期処理やフィールドをまたぐ寿命は判定しません。警告がないことは、破棄後の利用が安全である証明ではありません。破棄済みスコープやルート Provider からの送信はサポート外で、以前の `ObjectDisposedException` 保証はなくなりました。
 
 前提は次のとおりです。
 
 - 移行元は MediatR 12（`IMediator`、`ISender`、`IPublisher` の構成）を想定しています。
 - 移行先は .NET 10（C# 14、nullable 有効）が必要です。
-- Zendiator は競合順位を主張しません。[性能の記録](performance.md) は測定時の版を対象とし、
-  現在の遅延キャッシュ方式の性能を示すものではありません。
+- 性能は呼び出し方と Handler の処理に依存します。ベンチマークの結果を、移行先アプリの
+  すべての処理に当てはめることはできません。
 
 ## 対応関係の概要
 
@@ -111,9 +121,13 @@ services.AddApplication();
 - 生成先のコンパイルと明示したアセンブリだけを調べます。
   ハンドラーが参照するリクエスト型は自動で取り込みます。
 - `AddZendiator()` は `TryAdd` で登録します。事前登録があれば置き換えません。
-- ライフタイムの既定が違います。MediatR の既定は Transient、
-  Zendiator の既定は Scoped です。引数なしは Scoped と同じです。
-  Singleton と Transient は構成で選びます。
+- 解決・注入には `IZendiator` を使います。実装型の `Zendiator` は別途登録しません。
+  Mediator の生成方法を差し替える Factory も `IZendiator` に登録します。
+  [登録例](../README.ja.md#使い方)を参照してください。
+- Mediator の既定の有効期間は、MediatR が Transient、Zendiator が Scoped です。
+  Zendiator が生成する Handler・Behavior は、Mediator が Scoped の場合、既定で
+  Transient として登録され、同じ Mediator 内で再利用されます。
+  他の有効期間は構成で選びます。
 
 ```csharp
 services.AddZendiator(static configuration =>

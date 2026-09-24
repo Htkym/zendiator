@@ -10,6 +10,7 @@ internal sealed partial class SourceEmitter
     {
         b.AppendLine("""
             /// <summary>Typed request dispatch for this composition.</summary>
+            [global::System.CodeDom.Compiler.GeneratedCode("Zendiator.SourceGenerator", "0.3.0")]
             public interface IZendiator
             {
             """);

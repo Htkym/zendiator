@@ -8,7 +8,8 @@ namespace Zendiator.DiConfiguration.Tests;
 [Collection("DI runtime")]
 public sealed class DiRuntimeTests
 {
-    internal static ServiceCollection CreateServices(ServiceLifetime lifetime = ServiceLifetime.Scoped, bool staticForm = false)
+    internal static ServiceCollection CreateServices(ServiceLifetime lifetime = ServiceLifetime.Scoped, bool staticForm = false,
+        ServiceLifetime? dependencyLifetime = null)
     {
         var services = new ServiceCollection();
         services.AddScoped<Trace>();
@@ -49,6 +50,7 @@ public sealed class DiRuntimeTests
                 configuration.ConfigureHandlerOrder(typeof(ChangedFirst), order: 1);
                 configuration.ConfigureHandlerOrder(typeof(ChangedThird), order: 2);
                 configuration.ServiceLifetime = lifetime;
+                configuration.DependencyLifetime = dependencyLifetime;
             });
         }
         return services;
@@ -58,11 +60,30 @@ public sealed class DiRuntimeTests
     public async Task Di_registers_and_dispatches_without_attributes()
     {
         DiBehavior<Add, int>.Calls = 0;
-        await using var provider = CreateServices().BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+        var services = CreateServices();
+        var descriptor = Assert.Single(services, d => d.ServiceType == typeof(IZendiator));
+        Assert.Equal(typeof(Di.Generated.Zendiator), descriptor.ImplementationType);
+        Assert.Null(descriptor.ImplementationFactory);
+        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+        Assert.Equal(ServiceLifetime.Transient, Assert.Single(services, d => d.ServiceType == typeof(AddHandler)).Lifetime);
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(Di.Generated.Zendiator));
+        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
         await using var scope = provider.CreateAsyncScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        Assert.Same(mediator, scope.ServiceProvider.GetRequiredService<IZendiator>());
+        Assert.Null(scope.ServiceProvider.GetService<Di.Generated.Zendiator>());
         Assert.Equal(7, await mediator.SendAsync(new Add(3, 4)));
         Assert.Equal(1, DiBehavior<Add, int>.Calls);
+    }
+
+    [Fact]
+    public void Dependency_lifetime_can_restore_scope_sharing()
+    {
+        var services = CreateServices(dependencyLifetime: ServiceLifetime.Scoped);
+        Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == typeof(AddHandler)).Lifetime);
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        Assert.Same(scope.ServiceProvider.GetRequiredService<AddHandler>(), scope.ServiceProvider.GetRequiredService<AddHandler>());
     }
 
     [Fact]

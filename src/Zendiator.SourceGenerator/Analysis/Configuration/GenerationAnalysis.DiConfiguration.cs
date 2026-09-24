@@ -83,7 +83,7 @@ internal sealed partial class GenerationAnalysis
         {
             return AnalyzeDiAssignment(left.Name.Identifier.Text, assignment.Right, model, setting);
         }
-        ErrorAt(17, "Unsupported AddZendiator configuration statement. Use direct recorder calls (RegisterServicesFromAssemblyContaining, AddOpenBehavior, AddOpenStreamBehavior, AddNotification, ConfigureHandlerOrder) and property assignments (Namespace, ServiceLifetime).", statement.GetLocation());
+        ErrorAt(17, "Unsupported AddZendiator configuration statement. Use direct recorder calls (RegisterServicesFromAssemblyContaining, AddOpenBehavior, AddOpenStreamBehavior, AddNotification, ConfigureHandlerOrder) and property assignments (Namespace, ServiceLifetime, DependencyLifetime).", statement.GetLocation());
         return false;
     }
 
@@ -251,6 +251,7 @@ internal sealed partial class GenerationAnalysis
                     return true;
                 }
             case "ServiceLifetime":
+            case "DependencyLifetime":
                 {
                     // Lifetime flows at runtime and never shapes generation; only the
                     // value domain is checked here.
@@ -258,13 +259,13 @@ internal sealed partial class GenerationAnalysis
                     if (constant.HasValue && constant.Value is int lifetime &&
                         lifetime is not (0 or 1 or 2))
                     {
-                        ErrorAt(18, "ServiceLifetime must be Transient, Scoped, or Singleton.", location);
+                        ErrorAt(18, $"{propertyName} must be Transient, Scoped, or Singleton.", location);
                         return false;
                     }
                     return true;
                 }
             default:
-                ErrorAt(17, $"Unsupported AddZendiator configuration property '{propertyName}'. Supported properties: Namespace, ServiceLifetime.", location);
+                ErrorAt(17, $"Unsupported AddZendiator configuration property '{propertyName}'. Supported properties: Namespace, ServiceLifetime, DependencyLifetime.", location);
                 return false;
         }
     }

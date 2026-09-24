@@ -7,6 +7,37 @@ namespace Zendiator.CachePolicy.Tests;
 public sealed class ConcurrencyAndReentrancyTests
 {
     [Fact]
+    public async Task External_monitor_on_mediator_does_not_block_dispatch()
+    {
+        var services = new ServiceCollection();
+        services.AddZendiator();
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        var monitorOwner = Task.Factory.StartNew(() =>
+        {
+            lock (mediator)
+            {
+                entered.SetResult();
+                if (!release.Wait(TimeSpan.FromSeconds(30)))
+                    throw new TimeoutException("Dispatch must use its private initialization lock.");
+            }
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        try
+        {
+            Assert.Equal(42, await mediator.SendAsync(new Val0(41)));
+        }
+        finally
+        {
+            release.Set();
+            await monitorOwner;
+        }
+    }
+
+    [Fact]
     public async Task Concurrent_first_use_shares_single_scoped_instance()
     {
         TestCounters.ResetAll();

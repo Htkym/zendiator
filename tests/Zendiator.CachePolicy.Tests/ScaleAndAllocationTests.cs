@@ -101,6 +101,23 @@ public sealed class ScaleAndAllocationTests
     }
 
     [Fact]
+    public void Mediator_construction_stays_within_80_bytes()
+    {
+        var services = new ServiceCollection();
+        services.AddZendiator();
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        Zendiator? retained = null;
+        var allocated = Measure(() =>
+        {
+            retained = new Zendiator(scope.ServiceProvider);
+        });
+        // Includes mediator state and its private lock, but not the supplied provider.
+        Assert.InRange(allocated, 1, 80L * 1024);
+        Assert.NotNull(retained);
+    }
+
+    [Fact]
     public async Task Warm_paths_allocate_nothing()
     {
         TestCounters.ResetAll();
