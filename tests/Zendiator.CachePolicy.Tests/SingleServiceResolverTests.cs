@@ -113,7 +113,7 @@ public sealed class SingleServiceResolverTests
             if (id == 1)
             {
                 entered.SetResult();
-                if (!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException();
+                if (!release.Wait(TimeSpan.FromSeconds(30))) throw new TimeoutException();
                 throw new FormatException("activation");
             }
             return new Probe(id);
@@ -121,15 +121,16 @@ public sealed class SingleServiceResolverTests
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
         var capture = scope.ServiceProvider.GetRequiredService<ZendiatorSingleServiceResolver<Probe>>();
-        var first = Task.Run(() => Assert.Throws<FormatException>(capture.GetRequiredService));
+        var first = Task.Factory.StartNew(() => Assert.Throws<FormatException>(capture.GetRequiredService),
+            CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var started = 0;
-        var waiters = Enumerable.Range(0, 8).Select(_ => Task.Run(() =>
+        var waiters = Enumerable.Range(0, 8).Select(_ => Task.Factory.StartNew(() =>
         {
             if (Interlocked.Increment(ref started) == 8) ready.SetResult();
             return capture.GetRequiredService();
-        })).ToArray();
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default)).ToArray();
         try
         {
             await ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -156,7 +157,7 @@ public sealed class SingleServiceResolverTests
         {
             var id = Interlocked.Increment(ref entered);
             if (id == 2) bothEntered.SetResult();
-            if (!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException();
+            if (!release.Wait(TimeSpan.FromSeconds(30))) throw new TimeoutException();
             return new Probe(id);
         });
         using var provider = services.BuildServiceProvider();
@@ -164,8 +165,10 @@ public sealed class SingleServiceResolverTests
         using var secondScope = provider.CreateScope();
         var first = new ZendiatorSingleServiceResolver<Probe>(firstScope.ServiceProvider);
         var second = new ZendiatorSingleServiceResolver<Probe>(secondScope.ServiceProvider);
-        var firstTask = Task.Run(first.GetRequiredService);
-        var secondTask = Task.Run(second.GetRequiredService);
+        var firstTask = Task.Factory.StartNew(first.GetRequiredService,
+            CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        var secondTask = Task.Factory.StartNew(second.GetRequiredService,
+            CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         try
         {
             await bothEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -206,14 +209,14 @@ public sealed class SingleServiceResolverTests
         var capture = Resolve(scope.ServiceProvider, true);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var release = new ManualResetEventSlim();
-        var owner = Task.Run(() =>
+        var owner = Task.Factory.StartNew(() =>
         {
             lock (capture.Resolver)
             {
                 entered.SetResult();
-                if (!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Initialization used the public monitor.");
+                if (!release.Wait(TimeSpan.FromSeconds(30))) throw new TimeoutException("Initialization used the public monitor.");
             }
-        });
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         try { Assert.Equal(41, capture.Get().Id); }
         finally

@@ -16,15 +16,15 @@ public sealed class ConcurrencyAndReentrancyTests
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var release = new ManualResetEventSlim();
-        var monitorOwner = Task.Run(() =>
+        var monitorOwner = Task.Factory.StartNew(() =>
         {
             lock (mediator)
             {
                 entered.SetResult();
-                if (!release.Wait(TimeSpan.FromSeconds(10)))
+                if (!release.Wait(TimeSpan.FromSeconds(30)))
                     throw new TimeoutException("Dispatch must use its private initialization lock.");
             }
-        });
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         try
         {
