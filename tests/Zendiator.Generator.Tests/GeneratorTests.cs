@@ -31,6 +31,36 @@ public sealed class GeneratorTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void One_handler_for_async_and_sync_requests_uses_one_typed_capture(bool explicitSync)
+    {
+        var sync = explicitSync
+            ? "int ISyncRequestHandler<Pong,int>.Handle(Pong request, CancellationToken ct) => 2;"
+            : "public int Handle(Pong request, CancellationToken ct) => 2;";
+        var source = Head + Request + "public readonly record struct Pong : ISyncRequest<int>; "
+            + "public sealed class Handler : IRequestHandler<Ping,int>, ISyncRequestHandler<Pong,int> { "
+            + "public ValueTask<int> HandleAsync(Ping request, CancellationToken ct) => new(1); " + sync + " }";
+        var text = Run(Compilation(source), true, emit: true).GeneratedTrees.Single().ToString();
+        Assert.Contains("ZendiatorSingleServiceResolver<global::App.Handler>", text);
+        Assert.Contains("SyncRoute0Node0(global::Zendiator.DependencyInjection.ZendiatorSingleServiceResolver<global::App.Handler> services)", text);
+        Assert.Equal(2, text.Split("GetRequiredService()", StringSplitOptions.None).Length - 1);
+        if (explicitSync) Assert.Contains("((global::Zendiator.ISyncRequestHandler<global::App.Pong, int>)services.GetRequiredService())", text);
+    }
+
+    [Fact]
+    public void Different_sync_handler_keeps_the_general_resolver()
+    {
+        var source = Head + Request + Handler
+            + "public readonly record struct Pong : ISyncRequest<int>; "
+            + "public sealed class SyncHandler : ISyncRequestHandler<Pong,int> { "
+            + "public int Handle(Pong request, CancellationToken ct) => 2; }";
+        var text = Run(Compilation(source), true, emit: true).GeneratedTrees.Single().ToString();
+        Assert.Contains("class Zendiator : global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator>,", text);
+        Assert.Contains("services.GetRequiredService<global::App.SyncHandler>()", text);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Non_public_handler_keeps_the_general_resolver(bool nested)
     {
         var handler = nested
