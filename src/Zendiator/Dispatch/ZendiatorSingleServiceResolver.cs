@@ -29,7 +29,7 @@ public class ZendiatorSingleServiceResolver<T> where T : class
     [MethodImpl(MethodImplOptions.NoInlining)]
     private T ResolveSlow()
     {
-        // Preserve first-resolution slot order for other mediators using the paged cache.
+        // Preserve slot order for callers of the non-generic resolver.
         ZendiatorServiceResolver.ReserveServiceSlot<T>();
         var initialization = _initializationLock;
         lock (initialization)

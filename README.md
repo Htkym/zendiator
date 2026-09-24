@@ -345,6 +345,7 @@ With warmed-up scopes and synchronously completing allocation-free handlers/Beha
 First-time DI resolution, logging, and async suspension are outside that 0 B claim. No latency numbers are guaranteed.
 
 Dispatch uses one lazy, mediator-instance cache with standard DI construction. Use `services.AddZendiator()` and normal `BuildServiceProvider()` or host construction; no custom provider or fast-mode switch is required. See [construction and dispatch lifetime](docs/optimized-dispatch.md) for the Transient breaking change, disposal rules, and measurement boundaries.
+Generated general caches assign service slots per mediator composition to avoid sparse page allocations caused by unrelated compositions. This does not establish a general latency improvement.
 
 Historical release measurements are in the [0.1.0 release notes](docs/release/0.1.0-release-notes.md)
 and [performance record](docs/performance.md). They describe their measured revisions,

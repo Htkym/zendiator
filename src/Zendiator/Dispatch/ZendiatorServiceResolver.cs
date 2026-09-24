@@ -33,9 +33,13 @@ public class ZendiatorServiceResolver
     /// <summary>Gets the first instance resolved for this service type, regardless of its DI lifetime.</summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public T GetRequiredService<T>() where T : notnull
+    public virtual T GetRequiredService<T>() where T : notnull => GetRequiredServiceAtSlot<T>(ServiceSlot<T>.Index);
+
+    /// <summary>Gets a captured dependency using a slot owned by a generated composition.</summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    protected T GetRequiredServiceAtSlot<T>(int slot) where T : notnull
     {
-        var slot = ServiceSlot<T>.Index;
         if (Volatile.Read(ref _firstSlot) == slot)
             return (T)_firstValue!;
         var pages = Volatile.Read(ref _pages);

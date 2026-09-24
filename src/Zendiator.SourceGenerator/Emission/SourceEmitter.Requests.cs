@@ -82,7 +82,7 @@ internal sealed partial class SourceEmitter
         for (var node = 0; node <= route.Behaviors.Count; node++)
         {
             b.AppendLine($$"""
-                    private readonly struct Route{{index}}Node{{node}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver services) : {{ContinuationContract(route)}}
+                    private readonly struct Route{{index}}Node{{node}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> services) : {{ContinuationContract(route)}}
                     {
                         [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
                         public {{TaskContract(route)}} InvokeAsync({{Name(route.Request)}} request, global::System.Threading.CancellationToken cancellationToken)

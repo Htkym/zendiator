@@ -336,6 +336,7 @@ ZEN0021～ZEN0023 は警告です。静的に確定できる形だけを検出�
 初回DI解決、ログ出力、非同期中断は、この0 Bの主張に含めません。レイテンシの数値保証はしません。
 
 実行経路は Mediator 単位の遅延キャッシュに一本化しています。`services.AddZendiator()` と通常の `BuildServiceProvider()` またはホスト構築で利用でき、独自 Provider や高速化の切り替えは不要です。Transient の変更点と破棄の扱いは [構築と有効期間](docs/optimized-dispatch.md) を参照してください。
+生成される汎用キャッシュでは、サービス型の番号を Mediator の構成ごとに割り当て、無関係な構成による疎なページ確保を避けます。通常の送信速度が一律に改善するという意味ではありません。
 
 過去のリリースの測定値は [0.1.0 release notes](docs/release/0.1.0-release-notes.md) と
 [性能の記録](docs/performance.md) にあります。これらは測定時の版を対象とし、

@@ -69,6 +69,13 @@ cache. Both follow the same lazy-resolution and disposal contract. The resolver
 base type is generated infrastructure; applications should use the generated
 constructor and dispatch APIs rather than depend on that base type.
 
+The general generated resolver assigns service slots per mediator composition.
+Unrelated compositions therefore do not enlarge its page table merely by using
+other service types first. The same concrete service type keeps one slot across
+routes in a composition. This changes neither the DI lifetime nor who disposes
+the dependency. The non-generic `ZendiatorServiceResolver` remains available
+for code that constructs that helper directly.
+
 ## Ownership and disposal
 
 DI owns Handler and Behavior disposal. The generated mediator does not implement
@@ -87,6 +94,13 @@ may stop before disposing later services. Do not reuse a scope or mediator after
 disposal starts, whether disposal succeeds or throws.
 
 ## Preview breaking changes
+
+General generated mediators now derive from
+`ZendiatorServiceResolver<Zendiator>` instead of the non-generic helper. Code
+that inspects or names the exact generated base type must be updated and
+recompiled with the matching generator and runtime package versions.
+`AddZendiator()`, the default Scoped registration, `IZendiator.SendAsync`,
+and DI-owned dependency disposal retain their behavior.
 
 `BuildZendiatorServiceProvider`, `ZendiatorServiceProvider`,
 `ZendiatorServiceProviderFactory`, and the provider registration marker were removed.

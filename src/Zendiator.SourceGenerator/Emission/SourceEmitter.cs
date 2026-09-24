@@ -42,7 +42,7 @@ internal sealed partial class SourceEmitter
         EmitInterface(b);
         var resolverBase = _singleServiceTypeName is { } singleServiceTypeName
             ? $$"""global::Zendiator.DependencyInjection.ZendiatorSingleServiceResolver<{{singleServiceTypeName}}>, """
-            : _model.Target.InheritServiceResolver ? "global::Zendiator.DependencyInjection.ZendiatorServiceResolver, " : "";
+            : _model.Target.InheritServiceResolver ? "global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator>, " : "";
         b.AppendLine($$"""
             /// <summary>Generated mediator with lazily captured dependencies.</summary>
             [global::System.CodeDom.Compiler.GeneratedCode("Zendiator.SourceGenerator", "0.2.0")]
@@ -59,12 +59,12 @@ internal sealed partial class SourceEmitter
                 """);
         else
             b.AppendLine("""
-                    private readonly global::Zendiator.DependencyInjection.ZendiatorServiceResolver _services;
+                    private readonly global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> _services;
                     /// <summary>Creates a mediator bound to the supplied scope.</summary>
                     public Zendiator(global::System.IServiceProvider services)
                     {
                         global::System.ArgumentNullException.ThrowIfNull(services);
-                        _services = new global::Zendiator.DependencyInjection.ZendiatorServiceResolver(services);
+                        _services = new global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator>(services);
                     }
                 """);
         b.AppendLine("""

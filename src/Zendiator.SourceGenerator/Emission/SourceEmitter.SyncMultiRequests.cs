@@ -52,7 +52,7 @@ internal sealed partial class SourceEmitter
             for (var node = 0; node <= branch.Behaviors.Count; node++)
             {
                 b.AppendLine($$"""
-                        private readonly struct {{prefix}}Node{{node}}{{TypeParameters(route)}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver services) : {{cont}}{{TypeConstraints(route)}}
+                        private readonly struct {{prefix}}Node{{node}}{{TypeParameters(route)}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> services) : {{cont}}{{TypeConstraints(route)}}
                         {
                             [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
                             public {{(route.IsVoid ? "void" : resp)}} Invoke({{scoped}}{{req}} request, global::System.Threading.CancellationToken cancellationToken)
