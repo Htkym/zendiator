@@ -26,6 +26,10 @@ jobs:
       - name: Test
         run: dotnet test Zendiator.slnx -c Release --no-build
 
+      - name: Validate use-case benchmark fixtures
+        working-directory: benchmarks/Zendiator.UseCaseBenchmarks
+        run: dotnet ./bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll --validate-only
+
       - name: Format check
         shell: pwsh
         run: |
@@ -39,21 +43,11 @@ jobs:
             "tests/Zendiator.DiConfiguration.Tests/Zendiator.DiConfiguration.Tests.csproj",
             "tests/Zendiator.Generator.Tests/Zendiator.Generator.Tests.csproj",
             "tests/Zendiator.Allocation.Tests/Zendiator.Allocation.Tests.csproj",
-            "tests/Zendiator.Benchmark.Tests/Zendiator.Benchmark.Tests.csproj",
             "tests/Zendiator.CachePolicy.Tests/Zendiator.CachePolicy.Tests.csproj",
-            "tests/Zendiator.RScale.Tests/Zendiator.RScale.Tests.csproj",
-            "tests/Zendiator.PipeDepth.Tests/Zendiator.PipeDepth.Tests.csproj",
             "samples/Zendiator.Sample.Contracts/Zendiator.Sample.Contracts.csproj",
             "samples/Zendiator.Sample.Application/Zendiator.Sample.Application.csproj",
             "samples/Zendiator.Sample.Host/Zendiator.Sample.Host.csproj",
-            "benchmarks/Zendiator.Benchmarks/Zendiator.Benchmarks.csproj",
-            "benchmarks/Zendiator.FeatureBench/Zendiator.FeatureBench.csproj",
-            "benchmarks/Zendiator.DiBench/Zendiator.DiBench.csproj",
-            "benchmarks/Zendiator.RScale.R1/Zendiator.RScale.R1.csproj",
-            "benchmarks/Zendiator.RScale.R32/Zendiator.RScale.R32.csproj",
-            "benchmarks/Zendiator.RScale.R128/Zendiator.RScale.R128.csproj",
-            "benchmarks/Zendiator.PipeDepth/Zendiator.PipeDepth.csproj",
-            "benchmarks/Zendiator.DSoftObs/Zendiator.DSoftObs.csproj")) {
+            "benchmarks/Zendiator.UseCaseBenchmarks/Zendiator.UseCaseBenchmarks.csproj")) {
             dotnet format $p --verify-no-changes --no-restore
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }

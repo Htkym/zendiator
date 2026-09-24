@@ -2,7 +2,7 @@
 
 [English](migrating-from-mediatr.md)
 
-[README](../README.ja.md) と [設計方針](../Constitution.ja.md) も参照してください。
+[README](../README.ja.md) も参照してください。
 
 MediatR 12 を使ったコードを Zendiator へ移す手順です。API の対応関係と、
 書き換えが必要な箇所、対応していない機能をまとめています。
@@ -10,7 +10,7 @@ MediatR 12 を使ったコードを Zendiator へ移す手順です。API の対
 このガイドは現在のリポジトリを対象とします。公開済みパッケージとは異なる場合があるため、
 以下の有効期間や構成の説明を適用する前に、インストールする版のリリースノートを確認してください。
 
-現在のプレビュー版は標準 DI で構築し、Transient を含む Handler・Behavior を Mediator 単位で遅延取得して再利用します。新しい構成が必要な場合は Transient の Mediator を新たに解決してください。独自 Provider API は削除しました。生成される Mediator は `IDisposable` を実装せず、依存サービスの破棄は DI が担当します。送信やストリーム列挙が終わるまでスコープを維持してください。詳細は [構築と有効期間](optimized-dispatch.md) を参照してください。
+現在のプレビュー版は標準 DI で構築し、Transient を含む Handler・Behavior を Mediator 単位で遅延取得して再利用します。既定の Scoped Mediator で新しい構成が必要なら新しいスコープを作ります。解決するたびに新しい構成が必要な場合は Mediator を Transient に設定してください。独自 Provider API は削除しました。生成される Mediator は `IDisposable` を実装せず、依存サービスの破棄は DI が担当します。送信やストリーム列挙が終わるまでスコープを維持してください。詳細は [構築と有効期間](optimized-dispatch.md) を参照してください。
 
 以前の生成 Mediator を `Dispose()` していたコードは、DI スコープを破棄する形に直します。スコープを作るメソッドでは、送信の完了を待ってからスコープを抜けてください。
 
@@ -26,9 +26,8 @@ var user = await mediator.SendAsync(new GetUserQuery(1), cancellationToken);
 
 - 移行元は MediatR 12（`IMediator`、`ISender`、`IPublisher` の構成）を想定しています。
 - 移行先は .NET 10（C# 14、nullable 有効）が必要です。
-- Zendiator は全経路を通じた競合順位を主張しません。[性能の記録](performance.md) では、
-  現行開発ブランチの Scoped 初回送信と、過去の 0.1.0 の測定を分けています。
-  どちらも、移行先アプリのすべての処理を代表するものではありません。
+- 性能は呼び出し方と Handler の処理に依存します。ベンチマークの結果を、移行先アプリの
+  すべての処理に当てはめることはできません。
 
 ## 対応関係の概要
 

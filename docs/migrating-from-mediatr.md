@@ -2,7 +2,7 @@
 
 [日本語](migrating-from-mediatr.ja.md)
 
-See also the [README](../README.md) and [design principles](../Constitution.md).
+See also the [README](../README.md).
 
 Procedures for moving MediatR 12 code to Zendiator. Covers API correspondences,
 required rewrites, and unsupported features.
@@ -11,7 +11,7 @@ This guide describes the current repository. Published packages may differ;
 check the release notes for the version you install before applying the lifetime
 and configuration guidance below.
 
-The current preview uses standard DI construction and captures Handler/Behavior dependencies lazily per mediator instance, including Transient dependencies. Resolve a new transient mediator for a fresh composition. Custom provider APIs were removed. The generated mediator does not implement `IDisposable`; DI owns dependency disposal. Keep the scope alive until sends and stream enumeration finish. See [construction and dispatch lifetime](optimized-dispatch.md).
+The current preview uses standard DI construction and captures Handler/Behavior dependencies lazily per mediator instance, including Transient dependencies. Use a new scope for a new default Scoped mediator, or configure a Transient mediator when each resolution needs a fresh composition. Custom provider APIs were removed. The generated mediator does not implement `IDisposable`; DI owns dependency disposal. Keep the scope alive until sends and stream enumeration finish. See [construction and dispatch lifetime](optimized-dispatch.md).
 
 Replace explicit mediator disposal with disposal of its DI scope. Await the send before leaving that scope:
 
@@ -27,9 +27,8 @@ Assumptions:
 
 - The migration source is MediatR 12 (the `IMediator`, `ISender`, `IPublisher` setup).
 - The target requires .NET 10 (C# 14, nullable enabled).
-- Zendiator makes no overall competitor ranking. The [performance record](performance.md)
-  separates the current development-branch Scoped first-send snapshot from
-  historical 0.1.0 measurements. Neither covers every migration workload.
+- Performance depends on the call pattern and handler work; benchmark results do not
+  predict the performance of every application being migrated.
 
 ## API correspondence
 

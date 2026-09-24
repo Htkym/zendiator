@@ -1,6 +1,6 @@
 # Zendiator
 
-[日本語](README.ja.md) | [Design and maintenance principles](Constitution.md)
+[日本語](README.ja.md)
 
 A small Mediator for .NET 10 that generates typed dispatch at compile time.
 A Roslyn Incremental Source Generator produces per-request `SendAsync` overloads,
@@ -210,7 +210,7 @@ Rules:
   Singleton services capturing Scoped dependencies.
 - First registration wins. A later registration does not replace existing registrations.
 - Out-of-range values are diagnosed at generation (`ZEN0018`) when constant.
-- Each mediator captures dependencies on first use and reuses them, including Transient dependencies. Resolve a new transient mediator for a fresh composition.
+- Each mediator captures dependencies on first use and reuses them, including Transient dependencies. Use a new scope for a new default Scoped mediator, or configure a Transient mediator for a fresh composition on each resolution.
   The no-construction guarantee on short-circuit (downstream Behaviors and handlers are not resolved) is unchanged.
 
 Use Singleton only when the mediator, handlers, Behaviors, and their dependencies are
@@ -339,28 +339,15 @@ Document breaking changes explicitly rather than retaining an obsolete execution
 
 ## Performance
 
-`benchmarks/Zendiator.Benchmarks` compares direct calls against typed sends.
 With warmed-up scopes and synchronously completing allocation-free handlers/Behaviors,
 0 B of additional allocation per send is verified (the 0- and 1-stage sync paths are also pinned by tests).
 First-time DI resolution, logging, and async suspension are outside that 0 B claim. No latency numbers are guaranteed.
 
-Dispatch uses one lazy, mediator-instance cache with standard DI construction. Use `services.AddZendiator()` and normal `BuildServiceProvider()` or host construction; no custom provider or fast-mode switch is required. See [construction and dispatch lifetime](docs/optimized-dispatch.md) for the Transient breaking change, disposal rules, and measurement boundaries.
-Generated general caches assign service slots per mediator composition to avoid sparse page allocations caused by unrelated compositions. This does not establish a general latency improvement.
-
-The [current development-branch snapshot](docs/performance.md#current-development-branch-snapshot)
-measured a Scoped scope-create, resolve, Send0, and dispose operation at a
-96.10 ns launch-mean median and 408 B/op across 12 launches. Under that same
-narrow workload, two balanced sessions favored Zendiator over Immediate.Handlers,
-while Immediate allocated 40 B/op less. The competitor table and raw data remain
-local outside Git. This is not an overall fastest ranking or a latency guarantee.
-The [0.1.0 release notes](docs/release/0.1.0-release-notes.md) describe an older
-architecture; other routes and async suspension have separate costs.
-
-The generator also uses structural comparison of immutable, symbol-free models
-to skip template expansion when output is unchanged. Moving a DI registration
-updates interceptor locations independently of the mediator body. Semantic
-analysis still runs on compilation changes; this is not per-type incremental
-analysis. See the [constitution](Constitution.md) for the design and measurement rules.
+Dispatch uses one lazy, mediator-instance cache with standard DI construction.
+See [construction and dispatch lifetime](docs/optimized-dispatch.md) for dependency
+reuse, the Transient default for generated dependencies, and disposal rules.
+The [use-case benchmark](benchmarks/README.md) can reproduce comparisons for Send,
+Notification, and Stream. Measurement data and improvement notes stay local.
 
 ## AOT and trimming
 
@@ -379,11 +366,11 @@ See the [CI workflow](.github/workflows/ci.yml) for the checks and
 [known limitations](docs/release/known-limitations.md) for release-specific evidence
 and the open-generic/value-type boundary.
 
-## Out of scope (follow-ups)
+## Unsupported operations
 
 Parallel publish, fire-and-forget, persistence/outbox, `Send(object)` for requests,
 cycle detection, CodeFix, CodeLens, built-in `Result` pipeline mapping,
-and built-in logging/validation are out of scope for the first release.
+and built-in logging/validation are not provided.
 Sequential `PublishAsync`, streams via `StreamAsync`, and your own
 `Result` types as ordinary `TResponse` values are supported.
 
@@ -391,8 +378,5 @@ For migrating from MediatR, see [the migration guide](docs/migrating-from-mediat
 
 ## Development
 
-Start with [Constitution.md](Constitution.md) for library and generator design,
-dependency lifetime, performance acceptance criteria, test scope, and source
-management. See [source layout](docs/source-layout.md) for file placement.
 The [CI workflow](.github/workflows/ci.yml) defines integration checks; package
 versions are defined in [Directory.Build.props](Directory.Build.props).

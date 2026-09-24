@@ -134,12 +134,3 @@ provable misuse of this lifetime contract. They cover explicit `IDisposable`
 treatment, returning a mediator from a local `using` scope, and sending after
 explicit scope disposal in the same method. They do not establish safety for
 other control flow, asynchronous work, or mediators stored in fields.
-
-## Measurements
-
-The [current development-branch snapshot](performance.md#current-development-branch-snapshot)
-reports a full Scoped first Send0 and its allocation, separately from warm
-dispatch. Its paired Immediate.Handlers result applies only to that operation;
-it is not an across-the-board fastest ranking. Published 0.1.0/0.1.1 values
-describe older architectures and should not be presented as measurements of
-this implementation.

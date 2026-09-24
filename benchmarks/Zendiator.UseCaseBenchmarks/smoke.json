@@ -1,0 +1,4 @@
+[
+  { "Type": "ZendiatorSend0", "Method": "ScopeK1", "Lifetime": "Scoped" },
+  { "Type": "ZendiatorNotification1", "Method": "DispatchAsync" }
+]
