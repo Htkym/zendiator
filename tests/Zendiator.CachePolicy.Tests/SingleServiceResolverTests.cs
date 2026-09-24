@@ -100,6 +100,85 @@ public sealed class SingleServiceResolverTests
         Assert.Equal(1, calls);
     }
 
+    [Fact]
+    public async Task Concurrent_waiters_retry_after_a_failed_single_service_activation()
+    {
+        var services = Services();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        var calls = 0;
+        services.AddTransient<Probe>(_ =>
+        {
+            var id = Interlocked.Increment(ref calls);
+            if (id == 1)
+            {
+                entered.SetResult();
+                if (!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException();
+                throw new FormatException("activation");
+            }
+            return new Probe(id);
+        });
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var capture = scope.ServiceProvider.GetRequiredService<ZendiatorSingleServiceResolver<Probe>>();
+        var first = Task.Run(() => Assert.Throws<FormatException>(capture.GetRequiredService));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var started = 0;
+        var waiters = Enumerable.Range(0, 8).Select(_ => Task.Run(() =>
+        {
+            if (Interlocked.Increment(ref started) == 8) ready.SetResult();
+            return capture.GetRequiredService();
+        })).ToArray();
+        try
+        {
+            await ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            release.Set();
+            await first.WaitAsync(TimeSpan.FromSeconds(10));
+            var results = await Task.WhenAll(waiters).WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.All(results, result => Assert.Same(results[0], result));
+            Assert.Equal(2, calls);
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
+
+    [Fact]
+    public async Task Separate_single_service_resolvers_initialize_independently()
+    {
+        var services = Services();
+        var bothEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        var entered = 0;
+        services.AddTransient<Probe>(_ =>
+        {
+            var id = Interlocked.Increment(ref entered);
+            if (id == 2) bothEntered.SetResult();
+            if (!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException();
+            return new Probe(id);
+        });
+        using var provider = services.BuildServiceProvider();
+        using var firstScope = provider.CreateScope();
+        using var secondScope = provider.CreateScope();
+        var first = new ZendiatorSingleServiceResolver<Probe>(firstScope.ServiceProvider);
+        var second = new ZendiatorSingleServiceResolver<Probe>(secondScope.ServiceProvider);
+        var firstTask = Task.Run(first.GetRequiredService);
+        var secondTask = Task.Run(second.GetRequiredService);
+        try
+        {
+            await bothEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            release.Set();
+            Assert.NotSame(await firstTask.WaitAsync(TimeSpan.FromSeconds(10)),
+                await secondTask.WaitAsync(TimeSpan.FromSeconds(10)));
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

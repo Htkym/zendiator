@@ -8,14 +8,18 @@ namespace Zendiator.DependencyInjection;
 [EditorBrowsable(EditorBrowsableState.Never)]
 public class ZendiatorSingleServiceResolver<T> where T : class
 {
-    private readonly ZendiatorInitializationLock _initializationLock;
+    // ponytail: cold waiters share one monitor per Handler type; shard only if contention warrants it.
+    private static readonly object WaitMonitor = new();
+    private readonly IServiceProvider _provider;
     private T? _value;
+    private int _ownerThreadId;
+    private int _waiterCount;
 
     /// <summary>Creates a dependency cache for a mediator bound to the supplied scope.</summary>
     public ZendiatorSingleServiceResolver(IServiceProvider provider)
     {
         ArgumentNullException.ThrowIfNull(provider);
-        _initializationLock = new(provider);
+        _provider = provider;
     }
 
     /// <summary>Gets the first captured instance, regardless of its DI lifetime.</summary>
@@ -31,15 +35,50 @@ public class ZendiatorSingleServiceResolver<T> where T : class
     {
         // Preserve slot order for callers of the non-generic resolver.
         ZendiatorServiceResolver.ReserveServiceSlot<T>();
-        var initialization = _initializationLock;
-        lock (initialization)
+        var threadId = Environment.CurrentManagedThreadId;
+        while (true)
         {
-            if (_value is { } existing) return existing;
-            var service = initialization.Provider.GetRequiredService<T>();
-            // A reentrant factory may already have published this type. Keep the first capture,
-            // while returning this activation's result, as the general resolver does.
-            if (_value is null) Volatile.Write(ref _value, service);
-            return service;
+            if (Volatile.Read(ref _value) is { } existing) return existing;
+            var owner = Volatile.Read(ref _ownerThreadId);
+            if (owner == threadId) return ResolveOnOwnerThread();
+            if (owner == 0 && Interlocked.CompareExchange(ref _ownerThreadId, threadId, 0) == 0)
+            {
+                try
+                {
+                    if (_value is { } captured) return captured;
+                    return ResolveOnOwnerThread();
+                }
+                finally
+                {
+                    // Exchange pairs with waiter registration so a new waiter cannot miss the pulse.
+                    Interlocked.Exchange(ref _ownerThreadId, 0);
+                    if (Volatile.Read(ref _waiterCount) != 0)
+                    {
+                        lock (WaitMonitor) Monitor.PulseAll(WaitMonitor);
+                    }
+                }
+            }
+            lock (WaitMonitor)
+            {
+                Interlocked.Increment(ref _waiterCount);
+                try
+                {
+                    while (Volatile.Read(ref _ownerThreadId) != 0 && Volatile.Read(ref _value) is null)
+                        Monitor.Wait(WaitMonitor);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref _waiterCount);
+                }
+            }
         }
+    }
+
+    private T ResolveOnOwnerThread()
+    {
+        var service = _provider.GetRequiredService<T>();
+        // Reentrant activation may already have published its own instance.
+        if (_value is null) Volatile.Write(ref _value, service);
+        return service;
     }
 }
