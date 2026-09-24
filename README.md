@@ -347,12 +347,14 @@ First-time DI resolution, logging, and async suspension are outside that 0 B cla
 Dispatch uses one lazy, mediator-instance cache with standard DI construction. Use `services.AddZendiator()` and normal `BuildServiceProvider()` or host construction; no custom provider or fast-mode switch is required. See [construction and dispatch lifetime](docs/optimized-dispatch.md) for the Transient breaking change, disposal rules, and measurement boundaries.
 Generated general caches assign service slots per mediator composition to avoid sparse page allocations caused by unrelated compositions. This does not establish a general latency improvement.
 
-Historical release measurements are in the [0.1.0 release notes](docs/release/0.1.0-release-notes.md)
-and [performance record](docs/performance.md). They describe their measured revisions,
-not the current lazy-capture architecture. Values apply only to the measured
-routes and environment; generic response creation, full scope lifecycle, and
-asynchronously suspending streams have separate allocation costs.
-No competitor ranking or general allocation-free claim is made.
+The [current development-branch snapshot](docs/performance.md#current-development-branch-snapshot)
+measured a Scoped scope-create, resolve, Send0, and dispose operation at a
+96.10 ns launch-mean median and 408 B/op across 12 launches. Under that same
+narrow workload, two balanced sessions favored Zendiator over Immediate.Handlers,
+while Immediate allocated 40 B/op less. The competitor table and raw data remain
+local outside Git. This is not an overall fastest ranking or a latency guarantee.
+The [0.1.0 release notes](docs/release/0.1.0-release-notes.md) describe an older
+architecture; other routes and async suspension have separate costs.
 
 The generator also uses structural comparison of immutable, symbol-free models
 to skip template expansion when output is unchanged. Moving a DI registration

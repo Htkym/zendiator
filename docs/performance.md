@@ -1,4 +1,36 @@
-# 0.1.0 Formal Measurements
+# Performance measurements
+
+## Current development-branch snapshot
+
+On 2026-09-24, commit `ac2eb4e67f9fa97ca841cea0379e635b5595016f` was
+measured with BenchmarkDotNet 0.15.8 on an Intel Core Ultra 7 258V, Windows 11,
+.NET 10.0.8, and Microsoft DI 10.0.12. Each operation created a scope, resolved
+the official Scoped entry, completed one Send with no Behaviors or async suspension,
+and disposed the scope. The Zendiator call used `IZendiator.SendAsync`.
+
+Across 12 child-process launches, Zendiator's launch-mean median was **96.10 ns**
+(range 92.48–111.42 ns) with **408 B/op** allocated. Each launch used CPU affinity 1,
+20 warmup iterations, and 12 measurement iterations with a requested 500 ms
+iteration time. Handler work and the Scoped registration were checked before
+measurement. Provider construction and the first DI call-site compilation were
+outside the measured operation. Warm, synchronously completing sends remain 0 B
+in the allocation tests; that does not describe first-time scope work.
+
+The same harness paired Zendiator with Immediate.Handlers 4.2.0 in two sessions
+of six launches, alternating order. The geometric Zendiator/Immediate time ratio
+was 0.919 (launch-level 95% interval 0.864–0.978) and 0.902 (0.884–0.921).
+Both intervals were below 1 for this specific operation. Immediate used its
+request-specific generated Handler entry and allocated 368 B/op, 40 B less than
+Zendiator. MediatR 14.2.0, Mediator.SourceGenerator 3.0.2, and
+DispatchR.Mediator 2.3.1 were sampled only twice each. This is not an overall
+fastest ranking or a result for Behaviors, multiple sends per scope, suspended
+async work, startup, or Native AOT speed. The competitor table, raw values,
+excluded setup failure, and loaded-assembly hashes are retained locally outside Git.
+The generated Zendiator dispatch source for this fixture was unchanged from the
+previous commit, so the change in measured median is not attributed to the new
+mixed-route specialization.
+
+## Historical 0.1.0 formal measurements
 
 This is a historical record for 0.1.0, not a measurement of 0.2.0. The dispatch and
 dependency-capture architecture has changed. Do not use these figures as current

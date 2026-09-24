@@ -27,9 +27,9 @@ Assumptions:
 
 - The migration source is MediatR 12 (the `IMediator`, `ISender`, `IPublisher` setup).
 - The target requires .NET 10 (C# 14, nullable enabled).
-- Zendiator makes no competitor ranking. The [performance record](performance.md)
-  contains measurements for specific revisions, not evidence of the current
-  lazy-capture architecture's performance.
+- Zendiator makes no overall competitor ranking. The [performance record](performance.md)
+  separates the current development-branch Scoped first-send snapshot from
+  historical 0.1.0 measurements. Neither covers every migration workload.
 
 ## API correspondence
 

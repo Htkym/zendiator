@@ -62,12 +62,13 @@ lock. A synchronous factory can reenter a different route on the same thread.
 Factories must not block waiting for another thread to dispatch through the same
 mediator during initialization. Failed activation is not cached and can be retried.
 
-For ordinary closed request routes that all use one public reference-type handler,
-the generator can use a typed field cache when there are no behaviors, other route
-kinds, or explicit base-class declarations. Other configurations use the general
-cache. Both follow the same lazy-resolution and disposal contract. The resolver
-base type is generated infrastructure; applications should use the generated
-constructor and dispatch APIs rather than depend on that base type.
+When all closed ordinary request routes use one public reference-type Handler,
+the generator can use a typed field cache. Closed synchronous request routes
+may share that same Handler and cache. Behaviors, other route kinds, open routes,
+or an explicit base-class declaration keep the general cache. Both follow the
+same lazy-resolution and disposal contract. The resolver base type is generated
+infrastructure; applications should use the generated constructor and dispatch
+APIs rather than depend on that base type.
 
 The general generated resolver assigns service slots per mediator composition.
 Unrelated compositions therefore do not enlarge its page table merely by using
@@ -136,8 +137,9 @@ other control flow, asynchronous work, or mediators stored in fields.
 
 ## Measurements
 
-Use the working-tree ProjectReference in `.local/benchmarks2/public-benchmarks` for
-short comparisons. Warm dispatch and scope-startup cost must both be reported.
-Published 0.1.0/0.1.1 measurements describe older architectures; do not present them
-as measurements of this implementation. Short runs are exploratory, not proof of
-an across-the-board fastest ranking.
+The [current development-branch snapshot](performance.md#current-development-branch-snapshot)
+reports a full Scoped first Send0 and its allocation, separately from warm
+dispatch. Its paired Immediate.Handlers result applies only to that operation;
+it is not an across-the-board fastest ranking. Published 0.1.0/0.1.1 values
+describe older architectures and should not be presented as measurements of
+this implementation.

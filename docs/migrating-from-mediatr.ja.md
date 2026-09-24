@@ -26,8 +26,9 @@ var user = await mediator.SendAsync(new GetUserQuery(1), cancellationToken);
 
 - 移行元は MediatR 12（`IMediator`、`ISender`、`IPublisher` の構成）を想定しています。
 - 移行先は .NET 10（C# 14、nullable 有効）が必要です。
-- Zendiator は競合順位を主張しません。[性能の記録](performance.md) は測定時の版を対象とし、
-  現在の遅延キャッシュ方式の性能を示すものではありません。
+- Zendiator は全経路を通じた競合順位を主張しません。[性能の記録](performance.md) では、
+  現行開発ブランチの Scoped 初回送信と、過去の 0.1.0 の測定を分けています。
+  どちらも、移行先アプリのすべての処理を代表するものではありません。
 
 ## 対応関係の概要
 
