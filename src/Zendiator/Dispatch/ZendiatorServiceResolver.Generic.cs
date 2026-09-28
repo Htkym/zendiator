@@ -17,6 +17,9 @@ public class ZendiatorServiceResolver<TMediator> : ZendiatorServiceResolver
     /// <summary>Creates a dependency cache for a mediator bound to the supplied scope.</summary>
     public ZendiatorServiceResolver(IServiceProvider provider) : base(provider) { }
 
+    /// <summary>Creates a cache with a bounded initial page for a generated composition.</summary>
+    public ZendiatorServiceResolver(IServiceProvider provider, int initialPageCapacity) : base(provider, initialPageCapacity) { }
+
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public sealed override T GetRequiredService<T>() => GetRequiredServiceAtSlot<T>(ServiceSlot<T>.Index);

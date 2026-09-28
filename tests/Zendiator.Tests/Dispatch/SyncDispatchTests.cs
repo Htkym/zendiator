@@ -151,4 +151,75 @@ public sealed class SyncDispatchTests
         Assert.NotSame(scope.ServiceProvider.GetRequiredService<AddOneHandler>(), scope.ServiceProvider.GetRequiredService<AddOneHandler>());
         Assert.Equal(3, calls);
     }
+
+    [Fact]
+    public void Span_results_preserve_order_and_unused_capacity()
+    {
+        using var provider = Services().BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        Span<int> buffer = stackalloc int[] { -1, -2, -3 };
+        Assert.Equal(2, mediator.SendAllSync(new SumSync(3, 2), buffer, default));
+        Assert.Equal([6, 7, -3], buffer.ToArray());
+        // The existing two-argument default call must remain unambiguous.
+        Assert.Equal([6, 7], mediator.SendAllSync(new SumSync(3, 2), default));
+        string[] references = ["old", "old", "untouched"];
+        Assert.Equal(2, mediator.SendAllSync(new MultiRow<Span<int>>(7, buffer), references, default));
+        Assert.Equal(["a:7", "b:7", "untouched"], references);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void Short_span_fails_before_resolving_dependencies(int length)
+    {
+        var services = Services();
+        services.AddTransient<SumSyncHandlerA>(_ => throw new InvalidOperationException("must not resolve"));
+        services.AddTransient<Trace>(_ => throw new InvalidOperationException("must not resolve behavior dependencies"));
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        var buffer = new int[length];
+        var exception = Assert.Throws<ArgumentException>(() => mediator.SendAllSync(new SumSync(3, 2), buffer, default));
+        Assert.Equal("destination", exception.ParamName);
+        using var canceled = new CancellationTokenSource();
+        canceled.Cancel();
+        Assert.Equal(canceled.Token, Assert.ThrowsAny<OperationCanceledException>(() =>
+            mediator.SendAllSync(new SumSync(3, 2), buffer, canceled.Token)).CancellationToken);
+    }
+
+    [Fact]
+    public void Span_results_do_not_overwrite_overlapping_input_until_all_handlers_finish()
+    {
+        using var provider = Services().BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        Span<int> buffer = stackalloc int[] { 3, -1, -2 };
+        Assert.Equal(2, scope.ServiceProvider.GetRequiredService<IZendiator>().SendAllSync(new SpanMulti(buffer), buffer, default));
+        Assert.Equal([13, 23, -2], buffer.ToArray());
+    }
+
+    [Fact]
+    public void Span_results_leave_destination_unchanged_when_a_later_handler_fails()
+    {
+        using var provider = Services().BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var buffer = new[] { 3, -1, -2 };
+        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        Assert.Equal("second", Assert.Throws<InvalidOperationException>(() =>
+            mediator.SendAllSync(new SpanMulti(buffer, failSecond: true), buffer, default)).Message);
+        Assert.Equal([3, -1, -2], buffer);
+    }
+
+    [Fact]
+    public void Cancellation_between_span_branches_leaves_destination_unchanged()
+    {
+        using var provider = Services().BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        using var canceled = new CancellationTokenSource();
+        var buffer = new[] { 3, -1, -2 };
+        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        Assert.Equal(canceled.Token, Assert.ThrowsAny<OperationCanceledException>(() =>
+            mediator.SendAllSync(new SpanMulti(buffer, afterFirst: canceled.Cancel), buffer, canceled.Token)).CancellationToken);
+        Assert.Equal([3, -1, -2], buffer);
+    }
 }

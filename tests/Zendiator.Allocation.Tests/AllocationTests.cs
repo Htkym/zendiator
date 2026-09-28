@@ -5,6 +5,24 @@ namespace Zendiator.Allocation.Tests;
 
 public sealed class AllocationTests
 {
+    [Fact]
+    public async Task Warm_sync_multi_span_does_not_allocate_a_result_container()
+    {
+        var (mediator, scope) = CreateMediator();
+        await using (scope)
+        {
+            var sum = 0;
+            var allocated = Measure(() =>
+            {
+                Span<int> results = stackalloc int[2];
+                mediator.SendAllSync(new SyncMulti(10), results, default);
+                sum += results[0] + results[1];
+            });
+            Assert.Equal(0, allocated);
+            Assert.Equal(21 * 1025, sum);
+        }
+    }
+
     private static (IZendiator Mediator, AsyncServiceScope Scope) CreateMediator()
     {
         var services = new ServiceCollection();

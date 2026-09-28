@@ -17,6 +17,12 @@ internal sealed partial class SourceEmitter
     private void EmitStreams(StringBuilder b)
     {
         var routes = _model.Routes.Streams;
+        if (routes.Count != 0)
+            b.AppendLine("""
+                    // Forwarding delegates subsequent completion/failure to the inner enumerator.
+                    // Stopped prevents forwarding; it does not imply that resources are disposed.
+                    private enum StreamEnumeratorState : byte { NotStarted, Forwarding, Stopped }
+                """);
         for (var index = 0; index < routes.Count; index++)
             EmitStream(b, routes[index], index);
     }

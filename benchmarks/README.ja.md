@@ -19,4 +19,6 @@ fixture を変えるときは、`Zendiator.UseCaseBenchmarks` にある `Generat
 
 機械語を調べるときは `pwsh -NoProfile -File benchmarks/Run-Jit.ps1` を実行します。Send0/Send5 の新 Scope 経路をウォームアップして、指定したメソッドの Tier1 出力を `.local` に残します。`-Pattern` で対象を変えられます。機械語のサイズだけで速度改善を判断しません。
 
+確保量を分解するときは、Release ビルド後に `benchmarks/Zendiator.UseCaseBenchmarks` を作業ディレクトリとして `dotnet ./bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll --breakdown` を実行します。環境変数 `COLD_RUN` に新しい保存先の絶対パスを指定してください。`allocation-breakdown.json` は Scope、入口、Behavior の取得、Send の境界別、`resolver-scale.json` は 1/2/6/32/64/128 種類の依存を順方向・逆方向で取得した確保量です。反射を使う規模診断と簡易タイマーの値は、競合の速度比較には使いません。
+
 Send/Void は事前作成した要求と軽い同期完了ハンドラーを使います。Notification と Stream は実際の非同期中断を含みますが、非同期中断する Send、コンテナー構築、Send の例外経路、Native AOT 速度は未測定です。Immediate は要求別の生成入口、Zendiator は共通の `IZendiator.SendAsync` を使います。各ケースは1 launch のため、全体の最速順位や僅差の優劣は主張しません。

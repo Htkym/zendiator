@@ -29,7 +29,7 @@ internal sealed partial class SourceEmitter
         b.AppendLine("""        if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
         if (!route.IsVoid)
             b.AppendLine($$"""
-                        var results = new global::System.Collections.Generic.List<{{resp}}>({{route.Branches.Count}});
+                        var results = CreateResultArray<{{resp}}>({{route.Branches.Count}});
                 """);
         for (var bh = 0; bh < route.Branches.Count; bh++)
         {
@@ -37,12 +37,35 @@ internal sealed partial class SourceEmitter
             if (route.IsVoid)
                 b.AppendLine($$"""        new {{node0}}({{MediatorServices}}).Invoke(request, cancellationToken);""");
             else
-                b.AppendLine($$"""        results.Add(new {{node0}}({{MediatorServices}}).Invoke(request, cancellationToken));""");
+                b.AppendLine($$"""        results[{{bh}}] = new {{node0}}({{MediatorServices}}).Invoke(request, cancellationToken);""");
         }
 
         if (!route.IsVoid)
             b.AppendLine("""        return results;""");
         b.AppendLine("""    }""");
+        if (!route.IsVoid)
+        {
+            b.AppendLine($$"""
+                    /// <summary>Writes all results in handler order after every handler succeeds. Returns the number written.</summary>
+                    /// <exception cref="global::System.ArgumentException">The destination is too short; no handler is invoked.</exception>
+                    public {{SyncMultiSpanSignature(route)}}
+                    {
+                """);
+            if (route.Request.IsReferenceType)
+                b.AppendLine("""        global::System.ArgumentNullException.ThrowIfNull(request);""");
+            b.AppendLine($$"""
+                        if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);
+                        if (destination.Length < {{route.Branches.Count}}) throw new global::System.ArgumentException("The destination must hold at least {{route.Branches.Count}} results.", nameof(destination));
+                """);
+            for (var bh = 0; bh < route.Branches.Count; bh++)
+                b.AppendLine($$"""        var result{{bh}} = new SyncMultiRoute{{index}}Branch{{bh}}Node0{{tp}}({{MediatorServices}}).Invoke(request, cancellationToken);""");
+            for (var bh = 0; bh < route.Branches.Count; bh++)
+                b.AppendLine($$"""        destination[{{bh}}] = result{{bh}};""");
+            b.AppendLine($$"""
+                        return {{route.Branches.Count}};
+                    }
+                """);
+        }
         for (var bh = 0; bh < route.Branches.Count; bh++)
         {
             var branch = route.Branches[bh];
@@ -104,6 +127,16 @@ internal sealed partial class SourceEmitter
         var scoped = NeedsScoped(route) ? "scoped " : "";
         return $$"""
             {{task}} SendAllSync{{tp}}({{scoped}}{{req}} request, global::System.Threading.CancellationToken cancellationToken = default){{string.Concat(route.MethodConstraints)}}
+            """;
+    }
+
+    private static string SyncMultiSpanSignature(EmissionMultiRoute route)
+    {
+        var req = route.IsOpen ? route.RequestDisplay : Name(route.Request);
+        var resp = route.IsOpen ? route.ResponseDisplay : Name(route.Response);
+        var scoped = NeedsScoped(route) ? "scoped " : "";
+        return $$"""
+            int SendAllSync{{TypeParameters(route)}}({{scoped}}{{req}} request, scoped global::System.Span<{{resp}}> destination, global::System.Threading.CancellationToken cancellationToken){{string.Concat(route.MethodConstraints)}}
             """;
     }
 }

@@ -168,6 +168,8 @@ configuration.AddOpenStreamBehavior(typeof(StreamLoggingBehavior<,>), order: 2);
 
 列挙は遅延実行です。ハンドラーは `StreamAsync` 呼び出し時ではなく、最初の `MoveNextAsync` で開始します。API トークンと `WithCancellation` のどちらでも取り消しできます。両方が取り消し可能かつ異なるトークンである場合のみ連結します。
 
+初回の初期化に失敗した列挙器は再開せず、それ以降の `MoveNextAsync()` は `false` を返します。失敗した場合も `await using` などで破棄してください。再試行するときは `StreamAsync` から新しい列挙を作ります。
+
 ```csharp
 await foreach (var name in zendiator.StreamAsync(new GetHouseholdNames(3), cancellationToken))
 {
@@ -176,6 +178,30 @@ await foreach (var name in zendiator.StreamAsync(new GetHouseholdNames(3), cance
 ```
 
 `ref struct` の要求は同期契約（`ISyncRequest` ＋ `SendSync`）を使います。非同期経路とストリーム要素は診断します（ZEN0012）。再列挙は保証しないため、新しい列挙には `StreamAsync` を呼び直します。値型で閉じたオープンジェネリックは Native AOT では動作しません（[既知の制限](docs/release/known-limitations.md)）。
+
+## 同期の複数結果
+
+`ISyncMultiRequest<T>` は `SendAllSync(request, cancellationToken)` で複数のハンドラーの結果を順番に返します。
+戻り値は `IReadOnlyList<T>` です。具体的なコレクション型へのキャストには依存しないでください。
+
+結果を保持するバッファがある場合は、`Span<T>` を受け取るオーバーロードを使えます。
+次は `GetValues` に `int` を返すハンドラーが 2 つ登録されている場合の例です。
+
+```csharp
+Span<int> results = stackalloc int[2];
+int written = zendiator.SendAllSync(new GetValues(), results, cancellationToken);
+// results[..written] に、ハンドラー順の結果が入ります。
+```
+
+このオーバーロードは 3 引数とも必須です。要求の null、事前キャンセル、バッファ容量の順に確認し、
+容量不足の場合はハンドラーや依存サービスを取得する前に `ArgumentException` を送出します。
+全ハンドラーが成功してから結果を書き込み、余った領域には触れません。
+途中で失敗した場合も dispatcher はバッファに書き込みませんが、ハンドラー自身の副作用は取り消しません。
+入力の `ReadOnlySpan<T>` と出力領域が重なっていても、結果の書き込みは全ハンドラーの実行後です。
+
+参照型の結果には、呼び出し元で保持する配列の Span を渡してください。
+既存バッファを使うことで結果コンテナーの確保を省けますが、初回の DI 解決やハンドラー自身の確保は別です。
+非同期の `SendAllAsync` に Span を渡す API はありません。
 
 ## ライフタイム
 

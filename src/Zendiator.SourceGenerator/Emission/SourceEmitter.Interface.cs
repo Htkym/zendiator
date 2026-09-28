@@ -62,6 +62,11 @@ internal sealed partial class SourceEmitter
                     /// <summary>Dispatches the request to every handler in order, synchronously.</summary>
                     {{SyncMultiSignature(sync)}};
                 """);
+            if (!sync.IsVoid)
+                b.AppendLine($$"""
+                        /// <summary>Writes all results after every handler succeeds. Requires capacity for all handlers; returns the number written.</summary>
+                        {{SyncMultiSpanSignature(sync)}};
+                    """);
         }
 
         foreach (var stream in _model.Routes.Streams)

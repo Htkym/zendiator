@@ -172,6 +172,9 @@ configuration.AddOpenStreamBehavior(typeof(StreamLoggingBehavior<,>), order: 2);
 Consume lazily. The handler starts on first `MoveNextAsync`, not on `StreamAsync`.
 Either the API token or `WithCancellation` can cancel; different tokens are linked only when both are cancelable and different.
 
+If startup fails, that enumerator does not restart: subsequent `MoveNextAsync()` calls return `false`.
+Dispose it even after failure, for example with `await using`. Call `StreamAsync` again to retry with a fresh enumeration.
+
 ```csharp
 await foreach (var name in zendiator.StreamAsync(new GetHouseholdNames(3), cancellationToken))
 {
@@ -183,6 +186,31 @@ await foreach (var name in zendiator.StreamAsync(new GetHouseholdNames(3), cance
 and stream items diagnose them (ZEN0012). Re-enumeration is not guaranteed; call `StreamAsync` again for a fresh stream.
 Open-generic handlers closed over a value type need runtime generic construction,
 which NativeAOT cannot provide (see [known limitations](docs/release/known-limitations.md)).
+
+## Synchronous multiple results
+
+For `ISyncMultiRequest<T>`, `SendAllSync(request, cancellationToken)` returns handler results
+in order as `IReadOnlyList<T>`. Do not depend on a concrete collection type.
+
+To reuse caller-owned storage, use the Span overload. This example assumes that
+`GetValues` has two handlers returning `int`:
+
+```csharp
+Span<int> results = stackalloc int[2];
+int written = zendiator.SendAllSync(new GetValues(), results, cancellationToken);
+// results[..written] contains the results in handler order.
+```
+
+All three arguments are required. Validation checks a null request, pre-cancellation,
+then capacity. Insufficient capacity throws `ArgumentException` before resolving handlers
+or dependencies. The dispatcher writes results only after all handlers succeed and leaves
+unused capacity untouched. On failure, it does not write to the destination; handler side
+effects are not rolled back. Input `ReadOnlySpan<T>` and output storage may overlap because
+output is written after all handlers execute.
+
+For reference-type results, pass a Span over an array owned by the caller. Reusing storage
+avoids the result-container allocation; first-time DI resolution and handler allocations
+remain separate. `SendAllAsync` does not accept a Span destination.
 
 ## Lifetimes
 

@@ -12,14 +12,23 @@ public class ZendiatorServiceResolver
     private const int PageSize = 1 << PageBits;
     private static int _nextSlot;
     private readonly ZendiatorInitializationLock _initializationLock;
-    private object?[]?[] _pages = [];
+    // Page zero is stored directly until a later page needs a jagged directory.
+    private object?[] _pages = [];
     private int _firstSlot = -1;
+    private readonly int _initialPageCapacity;
     private object? _firstValue;
 
     /// <summary>Creates a dependency cache for a mediator bound to the supplied scope.</summary>
-    public ZendiatorServiceResolver(IServiceProvider provider)
+    public ZendiatorServiceResolver(IServiceProvider provider) : this(provider, PageSize) { }
+
+    /// <summary>Creates a dependency cache with a bounded initial page for a generated composition.</summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public ZendiatorServiceResolver(IServiceProvider provider, int initialPageCapacity)
     {
         ArgumentNullException.ThrowIfNull(provider);
+        if (initialPageCapacity < 1 || initialPageCapacity > PageSize)
+            throw new ArgumentOutOfRangeException(nameof(initialPageCapacity));
+        _initialPageCapacity = initialPageCapacity;
         _initializationLock = new(provider);
     }
 
@@ -42,12 +51,21 @@ public class ZendiatorServiceResolver
     {
         if (Volatile.Read(ref _firstSlot) == slot)
             return (T)_firstValue!;
-        var pages = Volatile.Read(ref _pages);
-        var pageIndex = slot >> PageBits;
-        if ((uint)pageIndex < (uint)pages.Length && Volatile.Read(ref pages[pageIndex]) is { } page
-            && Volatile.Read(ref page[slot & (PageSize - 1)]) is { } value)
+        if (GetCachedValue(slot) is { } value)
             return (T)value;
         return ResolveSlow<T>(slot);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private object? GetCachedValue(int slot)
+    {
+        var storage = Volatile.Read(ref _pages);
+        if (storage.GetType() == typeof(object[]))
+            return (uint)slot < (uint)storage.Length ? Volatile.Read(ref storage[slot]) : null;
+        var pages = (object?[]?[])storage;
+        var pageIndex = slot >> PageBits;
+        return (uint)pageIndex < (uint)pages.Length && Volatile.Read(ref pages[pageIndex]) is { } page
+            ? Volatile.Read(ref page[slot & (PageSize - 1)]) : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -61,7 +79,7 @@ public class ZendiatorServiceResolver
             if (_firstSlot == slot) return (T)_firstValue!;
             var pageIndex = slot >> PageBits;
             var offset = slot & (PageSize - 1);
-            if (pageIndex < _pages.Length && _pages[pageIndex]?[offset] is { } existing)
+            if (GetCachedValue(slot) is { } existing)
                 return (T)existing;
 
             var service = initialization.Provider.GetRequiredService<T>();
@@ -72,7 +90,41 @@ public class ZendiatorServiceResolver
                 Volatile.Write(ref _firstSlot, slot);
                 return service;
             }
-            var pages = _pages;
+            var storage = _pages;
+            object?[]?[] pages;
+            if (storage.GetType() == typeof(object[]))
+            {
+                if (pageIndex == 0)
+                {
+                    if (offset >= storage.Length)
+                    {
+                        var expanded = new object?[storage.Length == 0
+                            ? Math.Max(_initialPageCapacity, offset + 1) : PageSize];
+                        if (storage.Length != 0) Array.Copy(storage, expanded, storage.Length);
+                        Volatile.Write(ref _pages, expanded);
+                        storage = expanded;
+                    }
+                    Volatile.Write(ref storage[offset], service);
+                    return service;
+                }
+                pages = new object?[]?[Math.Max(pageIndex + 1, storage.Length == 0 ? 0 : 2)];
+                if (storage.Length != 0)
+                {
+                    // Promoted pages retain the full-page invariant used by readers.
+                    if (storage.Length < PageSize)
+                    {
+                        var full = new object?[PageSize];
+                        Array.Copy(storage, full, storage.Length);
+                        storage = full;
+                    }
+                    pages[0] = storage;
+                }
+                Volatile.Write(ref _pages, pages);
+            }
+            else
+            {
+                pages = (object?[]?[])storage;
+            }
             if (pageIndex >= pages.Length)
             {
                 var expanded = new object?[]?[Math.Max(pageIndex + 1, pages.Length * 2)];

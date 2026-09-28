@@ -52,7 +52,7 @@ internal sealed partial class SourceEmitter
         b.AppendLine("""        if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
         if (!route.IsVoid)
             b.AppendLine($$"""
-                        var results = new global::System.Collections.Generic.List<{{respDisplay}}>({{route.Branches.Count}});
+                        var results = CreateResultArray<{{respDisplay}}>({{route.Branches.Count}});
                 """);
         for (var bh = 0; bh < route.Branches.Count; bh++)
         {
@@ -63,7 +63,8 @@ internal sealed partial class SourceEmitter
                     """);
             else
                 b.AppendLine($$"""
-                            results.Add(await new {{node0}}({{MediatorServices}}).InvokeAsync(request, cancellationToken).ConfigureAwait(false));
+                            var result{{bh}} = await new {{node0}}({{MediatorServices}}).InvokeAsync(request, cancellationToken).ConfigureAwait(false);
+                            results[{{bh}}] = result{{bh}};
                     """);
         }
 

@@ -118,7 +118,75 @@ public sealed class GeneratorTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Closed_composition_bounds_capacity_and_deduplicates_shared_handler(bool explicitBase)
+    {
+        var head = explicitBase ? Head.Replace("partial class Zendiator;", "partial class Zendiator : object;") : Head;
+        var source = head + Request + Handler + """
+            public readonly record struct Pong : ISyncRequest<int>;
+            public sealed record Note : INotification;
+            public sealed class Other : ISyncRequestHandler<Pong,int>, INotificationHandler<Note> {
+                public int Handle(Pong r, CancellationToken c) => 2;
+                public ValueTask HandleAsync(Note n, CancellationToken c) => default;
+            }
+            """;
+        var text = Run(Compilation(source), true, emit: true).GeneratedTrees.Single().ToString();
+        Assert.Contains(explicitBase ? "(services, 2);" : "nameof(services)), 2)", text);
+    }
+
+    [Fact]
+    public void Open_composition_keeps_default_capacity()
+    {
+        var source = Head + Request + Handler + """
+            public readonly record struct Generic<T> : IRequest<int>;
+            public sealed class Other<T> : IRequestHandler<Generic<T>,int> {
+                public ValueTask<int> HandleAsync(Generic<T> r, CancellationToken c) => new(2);
+            }
+            """;
+        var text = Run(Compilation(source), true, emit: true).GeneratedTrees.Single().ToString();
+        Assert.Contains(": base(services ?? throw new global::System.ArgumentNullException(nameof(services)))", text);
+    }
+
     private const string Request = "public readonly record struct Ping : IRequest<int>; ";
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Sync_only_handler_uses_typed_capture_unless_explicit_base(bool explicitBase)
+    {
+        var head = explicitBase ? Head.Replace("partial class Zendiator;", "partial class Zendiator : object;") : Head;
+        var source = head + """
+            public readonly ref struct Ping : ISyncRequest<int> { public readonly ReadOnlySpan<int> Values; }
+            public readonly record struct Pong : ISyncRequest;
+            public sealed class Handler : ISyncRequestHandler<Ping,int>, ISyncRequestHandler<Pong> {
+                int ISyncRequestHandler<Ping,int>.Handle(scoped Ping r, CancellationToken c) => r.Values.Length;
+                public void Handle(Pong r, CancellationToken c) { }
+            }
+            """;
+        var text = Run(Compilation(source), true, emit: true).GeneratedTrees.Single().ToString();
+        Assert.Equal(!explicitBase, text.Contains("ZendiatorSingleServiceResolver<global::App.Handler>"));
+    }
+
+    [Theory]
+    [InlineData("int[]")]
+    [InlineData("int[,]?")]
+    [InlineData("string?[]")]
+    [InlineData("(int, string)")]
+    public void Multi_results_support_composite_response_types(string response)
+    {
+        var source = Head + $$"""
+            public readonly record struct Ping : IMultiRequest<{{response}}>;
+            public readonly record struct Pong : ISyncMultiRequest<{{response}}>;
+            public sealed class Handler : IRequestHandler<Ping,{{response}}>, ISyncRequestHandler<Pong,{{response}}> {
+                public ValueTask<{{response}}> HandleAsync(Ping r, CancellationToken c) => new(default({{response}})!);
+                public {{response}} Handle(Pong r, CancellationToken c) => default!;
+            }
+            """;
+        Run(Compilation(source), true, emit: true);
+    }
+
     private const string Handler = "public sealed class Handler : IRequestHandler<Ping,int> { public ValueTask<int> HandleAsync(Ping request, CancellationToken ct) => new(1); } ";
     private static readonly MetadataReference[] References = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
         .Select(p => MetadataReference.CreateFromFile(p)).ToArray();

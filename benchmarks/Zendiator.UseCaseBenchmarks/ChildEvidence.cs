@@ -27,7 +27,7 @@ internal static class ChildEvidence
             .ToArray();
         var runtimeHash = Convert.ToHexString(SHA256.HashData(
             File.ReadAllBytes(typeof(ZendiatorServiceResolver).Assembly.Location)));
-        var file = Path.Combine(directory, $"child-{Environment.ProcessId}-{scenario}-{lifetime}.json");
+        var file = Path.Combine(directory, $"child-{Environment.ProcessId}-{scenario}-{lifetime}-{Guid.NewGuid():N}.json");
         File.WriteAllText(file, JsonSerializer.Serialize(new
         {
             pid = Environment.ProcessId,
