@@ -178,10 +178,17 @@ public class ${lib}Send$b
     private readonly Ping$b request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => $(if($lib -eq 'Direct'){'["Default"]'}elseif($lib -eq 'Mediator'){'Registration.MediatorLifetimes'}elseif($lib -eq 'DispatchR'){'["Default","Scoped"]'}else{'["Default","Scoped","Singleton"]'});
     [GlobalSetup] public void Setup() { provider=Registration.Create("$lib",Lifetime); scope=provider.CreateScope(); entry=$resolve; ChildEvidence.Record("${lib}Send$b", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public $return Invoke(Ping$b r,CancellationToken t=default) => $send;
     [Benchmark] public $return Typed() => Invoke(request);
     [Benchmark] public $return ResolveSend() { entry=$resolve; return Invoke(request); }
@@ -210,13 +217,27 @@ public class ${lib}Send$b
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException(`$"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException(`$"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public $return FirstSend()
     {
@@ -243,8 +264,16 @@ foreach($lib in 'Direct','Zendiator','MediatRHistorical','Mediator','DispatchR',
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new ${lib}Stream$b(); stream.Setup();

@@ -534,10 +534,17 @@ public class DirectSend0
     private readonly Ping0 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("Direct",Lifetime); scope=provider.CreateScope(); entry=new ZPing0(); ChildEvidence.Record("DirectSend0", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping0 r,CancellationToken t=default) => new ValueTask<int>(Work.Handle(r.Value,r.Probe,t));
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=new ZPing0(); return Invoke(request); }
@@ -566,13 +573,27 @@ public class DirectSend0
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -616,10 +637,17 @@ public class ZendiatorSend0
     private readonly Ping0 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); ChildEvidence.Record("ZendiatorSend0", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping0 r,CancellationToken t=default) => entry.SendAsync(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); return Invoke(request); }
@@ -648,13 +676,27 @@ public class ZendiatorSend0
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -698,10 +740,17 @@ public class ZendiatorSend1
     private readonly Ping1 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); ChildEvidence.Record("ZendiatorSend1", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping1 r,CancellationToken t=default) => entry.SendAsync(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); return Invoke(request); }
@@ -730,13 +779,27 @@ public class ZendiatorSend1
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -780,10 +843,17 @@ public class ZendiatorSend3
     private readonly Ping3 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); ChildEvidence.Record("ZendiatorSend3", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping3 r,CancellationToken t=default) => entry.SendAsync(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); return Invoke(request); }
@@ -812,13 +882,27 @@ public class ZendiatorSend3
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -862,10 +946,17 @@ public class ZendiatorSend5
     private readonly Ping5 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); ChildEvidence.Record("ZendiatorSend5", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping5 r,CancellationToken t=default) => entry.SendAsync(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); return Invoke(request); }
@@ -894,13 +985,27 @@ public class ZendiatorSend5
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -944,10 +1049,17 @@ public class MediatRHistoricalSend0
     private readonly Ping0 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("MediatRHistorical",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<M.IMediator>(); ChildEvidence.Record("MediatRHistoricalSend0", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public Task<int> Invoke(Ping0 r,CancellationToken t=default) => entry.Send(r,t);
     [Benchmark] public Task<int> Typed() => Invoke(request);
     [Benchmark] public Task<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<M.IMediator>(); return Invoke(request); }
@@ -976,13 +1088,27 @@ public class MediatRHistoricalSend0
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public Task<int> FirstSend()
     {
@@ -1026,10 +1152,17 @@ public class MediatRHistoricalSend1
     private readonly Ping1 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("MediatRHistorical",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<M.IMediator>(); ChildEvidence.Record("MediatRHistoricalSend1", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public Task<int> Invoke(Ping1 r,CancellationToken t=default) => entry.Send(r,t);
     [Benchmark] public Task<int> Typed() => Invoke(request);
     [Benchmark] public Task<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<M.IMediator>(); return Invoke(request); }
@@ -1058,13 +1191,27 @@ public class MediatRHistoricalSend1
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public Task<int> FirstSend()
     {
@@ -1108,10 +1255,17 @@ public class MediatRHistoricalSend3
     private readonly Ping3 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("MediatRHistorical",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<M.IMediator>(); ChildEvidence.Record("MediatRHistoricalSend3", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public Task<int> Invoke(Ping3 r,CancellationToken t=default) => entry.Send(r,t);
     [Benchmark] public Task<int> Typed() => Invoke(request);
     [Benchmark] public Task<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<M.IMediator>(); return Invoke(request); }
@@ -1140,13 +1294,27 @@ public class MediatRHistoricalSend3
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public Task<int> FirstSend()
     {
@@ -1190,10 +1358,17 @@ public class MediatRHistoricalSend5
     private readonly Ping5 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("MediatRHistorical",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<M.IMediator>(); ChildEvidence.Record("MediatRHistoricalSend5", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public Task<int> Invoke(Ping5 r,CancellationToken t=default) => entry.Send(r,t);
     [Benchmark] public Task<int> Typed() => Invoke(request);
     [Benchmark] public Task<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<M.IMediator>(); return Invoke(request); }
@@ -1222,13 +1397,27 @@ public class MediatRHistoricalSend5
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public Task<int> FirstSend()
     {
@@ -1272,10 +1461,17 @@ public class MediatorSend0
     private readonly Ping0 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => Registration.MediatorLifetimes;
     [GlobalSetup] public void Setup() { provider=Registration.Create("Mediator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<G.Mediator>(); ChildEvidence.Record("MediatorSend0", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping0 r,CancellationToken t=default) => entry.Send(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<G.Mediator>(); return Invoke(request); }
@@ -1304,13 +1500,27 @@ public class MediatorSend0
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -1354,10 +1564,17 @@ public class MediatorSend1
     private readonly Ping1 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => Registration.MediatorLifetimes;
     [GlobalSetup] public void Setup() { provider=Registration.Create("Mediator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<G.Mediator>(); ChildEvidence.Record("MediatorSend1", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping1 r,CancellationToken t=default) => entry.Send(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<G.Mediator>(); return Invoke(request); }
@@ -1386,13 +1603,27 @@ public class MediatorSend1
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -1436,10 +1667,17 @@ public class MediatorSend3
     private readonly Ping3 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => Registration.MediatorLifetimes;
     [GlobalSetup] public void Setup() { provider=Registration.Create("Mediator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<G.Mediator>(); ChildEvidence.Record("MediatorSend3", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping3 r,CancellationToken t=default) => entry.Send(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<G.Mediator>(); return Invoke(request); }
@@ -1468,13 +1706,27 @@ public class MediatorSend3
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -1518,10 +1770,17 @@ public class MediatorSend5
     private readonly Ping5 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => Registration.MediatorLifetimes;
     [GlobalSetup] public void Setup() { provider=Registration.Create("Mediator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<G.Mediator>(); ChildEvidence.Record("MediatorSend5", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping5 r,CancellationToken t=default) => entry.Send(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<G.Mediator>(); return Invoke(request); }
@@ -1550,13 +1809,27 @@ public class MediatorSend5
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -1600,10 +1873,17 @@ public class DispatchRSend0
     private readonly Ping0 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("DispatchR",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<DispatchR.IMediator>(); ChildEvidence.Record("DispatchRSend0", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping0 r,CancellationToken t=default) => entry.Send(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<DispatchR.IMediator>(); return Invoke(request); }
@@ -1632,13 +1912,27 @@ public class DispatchRSend0
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -1682,10 +1976,17 @@ public class DispatchRSend1
     private readonly Ping1 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("DispatchR",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<DispatchR.IMediator>(); ChildEvidence.Record("DispatchRSend1", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping1 r,CancellationToken t=default) => entry.Send(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<DispatchR.IMediator>(); return Invoke(request); }
@@ -1714,13 +2015,27 @@ public class DispatchRSend1
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -1764,10 +2079,17 @@ public class DispatchRSend3
     private readonly Ping3 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("DispatchR",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<DispatchR.IMediator>(); ChildEvidence.Record("DispatchRSend3", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping3 r,CancellationToken t=default) => entry.Send(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<DispatchR.IMediator>(); return Invoke(request); }
@@ -1796,13 +2118,27 @@ public class DispatchRSend3
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -1846,10 +2182,17 @@ public class DispatchRSend5
     private readonly Ping5 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("DispatchR",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<DispatchR.IMediator>(); ChildEvidence.Record("DispatchRSend5", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping5 r,CancellationToken t=default) => entry.Send(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<DispatchR.IMediator>(); return Invoke(request); }
@@ -1878,13 +2221,27 @@ public class DispatchRSend5
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -1928,10 +2285,17 @@ public class ImmediateSend0
     private readonly Ping0 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("Immediate",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<IPing0.Handler>(); ChildEvidence.Record("ImmediateSend0", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping0 r,CancellationToken t=default) => entry.HandleAsync(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<IPing0.Handler>(); return Invoke(request); }
@@ -1960,13 +2324,27 @@ public class ImmediateSend0
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -2010,10 +2388,17 @@ public class ImmediateSend1
     private readonly Ping1 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("Immediate",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<IPing1.Handler>(); ChildEvidence.Record("ImmediateSend1", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping1 r,CancellationToken t=default) => entry.HandleAsync(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<IPing1.Handler>(); return Invoke(request); }
@@ -2042,13 +2427,27 @@ public class ImmediateSend1
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -2092,10 +2491,17 @@ public class ImmediateSend3
     private readonly Ping3 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("Immediate",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<IPing3.Handler>(); ChildEvidence.Record("ImmediateSend3", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping3 r,CancellationToken t=default) => entry.HandleAsync(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<IPing3.Handler>(); return Invoke(request); }
@@ -2124,13 +2530,27 @@ public class ImmediateSend3
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -2174,10 +2594,17 @@ public class ImmediateSend5
     private readonly Ping5 request = new();
     private IServiceScope[] fresh = [];
     private int used;
+    private bool firstSendStarted;
+    private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
     [GlobalSetup] public void Setup() { provider=Registration.Create("Immediate",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<IPing5.Handler>(); ChildEvidence.Record("ImmediateSend5", Lifetime); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    [GlobalCleanup] public void Cleanup()
+    {
+        scope.Dispose(); provider.Dispose();
+        if(firstSendStarted && completedFirstSendIterations==0)
+            throw new InvalidOperationException("FirstSend had no complete iteration.");
+    }
     public ValueTask<int> Invoke(Ping5 r,CancellationToken t=default) => entry.HandleAsync(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
     [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<IPing5.Handler>(); return Invoke(request); }
@@ -2206,13 +2633,27 @@ public class ImmediateSend5
         if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
         for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
         used=0;
+        firstSendStarted=true;
     }
     [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
     {
         var count=used;
         foreach(var s in fresh) s.Dispose();
         Array.Clear(fresh);
-        if(count!=fresh.Length) throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes.");
+        if(count==fresh.Length) { completedFirstSendIterations++; return; }
+        // BDN's EngineFactory.Jit probes one or sixteen operations before full iterations.
+        // Check the caller so a short warmup or measurement iteration cannot pass.
+        if((count==1 || count==16) && completedFirstSendIterations==0 && IsJitProbe()) return;
+        throw new InvalidOperationException($"FirstSend used {count} of {fresh.Length} fresh scopes outside BDN JIT.");
+    }
+    private static bool IsJitProbe()
+    {
+        foreach(var frame in new System.Diagnostics.StackTrace().GetFrames() ?? [])
+        {
+            var method=frame.GetMethod();
+            if(method?.DeclaringType?.FullName=="BenchmarkDotNet.Engines.EngineFactory" && method.Name=="Jit") return true;
+        }
+        return false;
     }
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
@@ -2979,8 +3420,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new DirectStream0(); stream.Setup();
@@ -2994,8 +3443,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new ZendiatorStream0(); stream.Setup();
@@ -3009,8 +3466,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new ZendiatorStream1(); stream.Setup();
@@ -3024,8 +3489,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new ZendiatorStream3(); stream.Setup();
@@ -3039,8 +3512,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new ZendiatorStream5(); stream.Setup();
@@ -3054,8 +3535,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new MediatRHistoricalStream0(); stream.Setup();
@@ -3069,8 +3558,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new MediatRHistoricalStream1(); stream.Setup();
@@ -3084,8 +3581,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new MediatRHistoricalStream3(); stream.Setup();
@@ -3099,8 +3604,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new MediatRHistoricalStream5(); stream.Setup();
@@ -3114,8 +3627,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new MediatorStream0(); stream.Setup();
@@ -3129,8 +3650,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new MediatorStream1(); stream.Setup();
@@ -3144,8 +3673,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new MediatorStream3(); stream.Setup();
@@ -3159,8 +3696,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new MediatorStream5(); stream.Setup();
@@ -3174,8 +3719,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new DispatchRStream0(); stream.Setup();
@@ -3189,8 +3742,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new DispatchRStream1(); stream.Setup();
@@ -3204,8 +3765,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new DispatchRStream3(); stream.Setup();
@@ -3219,8 +3788,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new DispatchRStream5(); stream.Setup();
@@ -3234,8 +3811,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new ImmediateStream0(); stream.Setup();
@@ -3249,8 +3834,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new ImmediateStream1(); stream.Setup();
@@ -3264,8 +3857,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new ImmediateStream3(); stream.Setup();
@@ -3279,8 +3880,16 @@ public static class GeneratedGate { public static async Task Run() {
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
         if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
         send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
+        send.CreateFresh();
         for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
         send.DisposeFresh();
+        send.CreateFresh();
+        if(await send.FirstSend()!=42) throw new InvalidOperationException("First send partial result");
+        try { send.DisposeFresh(); throw new InvalidOperationException("Partial FirstSend was accepted"); }
+        catch(InvalidOperationException e) when(e.Message.StartsWith("FirstSend used 1 of ", StringComparison.Ordinal)) { }
     }
     finally { send.Cleanup(); }
     var stream=new ImmediateStream5(); stream.Setup();
