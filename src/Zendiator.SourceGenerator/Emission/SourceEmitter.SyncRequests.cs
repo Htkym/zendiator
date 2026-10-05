@@ -49,16 +49,20 @@ internal sealed partial class SourceEmitter
             new SyncRoute{{index}}Node0{{tp}}({{MediatorServices}}).Invoke(request, cancellationToken);
                 }
             """);
+        var set = SetOf("SyncRoute" + index);
         for (var node = 0; node <= route.Behaviors.Count; node++)
         {
+            var parameter = set != null ? NodeParameter(set, node) : resolver + " services";
             b.AppendLine($$"""
-                    private readonly struct SyncRoute{{index}}Node{{node}}{{TypeParameters(route)}}({{resolver}} services) : {{cont}}{{TypeConstraints(route)}}
+                    private readonly struct SyncRoute{{index}}Node{{node}}{{TypeParameters(route)}}({{parameter}}) : {{cont}}{{TypeConstraints(route)}}
                     {
                         [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
                         public {{task}} Invoke({{scoped}}{{req}} request, global::System.Threading.CancellationToken cancellationToken)
                         {
                 """);
             Guard(b, route, "            ");
+            EmitSetLookup(b, set, node, "            ");
+            var services = NodeServices(set, node);
             if (node == route.Behaviors.Count)
             {
                 string handlerName, contract;
@@ -75,10 +79,8 @@ internal sealed partial class SourceEmitter
 
                 var direct = route.Handler.DirectCall;
                 var recv = _singleServiceTypeName != null
-                    ? "services.GetRequiredService()"
-                    : "services.GetRequiredService<" + handlerName + ">()";
-                if (!direct)
-                    recv = "((" + contract + ")" + recv + ")";
+                    ? (direct ? "services.GetRequiredService()" : "((" + contract + ")services.GetRequiredService())")
+                    : Receiver(set, route.Handler, handlerName, contract, direct, services);
                 b.Append("""            """);
                 if (!route.IsVoid)
                     b.Append("""return """);
@@ -99,12 +101,12 @@ internal sealed partial class SourceEmitter
                 }
 
                 var direct = route.Behaviors[node].DirectCall;
-                var recv = ServiceReceiver(behaviorName, contract, direct);
+                var recv = Receiver(set, route.Behaviors[node], behaviorName, contract, direct, services);
                 b.Append("""            """);
                 if (!route.IsVoid)
                     b.Append("""return """);
                 b.AppendLine($$"""
-                    {{recv}}.Handle(request, new SyncRoute{{index}}Node{{node + 1}}{{TypeParameters(route)}}(services), cancellationToken);
+                    {{recv}}.Handle(request, new SyncRoute{{index}}Node{{node + 1}}{{TypeParameters(route)}}({{NodeArgument(set)}}), cancellationToken);
                     """);
             }
 

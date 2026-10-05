@@ -3,7 +3,7 @@ using Xunit;
 
 namespace Zendiator.Tests;
 
-// Covers the enumerator lifecycle of the generated StreamRoute{N}Enumerator,
+// Covers the enumerator lifecycle of the generated StreamRoute{N}Enumerable,
 // in particular the P0 split of first-call startup (StartAndMoveNextAsync)
 // and steady-state forwarding MoveNextAsync.
 public sealed class StreamLifecycleTests
@@ -69,6 +69,26 @@ public sealed class StreamLifecycleTests
         await using var third = stream.GetAsyncEnumerator();
         Assert.True(await third.MoveNextAsync());
         Assert.Equal(0, third.Current);
+    }
+
+    [Fact]
+    public async Task Enumerator_requested_on_another_thread_stays_independent()
+    {
+        await using var provider = Services().BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var stream = scope.ServiceProvider.GetRequiredService<IZendiator>().StreamAsync(new LifecycleNumbers(2));
+        var other = await Task.Factory.StartNew(() => stream.GetAsyncEnumerator(),
+            CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        await using var own = stream.GetAsyncEnumerator();
+        Assert.NotSame(other, own);
+        Assert.True(await other.MoveNextAsync());
+        Assert.True(await other.MoveNextAsync());
+        Assert.True(await own.MoveNextAsync());
+        Assert.Equal(1, other.Current);
+        Assert.Equal(0, own.Current);
+        await other.DisposeAsync();
+        Assert.True(await own.MoveNextAsync());
+        Assert.False(await own.MoveNextAsync());
     }
 
     private static ServiceCollection Services()

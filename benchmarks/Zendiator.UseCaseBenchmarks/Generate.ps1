@@ -97,6 +97,7 @@ public static class Registration
 foreach($i in 1..5) {
     $lines.Add("c.AddOpenBehavior(typeof(ZBehavior$i<,>), order: $i); c.AddOpenStreamBehavior(typeof(ZSBehavior$i<,>), order: $(10+$i));")
     $lines.Add("c.AddOpenBehavior(typeof(ZVBehavior$i<>), order: $(20+$i));")
+    $lines.Add("c.AddOpenStreamBehavior(typeof(ZRBehavior$i<,>), order: $(30+$i));")
 }
 $lines.Add(@'
                 });
@@ -137,6 +138,7 @@ foreach($b in 1,3,5) {
 }
 Add-ExtraRegistrations
 $order = foreach($b in 1,3,5) { foreach($i in 1..$b) { "typeof(DBehavior${b}_$i)"; "typeof(DSBehavior${b}_$i)"; "typeof(DVBehavior${b}_$i)" } }
+$order += foreach($b in $RelayDepths) { foreach($i in 1..$b) { "typeof(DRBehavior${b}_$i)" } }
 $lines.Add('if(library == "DispatchR") s.AddDispatchR(c => { c.Assemblies.Add(typeof(Ping0).Assembly); c.ExcludeHandlers=[typeof(DOpen<>)]; c.PipelineOrder=[' + ($order -join ',') + ']; });')
 $lines.Add(@'
 if (library == "Mediator" && lifetime != "Default" && lifetime != MediatorLifetime)
@@ -165,6 +167,7 @@ foreach($lib in 'Direct','Zendiator','MediatRHistorical','Mediator','DispatchR',
             Immediate='entry.HandleAsync(r,t)'
         }[$lib]
         $return=if($lib -eq 'MediatRHistorical'){'Task<int>'}else{'ValueTask<int>'}
+        $localResolve=if($lib -eq 'Direct'){'new ZPing0()'}else{"local.ServiceProvider.GetRequiredService<$entry>()"}
         $lines.Add(@"
 [MemoryDiagnoser]
 public class ${lib}Send$b
@@ -173,6 +176,8 @@ public class ${lib}Send$b
     private IServiceScope scope = null!;
     private $entry entry = null!;
     private readonly Ping$b request = new();
+    private IServiceScope[] fresh = [];
+    private int used;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
     public IEnumerable<string> Lifetimes => $(if($lib -eq 'Direct'){'["Default"]'}elseif($lib -eq 'Mediator'){'Registration.MediatorLifetimes'}elseif($lib -eq 'DispatchR'){'["Default","Scoped"]'}else{'["Default","Scoped","Singleton"]'});
     [GlobalSetup] public void Setup() { provider=Registration.Create("$lib",Lifetime); scope=provider.CreateScope(); entry=$resolve; ChildEvidence.Record("${lib}Send$b", Lifetime); }
@@ -197,33 +202,32 @@ public class ${lib}Send$b
     }
     [Benchmark] public ValueTask<int> ScopeK10() => ScopeMany(10);
     [Benchmark] public ValueTask<int> ScopeK100() => ScopeMany(100);
-}
-[MemoryDiagnoser]
-public class ${lib}Stream$b
-{
-    private ServiceProvider provider = null!;
-    private IServiceScope scope = null!;
-    private $streamEntry entry = null!;
-    private Stream$b request = null!;
-    [Params(0,1,16,1024)] public int Count {get;set;}
-    [Params(false,true)] public bool Asynchronous {get;set;}
-    [GlobalSetup] public void Setup() { provider=Registration.Create("$lib"); scope=provider.CreateScope(); entry=$sresolve; request=new(Count,Asynchronous); ChildEvidence.Record("${lib}Stream$b", "Default"); }
-    [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
-    public IAsyncEnumerable<int> Invoke(Stream$b r,CancellationToken t=default) => $stream;
-    [Benchmark] public IAsyncEnumerable<int> Creation() => Invoke(request);
-    [Benchmark] public async ValueTask<int> Full() { int sum=0; await foreach(var item in Invoke(request).ConfigureAwait(false)) sum+=item; return sum; }
-    [Benchmark] public async ValueTask<bool> First() { await using var e=Invoke(request).GetAsyncEnumerator(); return await e.MoveNextAsync(); }
-    [Benchmark] public async ValueTask<int> EarlyBreak() { await foreach(var item in Invoke(request).ConfigureAwait(false)) return item; return -1; }
-    [Benchmark] public async ValueTask<bool> Cancellation()
+    [Benchmark] public int ScopeOnly() { using var local=provider.CreateScope(); return 1; }
+    [Benchmark] public int ScopeResolve() { using var local=provider.CreateScope(); GC.KeepAlive($localResolve); return 1; }
+    // Each FirstSend invocation takes its own scope, created before the measured iteration starts.
+    [IterationSetup(Target=nameof(FirstSend))] public void CreateFresh()
     {
-        using var cts=new CancellationTokenSource();
-        await using var e=Invoke(request,cts.Token).GetAsyncEnumerator();
-        await e.MoveNextAsync();
-        cts.Cancel();
-        try { await e.MoveNextAsync(); return false; } catch(OperationCanceledException) { return true; }
+        if(fresh.Length!=FreshScopes.Count) fresh=new IServiceScope[FreshScopes.Count];
+        for(int i=0;i<fresh.Length;i++) fresh[i]=provider.CreateScope();
+        used=0;
+    }
+    [IterationCleanup(Target=nameof(FirstSend))] public void DisposeFresh()
+    {
+        var count=used;
+        foreach(var s in fresh) s.Dispose();
+        Array.Clear(fresh);
+        if(count!=fresh.Length) throw new InvalidOperationException(`$"FirstSend used {count} of {fresh.Length} fresh scopes.");
+    }
+    [Benchmark, InvocationCount(FreshScopes.Count)] public $return FirstSend()
+    {
+        var local=fresh[used++];
+        var entry=$localResolve;
+        var r=request; var t=CancellationToken.None;
+        return $send;
     }
 }
 "@)
+        Add-StreamBenchmark $lib "${lib}Stream$b" "Stream$b" $streamEntry $sresolve $stream
     }
 }
 Add-ExtraBenchmarks
@@ -237,6 +241,10 @@ foreach($lib in 'Direct','Zendiator','MediatRHistorical','Mediator','DispatchR',
     try {
         await Correctness.Send("$lib",$b, async (p,t)=>await send.Invoke(new Ping$b(41,p),t));
         if(await send.ResolveSend()!=42 || await send.ScopeK1()!=42 || await send.ScopeK10()!=420 || await send.ScopeK100()!=4200) throw new InvalidOperationException("Scope result");
+        if(send.ScopeOnly()!=1 || send.ScopeResolve()!=1) throw new InvalidOperationException("Scope-only result");
+        send.CreateFresh();
+        for(int i=0;i<FreshScopes.Count;i++) if(await send.FirstSend()!=42) throw new InvalidOperationException("First send result");
+        send.DisposeFresh();
     }
     finally { send.Cleanup(); }
     var stream=new ${lib}Stream$b(); stream.Setup();

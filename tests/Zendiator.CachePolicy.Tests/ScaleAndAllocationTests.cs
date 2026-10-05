@@ -101,7 +101,7 @@ public sealed class ScaleAndAllocationTests
     }
 
     [Fact]
-    public void Mediator_construction_stays_within_80_bytes()
+    public void Mediator_construction_stays_within_40_bytes()
     {
         var services = new ServiceCollection();
         services.AddZendiator();
@@ -112,8 +112,8 @@ public sealed class ScaleAndAllocationTests
         {
             retained = new Zendiator(scope.ServiceProvider);
         });
-        // Includes mediator state and its private lock, but not the supplied provider.
-        Assert.InRange(allocated, 1, 80L * 1024);
+        // Includes mediator state, but not the supplied provider.
+        Assert.InRange(allocated, 1, 40L * 1024);
         Assert.NotNull(retained);
     }
 

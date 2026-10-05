@@ -21,7 +21,7 @@ internal sealed partial class SourceEmitter
             b.AppendLine("""
                     // Forwarding delegates subsequent completion/failure to the inner enumerator.
                     // Stopped prevents forwarding; it does not imply that resources are disposed.
-                    private enum StreamEnumeratorState : byte { NotStarted, Forwarding, Stopped }
+                    private enum StreamEnumeratorState : byte { Unclaimed, NotStarted, Forwarding, Stopped }
                 """);
         for (var index = 0; index < routes.Count; index++)
             EmitStream(b, routes[index], index);
@@ -46,16 +46,18 @@ internal sealed partial class SourceEmitter
                 }
             """);
         EmitStreamEnumerable(b, route, index);
-        EmitStreamEnumerator(b, route, index);
+        var set = SetOf("StreamRoute" + index);
         for (var node = 0; node <= route.Behaviors.Count; node++)
         {
             b.AppendLine($$"""
-                    private readonly struct StreamRoute{{index}}Node{{node}}{{TypeParameters(route)}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> services) : {{cont}}{{TypeConstraints(route)}}
+                    private readonly struct StreamRoute{{index}}Node{{node}}{{TypeParameters(route)}}({{NodeParameter(set, node)}}) : {{cont}}{{TypeConstraints(route)}}
                     {
                         [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
                         public global::System.Collections.Generic.IAsyncEnumerable<{{item}}> InvokeAsync({{req}} request, global::System.Threading.CancellationToken cancellationToken)
                         {
                 """);
+            EmitSetLookup(b, set, node, "            ");
+            var services = NodeServices(set, node);
             if (node == route.Behaviors.Count)
             {
                 string handlerName, contract;
@@ -71,7 +73,7 @@ internal sealed partial class SourceEmitter
                 }
 
                 var direct = route.Handler.DirectCall;
-                var recv = ServiceReceiver(handlerName, contract, direct);
+                var recv = Receiver(set, route.Handler, handlerName, contract, direct, services);
                 b.AppendLine($$"""            return {{recv}}.HandleAsync(request, cancellationToken);""");
             }
             else
@@ -89,9 +91,9 @@ internal sealed partial class SourceEmitter
                 }
 
                 var direct = route.Behaviors[node].DirectCall;
-                var recv = ServiceReceiver(behaviorName, contract, direct);
+                var recv = Receiver(set, route.Behaviors[node], behaviorName, contract, direct, services);
                 b.AppendLine($$"""
-                                return {{recv}}.HandleAsync(request, new StreamRoute{{index}}Node{{node + 1}}{{TypeParameters(route)}}(services), cancellationToken);
+                                return {{recv}}.HandleAsync(request, new StreamRoute{{index}}Node{{node + 1}}{{TypeParameters(route)}}({{NodeArgument(set)}}), cancellationToken);
                     """);
             }
 

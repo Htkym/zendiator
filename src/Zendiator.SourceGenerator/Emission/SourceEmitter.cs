@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
@@ -7,11 +9,13 @@ internal sealed partial class SourceEmitter
 {
     private readonly GenerationModel _model;
     private readonly string? _singleServiceTypeName;
+    private readonly Dictionary<string, DependencySet> _dependencySets;
     private string MediatorServices => _model.Target.InheritServiceResolver ? "this" : "_services";
     internal SourceEmitter(GenerationModel model)
     {
         _model = model;
         _singleServiceTypeName = SingleServiceTypeName(model);
+        _dependencySets = PlanDependencySets(model, _singleServiceTypeName != null);
     }
 
     private static string? SingleServiceTypeName(GenerationModel model)
@@ -33,31 +37,25 @@ internal sealed partial class SourceEmitter
         return handler.Name;
     }
 
-    private static int InitialPageCapacity(GenerationModel model)
+    // An async method records cancellation as canceled and other failures as faulted, as the replaced publish method did.
+    private void EmitFaulted(StringBuilder b)
     {
-        var types = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
-        foreach (var route in model.Routes.Requests.Single.Concat(model.Routes.Synchronous.Single).Concat(model.Routes.Streams))
-        {
-            if (route.IsOpen) return 32;
-            types.Add(route.Handler.Name);
-            foreach (var behavior in route.Behaviors) types.Add(behavior.Name);
-        }
-        foreach (var route in model.Routes.Requests.Multiple.Concat(model.Routes.Synchronous.Multiple))
-        {
-            if (route.IsOpen) return 32;
-            foreach (var branch in route.Branches)
-            {
-                if (branch.HandlerIsOpen) return 32;
-                types.Add(branch.Handler.Name);
-                foreach (var behavior in branch.Behaviors) types.Add(behavior.Name);
-            }
-        }
-        foreach (var route in model.Routes.Notifications)
-        {
-            if (route.IsOpen) return 32;
-            foreach (var subscriber in route.Subscribers) types.Add(subscriber.Handler.Name);
-        }
-        return types.Count == 0 || types.Count >= 32 ? 32 : types.Count;
+        if (!_model.Routes.Notifications.Any(static n => n.Subscribers.Count == 1 && !n.IsOpen)) return;
+        b.AppendLine("""
+            #pragma warning disable CS1998
+                private static async global::System.Threading.Tasks.ValueTask Faulted(global::System.Runtime.ExceptionServices.ExceptionDispatchInfo failure) => failure.Throw();
+            #pragma warning restore CS1998
+            """);
+    }
+
+    private int InitialPageCapacity()
+    {
+        var routes = AllRouteServices(_model);
+        if (routes.Any(static route => route.IsOpen)) return 32;
+        var owned = new HashSet<string>(_dependencySets.Values.SelectMany(static set => set.Types).Select(static type => type.Name), StringComparer.Ordinal);
+        var slots = _dependencySets.Count + routes.SelectMany(static route => route.Types).Select(static type => type.Name)
+            .Where(name => !owned.Contains(name)).Distinct(StringComparer.Ordinal).Count();
+        return slots == 0 || slots >= 32 ? 32 : slots;
     }
 
     private static StringBuilder CreateSourceBuilder() => new StringBuilder().AppendLine("""
@@ -67,7 +65,7 @@ internal sealed partial class SourceEmitter
     internal string Emit()
     {
         var b = CreateSourceBuilder();
-        var capacity = _singleServiceTypeName is null ? InitialPageCapacity(_model) : 32;
+        var capacity = _singleServiceTypeName is null ? InitialPageCapacity() : 32;
         var capacityArgument = capacity == 32 ? "" : ", " + capacity.ToString(System.Globalization.CultureInfo.InvariantCulture);
         b.AppendLine("""using global::Microsoft.Extensions.DependencyInjection;""");
         if (_model.Target.Namespace != null)
@@ -119,6 +117,8 @@ internal sealed partial class SourceEmitter
         EmitSyncMulti(b);
         EmitStreams(b);
         EmitStreamTokenMerge(b);
+        EmitFaulted(b);
+        EmitDependencySets(b);
         b.AppendLine("""}""");
         EmitRegistration(b);
         return b.ToString();

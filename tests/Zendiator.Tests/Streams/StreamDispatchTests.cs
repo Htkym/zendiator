@@ -6,9 +6,11 @@ namespace Zendiator.Tests;
 public sealed class StreamDispatchTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Disposal_preserves_context_and_captures_synchronous_exceptions(bool throws)
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    public async Task Disposal_preserves_context_and_captures_synchronous_exceptions(bool throws, bool linked)
     {
         using var provider = Services().BuildServiceProvider();
         using var scope = provider.CreateScope();
@@ -25,7 +27,8 @@ public sealed class StreamDispatchTests
             if (throws) throw failure;
             return new ValueTask(completion.Task);
         });
-        var e = scope.ServiceProvider.GetRequiredService<IZendiator>().StreamAsync(request, api.Token).GetAsyncEnumerator(enumeration.Token);
+        var e = scope.ServiceProvider.GetRequiredService<IZendiator>()
+            .StreamAsync(request, linked ? api.Token : default).GetAsyncEnumerator(linked ? enumeration.Token : default);
         Assert.True(await e.MoveNextAsync());
         var pending = e.DisposeAsync();
         Assert.Equal("caller", context.Value);

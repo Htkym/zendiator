@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('all', 'send', 'features', 'streams', 'smoke')]
+    [ValidateSet('all', 'send', 'features', 'streams', 'relay', 'smoke')]
     [string]$Group = 'all',
     [string]$OutputRoot
 )
@@ -30,13 +30,14 @@ function Get-SourceDigest {
 }
 
 $revision = (git -C $repo rev-parse HEAD).Trim()
+$sdk = (dotnet --version).Trim()
 $sourceBefore = Get-SourceDigest
 dotnet restore $project --locked-mode *> (Join-Path $output 'restore.log')
 if ($LASTEXITCODE -ne 0) { throw "Restore failed; see $output/restore.log" }
 dotnet build $project -c Release --no-restore *> (Join-Path $output 'build.log')
 if ($LASTEXITCODE -ne 0) { throw "Build failed; see $output/build.log" }
 
-$groups = if ($Group -eq 'all') { @('send', 'features', 'streams') } else { @($Group) }
+$groups = if ($Group -eq 'all') { @('send', 'features', 'streams', 'relay') } else { @($Group) }
 $saved = @{}
 foreach ($key in 'COLD_RUN', 'COLD_MATRIX_FILE', 'COLD_CASE', 'COLD_FORMAL', 'COLD_PINNED', 'COLD_EXPECT_CHILD_Z_SHA') {
     $saved[$key] = [Environment]::GetEnvironmentVariable($key, 'Process')
@@ -71,7 +72,7 @@ try {
                 Where-Object name -eq 'Zendiator').sha256
         } | Sort-Object -Unique)
         [pscustomobject]@{
-            group = $name; revision = $revision; expectedCases = $expected
+            group = $name; revision = $revision; sdk = $sdk; expectedCases = $expected
             exitCode = $runExit; outcome = $outcome; childCount = $children.Count
             productHashes = $hashes; sourceDigest = $sourceBefore
             profile = 'Release; affinity 1; 20 warmup; 12 measurement; 500 ms requested iteration; 1 launch'

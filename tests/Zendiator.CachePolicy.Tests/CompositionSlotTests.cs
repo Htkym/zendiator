@@ -37,10 +37,10 @@ public sealed class CompositionSlotTests
 
         static int PageLength(ZendiatorServiceResolver resolver)
         {
-            var storage = (object?[])typeof(ZendiatorServiceResolver)
-                .GetField("_pages", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .GetValue(resolver)!;
-            return storage is object?[]?[] pages ? pages.Length : storage.Length == 0 ? 0 : 1;
+            var storage = typeof(ZendiatorServiceResolver)
+                .GetField("_storage", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(resolver);
+            return storage switch { object?[]?[] pages => pages.Length, object?[] => 1, _ => 0 };
         }
 
         Assert.True(PageLength(filler) >= 2);
@@ -116,6 +116,26 @@ public sealed class CompositionSlotTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new ZendiatorServiceResolver(provider, capacity));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Array_services_are_not_mistaken_for_page_storage(bool arrayFirst)
+    {
+        var array = new object[] { "value" };
+        var pages = new object[][] { array };
+        using var provider = new ServiceCollection().AddSingleton(array).AddSingleton(pages).AddTransient<SlotFirst>().BuildServiceProvider();
+        var resolver = new ZendiatorServiceResolver<ArrayComposition>(provider);
+        var first = arrayFirst ? null : resolver.GetRequiredService<SlotFirst>();
+        Assert.Same(array, resolver.GetRequiredService<object[]>());
+        Assert.Same(pages, resolver.GetRequiredService<object[][]>());
+        first ??= resolver.GetRequiredService<SlotFirst>();
+        Assert.Same(array, resolver.GetRequiredService<object[]>());
+        Assert.Same(pages, resolver.GetRequiredService<object[][]>());
+        Assert.Same(first, resolver.GetRequiredService<SlotFirst>());
+    }
+
+    private sealed class ArrayComposition;
+
     [Fact]
     public void Small_page_grows_for_dependencies_outside_the_generated_composition()
     {
@@ -123,7 +143,7 @@ public sealed class CompositionSlotTests
         var resolver = new ZendiatorServiceResolver<BoundedComposition>(provider, 2);
         var first = resolver.GetRequiredService<SlotFirst>();
         var second = resolver.GetRequiredService<SlotSecond>();
-        var field = typeof(ZendiatorServiceResolver).GetField("_pages", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var field = typeof(ZendiatorServiceResolver).GetField("_storage", BindingFlags.Instance | BindingFlags.NonPublic)!;
         Assert.Equal(2, ((object[])field.GetValue(resolver)!).Length);
         var third = resolver.GetRequiredService<SlotThird>();
         Assert.Equal(32, ((object[])field.GetValue(resolver)!).Length);
@@ -151,6 +171,42 @@ public sealed class CompositionSlotTests
         Assert.Same(third, resolver.GetRequiredService<SlotThird>());
     }
 
+    [Fact]
+    public void Missing_service_raises_the_standard_DI_exception_without_another_factory_call()
+    {
+        var calls = 0;
+        using var provider = new ServiceCollection().AddTransient<SlotSecond>(_ => { calls++; return null!; }).BuildServiceProvider();
+        var resolver = new ZendiatorServiceResolver<MissingComposition>(provider);
+        var expected = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<SlotFirst>());
+        Assert.Equal(expected.Message, Assert.Throws<InvalidOperationException>(resolver.GetRequiredService<SlotFirst>).Message);
+        Assert.Throws<InvalidOperationException>(resolver.GetRequiredService<SlotSecond>);
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public void Provider_that_resolves_required_services_itself_is_used()
+    {
+        var provider = new RequiredOnlyProvider();
+        var resolver = new ZendiatorServiceResolver<RequiredComposition>(provider);
+        Assert.Same(provider.Value, resolver.GetRequiredService<SlotFirst>());
+        Assert.Same(provider.Value, resolver.GetRequiredService<SlotFirst>());
+        Assert.Equal(1, provider.RequiredCalls);
+    }
+
+    private sealed class RequiredOnlyProvider : IServiceProvider, ISupportRequiredService
+    {
+        internal readonly SlotFirst Value = new();
+        internal int RequiredCalls;
+        public object? GetService(Type serviceType) => null;
+        public object GetRequiredService(Type serviceType)
+        {
+            RequiredCalls++;
+            return Value;
+        }
+    }
+
+    private sealed class MissingComposition;
+    private sealed class RequiredComposition;
     private sealed class BoundedComposition;
     private sealed class BoundedReentrantComposition;
     private sealed class TargetComposition;

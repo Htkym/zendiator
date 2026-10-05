@@ -71,6 +71,7 @@ internal sealed partial class SourceEmitter
         if (!route.IsVoid)
             b.AppendLine("""        return results;""");
         b.AppendLine("""    }""");
+        var set = SetOf("MultiRoute" + index);
         for (var bh = 0; bh < route.Branches.Count; bh++)
         {
             var branch = route.Branches[bh];
@@ -78,7 +79,7 @@ internal sealed partial class SourceEmitter
             for (var node = 0; node <= branch.Behaviors.Count; node++)
             {
                 b.AppendLine($$"""
-                        private readonly struct {{prefix}}Node{{node}}{{TypeParameters(route)}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> services) : {{contDisplay}}{{TypeConstraints(route)}}
+                        private readonly struct {{prefix}}Node{{node}}{{TypeParameters(route)}}({{NodeParameter(set, node)}}) : {{contDisplay}}{{TypeConstraints(route)}}
                         {
                             [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
                             public {{taskDisplay}} InvokeAsync({{reqDisplay}} request, global::System.Threading.CancellationToken cancellationToken)
@@ -87,12 +88,14 @@ internal sealed partial class SourceEmitter
                 if (route.Request.IsReferenceType)
                     b.AppendLine("""            global::System.ArgumentNullException.ThrowIfNull(request);""");
                 b.AppendLine("""            if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
+                EmitSetLookup(b, set, node, "            ");
+                var services = NodeServices(set, node);
                 if (node == branch.Behaviors.Count)
                 {
                     var handlerName = route.IsOpen || branch.HandlerIsOpen ? branch.HandlerDisplay : Name(branch.Handler);
                     var contract = route.IsOpen || branch.HandlerIsOpen ? branch.HandlerContractDisplay : branchContract;
                     var direct = branch.Handler.DirectCall;
-                    var recv = ServiceReceiver(handlerName, contract, direct);
+                    var recv = Receiver(set, branch.Handler, handlerName, contract, direct, services);
                     b.AppendLine($$"""            return {{recv}}.HandleAsync(request, cancellationToken);""");
                 }
                 else
@@ -100,9 +103,9 @@ internal sealed partial class SourceEmitter
                     var behaviorName = route.IsOpen ? branch.BehaviorDisplays[node] : Name(branch.Behaviors[node]);
                     var contract = route.IsOpen ? branch.BehaviorContractDisplays[node] : behaviorRouteContract;
                     var direct = branch.Behaviors[node].DirectCall;
-                    var recv = ServiceReceiver(behaviorName, contract, direct);
+                    var recv = Receiver(set, branch.Behaviors[node], behaviorName, contract, direct, services);
                     b.AppendLine($$"""
-                                    return {{recv}}.HandleAsync(request, new {{prefix}}Node{{node + 1}}{{TypeParameters(route)}}(services), cancellationToken);
+                                    return {{recv}}.HandleAsync(request, new {{prefix}}Node{{node + 1}}{{TypeParameters(route)}}({{NodeArgument(set)}}), cancellationToken);
                         """);
                 }
 

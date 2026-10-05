@@ -128,6 +128,45 @@ public static class Correctness
         }
     }
 
+    // Records when each library runs relay pre-processing and where a pre-processing failure surfaces.
+    public static async Task RelayTiming(string library, int behaviors, Func<Probe, IAsyncEnumerable<int>> stream)
+    {
+        var probe = new Probe();
+        var sequence = stream(probe);
+        var atCreation = probe.Events.Count;
+        int atEnumerator, atFirstMove;
+        await using (var e = sequence.GetAsyncEnumerator())
+        {
+            atEnumerator = probe.Events.Count;
+            Require(await e.MoveNextAsync(), $"{library}: relay first item");
+            atFirstMove = probe.Events.Count;
+        }
+        Order(probe, behaviors);
+        var failing = new Probe { FailRelay = true };
+        var stage = "creation";
+        try
+        {
+            var failingSequence = stream(failing);
+            stage = "enumerator";
+            var e = failingSequence.GetAsyncEnumerator();
+            try
+            {
+                stage = "move-call";
+                var move = e.MoveNextAsync();
+                stage = "move-await";
+                await move;
+                stage = "none";
+            }
+            finally { await e.DisposeAsync(); }
+        }
+        catch (ArithmeticException) { }
+        Require(stage != "none", $"{library}: relay failure not propagated");
+        Require(failing.Handlers == 0, $"{library}: relay failure started the handler");
+        if (library == "Zendiator")
+            Require(atCreation == 0 && atEnumerator == 0 && stage == "move-await", "Zendiator: relay pre-processing must start on the first move");
+        Results.Add(new { library, suite = "RelayTiming", behaviors, eventsAtCreation = atCreation, eventsAtEnumerator = atEnumerator, eventsAtFirstMove = atFirstMove, failureStage = stage, status = "Passed" });
+    }
+
     public static void Save(string directory)
     {
         Directory.CreateDirectory(directory);
