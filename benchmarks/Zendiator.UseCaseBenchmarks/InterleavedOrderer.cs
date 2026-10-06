@@ -3,8 +3,8 @@ using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Order;
 using BenchmarkDotNet.Running;
 
-// Runs the libraries of one case next to each other and rotates which library goes first,
-// so that machine-state drift during a long run does not fall on one library's rows.
+// BenchmarkDotNet calls GetExecutionOrder for one benchmark type at a time.
+// Each type here belongs to one library, so this cannot interleave libraries.
 internal sealed class InterleavedOrderer : DefaultOrderer
 {
     private static readonly string[] Libraries = ["MediatRHistorical", "Mediator", "Zendiator", "Immediate", "DispatchR", "Direct"];
