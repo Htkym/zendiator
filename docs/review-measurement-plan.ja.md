@@ -1,14 +1,16 @@
-# レビュー修正後の重点測定計画（未実行）
+# レビュー修正後の重点測定計画（AB未実行）
 
-基準harnessは `ae9daa45f75212960edc5a3907433b97f558e0d3` の `benchmarks/` 全体とする。`run_interleaved.py` は比較キーごとにライブラリを隣接させ、先頭を交代する計画を作り、BDNを単一ケースずつ起動する。実ログ、BDN JSON、子証跡を計画と照合したroundだけを採用する。旧 `6a9a50b` の360件はライブラリ別ブロック実行の履歴であり、新しいroundやP0と結合しない。
+基準harnessは `0412efa9453aeccba8d46d55aefd2355ff448e24` の `benchmarks/` 全体とする。`run_interleaved.py` は比較キーごとにライブラリを隣接させ、先頭を交代する計画を作り、BDNを単一ケースずつ起動する。実ログ、BDN JSON、子証跡を計画と照合したroundだけを採用する。旧 `6a9a50b` の360件はライブラリ別ブロック実行の履歴であり、新しいroundやP0と結合しない。
 
 ## 先行確認
 
-LithoSharpの重い作業がない枠で、harnessコミットのcleanなworktreeから `--group custom --matrix benchmarks/Zendiator.UseCaseBenchmarks/review-notification.json --max-cases 2` を新規出力先で実行する。locked restore、Release build、394件gate、BDN子2件、ログ順・JSON・親子DLL hash・再開を確認する。所要は約2～5分を見込む。異常なら全件やABラウンドに進まない。これは部分smokeであり比較結果として扱わない。4グループ360件の新たな交互順fullrunは別枠で、過去の約2時間に単一ケース起動の追加時間が乗るため、2～3時間以上を見込んで予約する。
+2026-10-06に `cde3cdea977e54473b2a3ef95f32eae93b6f5616` の隔離clean worktreeで2ケースsmokeを実行した。SDK 10.0.401、.NET 10.0.12、locked restore、Release build、394/394 gateの後、`ZendiatorNotification1.Dispatch → MediatRHistoricalNotification1.Dispatch` の順でBDN子2件が完了した。各ケースはログheader・BDN JSON・子証跡が1件、子Zendiator DLL hashは同じで、owned processは0件だった。部分smokeのためgroup最終outcomeは書いていない。出力は `D:\gitroot\zendiator-driver-smoke-cde3cde-20261006\.local\benchmarks\interleaved-smoke-cde3cde-20261006-02` に保存した。
+
+主checkoutでの初回試行は `.local` 内に同名csprojが複数あり、BDNのproject探索で失敗した。失敗出力を保全し、以降は兄弟位置の隔離worktreeを使う。基準harness `0412efa9...` ではbuild前の同名project1件チェックを追加し、主checkoutでは拒否、隔離worktreeでは通ることを軽い検証で確認した。ABラウンドと新たな360件fullrunは未実行。fullrunは過去の約2時間に単一ケース起動の追加時間が乗るため、2～3時間以上を別枠で予約する。
 
 ## 通知の改修前後（4ケース）
 
-改修前の製品・生成器基準は `6a9a50bb43660b07d2033bad45eedef2a9e786bc`、通知契約修正後は `95b042b597fb50297234d2512e8a73500ebc71b1` とする。測定用の2つの隔離clean worktreeはharness `ae9daa45...` から派生させ、改修前側には通知生成器の2ファイルだけを `6a9a50b` から復元して専用のローカル測定commitを作る。改修後側はharnessの通知生成器を使う。両側の `benchmarks/` tree SHA、matrix SHA、lockfile、SDK 10.0.401、.NET runtime、BDN 0.15.8、affinity 1、warmup 20、measurement 12、指定500 ms、launch 1、実行planを一致させる。派生commitのfull SHA、ソースmanifest、生成コードSHAと親子DLL SHAを保存し、差分が通知生成器の2ファイルだけであることを測定前に確認する。
+改修前の製品・生成器基準は `6a9a50bb43660b07d2033bad45eedef2a9e786bc`、通知契約修正後は `95b042b597fb50297234d2512e8a73500ebc71b1` とする。測定用の2つの隔離clean worktreeはharness `0412efa9...` から派生させ、改修前側には通知生成器の2ファイルだけを `6a9a50b` から復元して専用のローカル測定commitを作る。改修後側はharnessの通知生成器を使う。両側の `benchmarks/` tree SHA、matrix SHA、lockfile、SDK 10.0.401、.NET runtime、BDN 0.15.8、affinity 1、warmup 20、measurement 12、指定500 ms、launch 1、実行planを一致させる。派生commitのfull SHA、ソースmanifest、生成コードSHAと親子DLL SHAを保存し、差分が通知生成器の2ファイルだけであることを測定前に確認する。
 
 `review-notification.json` は `ZendiatorNotification1.Dispatch`（同期成功）と `DispatchAsync`（非同期中断）、および同条件の `MediatRHistoricalNotification1` 2件を対照とする。改修前・後・後・前・前・後・後・前（ABBAを2回）で各4 round、計32子ケース。各roundに394件gate、4/4ケース、失敗0、証跡4件、版内の子DLL hash一種類を要求する。予定時間は子ケース約10～15分にbuild・gate・照合を足して20～30分程度。旧生成器は契約回帰テスト2件に失敗することを既に確認済みであり、測定用の既知の差として明記する。
 
