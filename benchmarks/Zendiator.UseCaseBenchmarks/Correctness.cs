@@ -81,30 +81,30 @@ public static class Correctness
                 Order(probe, behaviors);
                 Require(probe.Disposals == 1, $"{library}: full disposal");
 
-                probe = new();
-                await foreach (int item in stream(count, asynchronous, probe, default))
-                    break;
-                Require(probe.Items == Math.Min(count, 1) && probe.Disposals == 1, $"{library}: early break");
-
-                using var cts = new CancellationTokenSource();
-                probe = new();
-                await using (var e = stream(count, asynchronous, probe, cts.Token).GetAsyncEnumerator())
-                {
-                    await e.MoveNextAsync();
-                    cts.Cancel();
-                    if (count > 1)
-                    {
-                        try
-                        {
-                            await e.MoveNextAsync();
-                            throw new InvalidOperationException($"{library}: midstream cancellation not propagated");
-                        }
-                        catch (OperationCanceledException) { }
-                    }
-                }
-                Require(probe.Disposals == 1, $"{library}: cancelled disposal");
                 Results.Add(new { library, suite = "Stream", behaviors, count, asynchronous, status = "Passed" });
             }
+        foreach (bool asynchronous in new[] { false, true })
+        {
+            var probe = new Probe();
+            await foreach (int item in stream(16, asynchronous, probe, default))
+                break;
+            Require(probe.Items == 1 && probe.Disposals == 1, $"{library}: early break");
+
+            using var cts = new CancellationTokenSource();
+            probe = new();
+            await using (var e = stream(16, asynchronous, probe, cts.Token).GetAsyncEnumerator())
+            {
+                await e.MoveNextAsync();
+                cts.Cancel();
+                try
+                {
+                    await e.MoveNextAsync();
+                    throw new InvalidOperationException($"{library}: midstream cancellation not propagated");
+                }
+                catch (OperationCanceledException) { }
+            }
+            Require(probe.Disposals == 1, $"{library}: cancelled disposal");
+        }
         var failing = new Probe { Fail = true };
         try
         {

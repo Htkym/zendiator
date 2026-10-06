@@ -73,7 +73,7 @@ public sealed class AllocationTests
     }
 
     [Fact]
-    public async Task Stream_creation_is_minimal_and_enumeration_has_no_per_item_DI_lookup()
+    public async Task Stream_creation_stays_below_256_bytes()
     {
         var (mediator, scope) = CreateMediator();
         await using (scope)

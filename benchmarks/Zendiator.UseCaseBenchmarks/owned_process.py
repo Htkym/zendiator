@@ -7,11 +7,100 @@ Other POSIX platforms are refused until their membership query is implemented.
 
 import ctypes
 import os
+import re
 import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+
+
+def validate_process_identity(identity):
+    if (not isinstance(identity, dict) or type(identity.get("pid")) is not int or identity["pid"] <= 0 or
+        identity.get("platform") not in ("windows", "linux") or not isinstance(identity.get("startToken"), str)):
+        raise RuntimeError("Missing or incomplete recorded process identity; do not resume")
+    token = identity["startToken"]
+    pattern = r"[0-9]+" if identity["platform"] == "windows" else r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}:[0-9]+"
+    if not re.fullmatch(pattern, token):
+        raise RuntimeError("Unidentifiable recorded process start identity; do not resume")
+
+
+def linux_snapshot_from_stat(pid, stat, boot):
+    try:
+        fields = stat[stat.rfind(")") + 2:].split()
+        if int(stat.split(" ", 1)[0]) != pid:
+            raise ValueError("PID changed")
+        identity = {"pid": pid, "platform": "linux", "startToken": boot.strip() + ":" + str(int(fields[19]))}
+        validate_process_identity(identity)
+        return dict(identity, state="terminated" if fields[0] in ("Z", "X") else "running")
+    except (ValueError, IndexError) as error:
+        raise RuntimeError(f"Cannot identify process {pid}") from error
+
+
+def process_snapshot(pid):
+    """Read a process through a handle or /proc; never signal a PID."""
+    if type(pid) is not int or pid <= 0:
+        raise RuntimeError("Invalid process PID")
+    if os.name == "nt":
+        from ctypes import wintypes as w
+        api = ctypes.WinDLL("kernel32", use_last_error=True)
+        api.OpenProcess.argtypes, api.OpenProcess.restype = [w.DWORD, w.BOOL, w.DWORD], w.HANDLE
+        api.GetProcessTimes.argtypes = [w.HANDLE] + [ctypes.POINTER(w.FILETIME)] * 4
+        api.GetProcessTimes.restype = w.BOOL
+        api.WaitForSingleObject.argtypes, api.WaitForSingleObject.restype = [w.HANDLE, w.DWORD], w.DWORD
+        api.CloseHandle.argtypes, api.CloseHandle.restype = [w.HANDLE], w.BOOL
+        handle = api.OpenProcess(0x1000 | 0x100000, False, pid)  # QUERY_LIMITED_INFORMATION | SYNCHRONIZE
+        if not handle:
+            error = ctypes.get_last_error()
+            if error == 87:  # ERROR_INVALID_PARAMETER: PID no longer exists.
+                return None
+            raise RuntimeError(f"Cannot identify process {pid}; WinError {error}")
+        try:
+            creation, exit_time, kernel, user = (w.FILETIME() for _ in range(4))
+            if not api.GetProcessTimes(handle, ctypes.byref(creation), ctypes.byref(exit_time), ctypes.byref(kernel), ctypes.byref(user)):
+                raise RuntimeError(f"Cannot read process creation time; WinError {ctypes.get_last_error()}")
+            wait = api.WaitForSingleObject(handle, 0)
+            if wait not in (0, 258):
+                raise RuntimeError("Cannot determine process execution state")
+            ticks = ((creation.dwHighDateTime << 32) | creation.dwLowDateTime) + 504911232000000000
+            return {"pid": pid, "platform": "windows", "startToken": str(ticks),
+                    "state": "terminated" if wait == 0 else "running"}
+        finally:
+            api.CloseHandle(handle)
+    if sys.platform.startswith("linux") and Path("/proc/self/stat").exists():
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text()
+        except FileNotFoundError:
+            return None
+        except OSError as error:
+            raise RuntimeError(f"Cannot identify process {pid}") from error
+        try:
+            boot = Path("/proc/sys/kernel/random/boot_id").read_text()
+            return linux_snapshot_from_stat(pid, stat, boot)
+        except (OSError, ValueError, IndexError) as error:
+            raise RuntimeError(f"Cannot identify process {pid}") from error
+    raise RuntimeError("Process identity is unsupported on this platform")
+
+
+def process_identity(pid):
+    snapshot = process_snapshot(pid)
+    if snapshot is None or snapshot["state"] != "running":
+        raise RuntimeError("Owned launcher exited before its identity was recorded")
+    return {name: snapshot[name] for name in ("pid", "platform", "startToken")}
+
+
+def process_alive(identity):
+    validate_process_identity(identity)
+    platform = "windows" if os.name == "nt" else "linux" if sys.platform.startswith("linux") else None
+    if identity["platform"] != platform:
+        raise RuntimeError("Cannot identify recorded process on this platform; do not resume")
+    snapshot = process_snapshot(identity["pid"])
+    if snapshot is None or snapshot["state"] == "terminated":
+        return False
+    if snapshot["platform"] != identity["platform"]:
+        raise RuntimeError("Cannot identify recorded process on this platform; do not resume")
+    return snapshot["startToken"] == identity["startToken"]
 
 
 class _WindowsJob:

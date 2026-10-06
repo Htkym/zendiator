@@ -16,7 +16,7 @@ import uuid
 from pathlib import Path
 
 from interleaved_plan import identity, make_plan, normalize_case, verify_log
-from owned_process import OwnedCommand
+from owned_process import OwnedCommand, process_alive, process_identity
 from artifact_gate import PROTOCOL as ARTIFACT_GATE_PROTOCOL, ensure_artifact_gate, check_artifact_binding
 
 
@@ -85,7 +85,8 @@ def run_logged(args, path, env, cwd=PROJECT):
         signal.signal(signal.SIGTERM, interrupted)
         try:
             owned.start()
-            record.update(pid=owned.process.pid, containment=owned.kind, state="running")
+            record.update(pid=owned.process.pid, processIdentity=process_identity(owned.process.pid),
+                          containment=owned.kind, state="running")
             write_json(marker, record)
             owned.release()
             code = owned.process.wait()
@@ -119,20 +120,6 @@ def run_logged(args, path, env, cwd=PROJECT):
                 signal.signal(signal.SIGTERM, old_term)
 
 
-def process_alive(pid):
-    if os.name != "nt":
-        try:
-            os.kill(pid, 0)
-            return True
-        except ProcessLookupError:
-            return False
-    script = f"Get-CimInstance Win32_Process -Filter 'ProcessId = {int(pid)}' | Select-Object -ExpandProperty ProcessId"
-    result = subprocess.run(["powershell", "-NoProfile", "-Command", script],
-                            capture_output=True, text=True, check=False)
-    if result.returncode:
-        raise RuntimeError(f"Could not verify prior process {pid}; do not resume")
-    return result.stdout.strip() == str(pid)
-
 
 def check_owned_markers(directory):
     for marker in directory.rglob("*.process.json"):
@@ -149,7 +136,10 @@ def check_abandoned(case_dir):
         check_owned_markers(attempt)
         for evidence in attempt.glob("child-*.json"):
             child = json.loads(evidence.read_text(encoding="utf-8"))
-            if process_alive(child["pid"]):
+            identity = child.get("processIdentity")
+            if not isinstance(identity, dict) or identity.get("pid") != child["pid"]:
+                raise RuntimeError(f"Missing or inconsistent child process identity; do not resume: {evidence}")
+            if process_alive(identity):
                 raise RuntimeError(f"Prior BDN child {child['pid']} is still running: {evidence}")
 
 
@@ -171,6 +161,12 @@ def clean_env():
                  "COLD_EXPECT_CHILD_Z_SHA", "COLD_SKIP_GATE", "COLD_GATE_PROOF", "COLD_SINGLE_CASE",
                  "COLD_SCOPED_PAIR", "COLD_COMPETITORS", "COLD_ONLY"):
         env.pop(name, None)
+    return env
+
+
+def build_env():
+    env = clean_env()
+    env.update(MSBUILDDISABLENODEREUSE="1", DOTNET_CLI_USE_MSBUILD_SERVER="0", UseSharedCompilation="false")
     return env
 
 
@@ -365,8 +361,10 @@ def main():
         if any(session.get(key) != value for key, value in current.items()):
             raise ValueError("Revision, SDK, source, group, or matrix changed; cannot resume")
     else:
-        run_logged(["dotnet", "restore", str(PROJECT / "Zendiator.UseCaseBenchmarks.csproj"), "--locked-mode"], output / "restore.log", clean_env())
-        run_logged(["dotnet", "build", str(PROJECT / "Zendiator.UseCaseBenchmarks.csproj"), "-c", "Release", "--no-restore"], output / "build.log", clean_env())
+        run_logged(["dotnet", "restore", str(PROJECT / "Zendiator.UseCaseBenchmarks.csproj"), "--locked-mode",
+                    "--disable-build-servers", "-p:UseSharedCompilation=false", "-nodeReuse:false"], output / "restore.log", build_env())
+        run_logged(["dotnet", "build", str(PROJECT / "Zendiator.UseCaseBenchmarks.csproj"), "-c", "Release", "--no-restore",
+                    "--disable-build-servers", "-p:UseSharedCompilation=false", "-nodeReuse:false"], output / "build.log", build_env())
         session = dict(current)
         session["sessionId"] = uuid.uuid4().hex
         session["runtimeSha256"] = sha(REPO / "src/Zendiator/bin/Release/net10.0/Zendiator.dll")

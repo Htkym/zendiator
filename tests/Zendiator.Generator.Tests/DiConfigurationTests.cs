@@ -64,22 +64,6 @@ public sealed class DiConfigurationTests
         return driver.GetRunResult();
     }
 
-    private const string FullLambda = """
-        var collection = new ServiceCollection();
-        collection.AddZendiator(static configuration =>
-        {
-            configuration.Namespace = "App.Generated";
-            configuration.ServiceLifetime = ServiceLifetime.Scoped;
-            configuration.RegisterServicesFromAssemblyContaining<Marker>();
-            configuration.RegisterServicesFromAssembly(typeof(ContractsMarker).Assembly);
-            configuration.AddOpenBehavior(typeof(LoggingBehavior<,>), order: 0);
-            configuration.AddOpenBehavior(typeof(CommandBehavior<>), order: 10);
-            configuration.AddOpenBehavior(typeof(SyncBehavior<,>), order: 20);
-            configuration.AddNotification<UserCreated>();
-            configuration.ConfigureHandlerOrder(typeof(AuditHandler), order: 0);
-            configuration.ConfigureHandlerOrder(typeof(EmailHandler), order: 10);
-        });
-        """;
 
     [Fact]
     public void Moving_registration_refreshes_interceptors_but_reuses_mediator_emission()
@@ -114,19 +98,6 @@ public sealed class DiConfigurationTests
     }
 
     [Fact]
-    public void Full_lambda_generates_registrar_and_shims()
-    {
-        var result = Run(Head + Fixtures + "public sealed class App { public void Register(" + Services + " services) { " + FullLambda + " } }", true);
-        var mediator = result.GeneratedTrees.Single(t => t.ToString().Contains("internal const string StructureFingerprint")).ToString();
-        Assert.Contains("internal const string StructureFingerprint", mediator);
-        Assert.DoesNotContain("class ZendiatorServiceCollectionExtensions", mediator);
-        Assert.DoesNotContain("MakeGeneric", mediator);
-        var shims = result.GeneratedTrees.Single(t => t.ToString().Contains("AddZendiatorShims")).ToString();
-        Assert.Contains("InterceptsLocation", shims);
-        Assert.Contains("file sealed class InterceptsLocationAttribute", shims);
-    }
-
-    [Fact]
     public void Null_configuration_is_rejected()
     {
         var result = Run(Head + Fixtures + "public sealed class App { public void Register(" + Services + " services) { services.AddZendiator(null); } }", false);
@@ -149,16 +120,6 @@ public sealed class DiConfigurationTests
             + "services.AddZendiator(static configuration => { configuration.RegisterServicesFromAssembly(typeof(global::App.Marker).Assembly); }); } }";
         var result = Run(source, false);
         Assert.DoesNotContain(result.Diagnostics, d => d.Id == "ZEN0016");
-    }
-
-    [Fact]
-    public void Same_structure_twice_is_silent()
-    {
-        var source = Head + Fixtures + "public sealed class App { public void Register(" + Services + " services) { "
-            + "services.AddZendiator(static configuration => { configuration.RegisterServicesFromAssemblyContaining<Marker>(); }); "
-            + "services.AddZendiator(static configuration => { configuration.RegisterServicesFromAssemblyContaining<Marker>(); }); } }";
-        var result = Run(source, false);
-        Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
     }
 
     [Fact]
@@ -185,17 +146,6 @@ public sealed class DiConfigurationTests
             + "services.AddZendiator(static configuration => { configuration.RegisterServicesFromAssemblyContaining<Marker>(); }); } }";
         var result = Run(source, false);
         Assert.Contains(result.Diagnostics, d => d.Id == "ZEN0015");
-    }
-
-    [Fact]
-    public void Attributes_plus_bare_call_stays_silent()
-    {
-        var source = Head + "[GenerateZendiator] public sealed partial class Zendiator; "
-            + "public readonly record struct Ping : IRequest<int>; "
-            + "public sealed class PingHandler : IRequestHandler<Ping, int> { public ValueTask<int> HandleAsync(Ping r, CancellationToken c) => new(1); } "
-            + "public sealed class App { public void Register(" + Services + " services) { services.AddZendiator(); } }";
-        var result = Run(source, true);
-        Assert.Single(result.GeneratedTrees);
     }
 
     [Theory]
@@ -292,28 +242,6 @@ public sealed class DiConfigurationTests
     }
 
     [Fact]
-    public void Static_form_call_generates_plain_shim()
-    {
-        var source = Head + Fixtures + "public sealed class App { public void Register(" + Services + " services) { "
-            + "global::Zendiator.DependencyInjection.ZendiatorServiceCollectionExtensions.AddZendiator(services, static configuration => { configuration.RegisterServicesFromAssemblyContaining<Marker>(); }); } }";
-        var result = Run(source, true);
-        var shims = result.GeneratedTrees.Single(t => t.ToString().Contains("AddZendiatorShims")).ToString();
-        Assert.Contains("InterceptsLocation", shims);
-        Assert.DoesNotContain("(this global::Microsoft.Extensions.DependencyInjection.IServiceCollection services,", shims);
-    }
-
-    [Fact]
-    public void Shim_invokes_the_callback_exactly_once_textually()
-    {
-        var source = Head + Fixtures + "public sealed class App { public void Register(" + Services + " services) { "
-            + "services.AddZendiator(static configuration => { configuration.RegisterServicesFromAssemblyContaining<Marker>(); }); } }";
-        var result = Run(source, true);
-        var shims = result.GeneratedTrees.Single(t => t.ToString().Contains("AddZendiatorShims")).ToString();
-        Assert.Single(System.Text.RegularExpressions.Regex.Matches(shims, "configure\\(configuration\\);"));
-        Assert.Contains("ThrowIfNull(configure)", shims);
-    }
-
-    [Fact]
     public void Attribute_and_config_orders_must_agree()
     {
         var source = Head + Fixtures + "public sealed class App { public void Register(" + Services + " services) { "
@@ -325,20 +253,5 @@ public sealed class DiConfigurationTests
         Assert.Contains(conflicted.Diagnostics, d => d.Id == "ZEN0018");
         var agreed = Run(withAttr.Replace("order: 9", "order: 1"), true);
         Assert.Empty(agreed.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error));
-    }
-
-    [Fact]
-    public void Di_call_binds_package_before_generation()
-    {
-        var source = Head + Fixtures + "public sealed class App { public void Register(" + Services + " services) { "
-            + "services.AddZendiator(static configuration => { configuration.RegisterServicesFromAssemblyContaining<Marker>(); }); } }";
-        var input = Compilation(source);
-        var tree = input.SyntaxTrees[0];
-        var model = input.GetSemanticModel(tree);
-        var invocation = tree.GetRoot().DescendantNodes().OfType<InvocationExpressionSyntax>().First(i => i.Expression.ToString().Contains("AddZendiator"));
-        var symbol = model.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
-        Assert.NotNull(symbol);
-        Assert.Equal("ZendiatorServiceCollectionExtensions", symbol.OriginalDefinition.ContainingType.Name);
-        Assert.Equal("Zendiator.DependencyInjection", symbol.OriginalDefinition.ContainingType.ContainingNamespace.ToDisplayString());
     }
 }

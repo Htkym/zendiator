@@ -7,6 +7,7 @@ using System.Text.Json;
 
 namespace Competitive;
 
+internal sealed record ProcessIdentityEvidence(int Pid, string Platform, string StartToken);
 internal sealed record LoadedAssemblyEvidence(string Name, string FullName, string Path, string Mvid, string Sha256);
 internal sealed record ConfigFileEvidence(string Path, string Sha256);
 internal sealed record RuntimeEvidence(string Framework, string FrameworkVersion, string Architecture,
@@ -34,6 +35,24 @@ internal static class ArtifactEvidence
     ];
 
     public static string Hash(string path) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+
+    public static ProcessIdentityEvidence ProcessIdentity()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            using var process = Process.GetCurrentProcess();
+            return new(Environment.ProcessId, "windows", process.StartTime.ToUniversalTime().Ticks
+                .ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        if (OperatingSystem.IsLinux())
+        {
+            var stat = File.ReadAllText("/proc/self/stat");
+            var fields = stat[(stat.LastIndexOf(')') + 2)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var boot = File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim();
+            return new(Environment.ProcessId, "linux", boot + ":" + fields[19]);
+        }
+        throw new PlatformNotSupportedException("Process identity is implemented for Windows/Linux only");
+    }
 
     public static LoadedAssemblyEvidence[] Assemblies()
     {

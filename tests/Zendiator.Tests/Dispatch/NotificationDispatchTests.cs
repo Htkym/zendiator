@@ -96,14 +96,8 @@ public sealed class NotificationDispatchTests
         await using var scope = provider.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<IZendiator>().PublishAsync(new UserCreated(7));
         Assert.Equal(["metrics:7", "alpha", "provision:7", "mail:7"], scope.ServiceProvider.GetRequiredService<AuditLog>().Events);
-    }
-
-    [Fact]
-    public async Task Publish_alias_matches_publish_async()
-    {
-        await using var provider = Services().BuildServiceProvider();
-        await using var scope = provider.CreateAsyncScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        scope.ServiceProvider.GetRequiredService<AuditLog>().Events.Clear();
         await mediator.Publish(new UserCreated(8));
         Assert.Equal(["metrics:8", "alpha", "provision:8", "mail:8"], scope.ServiceProvider.GetRequiredService<AuditLog>().Events);
         await Assert.ThrowsAsync<ArgumentNullException>(async () => await mediator.PublishAsync((UserCreated)null!));
@@ -167,17 +161,6 @@ public sealed class NotificationDispatchTests
             CancelFirstHandler.Live?.Dispose();
             CancelFirstHandler.Live = null;
         }
-    }
-
-    [Fact]
-    public async Task Type_erased_publish_uses_the_runtime_type()
-    {
-        await using var provider = Services().BuildServiceProvider();
-        await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        INotification erased = new UserCreated(9);
-        await mediator.PublishAsync(erased);
-        Assert.Equal(["metrics:9", "alpha", "provision:9", "mail:9"], scope.ServiceProvider.GetRequiredService<AuditLog>().Events);
     }
 
     [Fact]

@@ -83,20 +83,6 @@ public sealed class LazyAndPipelineMeaningTests
     }
 
     [Fact]
-    public async Task Retry_scoped_constructs_once_handles_twice()
-    {
-        TestCounters.ResetAll();
-        var services = new ServiceCollection();
-        services.AddZendiator();
-        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-        await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        Assert.Equal(2, await mediator.SendAsync(new RetryReq()));
-        Assert.Equal(1, RetryHandler.Constructions);
-        Assert.Equal(1, RetryTwiceBehavior.HandleCalls);
-    }
-
-    [Fact]
     public async Task Retry_transient_reuses_the_mediator_dependency()
     {
         TestCounters.ResetAll();

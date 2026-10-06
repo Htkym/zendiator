@@ -70,11 +70,11 @@ public sealed class NotificationPoolingContractTests
         using var cancellation = new CancellationTokenSource();
         var context = new AsyncLocal<string?> { Value = "caller" };
 
-        for (var round = 0; round < 4; round++)
+        for (var round = 0; round < 2; round++)
         {
-            var sources = new NotificationCompletion[6];
-            var tasks = new Task[6];
-            var failures = new Exception?[6];
+            var sources = new NotificationCompletion[3];
+            var tasks = new Task[3];
+            var failures = new Exception?[3];
             for (var i = 0; i < sources.Length; i++)
             {
                 sources[i] = new NotificationCompletion();

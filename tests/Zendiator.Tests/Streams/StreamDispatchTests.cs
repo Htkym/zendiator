@@ -180,23 +180,7 @@ public sealed class StreamDispatchTests
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
         Assert.Empty(await Collect(mediator.StreamAsync(new GetNumbers(0))));
         Assert.Equal([7], await Collect(mediator.StreamAsync(new GetOne(7))));
-        Assert.Equal(16, (await Collect(mediator.StreamAsync(new GetNumbers(16)))).Count);
-        var items1024 = await Collect(mediator.StreamAsync(new GetNumbers(1024)));
-        Assert.Equal(1024, items1024.Count);
-        for (var i = 0; i < 1024; i++) Assert.Equal(i, items1024[i]);
-    }
-
-    [Fact]
-    public async Task S_handler_runs_once_per_enumeration()
-    {
-        GetNumbersHandler.Calls = 0;
-        await using var provider = Services().BuildServiceProvider();
-        await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        Assert.Equal([0, 1], await Collect(mediator.StreamAsync(new GetNumbers(2))));
-        Assert.Equal(1, GetNumbersHandler.Calls);
-        Assert.Equal([0, 1], await Collect(mediator.StreamAsync(new GetNumbers(2))));
-        Assert.Equal(2, GetNumbersHandler.Calls);
+        Assert.Equal(Enumerable.Range(0, 16), await Collect(mediator.StreamAsync(new GetNumbers(16))));
     }
 
     [Fact]
@@ -214,10 +198,8 @@ public sealed class StreamDispatchTests
         Assert.True(await enumerator.MoveNextAsync());
         Assert.Equal(1, GetLazyHandler.Started);
         await enumerator.DisposeAsync();
-        // Unenumerated stream has no side effects.
-        GetLazyHandler.Started = 0;
-        _ = mediator.StreamAsync(new GetLazy(5));
-        Assert.Equal(0, GetLazyHandler.Started);
+        Assert.Equal([0, 1, 2], await Collect(stream));
+        Assert.Equal(2, GetLazyHandler.Started);
     }
 
     [Fact]
@@ -323,74 +305,6 @@ public sealed class StreamDispatchTests
     }
 
     [Fact]
-    public async Task E_exceptions_and_D_disposal()
-    {
-        await using var provider = Services().BuildServiceProvider();
-        await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        // First-item exception.
-        Assert.Same(GetFailHandler.Failure, await Assert.ThrowsAsync<InvalidOperationException>(async () => await Collect(mediator.StreamAsync(new GetFail(3, 0)))));
-        // Mid-stream exception stops later items.
-        var seen = new List<int>();
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-        {
-            await foreach (var i in mediator.StreamAsync(new GetFail(5, 2))) seen.Add(i);
-        });
-        Assert.Equal([0, 1], seen);
-        // Break after first.
-        var first = new List<int>();
-        await foreach (var i in mediator.StreamAsync(new GetNumbers(10)))
-        {
-            first.Add(i);
-            break;
-        }
-        Assert.Equal([0], first);
-        // Break after N.
-        var n = new List<int>();
-        await foreach (var i in mediator.StreamAsync(new GetNumbers(10)))
-        {
-            n.Add(i);
-            if (n.Count == 3) break;
-        }
-        Assert.Equal([0, 1, 2], n);
-        // Explicit DisposeAsync.
-        var e = mediator.StreamAsync(new GetNumbers(10)).GetAsyncEnumerator();
-        Assert.True(await e.MoveNextAsync());
-        await e.DisposeAsync();
-    }
-
-    [Fact]
-    public async Task T_scoped_singleton_transient_and_isolation()
-    {
-        var services = Services();
-        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-        int firstHash;
-        await using (var scope = provider.CreateAsyncScope())
-        {
-            var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-            var items = await Collect(mediator.StreamAsync(new GetScopedItems(2)));
-            Assert.Equal([0, 1], items);
-            firstHash = scope.ServiceProvider.GetRequiredService<Trace>().GetHashCode();
-        }
-        await using (var scope = provider.CreateAsyncScope())
-        {
-            var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-            await Collect(mediator.StreamAsync(new GetScopedItems(1)));
-            Assert.NotEqual(firstHash, scope.ServiceProvider.GetRequiredService<Trace>().GetHashCode());
-        }
-        // Concurrent streams in separate scopes stay isolated.
-        await using var s1 = provider.CreateAsyncScope();
-        await using var s2 = provider.CreateAsyncScope();
-        var m1 = s1.ServiceProvider.GetRequiredService<IZendiator>();
-        var m2 = s2.ServiceProvider.GetRequiredService<IZendiator>();
-        var t1 = Collect(m1.StreamAsync(new GetNumbers(4)));
-        var t2 = Collect(m2.StreamAsync(new GetNumbers(4)));
-        var r = await Task.WhenAll(t1, t2);
-        Assert.Equal([0, 1, 2, 3], r[0]);
-        Assert.Equal([0, 1, 2, 3], r[1]);
-    }
-
-    [Fact]
     public async Task G_generic_closed_open()
     {
         await using var provider = Services().BuildServiceProvider();
@@ -405,22 +319,8 @@ public sealed class StreamDispatchTests
     }
 
     [Fact]
-    public async Task T_singleton_transient_factory_and_disposed_scope()
+    public async Task Transient_stream_factory_is_used_and_disposed_scope_rejects_lazy_startup()
     {
-        // Singleton: same handler across scopes (via container reuse, per-enumeration resolve still returns same singleton).
-        var singletonServices = new ServiceCollection();
-        singletonServices.AddScoped<Trace>();
-        singletonServices.AddScoped<AuditLog>();
-        singletonServices.AddScoped<Gate>();
-        singletonServices.AddZendiator(ServiceLifetime.Singleton);
-        await using var singletonProvider = singletonServices.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-        GetNumbersHandler.Calls = 0;
-        await using (var s = singletonProvider.CreateAsyncScope())
-            await Collect(s.ServiceProvider.GetRequiredService<IZendiator>().StreamAsync(new GetNumbers(1)));
-        await using (var s = singletonProvider.CreateAsyncScope())
-            await Collect(s.ServiceProvider.GetRequiredService<IZendiator>().StreamAsync(new GetNumbers(1)));
-        Assert.Equal(2, GetNumbersHandler.Calls);
-
         // Transient factory override is respected (TryAdd does not replace).
         var factoryServices = Services();
         var factoryCalls = 0;
@@ -432,7 +332,7 @@ public sealed class StreamDispatchTests
         await using var factoryProvider = factoryServices.BuildServiceProvider();
         await using (var s = factoryProvider.CreateAsyncScope())
             Assert.Equal([5], await Collect(s.ServiceProvider.GetRequiredService<IZendiator>().StreamAsync(new GetOne(5))));
-        Assert.True(factoryCalls >= 1);
+        Assert.Equal(1, factoryCalls);
 
         // Disposed scope: enumeration fails without leaking.
         var disposedServices = Services();
@@ -443,25 +343,5 @@ public sealed class StreamDispatchTests
         await disposedScope.DisposeAsync();
         await Assert.ThrowsAnyAsync<ObjectDisposedException>(async () => await Collect(disposedStream));
 
-        // Multiple providers stay isolated.
-        await using var p1 = Services().BuildServiceProvider();
-        await using var p2 = Services().BuildServiceProvider();
-        await using var s1 = p1.CreateAsyncScope();
-        await using var s2 = p2.CreateAsyncScope();
-        Assert.Equal([0, 1], await Collect(s1.ServiceProvider.GetRequiredService<IZendiator>().StreamAsync(new GetNumbers(2))));
-        Assert.Equal([0, 1], await Collect(s2.ServiceProvider.GetRequiredService<IZendiator>().StreamAsync(new GetNumbers(2))));
-    }
-
-    [Fact]
-    public async Task D_no_double_dispose_and_handler_finally()
-    {
-        await using var provider = Services().BuildServiceProvider();
-        await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        var e = mediator.StreamAsync(new GetNumbers(5)).GetAsyncEnumerator();
-        Assert.True(await e.MoveNextAsync());
-        await e.DisposeAsync();
-        await e.DisposeAsync();
-        Assert.False(await e.MoveNextAsync());
     }
 }

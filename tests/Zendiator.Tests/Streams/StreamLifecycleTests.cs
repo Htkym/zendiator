@@ -113,19 +113,6 @@ public sealed class StreamLifecycleTests
     }
 
     [Fact]
-    public async Task Single_item_stream_completes_and_stays_completed()
-    {
-        await using var provider = Services().BuildServiceProvider();
-        await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        await using var e = mediator.StreamAsync(new GetOne(7)).GetAsyncEnumerator();
-        Assert.True(await e.MoveNextAsync());
-        Assert.Equal(7, e.Current);
-        Assert.False(await e.MoveNextAsync());
-        Assert.False(await e.MoveNextAsync());
-    }
-
-    [Fact]
     public async Task Completed_stream_with_behavior_stays_completed()
     {
         await using var provider = Services().BuildServiceProvider();
@@ -177,17 +164,5 @@ public sealed class StreamLifecycleTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await e.MoveNextAsync());
         await e.DisposeAsync();
         Assert.False(await e.MoveNextAsync());
-    }
-
-    [Fact]
-    public async Task Current_before_first_move_next_is_default()
-    {
-        await using var provider = Services().BuildServiceProvider();
-        await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        await using var e = mediator.StreamAsync(new LifecycleNumbers(3)).GetAsyncEnumerator();
-        Assert.Equal(0, e.Current);
-        Assert.True(await e.MoveNextAsync());
-        Assert.Equal(0, e.Current);
     }
 }

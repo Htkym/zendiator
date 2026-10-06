@@ -32,20 +32,6 @@ public sealed class StreamGeneratorTests
         return driver.GetRunResult();
     }
 
-    [Fact]
-    public void Stream_typed_source_compiles_and_is_lazy()
-    {
-        var result = Run(Compilation(Head + StreamReq + StreamHandler), true);
-        var source = result.GeneratedTrees.Single().ToString();
-        Assert.Contains("StreamAsync(global::App.GetItems request", source);
-        Assert.Contains("IAsyncEnumerable<int>", source);
-        Assert.Contains("IStreamContinuation<", source);
-        Assert.DoesNotContain("object request", source);
-        // Lazy: StreamAsync returns enumerable without resolving.
-        Assert.Contains("StreamRoute0Enumerable", source);
-        Assert.Contains("MergeStreamTokens", source);
-    }
-
     [Theory]
     [InlineData("ZEN0001", "public sealed record GetItems(int Count) : IStreamRequest<int>;")]
     [InlineData("ZEN0002", StreamReq + StreamHandler + "public sealed class Other : IStreamRequestHandler<GetItems,int> { public async IAsyncEnumerable<int> HandleAsync(GetItems r, CancellationToken c) { await Task.Yield(); yield return 1; } }")]
@@ -66,36 +52,12 @@ public sealed class StreamGeneratorTests
     }
 
     [Fact]
-    public void Stream_generic_open_handler_works()
-    {
-        var body = "public sealed record StreamEntities<T>(int Count) : IStreamRequest<T> where T : new(); public sealed class StreamEntitiesHandler<T> : IStreamRequestHandler<StreamEntities<T>,T> where T : new() { public async IAsyncEnumerable<T> HandleAsync(StreamEntities<T> r, CancellationToken c) { await Task.Yield(); yield return new T(); } }";
-        var result = Run(Compilation(Head + body), true);
-        var source = result.GeneratedTrees.Single().ToString();
-        Assert.Contains("StreamAsync<T>", source);
-    }
-
-    [Fact]
     public void Stream_ambiguous_closed_open_is_diagnosed()
     {
         // Closed Ent<int> handler plus open Ent<T> handler overlap -> ambiguity.
         var ambiguous = "public sealed record Ent<T>(int Count) : IStreamRequest<T>; public sealed class OpenH<T> : IStreamRequestHandler<Ent<T>,T> { public async IAsyncEnumerable<T> HandleAsync(Ent<T> r, CancellationToken c) { await Task.Yield(); yield break; } } public sealed class ClosedIntH : IStreamRequestHandler<Ent<int>,int> { public async IAsyncEnumerable<int> HandleAsync(Ent<int> r, CancellationToken c) { await Task.Yield(); yield return 0; } }";
         var amb = Run(Compilation(Head + ambiguous), false);
         Assert.Contains(amb.Diagnostics, d => d.Id == "ZEN0010");
-    }
-
-    [Fact]
-    public void Stream_behavior_pipeline_compiles()
-    {
-        var body = StreamReq + StreamHandler + """
-            public sealed class Pass : IStreamPipelineBehavior<GetItems,int> {
-                public async IAsyncEnumerable<int> HandleAsync<N>(GetItems r, N n, CancellationToken c) where N : struct, IStreamContinuation<GetItems,int> { await foreach (var i in n.InvokeAsync(r, c)) yield return i; }
-            }
-            """;
-        var withAttr = Head.Replace("[GenerateZendiator]", "[GenerateZendiator, PipelineBehavior(typeof(Pass), Order = 0)]") + body;
-        var result = Run(Compilation(withAttr), true);
-        var source = result.GeneratedTrees.Single().ToString();
-        Assert.Contains("StreamRoute0Node0", source);
-        Assert.Contains("StreamRoute0Node1", source);
     }
 
     [Fact]

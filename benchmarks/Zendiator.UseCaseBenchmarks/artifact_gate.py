@@ -11,6 +11,8 @@ import re
 import shutil
 from pathlib import Path
 
+from owned_process import validate_process_identity
+
 
 PROTOCOL = "zendiator-child-artifact-gate-v1"
 HASH = re.compile(r"^[0-9A-F]{64}$")
@@ -117,6 +119,15 @@ def child_snapshot(row, attempt):
         final["pid"] != initial["pid"] or final["scenario"] != row["Case"]["Type"] or
         final["lifetime"] != lifetime or final["initialEvidenceSha256"] != sha(children[0])):
         raise ValueError("Post-workload evidence is absent, failed or not bound to this case/child")
+    identity = initial.get("processIdentity")
+    if (not isinstance(identity, dict) or identity.get("pid") != initial["pid"] or
+        identity.get("platform") not in {"windows", "linux"} or not identity.get("startToken") or
+        final.get("processIdentity") != identity):
+        raise ValueError("Post-workload evidence has missing or changed process identity")
+    try:
+        validate_process_identity(identity)
+    except RuntimeError as error:
+        raise ValueError("Post-workload evidence has unidentifiable process identity") from error
     loaded = assembly_map(final["assemblies"])
     initial_map = assembly_map(initial["assemblies"])
     if any(name not in loaded or loaded[name] != item for name, item in initial_map.items()):
@@ -134,7 +145,7 @@ def implementation_identity(project):
     return digest({name: sha(project / name) for name in names})
 
 
-def semantic_identity(final, session, project, runtime):
+def semantic_identity(final, session, project, runtime, bundle_files):
     config = runtime["runtimeConfig"]
     deps = runtime["deps"]
     for item in (config, deps, *runtime["appDeps"], *runtime["nativeRuntime"]):
@@ -148,6 +159,7 @@ def semantic_identity(final, session, project, runtime):
         "session": session["sessionId"], "revision": session["revision"], "sourceDigest": session["sourceDigest"],
         "sdk": session["sdk"], "protocol": PROTOCOL, "gateImplementationSha256": implementation_identity(project),
         "gateDriverSha256": sha(Path(__file__)),
+        "bundleFiles": dict(bundle_files),
         "assemblies": sorted([item["name"], item["fullName"], item["mvid"], item["sha256"]]
                              for item in final["assemblies"]),
         "runtime": {key: value for key, value in runtime.items() if key not in ("runtimeConfig", "deps", "appDeps")},
@@ -242,8 +254,9 @@ def verify_gate(request_path, proof_path):
     for expected in request["expectedAssemblies"]:
         if expected["name"] not in actual or actual[expected["name"]] != expected:
             raise ValueError("Actual gate loaded a different consumer/product/dependency binding")
-        if sha(expected["path"]) != expected["sha256"]:
-            raise ValueError("Recorded loaded binding changed after the gate")
+    for item in actual.values():
+        if sha(item["path"]) != item["sha256"]:
+            raise ValueError("Actual gate loaded binding changed after the gate")
     verify_runtime(proof["runtimeEvidence"], request["expectedRuntime"])
     runtime = request["expectedRuntime"]
     for item in (runtime["runtimeConfig"], runtime["deps"], *runtime["appDeps"], *runtime["nativeRuntime"]):
@@ -257,7 +270,7 @@ def verify_gate(request_path, proof_path):
 def ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env):
     final, final_path, loaded = child_snapshot(row, attempt)
     bundle, files, expected, runtime, build_root = prepare_bundle(row, attempt, final, project)
-    semantic = semantic_identity(final, session, project, runtime)
+    semantic = semantic_identity(final, session, project, runtime, files)
     key = digest(semantic)
     cache_root = attempt.parents[4] / "artifact-gate-cache"
     cache = cache_root / (key + ".json")
@@ -281,6 +294,8 @@ def ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env):
         saved_request = Path(saved["requestPath"])
         if sha(proof_path) != saved["proofSha256"] or sha(saved_request) != saved["requestSha256"]:
             raise ValueError("Cached gate proof is missing or changed")
+        if read(saved_request).get("bundleFiles") != files:
+            raise ValueError("Cached gate proof covers a different full saved bundle")
         verify_gate(saved_request, proof_path)
     else:
         env = clean_env()
@@ -303,15 +318,17 @@ def ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env):
         write(cache, {"key": key, "semantic": semantic, "proofPath": str(proof_path),
                       "proofSha256": sha(proof_path), "requestPath": str(request_path),
                       "requestSha256": sha(request_path)})
-    if tree_hashes(bundle) != files or sha(final_path) != request["childProofSha256"]:
+    if (reused and tree_hashes(bundle) != files) or sha(final_path) != request["childProofSha256"]:
         raise ValueError("Current case's saved bundle or child evidence changed during gate/cache validation")
-    write(attempt / "artifact-binding.json", {"schemaVersion": 1, "session": session["sessionId"],
+    binding = {"schemaVersion": 1, "session": session["sessionId"],
           "case": canonical(row["Case"]), "childPid": final["pid"], "childProofSha256": sha(final_path),
           "key": key, "semantic": semantic, "requestPath": str(request_path), "requestSha256": sha(request_path),
           "gateRequestPath": str(saved_request), "gateRequestSha256": sha(saved_request),
           "proofPath": str(proof_path), "proofSha256": sha(proof_path), "proofReused": reused,
-          "bundleBeforeAndAfterVerified": True})
-    return check_artifact_binding(row, attempt, session, project)
+          "bundleBeforeAndAfterVerified": True}
+    binding_path = attempt / "artifact-binding.json"
+    write(binding_path, binding)
+    return binding_result(binding_path, binding)
 
 
 def check_artifact_binding(row, attempt, session, project):
@@ -320,7 +337,7 @@ def check_artifact_binding(row, attempt, session, project):
     final, final_path, _ = child_snapshot(row, attempt)
     request_path = Path(binding["requestPath"])
     request = read(request_path)
-    semantic = semantic_identity(final, session, project, request["expectedRuntime"])
+    semantic = semantic_identity(final, session, project, request["expectedRuntime"], request["bundleFiles"])
     if (binding.get("schemaVersion") != 1 or binding.get("session") != session["sessionId"] or
         binding.get("case") != canonical(row["Case"]) or binding.get("childPid") != final["pid"] or
         binding.get("childProofSha256") != sha(final_path) or binding.get("semantic") != semantic or
@@ -337,7 +354,7 @@ def check_artifact_binding(row, attempt, session, project):
         request["childPid"] != final["pid"] or request["childProofSha256"] != sha(final_path) or
         request["buildEvidenceSha256"] != sha(attempt / "build-artifacts.json") or
         not same_path(request["bundleRoot"], attempt / "bundle") or
-        tree_hashes(request["bundleRoot"]) != request["bundleFiles"]):
+        (not same_path(request_path, gate_request) and tree_hashes(request["bundleRoot"]) != request["bundleFiles"])):
         raise ValueError("Saved current-case request/bundle identity changed")
     runtime = request["expectedRuntime"]
     original_runtime = final["runtimeEvidence"]
@@ -365,11 +382,16 @@ def check_artifact_binding(row, attempt, session, project):
     identity = lambda items: sorted((item["name"], item["fullName"], item["mvid"], item["sha256"]) for item in items)
     if (identity(request["expectedAssemblies"]) != identity(final["assemblies"]) or
         identity(request["expectedAssemblies"]) != identity(proven_request["expectedAssemblies"]) or
+        proven_request.get("bundleFiles") != request["bundleFiles"] or
         proven_request["session"] != session["sessionId"] or
         proven_request["gateImplementationSha256"] != semantic["gateImplementationSha256"] or
         proven_request["gateDriverSha256"] != semantic["gateDriverSha256"]):
         raise ValueError("Cached proof covers a different semantic artifact/gate implementation")
     verify_gate(gate_request, proof_path)
-    return {"bindingSha256": sha(path), "childFinalSha256": sha(final_path), "key": binding["key"],
+    return binding_result(path, binding)
+
+
+def binding_result(path, binding):
+    return {"bindingSha256": sha(path), "childFinalSha256": binding["childProofSha256"], "key": binding["key"],
             "proofSha256": binding["proofSha256"], "proofReused": binding["proofReused"],
             "scope": "394 benchmark gate; notification-contract/full-suite evidence remains separate"}

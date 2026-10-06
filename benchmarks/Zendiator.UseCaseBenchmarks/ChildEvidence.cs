@@ -18,11 +18,12 @@ internal static class ChildEvidence
         Directory.CreateDirectory(directory);
         var runtimeHash = ArtifactEvidence.Hash(typeof(ZendiatorServiceResolver).Assembly.Location);
         var file = Path.Combine(directory, $"child-{Environment.ProcessId}-{scenario}-{lifetime}-{Guid.NewGuid():N}.json");
+        var processIdentity = ArtifactEvidence.ProcessIdentity();
         var runtime = ArtifactEvidence.Runtime();
         ArtifactEvidence.Write(file, new
         {
             pid = Environment.ProcessId, startedUtc = DateTimeOffset.UtcNow,
-            scenario, lifetime, phase = "global-setup",
+            scenario, lifetime, processIdentity, phase = "global-setup",
             runtime = runtime.Framework, runtimeEvidence = runtime, assemblies = ArtifactEvidence.Assemblies()
         });
         var initialSha = ArtifactEvidence.Hash(file);
@@ -36,7 +37,7 @@ internal static class ChildEvidence
                 ArtifactEvidence.Write(finalPath, new
                 {
                     schemaVersion = 1, pid = Environment.ProcessId, capturedUtc = DateTimeOffset.UtcNow,
-                    scenario, lifetime, phase = "process-exit-after-workload", initialEvidenceSha256 = initialSha,
+                    scenario, lifetime, processIdentity, phase = "process-exit-after-workload", initialEvidenceSha256 = initialSha,
                     runtime = finalRuntime.Framework, runtimeEvidence = finalRuntime,
                     assemblies = ArtifactEvidence.Assemblies(),
                     scope = "All currently loaded, file-backed managed assemblies; dynamic/native code is outside this map"

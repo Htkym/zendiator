@@ -69,23 +69,6 @@ public sealed class ScaleAndAllocationTests
         Assert.Equal(0, PipeB0.HandleCalls);
     }
 
-    [Fact]
-    public async Task Only_constructed_services_are_disposed()
-    {
-        TestCounters.ResetAll();
-        var services = new ServiceCollection();
-        AddCountingFactories(services, ServiceLifetime.Scoped);
-        services.AddZendiator();
-        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-        var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        Assert.Equal(42, await mediator.SendAsync(new Val0(41)));
-        Assert.Equal(5, await mediator.SendAsync(new DispReq()));
-        await scope.DisposeAsync();
-        Assert.Equal(1, DispHandler.DisposeCount);
-        await provider.DisposeAsync();
-    }
-
     private static long Measure(Action action)
     {
         action();

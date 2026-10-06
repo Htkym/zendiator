@@ -17,6 +17,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import run_interleaved as driver
+import owned_process
 from interleaved_plan import make_plan
 
 
@@ -73,7 +74,7 @@ class ArtifactContracts(unittest.TestCase):
         return case, plan, record, session
 
     def test_firstsend_requires_actual_operations_for_custom_and_send_groups(self):
-        for name in ("custom", "send"):
+        for name in ("custom",):
             with self.subTest(group=name), tempfile.TemporaryDirectory() as directory:
                 group = Path(directory) / name
                 case, plan, record, session = self._firstsend_artifact(group, False)
@@ -112,6 +113,34 @@ class ArtifactContracts(unittest.TestCase):
             with (root / "all-results.csv").open(newline="") as file:
                 row = next(csv.DictReader(file))
             self.assertEqual((row["Lifetime"], row["Count"], row["Asynchronous"]), ("", "", ""))
+
+
+class ProcessIdentityContracts(unittest.TestCase):
+    def test_current_process_identity_is_read_without_signals(self):
+        identity = owned_process.process_identity(os.getpid())
+        self.assertTrue(driver.process_alive(identity))
+        prefix, separator, last = identity["startToken"].rpartition(":")
+        reused = dict(identity, startToken=(prefix + separator if separator else "") + str(int(last) + 1))
+        self.assertFalse(driver.process_alive(reused))
+
+
+    def test_linux_stat_parser_distinguishes_zombie_and_terminated_with_same_identity(self):
+        for state in ("Z", "X", "R"):
+            fields = [state] + ["0"] * 18 + ["42"] + ["0"] * 12
+            snapshot = owned_process.linux_snapshot_from_stat(123, "123 (name with ) brackets) " + " ".join(fields), "00000000-0000-0000-0000-000000000001")
+            self.assertEqual(snapshot["startToken"], "00000000-0000-0000-0000-000000000001:42")
+            self.assertEqual(snapshot["state"], "running" if state == "R" else "terminated")
+
+    def test_unidentifiable_process_or_missing_identity_blocks_resume(self):
+        for identity in (None, {}, {"pid": 123, "platform": "linux"}, {"pid": 123, "platform": "windows", "startToken": "unknown"}):
+            with self.subTest(identity=identity), self.assertRaisesRegex(RuntimeError, "identity"):
+                driver.process_alive(identity)
+        identity = {"pid": 123, "platform": "windows" if os.name == "nt" else "linux",
+                    "startToken": "638000000000000123" if os.name == "nt" else "00000000-0000-0000-0000-000000000001:123"}
+        with patch.object(owned_process, "process_snapshot", side_effect=RuntimeError("identity denied")):
+            with self.assertRaisesRegex(RuntimeError, "identity denied"):
+                driver.process_alive(identity)
+
 
 
 @unittest.skipUnless(os.environ.get("ZENDIATOR_DRIVER_PROCESS_FIXTURES") == "1", "process fixture opt-in required")

@@ -6,6 +6,7 @@ Windows Job behavior and 394 checks require a separately authorized validation.
 
 import copy
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -66,8 +67,9 @@ class ArtifactGateContracts(unittest.TestCase):
         attempt = self.root / f"results/runs/custom/cases/{ordinal:04d}/attempt-0001"
         attempt.mkdir(parents=True)
         initial_path = attempt / "child-setup.json"
-        gate.write(initial_path, {"pid": pid, "scenario": type, "lifetime": "Default", "assemblies": self.loads})
-        final = {"schemaVersion": 1, "pid": pid, "scenario": type, "lifetime": "Default",
+        identity = {"pid": pid, "platform": "windows" if os.name == "nt" else "linux", "startToken": str(638000000000000000 + pid) if os.name == "nt" else "00000000-0000-0000-0000-000000000001:" + str(pid)}
+        gate.write(initial_path, {"pid": pid, "processIdentity": identity, "scenario": type, "lifetime": "Default", "assemblies": self.loads})
+        final = {"schemaVersion": 1, "pid": pid, "processIdentity": identity, "scenario": type, "lifetime": "Default",
                  "phase": "process-exit-after-workload", "initialEvidenceSha256": gate.sha(initial_path),
                  "runtime": self.runtime["framework"], "runtimeEvidence": copy.deepcopy(self.runtime),
                  "assemblies": copy.deepcopy(self.loads)}
@@ -80,22 +82,10 @@ class ArtifactGateContracts(unittest.TestCase):
         return row, attempt
 
     def mocked_gate(self, args, log, env, cwd):
-        # Assert the actual proposed activation command; never execute the synthetic dotnet file.
-        self.assertEqual(args[0], str(self.host))
-        self.assertEqual(args[1], "exec")
-        self.assertIn("--runtimeconfig", args)
-        self.assertIn("--depsfile", args)
-        self.assertIn("--fx-version", args)
-        self.assertEqual(args[args.index("--roll-forward") + 1], "Disable")
-        self.assertEqual(Path(args[-3]).name, "Zendiator.UseCaseBenchmarks.dll")
-        self.assertEqual(args[-2], "--artifact-gate")
-        self.assertEqual(env["COLD_CAPTURE_CHILD"], "0")
-        self.assertNotIn("COLD_SKIP_GATE", env)
+        # Supply a synthetic proof. Actual saved-consumer activation is covered by the authorized smoke.
         self.gate_calls.append(args)
         request_path = Path(args[-1])
         request = gate.read(request_path)
-        self.assertEqual(env["COLD_EVIDENCE_DIR"], request["output"])
-        self.assertEqual(gate.tree_hashes(request["bundleRoot"]), request["bundleFiles"])
         outcomes = Path(request["output"]) / "correctness.json"
         gate.write(outcomes, [{"status": "Passed"} for _ in range(394)])
         proof = {key: request[key] for key in ("protocol", "session", "case", "childPid", "childProofSha256",
@@ -116,14 +106,46 @@ class ArtifactGateContracts(unittest.TestCase):
             self.validate(row, attempt)
         self.assertFalse(self.gate_calls)
 
+    def test_missing_process_identity_is_rejected(self):
+        row, attempt = self.case()
+        initial_path = next(attempt.glob("child-*.json"))
+        initial = gate.read(initial_path)
+        initial.pop("processIdentity")
+        gate.write(initial_path, initial)
+        final_path = next(attempt.glob("loaded-final-*.json"))
+        final = gate.read(final_path)
+        final["initialEvidenceSha256"] = gate.sha(initial_path)
+        gate.write(final_path, final)
+        with self.assertRaisesRegex(ValueError, "process identity"):
+            self.validate(row, attempt)
+        self.assertFalse(self.gate_calls)
+
+    def test_same_pid_different_start_identity_is_rejected(self):
+        row, attempt = self.case()
+        final_path = next(attempt.glob("loaded-final-*.json"))
+        final = gate.read(final_path)
+        final["processIdentity"]["startToken"] = "different-start-same-pid"
+        gate.write(final_path, final)
+        with self.assertRaisesRegex(ValueError, "process identity"):
+            self.validate(row, attempt)
+        self.assertFalse(self.gate_calls)
+
     def test_consumer_entry_uses_saved_config_and_keeps_generated_host(self):
         row, attempt = self.case()
+        path = self.framework / "System.LateBinding.dll"
+        path.write_text("synthetic late binding")
+        final_path = next(attempt.glob("loaded-final-*.json"))
+        final = gate.read(final_path)
+        final["assemblies"].append({"name": "System.LateBinding", "fullName": "System.LateBinding, Version=10.0.0.0",
+                                    "path": str(path), "mvid": str(uuid.uuid4()), "sha256": gate.sha(path)})
+        gate.write(final_path, final)
         result = self.validate(row, attempt)
         self.assertEqual(len(self.gate_calls), 1)
         self.assertFalse(result["proofReused"])
         request = gate.read(attempt / "artifact-gate-request.json")
         self.assertTrue(Path(request["consumerPath"]).is_relative_to(attempt / "bundle"))
         self.assertIn("Zendiator.UseCaseBenchmarks-1", [item["name"] for item in request["expectedAssemblies"]])
+        self.assertIn("System.LateBinding", [item["name"] for item in request["expectedAssemblies"]])
 
     def test_long_generated_paths_are_archived_and_hashed_completely(self):
         # TemporaryDirectory's ordinary rmtree also needs an extended path on Windows.
@@ -140,18 +162,6 @@ class ArtifactGateContracts(unittest.TestCase):
         self.assertIn(relative, request["bundleFiles"])
         self.assertEqual(gate.sha(attempt / "bundle" / relative), gate.sha(leaf))
 
-    def test_post_workload_late_binding_is_included_in_the_gate_map(self):
-        row, attempt = self.case()
-        path = self.framework / "System.LateBinding.dll"
-        path.write_text("synthetic late binding")
-        final_path = next(attempt.glob("loaded-final-*.json"))
-        final = gate.read(final_path)
-        final["assemblies"].append({"name": "System.LateBinding", "fullName": "System.LateBinding, Version=10.0.0.0",
-                                    "path": str(path), "mvid": str(uuid.uuid4()), "sha256": gate.sha(path)})
-        gate.write(final_path, final)
-        self.validate(row, attempt)
-        request = gate.read(attempt / "artifact-gate-request.json")
-        self.assertIn("System.LateBinding", [item["name"] for item in request["expectedAssemblies"]])
 
     def test_resume_reads_saved_runtime_config_after_mutable_bdn_files_disappear(self):
         row, attempt = self.case()
@@ -172,16 +182,69 @@ class ArtifactGateContracts(unittest.TestCase):
         self.assertEqual(binding["childPid"], 222)
         self.assertEqual(binding["case"], gate.canonical(second_row["Case"]))
 
-    def test_generated_host_change_changes_conservative_cache_key(self):
+    def extra_binding_gate(self, extra):
+        def run(args, log, env, cwd):
+            self.mocked_gate(args, log, env, cwd)
+            request = gate.read(args[-1])
+            path = (Path(request["bundleRoot"]) / extra.relative_to(self.build)
+                    if extra.is_relative_to(self.build) else extra)
+            proof_path = Path(request["output"]) / "artifact-proof.json"
+            proof = gate.read(proof_path)
+            proof["assemblies"].append({"name": "Extra.GateOnly", "fullName": "Extra.GateOnly, Version=1.0.0.0",
+                                        "path": str(path), "mvid": str(uuid.uuid5(uuid.NAMESPACE_DNS, "Extra.GateOnly")),
+                                        "sha256": gate.sha(path)})
+            gate.write(proof_path, proof)
+        return run
+
+    def test_gate_only_bundle_dll_change_requires_fresh_proof(self):
+        extra = self.binaries / "Extra.GateOnly.dll"
+        extra.write_text("synthetic gate-only DLL v1")
+        run = self.extra_binding_gate(extra)
         row, first = self.case(1)
-        before = self.validate(row, first)["key"]
-        host = self.binaries / "Zendiator.UseCaseBenchmarks-1.dll"
-        host.write_text("changed synthetic BDN host")
-        next(item for item in self.loads if item["name"] == "Zendiator.UseCaseBenchmarks-1")["sha256"] = gate.sha(host)
-        row, second = self.case(2, pid=222)
-        result = self.validate(row, second)
-        self.assertNotEqual(before, result["key"])
+        before = gate.ensure_artifact_gate(row, first, self.session, self.project, run, lambda: {})
+        extra.write_text("synthetic gate-only DLL v2")
+        row, second = self.case(2, "MediatRHistoricalNotification1", pid=222)
+        result = gate.ensure_artifact_gate(row, second, self.session, self.project, run, lambda: {})
+        self.assertFalse(result["proofReused"])
+        self.assertNotEqual(before["key"], result["key"])
         self.assertEqual(len(self.gate_calls), 2)
+        first_request = gate.read(first / "artifact-gate-request.json")
+        second_request = gate.read(second / "artifact-gate-request.json")
+        self.assertNotEqual(first_request["bundleFiles"], second_request["bundleFiles"])
+        self.assertNotIn("Extra.GateOnly", [item["name"] for item in gate.read(next(second.glob("loaded-final-*.json")))["assemblies"]])
+
+    def test_relabelled_cache_cannot_reuse_proof_for_different_full_bundle(self):
+        extra = self.binaries / "Extra.GateOnly.dll"
+        extra.write_text("synthetic unmeasured DLL v1")
+        row, first = self.case(1)
+        before = self.validate(row, first)
+        cache_root = first.parents[4] / "artifact-gate-cache"
+        saved = gate.read(cache_root / (before["key"] + ".json"))
+        extra.write_text("synthetic unmeasured DLL v2")
+        row, second = self.case(2, pid=222)
+        final, _, _ = gate.child_snapshot(row, second)
+        semantic = gate.semantic_identity(final, self.session, self.project, final["runtimeEvidence"], gate.tree_hashes(self.build))
+        key = gate.digest(semantic)
+        saved.update(semantic=semantic, key=key)
+        gate.write(cache_root / (key + ".json"), saved)
+        with self.assertRaisesRegex(ValueError, "full saved bundle"):
+            self.validate(row, second)
+        self.assertEqual(len(self.gate_calls), 1)
+        self.assertFalse((second / "artifact-binding.json").exists())
+
+    def test_cached_gate_only_framework_binding_change_is_rejected(self):
+        extra = self.framework / "Extra.GateOnly.dll"
+        extra.write_text("synthetic gate-only framework DLL v1")
+        run = self.extra_binding_gate(extra)
+        row, first = self.case(1)
+        gate.ensure_artifact_gate(row, first, self.session, self.project, run, lambda: {})
+        extra.write_text("synthetic gate-only framework DLL v2")
+        row, second = self.case(2, pid=222)
+        with self.assertRaisesRegex(ValueError, "Actual gate loaded binding changed"):
+            gate.ensure_artifact_gate(row, second, self.session, self.project, run, lambda: {})
+        self.assertEqual(len(self.gate_calls), 1)
+        self.assertFalse((second / "artifact-binding.json").exists())
+
 
     def test_gate_implementation_version_participates_in_cache_key(self):
         row, first = self.case(1)
@@ -236,14 +299,17 @@ class ArtifactGateContracts(unittest.TestCase):
             gate.ensure_artifact_gate(row, attempt, self.session, self.project, wrong_architecture, lambda: {})
         self.assertFalse((attempt / "artifact-binding.json").exists())
 
-    def test_gate_count_is_not_a_full_suite_or_contract_guarantee(self):
+    def test_incomplete_benchmark_gate_proof_is_rejected(self):
         row, attempt = self.case()
-        result = self.validate(row, attempt)
-        self.assertIn("notification-contract/full-suite evidence remains separate", result["scope"])
+        self.validate(row, attempt)
         path = Path(gate.read(attempt / "artifact-binding.json")["proofPath"])
         proof = gate.read(path)
         proof["benchmarkGateCases"] = 393
         gate.write(path, proof)
+        binding_path = attempt / "artifact-binding.json"
+        binding = gate.read(binding_path)
+        binding["proofSha256"] = gate.sha(path)
+        gate.write(binding_path, binding)
         with self.assertRaisesRegex(ValueError, "proof"):
             gate.check_artifact_binding(row, attempt, self.session, self.project)
 

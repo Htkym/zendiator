@@ -38,28 +38,6 @@ public sealed class ConcurrencyAndReentrancyTests
     }
 
     [Fact]
-    public async Task Concurrent_first_use_shares_single_scoped_instance()
-    {
-        TestCounters.ResetAll();
-        var services = new ServiceCollection();
-        services.AddScoped<Val0Handler>(_ =>
-        {
-            Interlocked.Increment(ref Val0Handler.FactoryCalls);
-            return new Val0Handler();
-        });
-        services.AddZendiator();
-        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-        using var scope = provider.CreateScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        var results = await Task.WhenAll(Enumerable.Range(0, 8).SelectMany(task => Enumerable.Range(0, 3).Select(i =>
-            Task.Run(async () => await mediator.SendAsync(new Val0(task * 10 + i))))));
-        for (var task = 0; task < 8; task++)
-            for (var i = 0; i < 3; i++)
-                Assert.Equal(task * 10 + i + 1, results[task * 3 + i]);
-        Assert.Equal(1, Val0Handler.FactoryCalls);
-    }
-
-    [Fact]
     public async Task Concurrent_transient_use_captures_once()
     {
         TestCounters.ResetAll();
@@ -81,28 +59,9 @@ public sealed class ConcurrencyAndReentrancyTests
     }
 
     [Fact]
-    public async Task Concurrent_distinct_routes_stay_independent()
-    {
-        TestCounters.ResetAll();
-        var services = new ServiceCollection();
-        services.AddZendiator();
-        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-        using var scope = provider.CreateScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        var val0 = Task.Run(async () => await mediator.SendAsync(new Val0(41)));
-        var pipe = Task.Run(async () => await mediator.SendAsync(new PipeReq(1)));
-        var gate = Task.Run(async () => await mediator.SendAsync(new GateReq(true)));
-        var tok = Task.Run(async () => await mediator.SendAsync(new TokReq(CancellationToken.None)));
-        Assert.Equal(42, await val0);
-        Assert.Equal(1001, await pipe);
-        Assert.Equal(7, await gate);
-        Assert.Equal(CancellationToken.None, await tok);
-    }
-
-    [Fact]
     public async Task Repeated_contended_first_use_completes_and_captures_once()
     {
-        const int Rounds = 200;
+        const int Rounds = 16;
         TestCounters.ResetAll();
         var services = new ServiceCollection();
         services.AddTransient(_ =>

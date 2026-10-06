@@ -27,18 +27,24 @@ Send/Void は事前作成した要求と軽い同期完了ハンドラーを使�
 
 ### ライブラリ横断の実行driver
 
-既存 `Run-Comparison.ps1` は、保存済み360件と同じtype別ブロック実行を行います。別の `Zendiator.UseCaseBenchmarks/run_interleaved.py` は `interleaved_plan.py` で比較キーごとの先頭ライブラリを交代し、BDNを1回につき単一ケースだけ起動して、連結した子ログと計画を照合します。cleanなコミット済みworktree、SDK 10.0.401、locked restore、Releaseビルド、新しい出力先が必要です。各グループ前に正当性394件を一度確認します。失敗した試行を残し、ソース・SDK・親子DLLの同一性、ケースごとの結果と子証跡1件を検証し、完了ケースは再実行せず再開できます。旧ブロック実行の出力は取り込みません。
+既存の`Run-Comparison.ps1`は、保存済み360件と同じtype別ブロック実行を行います。別の`Zendiator.UseCaseBenchmarks/run_interleaved.py`は、`interleaved_plan.py`で比較キーごとの先頭ライブラリを交代します。BDNを1回につき単一ケースだけ起動し、連結した子ログと計画を照合します。cleanなコミット済みworktree、SDK 10.0.401、locked restore、Releaseビルド、source worktreeの外にある新しい出力先が必要です。各グループ前に正当性394件を一度確認します。失敗した試行と親子DLLの同一性情報も残します。旧ブロック実行の出力は取り込みません。
 
-リポジトリのルートから、ビルド・BDNを起動せず計画を確認する例:
+測定した子ごとに、生成build・ソース・DLL・runtimeconfig・depsを保存し、setup時とworkload終了後のアセンブリ証跡を別々に残します。元のdotnet hostと保存した設定を使い、frameworkの版を固定してroll-forwardを無効にし、別プロセスで保存consumerの`--artifact-gate`入口を実行します。この394件のgateで、子のmanaged binding、runtime・依存・GC設定、bundle全体の実行前後の不変性を確認します。proofの検証が通るまで`complete.json`を書きません。cacheの再利用は、同じsessionでbundle全体のmap、測定子のbinding、設定、gate実装が一致する場合だけです。各ケース・子をproofに結び付ける証跡は個別に残します。gateだけが読み込んだbindingもproof検証時に照合します。生成BDN hostのStartupObjectをgate入口には使いません。この394件のbenchmark確認と、通知契約の重点テスト・全体テストは別の検証です。
+
+リポジトリのルートから、ビルド・BDNを起動せず計画を確認する例です。
 
 ```powershell
-python benchmarks/Zendiator.UseCaseBenchmarks/run_interleaved.py --group all --output D:\gitroot\zendiator\.local\benchmarks\new-interleaved-run --dry-run
+python benchmarks/Zendiator.UseCaseBenchmarks/run_interleaved.py --group all --output D:\gitroot\zendiator-benchmark-results\new-interleaved-run --dry-run
 ```
 
-PCが静かな時間枠で `--max-cases 2` を付けると2ケースだけのsmokeになり、最終outcomeやreportを書かない途中状態で停止します。証跡を確認した後、同じ出力先を指定して `--resume` を付け、`--max-cases` を外して続けます。全件実行では両方を外します。現時点でdriverはdry-runまでの確認です。実ログ、BDN JSON、子証跡の最終照合が通るまでは交互実行の結果と呼びません。
+出力先はsource checkoutの配下ではなく、兄弟位置に置きます。本実行と再開にも同じ外部パスを指定してください。`--dry-run`は本実行の条件を検査する前に計画だけを出すため、出力先の位置や実行環境までは確認しません。
 
+PCが静かな時間枠で`--max-cases 2`を付けると、2ケースだけのsmokeになります。最終outcomeやreportを書かない途中状態で停止します。証跡を確認した後、同じ出力先を指定して`--resume`を付け、`--max-cases`を外して続けます。全件実行では両方を外します。完了ケースの再利用には、保存bundle・proofの一致と、以前の所有プロセスがすべて終了した証拠が必要です。子の確認にはPIDと開始identityを使い、終了済み・zombieを区別します。識別できなければ再開を拒否し、確認のために別プロセスを停止しません。
 
-改修前後の重点ラウンドでは `--group custom --matrix benchmarks/Zendiator.UseCaseBenchmarks/review-notification.json`（4ケース）または `review-p0-ab.json`（10ケース）を指定し、roundごとに別の出力先を使います。実行順・証跡確認・再開の条件は同じで、完了した重点roundごとに `all-results.csv` を出力します。
+`d66389b`では、Windowsの単一ケースによる保存consumer smokeと実際のWindows Job fixtureを確認しました。独立Linuxレビューでは、OS SIGINT・SIGTERM、繰り返す割込み、別sentinelの保持を含むdriver-audit fixtureが成功しています。追加のcache・process identity・build server修正は、次の実行枠で再検証が必要です。実OSのCTRL_BREAK配送は未検証です。全計画ケースの実ログ、BDN JSON、子証跡、artifact proofの最終照合が通るまでは、全件の交互実行結果と呼びません。
 
+改修前後の重点ラウンドでは、`--group custom --matrix benchmarks/Zendiator.UseCaseBenchmarks/review-notification.json`の4ケース、または`review-p0-ab.json`の10ケースを指定します。roundごとに別の外部出力先を使います。実行順・証跡確認・再開の条件は同じで、完了した重点roundごとに`all-results.csv`を出力します。
 
-BDNはworktree配下から `Zendiator.UseCaseBenchmarks.csproj` を探索します。driverはrestore/build前に1件だけ存在することを確認します。主checkoutの `.local` に別checkoutが入っている場合は、兄弟位置のcleanな隔離worktreeで実行し、そこに新しい `.local` 出力先を作ります。再開は同じworktree・出力先・commit・SDK・matrixで、以前のowned BDNプロセスが残っていないことを確認してから行います。同名projectで失敗した出力は保全し、隔離worktreeの新しい出力先で始めます。worktreeをまたいでその失敗を再開しません。
+driverが直接起動するrestore・buildは、そのコマンドでpersistent build serverを再利用しない設定を使います。既存serverを停止する処理は行わず、descendantの包含条件も維持します。
+
+BDNはworktree配下から`Zendiator.UseCaseBenchmarks.csproj`を探索します。driverはrestore・build前に1件だけ存在することを確認します。主checkoutの`.local`に別checkoutが入っている場合は、兄弟位置のcleanな隔離worktreeで実行し、出力は別の兄弟resultsディレクトリに置いてください。再開には、同じworktree・外部出力先・commit・SDK・matrixと、所有プロセスの終了・artifactの一致を示す証跡が必要です。同名projectで失敗した出力は保全し、隔離worktreeの外にある新しい出力先で始めます。worktreeをまたいでその失敗を再開しません。
