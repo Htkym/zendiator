@@ -53,21 +53,10 @@ revision = metadata.get("revision", metadata.get("commit"))
 if not revision:
     raise ValueError("The send run has no source revision")
 source_digest = metadata.get("sourceDigest")
-manifest = json.loads((OUTPUT / "runs" / "send" / "manifest.json").read_text(encoding="utf-8"))
-generated = next((item["sha256"] for item in manifest.get("generated", []) if item["path"].endswith("Zendiator.g.cs")), None)
-product = (metadata.get("productHashes") or [None])[0]
-environment = "、".join(part for part in (
-    f"SDK {metadata['sdk']}" if metadata.get("sdk") else "",
-    manifest.get("runtime", ""),
-    f"製品 DLL `{product}`" if product else "",
-    f"生成コード `{generated}`" if generated else "",
-) if part)
 parts = [
     "# ユースケース別の競合ライブラリ比較",
     "",
     f"Zendiator revision `{revision}`" + (f"、ソース digest `{source_digest}`" if source_digest else "") + "。数値は BenchmarkDotNet の mean / allocated bytes。`all-results.csv` に median、標準偏差、有効 iteration 数も収録した。各 `runs/<group>/results/*-full.json` に生データ、`run.log` に警告、`run-info.json` に成功件数と子プロセスの DLL hash を残した。",
-    "",
-    f"測定環境: {environment}。" if environment else "",
     "",
     "この表は 1 launch の探索比較。API と業務コードの形が異なるため、小差やライブラリ全体の順位を確定しない。`対象外` は本ハーネスに同等ケースがないことを示し、速度 0 や機能の不在を意味しない。",
 ]
@@ -79,17 +68,6 @@ for method, title in (
     ("ScopeK10", "新しい Scope で 10 回 Send"),
 ):
     parts += ["", f"## {title}", "", table([(f"Behavior {depth} 段", "Send", depth, method, "", "") for depth in (0, 1, 3, 5)])]
-
-parts += [
-    "",
-    "## 新しい Scope での入口の初回取得",
-    "",
-    "Controller に Scoped の入口を注入して 1 回 Send する用途に近い形を、段階ごとに別ケースとして測る。Provider は事前に構築した。`初回取得＋Send` は計測外で作成した Scope を 1 回の操作ごとに 1 つ使い、同じ Scope での再取得にならないようにした（BDN の invocation 16384 回、unroll 1、Scope の作成と破棄は iteration 単位の setup／cleanup）。行どうしの単純な差を構築・解決のコストとはみなさない。HTTP や MVC のパイプライン全体は含まない。",
-    "",
-    table([("Scope 作成・破棄のみ", "Send", 0, "ScopeOnly", "", "")]
-          + [(f"Behavior {depth} 段、Scope 作成・入口の初回取得・破棄", "Send", depth, "ScopeResolve", "", "") for depth in (0, 1, 3, 5)]
-          + [(f"Behavior {depth} 段、用意済み Scope で入口の初回取得＋Send", "Send", depth, "FirstSend", "", "") for depth in (0, 1, 3, 5)]),
-]
 
 parts += [
     "",
@@ -129,60 +107,10 @@ parts += [
                ("早期終了、非同期中断", "EarlyBreak", True),
                ("途中キャンセル、非同期中断", "Cancellation", True),
            )]),
-]
-
-RELAY_STAGE = {
-    "creation": "Stream 生成時に同期 throw",
-    "enumerator": "GetAsyncEnumerator で throw",
-    "move-call": "MoveNextAsync の呼び出しで同期 throw",
-    "move-await": "初回 MoveNextAsync の完了で throw",
-}
-
-
-def relay_timing():
-    path = OUTPUT / "runs" / "relay" / "correctness.json"
-    if not path.exists():
-        return []
-    rows = [row for row in json.loads(path.read_text(encoding="utf-8")) if row.get("suite") == "RelayTiming"]
-    lines = ["| ライブラリ | Behavior 段数 | 前処理の実行時点 | 前処理の例外 |", "|---|---:|---|---|"]
-    for row in rows:
-        when = ("Stream 生成時" if row["eventsAtCreation"] else
-                "GetAsyncEnumerator 時" if row["eventsAtEnumerator"] else "初回 MoveNextAsync 時")
-        lines.append(f"| {LIBS[row['library']]} | {row['behaviors']} | {when} | {RELAY_STAGE[row['failureStage']]} |")
-    return ["", "前処理の実行時点と例外の出方（測定前の確認で記録）:", "", "\n".join(lines)]
-
-
-if any(row["Group"] == "relay" for row in ROWS):
-    parts += [
-        "",
-        "## 前処理のみの Stream Behavior、全列挙 16 項目",
-        "",
-        "各ライブラリの Behavior を、前処理の後に next の列挙元をそのまま返す非 async 実装にそろえた独立ケース。上の Stream 表（async iterator で中継する Behavior）とは処理内容が異なるため、表をまたいで比較しない。",
-        "",
-        table([(f"Behavior {depth} 段、{'非同期中断' if asynchronous else '同期完了'}", "Relay", depth, "Full", 16, asynchronous) for depth in (1, 5) for asynchronous in (False, True)]),
-        "",
-        "## 前処理のみの Stream Behavior、全列挙 1024 項目",
-        "",
-        table([(f"Behavior 5 段、{'非同期中断' if asynchronous else '同期完了'}", "Relay", 5, "Full", 1024, asynchronous) for asynchronous in (False, True)]),
-        "",
-        "## 前処理のみの Stream Behavior、生成・部分列挙・キャンセル（16 項目）",
-        "",
-        table([(f"Behavior 5 段、{label}", "Relay", 5, method, 16, asynchronous)
-               for label, method, asynchronous in (
-                   ("生成のみ", "Creation", False),
-                   ("先頭 1 件、同期完了", "First", False),
-                   ("先頭 1 件、非同期中断", "First", True),
-                   ("早期終了、同期完了", "EarlyBreak", False),
-                   ("早期終了、非同期中断", "EarlyBreak", True),
-                   ("途中キャンセル、非同期中断", "Cancellation", True),
-               )]),
-    ] + relay_timing()
-
-parts += [
     "",
     "## 測定条件と読み方",
     "",
-    "- Release、CPU affinity 1。BDN の子プロセスをケースごとに分離し、warmup 20、測定 12、指定 iteration time 500 ms、1 launch。同じケースの各ライブラリを続けて実行し、先に実行するライブラリをケースごとに入れ替えた。実行時の CPU・OS・SDK・ライブラリ版は `run.log` と `manifest.json` を参照。全ケースの独立セッション再現や Tier1 JIT 分析まで済んだ正式な最速認定ではない。",
+    "- Release、CPU affinity 1。BDN の子プロセスをケースごとに分離し、warmup 20、測定 12、指定 iteration time 500 ms、1 launch。実行時の CPU・OS・SDK・ライブラリ版は `run.log` と `manifest.json` を参照。全ケースの独立セッション再現や Tier1 JIT 分析まで済んだ正式な最速認定ではない。",
     "- Send と Void のハンドラは同期完了する軽い計算で、要求オブジェクトは事前に作成した。`Typed` の 1～2 ns 付近は測定限界に近く、実業務の I/O や複雑な Handler の所要時間を表さない。Notification の非同期ケースは各ハンドラで `Task.Yield()`、Stream の非同期ケースは列挙中に実際に中断する。入力、業務結果、Behavior 順、キャンセル、例外、通知の購読者数、列挙結果を測定前に確認した。",
     "- Zendiator と DispatchR は共通 Mediator 入口。Immediate は要求ごとの生成入口。MediatR は `Task`、他は主に `ValueTask` を返す。Mediator.SourceGenerator は具体的 Mediator 入口。これらの API 差が実測値に含まれる。",
     "- DI lifetime は各ライブラリの公式登録で Scoped を指定できる範囲に合わせた。Immediate の入口は生成器の形、DispatchR の入口 lifetime は登録に従う。`ScopeK1` は Scope の生成と破棄を含む。`ScopeK10` は 10 件の合計値であり、1 件あたりに割らない。",

@@ -46,39 +46,6 @@ public sealed class NotificationDispatchTests
         Assert.Equal("caller", context.Value);
     }
 
-    [Fact]
-    public async Task Single_subscriber_publish_reports_synchronous_failures_through_its_result()
-    {
-        var services = Services();
-        var factoryFailure = new InvalidOperationException("factory");
-        var failFactory = false;
-        services.AddTransient(_ => failFactory ? throw factoryFailure : new ControlledNotificationHandler());
-        await using var provider = services.BuildServiceProvider();
-        await using (var scope = provider.CreateAsyncScope())
-        {
-            var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-            var rejected = mediator.PublishAsync((ControlledNotification)null!);
-            Assert.True(rejected.IsFaulted);
-            await Assert.ThrowsAsync<ArgumentNullException>(async () => await rejected);
-            using var cancellation = new CancellationTokenSource();
-            cancellation.Cancel();
-            var completion = new NotificationCompletion();
-            var canceled = mediator.PublishAsync(new ControlledNotification(completion, completion.Version, new AsyncLocal<string?>()), cancellation.Token);
-            Assert.True(canceled.IsCanceled);
-            Assert.Equal(cancellation.Token, (await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await canceled)).CancellationToken);
-            Assert.Equal(0, completion.Consumptions);
-        }
-        failFactory = true;
-        await using (var scope = provider.CreateAsyncScope())
-        {
-            var completion = new NotificationCompletion();
-            var failed = scope.ServiceProvider.GetRequiredService<IZendiator>()
-                .PublishAsync(new ControlledNotification(completion, completion.Version, new AsyncLocal<string?>()));
-            Assert.True(failed.IsFaulted);
-            Assert.Same(factoryFailure, await Assert.ThrowsAsync<InvalidOperationException>(async () => await failed));
-        }
-    }
-
     private static ServiceCollection Services()
     {
         var services = new ServiceCollection();

@@ -12,7 +12,6 @@ if len(sys.argv) != 2:
     raise SystemExit("Usage: python analyze.py OUTPUT_ROOT")
 OUTPUT = Path(sys.argv[1]).resolve()
 FIELDS = ("Type", "Method", "Lifetime", "Count", "Asynchronous")
-GROUPS = ("send", "features", "streams", "relay")
 
 
 def key(case):
@@ -30,7 +29,7 @@ def parameters(value):
 expected = {}
 actual = {}
 rows = []
-for group in GROUPS:
+for group in ("send", "features", "streams"):
     matrix = json.loads((ROOT / f"{group}.json").read_text(encoding="utf-8"))
     for case in matrix:
         identifier = key(case)
@@ -74,7 +73,7 @@ with (OUTPUT / "all-results.csv").open("w", encoding="utf-8", newline="") as out
     writer.writeheader()
     writer.writerows(rows)
 
-for group in GROUPS:
+for group in ("send", "features", "streams"):
     wanted = {identifier for identifier, value in expected.items() if value == group}
     found = {identifier for identifier, value in actual.items() if value == group}
     print(f"{group}: {len(found)}/{len(wanted)} cases")

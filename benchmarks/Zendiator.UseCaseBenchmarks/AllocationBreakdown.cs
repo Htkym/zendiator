@@ -7,8 +7,6 @@ internal static class AllocationBreakdown
 {
     private sealed class PlainEntry;
     private sealed class DisposableEntry : IDisposable { public void Dispose() { } }
-    private sealed class ScaleComposition;
-    private sealed class ScaleValue<T> { public ScaleValue() { } }
 
     public static Task Run(string output)
     {
@@ -37,18 +35,12 @@ internal static class AllocationBreakdown
                 throw new InvalidOperationException("Transient Immediate handler was shared in one scope.");
         }
         var request = new Ping0();
-        var request3 = new Ping3();
-        var request5 = new Ping5();
         var cases = new (string Name, Func<int> Invoke)[]
         {
             ("Z Scope", () => { using var scope = zendiator.CreateScope(); return 1; }),
             ("Z Scope+direct mediator", () => { using var scope = zendiator.CreateScope(); var entry = new Competitive.Generated.Zendiator(scope.ServiceProvider); GC.KeepAlive(entry); return 1; }),
             ("Z Scope+entry", () => { using var scope = zendiator.CreateScope(); var entry = scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); GC.KeepAlive(entry); return 1; }),
             ("Z Scope+entry+Send0", () => { using var scope = zendiator.CreateScope(); var entry = scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); return entry.SendAsync(request).Result; }),
-            ("Z Scope+entry+first Behavior5", () => { using var scope = zendiator.CreateScope(); var entry = (Competitive.Generated.Zendiator)scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); _ = entry.GetRequiredService<ZBehavior1<Ping5, int>>(); return 1; }),
-            ("Z Scope+entry+two Behaviors5", () => { using var scope = zendiator.CreateScope(); var entry = (Competitive.Generated.Zendiator)scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); _ = entry.GetRequiredService<ZBehavior1<Ping5, int>>(); _ = entry.GetRequiredService<ZBehavior2<Ping5, int>>(); return 1; }),
-            ("Z Scope+entry+Send3", () => { using var scope = zendiator.CreateScope(); var entry = scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); return entry.SendAsync(request3).Result; }),
-            ("Z Scope+entry+Send5", () => { using var scope = zendiator.CreateScope(); var entry = scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); return entry.SendAsync(request5).Result; }),
             ("I Scope", () => { using var scope = immediate.CreateScope(); return 1; }),
             ("I Scope+direct handler", () => { using var scope = immediate.CreateScope(); var entry = new IPing0.Handler(new IPing0.HandleBehavior()); GC.KeepAlive(entry); return 1; }),
             ("I Scope+entry", () => { using var scope = immediate.CreateScope(); var entry = scope.ServiceProvider.GetRequiredService<IPing0.Handler>(); GC.KeepAlive(entry); return 1; }),
@@ -80,43 +72,6 @@ internal static class AllocationBreakdown
         var path = Path.Combine(output, "allocation-breakdown.json");
         File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine(path);
-        MeasureResolverScale(output);
         return Task.CompletedTask;
-    }
-
-    private static void MeasureResolverScale(string output)
-    {
-        using var provider = new ServiceCollection().AddTransient(typeof(ScaleValue<>)).BuildServiceProvider();
-        var method = typeof(Zendiator.DependencyInjection.ZendiatorServiceResolver<ScaleComposition>).GetMethod("GetRequiredService")!;
-        var calls = (from first in Enumerable.Range(1, 16)
-                     from second in Enumerable.Range(1, 8)
-                     let argument = typeof(Tuple<,>).MakeGenericType(typeof(int).MakeArrayType(first), typeof(string).MakeArrayType(second))
-                     select method.MakeGenericMethod(typeof(ScaleValue<>).MakeGenericType(argument))).ToArray();
-        var primer = new Zendiator.DependencyInjection.ZendiatorServiceResolver<ScaleComposition>(provider);
-        foreach (var call in calls) call.Invoke(primer, null);
-        var results = new List<object>();
-        foreach (var reverse in new[] { false, true })
-        {
-            var ordered = reverse ? calls.Reverse().ToArray() : calls;
-            foreach (var count in new[] { 1, 2, 6, 32, 64, 128 })
-            {
-                void Resolve()
-                {
-                    var resolver = new Zendiator.DependencyInjection.ZendiatorServiceResolver<ScaleComposition>(provider);
-                    for (var i = 0; i < count; i++)
-                    {
-                        var captured = ordered[i].Invoke(resolver, null);
-                        if (!ReferenceEquals(captured, ordered[i].Invoke(resolver, null)))
-                            throw new InvalidOperationException("A captured dependency was replaced.");
-                    }
-                }
-                for (var i = 0; i < 100; i++) Resolve();
-                var before = GC.GetAllocatedBytesForCurrentThread();
-                for (var i = 0; i < 1000; i++) Resolve();
-                var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-                results.Add(new { reverse, count, bytesPerOperation = allocated / 1000d });
-            }
-        }
-        File.WriteAllText(Path.Combine(output, "resolver-scale.json"), JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
     }
 }

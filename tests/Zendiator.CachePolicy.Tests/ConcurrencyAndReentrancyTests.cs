@@ -100,56 +100,6 @@ public sealed class ConcurrencyAndReentrancyTests
     }
 
     [Fact]
-    public async Task Repeated_contended_first_use_completes_and_captures_once()
-    {
-        const int Rounds = 200;
-        TestCounters.ResetAll();
-        var services = new ServiceCollection();
-        services.AddTransient(_ =>
-        {
-            Interlocked.Increment(ref PipeB0.FactoryCalls);
-            Thread.SpinWait(500);
-            return new PipeB0();
-        });
-        services.AddTransient(_ =>
-        {
-            Interlocked.Increment(ref Val0Handler.FactoryCalls);
-            Thread.SpinWait(500);
-            return new Val0Handler();
-        });
-        services.AddZendiator();
-        await using var provider = services.BuildServiceProvider();
-        var scopes = Enumerable.Range(0, Rounds).Select(_ => provider.CreateAsyncScope()).ToArray();
-        try
-        {
-            var mediators = scopes.Select(scope => scope.ServiceProvider.GetRequiredService<IZendiator>()).ToArray();
-            using var barrier = new Barrier(4);
-            // Two workers race on the route set and two on a slot dependency of the same mediator.
-            var workers = Enumerable.Range(0, 4).Select(worker => Task.Factory.StartNew(() =>
-            {
-                for (var round = 0; round < Rounds; round++)
-                {
-                    barrier.SignalAndWait();
-                    if (worker < 2)
-                        Assert.Equal(1001, mediators[round].SendAsync(new PipeReq(1)).AsTask().GetAwaiter().GetResult());
-                    else
-                        Assert.Equal(42, mediators[round].SendAsync(new Val0(41)).AsTask().GetAwaiter().GetResult());
-                }
-            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default)).ToArray();
-            await Task.WhenAll(workers).WaitAsync(TimeSpan.FromSeconds(60));
-            Assert.Equal(Rounds, PipeB0.FactoryCalls);
-            Assert.Equal(Rounds, PipeB0.Constructions);
-            Assert.Equal(Rounds, PipeHandler.Constructions);
-            Assert.Equal(Rounds, Val0Handler.FactoryCalls);
-            Assert.Equal(Rounds, Val0Handler.Constructions);
-        }
-        finally
-        {
-            foreach (var scope in scopes) await scope.DisposeAsync();
-        }
-    }
-
-    [Fact]
     public async Task Factory_reentrancy_into_another_route_completes()
     {
         TestCounters.ResetAll();

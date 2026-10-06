@@ -111,16 +111,14 @@ public sealed class AuditHandler : INotificationHandler<UserCreated>
     }
 }
 
-public sealed record Pair(int A, int B) : IMultiRequest<int>, ISyncMultiRequest<int>;
-public sealed class PairHandlerA : IRequestHandler<Pair, int>, ISyncRequestHandler<Pair, int>
+public sealed record Pair(int A, int B) : IMultiRequest<int>;
+public sealed class PairHandlerA : IRequestHandler<Pair, int>
 {
     public ValueTask<int> HandleAsync(Pair request, CancellationToken cancellationToken) => new(request.A + request.B);
-    public int Handle(Pair request, CancellationToken cancellationToken) => request.A + request.B;
 }
-public sealed class PairHandlerB : IRequestHandler<Pair, int>, ISyncRequestHandler<Pair, int>
+public sealed class PairHandlerB : IRequestHandler<Pair, int>
 {
     public ValueTask<int> HandleAsync(Pair request, CancellationToken cancellationToken) => new(request.A * request.B);
-    public int Handle(Pair request, CancellationToken cancellationToken) => request.A * request.B;
 }
 
 public readonly ref struct ParseYear : ISyncRequest<int>
@@ -221,9 +219,6 @@ public static class Program
         Span<int> years = stackalloc int[3] { 2000, 20, 6 };
         year += mediator.SendSync(new ParseYear(years), CancellationToken.None) - 2026;
         Check("AOT07", year == 2026, $"sync={year}");
-        Span<int> pairResults = stackalloc int[3] { -1, -1, -1 };
-        var written = mediator.SendAllSync(new Pair(2, 3), pairResults, CancellationToken.None);
-        Check("AOT07S", written == 2 && pairResults[0] == 5 && pairResults[1] == 6 && pairResults[2] == -1, $"span-count={written}");
 
         var names = new List<string>();
         await foreach (var n in mediator.StreamAsync(new GetNames(3))) names.Add(n);

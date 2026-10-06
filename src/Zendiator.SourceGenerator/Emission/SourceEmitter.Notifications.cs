@@ -32,8 +32,8 @@ internal sealed partial class SourceEmitter
 
     private void EmitNotifications(StringBuilder b)
     {
-        for (var index = 0; index < _model.Routes.Notifications.Count; index++)
-            EmitNotification(b, _model.Routes.Notifications[index], index);
+        foreach (var route in _model.Routes.Notifications)
+            EmitNotification(b, route);
         var closed = _model.Routes.Notifications.Where(static n => !n.IsOpen).ToList();
         if (closed.Count != 0)
         {
@@ -57,9 +57,8 @@ internal sealed partial class SourceEmitter
         }
     }
 
-    private void EmitNotification(StringBuilder b, EmissionNotificationRoute route, int index)
+    private void EmitNotification(StringBuilder b, EmissionNotificationRoute route)
     {
-        var set = SetOf("NotificationRoute" + index);
         b.AppendLine("""    /// <summary>Publishes the notification to subscribers in order.</summary>""");
         if (route.Subscribers.Count == 0)
         {
@@ -74,10 +73,6 @@ internal sealed partial class SourceEmitter
                         return default;
                     }
                 """);
-        }
-        else if (route.Subscribers.Count == 1 && !route.IsOpen)
-        {
-            EmitSingleSubscriberNotification(b, route, index);
         }
         else
         {
@@ -104,8 +99,7 @@ internal sealed partial class SourceEmitter
                 }
 
                 var direct = sub.Handler.DirectCall;
-                var recv = Receiver(set, sub.Handler, handlerName, contract, direct, MediatorServices,
-                    set == null ? "" : set.Name + ".Get(" + MediatorServices + ")");
+                var recv = ServiceReceiver(handlerName, contract, direct, MediatorServices);
                 if (i != 0)
                     b.AppendLine("""        if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
                 b.AppendLine($$"""
@@ -118,43 +112,6 @@ internal sealed partial class SourceEmitter
 
         b.AppendLine($$"""
                 public {{NotificationSignature(route, publish: true)}} => PublishAsync(notification, cancellationToken);
-            """);
-    }
-
-    // Start restores the caller's contexts like an async method without boxing a state machine.
-    private void EmitSingleSubscriberNotification(StringBuilder b, EmissionNotificationRoute route, int index)
-    {
-        var handler = route.Subscribers[0].Handler;
-        var contract = $$"""global::Zendiator.INotificationHandler<{{route.NotificationDisplay}}>""";
-        var publish = $"NotificationRoute{index}Publish";
-        b.AppendLine($$"""
-                public {{NotificationSignature(route, publish: false)}}
-                {
-                    var publish = new {{publish}}({{MediatorServices}}, notification, cancellationToken);
-                    global::System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder.Create().Start(ref publish);
-                    return publish.Result;
-                }
-                private struct {{publish}}({{ResolverType}} services, {{route.NotificationDisplay}} notification, global::System.Threading.CancellationToken cancellationToken) : global::System.Runtime.CompilerServices.IAsyncStateMachine
-                {
-                    internal global::System.Threading.Tasks.ValueTask Result;
-                    public void MoveNext()
-                    {
-                        try
-                        {
-            """);
-        if (route.Notification.IsReferenceType)
-            b.AppendLine("""                global::System.ArgumentNullException.ThrowIfNull(notification);""");
-        b.AppendLine($$"""
-                            if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);
-                            Result = {{ServiceReceiver(Name(handler), contract, handler.DirectCall)}}.HandleAsync(notification, cancellationToken);
-                        }
-                        catch (global::System.Exception exception)
-                        {
-                            Result = Faulted(global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception));
-                        }
-                    }
-                    public void SetStateMachine(global::System.Runtime.CompilerServices.IAsyncStateMachine stateMachine) { }
-                }
             """);
     }
 }

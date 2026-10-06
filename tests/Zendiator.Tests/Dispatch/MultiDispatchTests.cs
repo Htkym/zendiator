@@ -5,24 +5,6 @@ namespace Zendiator.Tests;
 
 public sealed class MultiDispatchTests
 {
-    [Fact]
-    public async Task Results_survive_multiple_real_suspensions_in_handler_order()
-    {
-        using var provider = Services().BuildServiceProvider();
-        using var scope = provider.CreateScope();
-        var first = new TaskCompletionSource<int>();
-        var second = new TaskCompletionSource<int>();
-        var request = new PendingMulti(first.Task, second.Task);
-        var pending = scope.ServiceProvider.GetRequiredService<IZendiator>().SendAllAsync(request);
-        Assert.False(pending.IsCompleted);
-        Assert.Equal([1], request.Started);
-        first.SetResult(10);
-        Assert.False(pending.IsCompleted);
-        second.SetResult(20);
-        Assert.Equal([10, 20], await pending);
-        Assert.Equal([1, 2], request.Started);
-    }
-
     private static ServiceCollection Services()
     {
         var services = new ServiceCollection();

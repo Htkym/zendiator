@@ -28,35 +28,41 @@ internal sealed partial class SourceEmitter
         var tp = TypeParameters(route);
         var req = route.IsOpen ? route.RequestDisplay : Name(route.Request);
         var item = route.IsOpen ? route.ResponseDisplay : Name(route.Response);
+        var enumerator = $"StreamRoute{index}Enumerator";
         var enumerable = $"StreamRoute{index}Enumerable";
         // Typed enumerable: lightweight, no shared mutable state on the mediator.
-        // The creating thread's first enumeration reuses this instance, like a compiler-generated iterator.
+        b.AppendLine($$"""
+                private sealed class {{enumerable}}{{TypeParameters(route)}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> services, {{req}} request, global::System.Threading.CancellationToken apiToken) : global::System.Collections.Generic.IAsyncEnumerable<{{item}}>{{TypeConstraints(route)}}
+                {
+                    public global::System.Collections.Generic.IAsyncEnumerator<{{item}}> GetAsyncEnumerator(global::System.Threading.CancellationToken cancellationToken = default) => new {{enumerator}}{{tp}}(services, request, apiToken, cancellationToken);
+                }
+            """);
+    }
+
+    private static void EmitStreamEnumerator(StringBuilder b, EmissionRoute route, int index)
+    {
+        var tp = TypeParameters(route);
+        var req = route.IsOpen ? route.RequestDisplay : Name(route.Request);
+        var item = route.IsOpen ? route.ResponseDisplay : Name(route.Response);
+        var enumerator = $"StreamRoute{index}Enumerator";
         // Typed enumerator: resolves pipeline once on first MoveNext, merges tokens only when different.
         b.AppendLine($$"""
-                private sealed class {{enumerable}}{{TypeParameters(route)}} : global::System.Collections.Generic.IAsyncEnumerable<{{item}}>, global::System.Collections.Generic.IAsyncEnumerator<{{item}}>{{TypeConstraints(route)}}
+                private sealed class {{enumerator}}{{TypeParameters(route)}} : global::System.Collections.Generic.IAsyncEnumerator<{{item}}>{{TypeConstraints(route)}}
                 {
                     private readonly global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> _services;
                     private readonly {{req}} _request;
                     private readonly global::System.Threading.CancellationToken _apiToken;
-                    private readonly int _ownerThreadId;
-                    private global::System.Threading.CancellationToken _enumToken;
+                    private readonly global::System.Threading.CancellationToken _enumToken;
                     private global::System.Threading.CancellationTokenSource? _linked;
                     private global::System.Collections.Generic.IAsyncEnumerator<{{item}}>? _inner;
-                    private StreamEnumeratorState _state;
-                    public {{enumerable}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> services, {{req}} request, global::System.Threading.CancellationToken apiToken)
+                    private bool _started;
+                    private bool _done;
+                    public {{enumerator}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> services, {{req}} request, global::System.Threading.CancellationToken apiToken, global::System.Threading.CancellationToken enumToken)
                     {
                         _services = services;
                         _request = request;
                         _apiToken = apiToken;
-                        _ownerThreadId = global::System.Environment.CurrentManagedThreadId;
-                    }
-                    public global::System.Collections.Generic.IAsyncEnumerator<{{item}}> GetAsyncEnumerator(global::System.Threading.CancellationToken cancellationToken = default)
-                    {
-                        var enumerator = _state == StreamEnumeratorState.Unclaimed && _ownerThreadId == global::System.Environment.CurrentManagedThreadId
-                            ? this : new {{enumerable}}{{tp}}(_services, _request, _apiToken);
-                        enumerator._state = StreamEnumeratorState.NotStarted;
-                        enumerator._enumToken = cancellationToken;
-                        return enumerator;
+                        _enumToken = enumToken;
                     }
                     public {{item}} Current => _inner != null ? _inner.Current : default!;
             """);
@@ -66,48 +72,37 @@ internal sealed partial class SourceEmitter
         b.AppendLine("""
                     public global::System.Threading.Tasks.ValueTask<bool> MoveNextAsync()
                     {
-                        if (_state == StreamEnumeratorState.Forwarding) return _inner!.MoveNextAsync();
-                        if (_state == StreamEnumeratorState.NotStarted) return StartAndMoveNextAsync();
-                        return new global::System.Threading.Tasks.ValueTask<bool>(false);
+                        if (_done) return new global::System.Threading.Tasks.ValueTask<bool>(false);
+                        if (!_started) return StartAndMoveNextAsync();
+                        return _inner!.MoveNextAsync();
                     }
-                    private global::System.Threading.Tasks.ValueTask<bool> StartAndMoveNextAsync()
+                    private async global::System.Threading.Tasks.ValueTask<bool> StartAndMoveNextAsync()
                     {
-                        var task = StartCoreAsync();
-                        return task.IsCompletedSuccessfully
-                            ? new global::System.Threading.Tasks.ValueTask<bool>(task.Result)
-                            : new global::System.Threading.Tasks.ValueTask<bool>(task);
-                    }
-                    private async global::System.Threading.Tasks.Task<bool> StartCoreAsync()
-                    {
-                        _state = StreamEnumeratorState.Forwarding;
-                        try
-                        {
+                        _started = true;
             """);
         if (route.Request.IsReferenceType)
-            b.AppendLine("""                global::System.ArgumentNullException.ThrowIfNull(_request, "_request");""");
+            b.AppendLine("""            global::System.ArgumentNullException.ThrowIfNull(_request);""");
         b.AppendLine($$"""
-                            var effective = MergeStreamTokens(_apiToken, _enumToken, out _linked);
+                            var effective = MergeStreamTokens(_apiToken, _enumToken, out var linked);
+                            _linked = linked;
                             if (effective.IsCancellationRequested) ThrowDispatchCancellation(effective);
-                            _inner = new StreamRoute{{index}}Node0{{tp}}(_services).InvokeAsync(_request, effective).GetAsyncEnumerator(effective);
-                            var ok = await _inner.MoveNextAsync().ConfigureAwait(false);
-                            if (!ok) _state = StreamEnumeratorState.Stopped;
+                            global::System.Collections.Generic.IAsyncEnumerable<{{item}}> pipeline = new StreamRoute{{index}}Node0{{tp}}(_services).InvokeAsync(_request, effective);
+                            _inner = pipeline.GetAsyncEnumerator(effective);
+                        try
+                        {
+                            var ok = await _inner!.MoveNextAsync().ConfigureAwait(false);
+                            if (!ok) _done = true;
                             return ok;
                         }
                         catch
                         {
-                            _state = StreamEnumeratorState.Stopped;
+                            _done = true;
                             throw;
                         }
                     }
-                    public global::System.Threading.Tasks.ValueTask DisposeAsync()
+                    public async global::System.Threading.Tasks.ValueTask DisposeAsync()
                     {
-                        if (_inner != null || _linked != null) return DisposeInnerAsync();
-                        _state = StreamEnumeratorState.Stopped;
-                        return default;
-                    }
-                    private async global::System.Threading.Tasks.ValueTask DisposeInnerAsync()
-                    {
-                        _state = StreamEnumeratorState.Stopped;
+                        _done = true;
                         var inner = _inner;
                         _inner = null;
                         try

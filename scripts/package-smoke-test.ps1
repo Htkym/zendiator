@@ -64,7 +64,6 @@ namespace Smoke.Contracts;
 public sealed class Marker;
 
 public readonly record struct Ping(int Value) : global::Zendiator.IQuery<int>;
-public readonly record struct Values(int Value) : global::Zendiator.ISyncMultiRequest<int>;
 "@ | Set-Content "$WorkingDir/contracts/Contracts.cs" -Encoding UTF8
 
 @"
@@ -91,18 +90,6 @@ public sealed class Marker;
 public sealed class PingHandler : global::Zendiator.IQueryHandler<Ping, int>
 {
     public ValueTask<int> HandleAsync(Ping request, CancellationToken cancellationToken) => new(request.Value * 2);
-}
-
-[global::Zendiator.HandlerOrder(Order = 0)]
-public sealed class ValuesFirst : global::Zendiator.ISyncRequestHandler<Values, int>
-{
-    public int Handle(Values request, CancellationToken cancellationToken) => request.Value;
-}
-
-[global::Zendiator.HandlerOrder(Order = 1)]
-public sealed class ValuesSecond : global::Zendiator.ISyncRequestHandler<Values, int>
-{
-    public int Handle(Values request, CancellationToken cancellationToken) => request.Value + 1;
 }
 "@ | Set-Content "$WorkingDir/app/Handlers.cs" -Encoding UTF8
 
@@ -134,12 +121,6 @@ await using var provider = services.BuildServiceProvider();
 await using var scope = provider.CreateAsyncScope();
 var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
 var result = await mediator.SendAsync(new Ping(21));
-Span<int> values = stackalloc int[3];
-values[2] = -1;
-var written = mediator.SendAllSync(new Values(20), values, default);
-if (written != 2 || values[0] != 20 || values[1] != 21 || values[2] != -1) return 1;
-var collected = mediator.SendAllSync(new Values(20), default);
-if (collected.Count != 2 || collected[0] != 20 || collected[1] != 21) return 1;
 Console.WriteLine($"RESULT {result}");
 return result == 42 ? 0 : 1;
 "@ | Set-Content "$WorkingDir/host/Program.cs" -Encoding UTF8

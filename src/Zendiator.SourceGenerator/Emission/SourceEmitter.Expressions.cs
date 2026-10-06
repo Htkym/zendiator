@@ -15,7 +15,21 @@ internal sealed partial class SourceEmitter
         b.AppendLine($$"""{{indent}}if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
     }
 
-    private static string ServiceReceiver(string serviceType, string contract, bool direct, string services = "services") => direct ? $$"""{{services}}.GetDispatchService<{{serviceType}}>()""" : $$"""(({{contract}}){{services}}.GetDispatchService<{{serviceType}}>())""";
+    private static void HandlerCall(StringBuilder b, EmissionRoute route, string services, string indent)
+    {
+        b.AppendLine($$"""
+            {{indent}}return (({{HandlerContract(route)}}){{services}}.GetRequiredService<{{Name(route.Handler)}}>()).HandleAsync(request, cancellationToken);
+            """);
+    }
+
+    private static void HandlerCallDirect(StringBuilder b, EmissionRoute route)
+    {
+        b.AppendLine($$"""
+                        return services.GetRequiredService<{{Name(route.Handler)}}>().HandleAsync(request, cancellationToken);
+            """);
+    }
+
+    private static string ServiceReceiver(string serviceType, string contract, bool direct, string services = "services") => direct ? $$"""{{services}}.GetRequiredService<{{serviceType}}>()""" : $$"""(({{contract}}){{services}}.GetRequiredService<{{serviceType}}>())""";
     private static string TypeParameters(EmissionRoute route) => route.IsOpen ? "<" + string.Join(", ", route.OpenTypeParams) + ">" : "";
     private static string TypeConstraints(EmissionRoute route) => route.IsOpen ? string.Concat(route.MethodConstraints) : "";
 }

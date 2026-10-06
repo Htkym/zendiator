@@ -77,14 +77,6 @@ routes in a composition. This changes neither the DI lifetime nor who disposes
 the dependency. The non-generic `ZendiatorServiceResolver` remains available
 for code that constructs that helper directly.
 
-A closed route whose Handler and Behaviors include at least two reference types
-that no other route uses keeps those captures in a typed dependency set. The
-mediator creates the set when the route first runs, and each dependency in it is
-still resolved only when its pipeline node is first reached. Types shared by
-several routes, value types, and generic definitions that an open route can close
-keep composition slots. A direct `GetRequiredService<T>()` call on the generated
-mediator returns the same capture that the route set holds, in either order.
-
 ## Ownership and disposal
 
 DI owns Handler and Behavior disposal. The generated mediator does not implement

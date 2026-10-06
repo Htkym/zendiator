@@ -42,9 +42,4 @@ namespace Zendiator.Tests;
 [PipelineBehavior(typeof(StreamGate), Order = 36)]
 [PipelineBehavior(typeof(StreamReplace), Order = 37)]
 [PipelineBehavior(typeof(StreamTraceFail), Order = 38)]
-[PipelineBehavior(typeof(StreamRelayA), Order = 39)]
-[PipelineBehavior(typeof(StreamRelayB), Order = 40)]
-[PipelineBehavior(typeof(StreamRelayOuter), Order = 41)]
-[PipelineBehavior(typeof(StreamRelayIterator), Order = 42)]
-[PipelineBehavior(typeof(StreamRelayInner), Order = 43)]
 public sealed partial class Zendiator;

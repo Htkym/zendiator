@@ -8,7 +8,7 @@ depths = (0, 1, 3, 5)
 send = [
     {"Type": f"{library}Send{depth}", "Method": method, "Lifetime": "Scoped"}
     for depth in depths
-    for method in ("Typed", "ResolveSend", "ScopeK1", "ScopeK10", "FirstSend", "ScopeResolve") + (("ScopeOnly",) if depth == 0 else ())
+    for method in ("Typed", "ResolveSend", "ScopeK1", "ScopeK10")
     for library in libraries
 ]
 
@@ -45,22 +45,7 @@ for depth in depths:
             streams.append({"Type": name, "Method": "Creation", "Count": 16, "Asynchronous": False})
             streams.append({"Type": name, "Method": "Cancellation", "Count": 16, "Asynchronous": True})
 
-# Behaviors that only pre-process and return next's sequence, in the same shape for every library.
-relay = []
-for depth in (1, 5):
-    for library in libraries:
-        name = f"{library}Relay{depth}"
-        for asynchronous in (False, True):
-            relay.append({"Type": name, "Method": "Full", "Count": 16, "Asynchronous": asynchronous})
-        if depth == 5:
-            for asynchronous in (False, True):
-                relay.append({"Type": name, "Method": "Full", "Count": 1024, "Asynchronous": asynchronous})
-                for method in ("First", "EarlyBreak"):
-                    relay.append({"Type": name, "Method": method, "Count": 16, "Asynchronous": asynchronous})
-            relay.append({"Type": name, "Method": "Creation", "Count": 16, "Asynchronous": False})
-            relay.append({"Type": name, "Method": "Cancellation", "Count": 16, "Asynchronous": True})
-
-for group, cases in (("send", send), ("features", features), ("streams", streams), ("relay", relay)):
+for group, cases in (("send", send), ("features", features), ("streams", streams)):
     assert len(cases) == len({json.dumps(case, sort_keys=True) for case in cases})
     (root / f"{group}.json").write_text(json.dumps(cases, indent=2) + "\n")
     print(f"{group}: {len(cases)} cases")

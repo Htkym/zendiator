@@ -49,7 +49,6 @@ File.WriteAllText(Path.Combine(output, "manifest.json"), JsonSerializer.Serializ
 }, new JsonSerializerOptions { WriteIndented = true }));
 if (args.Contains("--validate-only")) return;
 if (args.Contains("--breakdown")) { await AllocationBreakdown.Run(output); return; }
-if (args.Contains("--stream-breakdown")) { await StreamAllocationProfile.Run(output); return; }
 if (args.Contains("--inspect"))
 {
     var zero = new ZendiatorSend0 { Lifetime = "Scoped" };
@@ -104,7 +103,6 @@ var config = DefaultConfig.Instance.AddJob(job).AddExporter(JsonExporter.Full).W
             || name == "ZendiatorSend5" && method is "Typed" or "ScopeK1"
             || name == "MediatRHistoricalSend0" && method == "ScopeK1";
     }));
-if (matrix is not null) config = config.WithOrderer(new InterleavedOrderer()).WithOptions(ConfigOptions.JoinSummary);
 var summaries = BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, config);
 var cases = summaries.Sum(s => s.Reports.Length);
 var failures = summaries.Sum(s => s.Reports.Count(r => !r.Success));

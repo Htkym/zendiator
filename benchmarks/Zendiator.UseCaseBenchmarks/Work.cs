@@ -11,7 +11,6 @@ public sealed class Probe
     public int Items;
     public int Disposals;
     public bool Fail;
-    public bool FailRelay;
 }
 
 public interface IWork
@@ -24,13 +23,6 @@ public interface ILevel2 : ILevel1;
 public interface ILevel3 : ILevel2;
 public interface ILevel4 : ILevel3;
 public interface ILevel5 : ILevel4;
-
-// Markers for streams whose Behaviors only pre-process and return next's sequence.
-public interface IRelayLevel1 : IWork;
-public interface IRelayLevel2 : IRelayLevel1;
-public interface IRelayLevel3 : IRelayLevel2;
-public interface IRelayLevel4 : IRelayLevel3;
-public interface IRelayLevel5 : IRelayLevel4;
 
 public static class Work
 {
@@ -56,15 +48,6 @@ public static class Work
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Enter(IWork request, int id) => request.Probe?.Events.Add(id);
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void Relay(IWork request, int id)
-    {
-        if (request.Probe is not { } probe) return;
-        if (probe.FailRelay)
-            throw new ArithmeticException("Expected relay sentinel");
-        probe.Events.Add(id);
-    }
 
     public static int Handle(int value, Probe? probe, CancellationToken token)
     {
