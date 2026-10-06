@@ -39,3 +39,6 @@ PCが静かな時間枠で `--max-cases 2` を付けると2ケースだけのsmo
 
 
 改修前後の重点ラウンドでは `--group custom --matrix benchmarks/Zendiator.UseCaseBenchmarks/review-notification.json`（4ケース）または `review-p0-ab.json`（10ケース）を指定し、roundごとに別の出力先を使います。実行順・証跡確認・再開の条件は同じで、完了した重点roundごとに `all-results.csv` を出力します。
+
+
+BDNはworktree配下から `Zendiator.UseCaseBenchmarks.csproj` を探索します。driverはrestore/build前に1件だけ存在することを確認します。主checkoutの `.local` に別checkoutが入っている場合は、兄弟位置のcleanな隔離worktreeで実行し、そこに新しい `.local` 出力先を作ります。再開は同じworktree・出力先・commit・SDK・matrixで、以前のowned BDNプロセスが残っていないことを確認してから行います。同名projectで失敗した出力は保全し、隔離worktreeの新しい出力先で始めます。worktreeをまたいでその失敗を再開しません。

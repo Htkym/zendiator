@@ -41,3 +41,6 @@ In a quiet measurement slot, use `--max-cases 2` for a bounded two-case smoke. T
 
 
 For focused before/after rounds, use `--group custom --matrix benchmarks/Zendiator.UseCaseBenchmarks/review-notification.json` (4 cases) or `review-p0-ab.json` (10 cases). Use a distinct output root for each round. The same ordering, evidence checks, and resumability apply; `all-results.csv` is produced for each completed focused round.
+
+
+BDN searches below the worktree for `Zendiator.UseCaseBenchmarks.csproj`. The driver checks that exactly one exists before restore/build. Run from a clean sibling worktree if the main checkout contains nested `.local` checkouts; keep its output in a new `.local` directory there. Resume only with the same worktree, output root, commit, SDK, and matrix after confirming no prior owned BDN process remains. Preserve an ambiguous-project failure and start a new output in the sibling worktree; do not resume that failure across worktrees.

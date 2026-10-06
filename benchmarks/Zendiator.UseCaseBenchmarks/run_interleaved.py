@@ -48,6 +48,15 @@ def source_digest():
     return digest.hexdigest().upper()
 
 
+def check_project_discovery():
+    expected = (PROJECT / "Zendiator.UseCaseBenchmarks.csproj").resolve()
+    matches = sorted(path.resolve() for path in REPO.rglob(expected.name))
+    if matches != [expected]:
+        found = ", ".join(str(path) for path in matches) or "none"
+        raise ValueError("BDN requires exactly one benchmark project below this worktree; "
+                         f"found: {found}. Use a clean sibling worktree and a new output root.")
+
+
 def check_binary_identity(session):
     paths = (("runtimeSha256", REPO / "src/Zendiator/bin/Release/net10.0/Zendiator.dll"),
              ("benchmarkSha256", PROJECT / "bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll"),
@@ -276,6 +285,7 @@ def main():
         print(f"{group}: {len(plan)} cases, {keys} comparison keys; first: {plan[0]['Library']}")
     if args.dry_run:
         return
+    check_project_discovery()
     if args.max_cases is not None and args.max_cases < 1:
         raise ValueError("--max-cases must be positive")
     if command(["git", "status", "--porcelain=v1", "-uall"]):
