@@ -182,17 +182,21 @@ def finish_group(run, plan, cases, session):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--group", choices=("all", *GROUPS), default="all")
+    parser.add_argument("--group", choices=("all", *GROUPS, "custom"), default="all")
+    parser.add_argument("--matrix", type=Path, help="Required for --group custom; enables a focused comparison")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--max-cases", type=int, help="Stop after this many completed cases; leave a resumable partial run")
     parser.add_argument("--expect-sdk", default="10.0.401")
     args = parser.parse_args()
+    if (args.group == "custom") != (args.matrix is not None):
+        parser.error("--matrix must be supplied exactly when --group custom is selected")
     groups = GROUPS if args.group == "all" else (args.group,)
+    matrix_paths = {group: (args.matrix.resolve() if group == "custom" else PROJECT / f"{group}.json") for group in groups}
     plans = {}
     for group in groups:
-        cases = json.loads((PROJECT / f"{group}.json").read_text(encoding="utf-8"))
+        cases = json.loads(matrix_paths[group].read_text(encoding="utf-8"))
         plan, keys = make_plan(cases)
         plans[group] = (cases, plan)
         print(f"{group}: {len(plan)} cases, {keys} comparison keys; first: {plan[0]['Library']}")
@@ -215,7 +219,7 @@ def main():
         output.mkdir(parents=True)
     current = {"revision": command(["git", "rev-parse", "HEAD"]), "sdk": sdk,
                "sourceDigest": source_digest(), "groups": list(groups),
-               "matrixSha256": {group: sha(PROJECT / f"{group}.json") for group in groups}}
+               "matrixSha256": {group: sha(matrix_paths[group]) for group in groups}}
     if args.resume:
         session = json.loads((output / "session.json").read_text(encoding="utf-8"))
         if any(session[key] != value for key, value in current.items()):
@@ -284,7 +288,10 @@ def main():
         product_hash = child_hash
     if source_digest() != session["sourceDigest"] or command(["git", "rev-parse", "HEAD"]) != session["revision"]:
         raise ValueError("Source changed during measurement")
-    run_logged(["python", str(PROJECT / "analyze.py"), str(output)], output / "analyze.log", clean_env())
+    analysis = ["python", str(PROJECT / "analyze.py"), str(output)]
+    if args.group == "custom":
+        analysis.extend(["--matrix", str(matrix_paths["custom"])])
+    run_logged(analysis, output / "analyze.log", clean_env())
     if args.group == "all":
         run_logged(["python", str(PROJECT / "make_report.py"), str(output)], output / "report.log", clean_env())
     print(f"Verified interleaved run: {output}")

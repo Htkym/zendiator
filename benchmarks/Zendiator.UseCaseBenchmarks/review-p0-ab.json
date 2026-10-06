@@ -1,0 +1,56 @@
+[
+  {
+    "Type": "ZendiatorSend0",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend0",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend0",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend5",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  }
+]

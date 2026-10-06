@@ -36,3 +36,6 @@ python benchmarks/Zendiator.UseCaseBenchmarks/run_interleaved.py --group all --o
 ```
 
 PCが静かな時間枠で `--max-cases 2` を付けると2ケースだけのsmokeになり、最終outcomeやreportを書かない途中状態で停止します。証跡を確認した後、同じ出力先を指定して `--resume` を付け、`--max-cases` を外して続けます。全件実行では両方を外します。現時点でdriverはdry-runまでの確認です。実ログ、BDN JSON、子証跡の最終照合が通るまでは交互実行の結果と呼びません。
+
+
+改修前後の重点ラウンドでは `--group custom --matrix benchmarks/Zendiator.UseCaseBenchmarks/review-notification.json`（4ケース）または `review-p0-ab.json`（10ケース）を指定し、roundごとに別の出力先を使います。実行順・証跡確認・再開の条件は同じで、完了した重点roundごとに `all-results.csv` を出力します。

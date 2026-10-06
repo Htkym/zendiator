@@ -38,3 +38,6 @@ python benchmarks/Zendiator.UseCaseBenchmarks/run_interleaved.py --group all --o
 ```
 
 In a quiet measurement slot, use `--max-cases 2` for a bounded two-case smoke. This leaves a partial run without a final outcome or report. After checking its evidence, continue with the same output path and `--resume`, omitting `--max-cases`. A full run omits both flags. The driver has only been checked with dry-run so far; do not label a run interleaved until its case logs, BDN JSON, and child evidence pass final verification.
+
+
+For focused before/after rounds, use `--group custom --matrix benchmarks/Zendiator.UseCaseBenchmarks/review-notification.json` (4 cases) or `review-p0-ab.json` (10 cases). Use a distinct output root for each round. The same ordering, evidence checks, and resumability apply; `all-results.csv` is produced for each completed focused round.

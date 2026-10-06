@@ -1,0 +1,18 @@
+[
+  {
+    "Type": "ZendiatorNotification1",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ZendiatorNotification1",
+    "Method": "DispatchAsync"
+  },
+  {
+    "Type": "MediatRHistoricalNotification1",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatRHistoricalNotification1",
+    "Method": "DispatchAsync"
+  }
+]
