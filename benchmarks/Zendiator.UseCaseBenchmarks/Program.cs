@@ -8,6 +8,13 @@ using Perfolizer.Horology;
 using System.Security.Cryptography;
 using System.Text.Json;
 
+if (args.Length > 0 && args[0] == "--artifact-gate")
+{
+    if (args.Length != 2) throw new ArgumentException("--artifact-gate requires one saved request file");
+    await ArtifactGate.Run(Path.GetFullPath(args[1]));
+    return;
+}
+
 if (!File.Exists("Zendiator.UseCaseBenchmarks.csproj")) throw new InvalidOperationException("Run from the use-case benchmark directory.");
 if (args.Contains("--help")) { BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args); return; }
 var output = Path.GetFullPath(Environment.GetEnvironmentVariable("COLD_RUN") ?? Path.Combine("..", "..", ".local", "benchmarks", "explore"));
@@ -104,7 +111,7 @@ var job = Job.Default.WithId("Comparison").WithWarmupCount(matrix is not null ||
     .WithIterationTime(TimeInterval.FromMilliseconds(matrix is not null || formal ? 500 : 300));
 if (pinned) job = job.WithAffinity(new IntPtr(1));
 Environment.SetEnvironmentVariable("COLD_CAPTURE_CHILD", "1");
-var config = DefaultConfig.Instance.AddJob(job).AddExporter(JsonExporter.Full).WithArtifactsPath(output)
+var config = DefaultConfig.Instance.AddJob(job).AddExporter(JsonExporter.Full).WithArtifactsPath(output).WithOptions(ConfigOptions.KeepBenchmarkFiles)
     .AddFilter(new SimpleFilter(b =>
     {
         var name = b.Descriptor.Type.Name;
@@ -125,8 +132,19 @@ var config = DefaultConfig.Instance.AddJob(job).AddExporter(JsonExporter.Full).W
             || name == "ZendiatorSend5" && method is "Typed" or "ScopeK1"
             || name == "MediatRHistoricalSend0" && method == "ScopeK1";
     }));
-if (matrix is not null) config = config.WithOrderer(new InterleavedOrderer()).WithOptions(ConfigOptions.JoinSummary);
+if (matrix is not null) config = config.WithOrderer(new InterleavedOrderer()).WithOptions(ConfigOptions.JoinSummary | ConfigOptions.KeepBenchmarkFiles);
 var summaries = BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, config);
+ArtifactEvidence.Write(Path.Combine(output, "build-artifacts.json"), new
+{
+    schemaVersion = 1,
+    reports = summaries.SelectMany(s => s.Reports).Select(report => new
+    {
+        type = report.BenchmarkCase.Descriptor.Type.Name,
+        method = report.BenchmarkCase.Descriptor.WorkloadMethod.Name,
+        buildSuccess = report.BuildResult.IsBuildSuccess,
+        paths = report.BuildResult.ArtifactsPaths
+    }).ToArray()
+});
 var cases = summaries.Sum(s => s.Reports.Length);
 var failures = summaries.Sum(s => s.Reports.Count(r => !r.Success));
 File.WriteAllText(Path.Combine(output, "outcome.json"), JsonSerializer.Serialize(new

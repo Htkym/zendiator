@@ -6,6 +6,8 @@ import re
 import sys
 from pathlib import Path
 
+from interleaved_plan import normalize_case
+
 
 ROOT = Path(__file__).resolve().parent
 if len(sys.argv) not in (2, 4) or (len(sys.argv) == 4 and sys.argv[2] != "--matrix"):
@@ -17,6 +19,7 @@ MATRICES = ({"custom": Path(sys.argv[3]).resolve()} if len(sys.argv) == 4 else
 
 
 def key(case):
+    case = normalize_case(case)
     return tuple(str(case.get(field, "")) for field in FIELDS)
 
 

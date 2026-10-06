@@ -34,11 +34,20 @@ def comparison_key(case):
     )
 
 
+def normalize_case(case):
+    if not isinstance(case, dict) or any(not isinstance(case.get(field), str) or not case[field]
+                                         for field in ("Type", "Method")):
+        raise ValueError("Matrix cases require nonempty Type and Method strings")
+    # C# MatrixCase treats omitted and explicit-null optional parameters identically.
+    return {name: value for name, value in case.items() if name not in FIELDS[2:] or value is not None}
+
+
 def identity(case):
     return tuple(case.get(field) for field in FIELDS)
 
 
 def make_plan(cases):
+    cases = [normalize_case(case) for case in cases]
     if len({identity(case) for case in cases}) != len(cases):
         raise ValueError("Matrix contains duplicate cases")
     groups = OrderedDict()
