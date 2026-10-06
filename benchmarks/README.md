@@ -27,8 +27,14 @@ For allocation diagnostics after a Release build, run `dotnet ./bin/Release/net1
 
 The matrix uses lightweight synchronously completing Send/Void handlers and precreated requests. It includes actual suspension for Notification and Stream, but not suspended Send handlers, provider construction, Send exception timing, or Native AOT speed. Immediate uses a request-specific generated entry; Zendiator keeps `IZendiator.SendAsync`. An unmatched case is reported as not measured. One launch describes the measured run, not an overall-fastest ranking.
 
-### Future cross-library execution order
+### Cross-library execution driver
 
-`Zendiator.UseCaseBenchmarks/interleaved_plan.py` emits a comparison-key plan from one group matrix. It keeps the libraries of each comparable case adjacent and rotates the first library across keys. `--verify-log` compares a BDN `run.log` against that exact order and rejects the existing type-block runs. This tool plans and checks order; `Run-Comparison.ps1` does not execute the plan yet.
+`Run-Comparison.ps1` remains the type-block runner used for the historical 360-case result. `Zendiator.UseCaseBenchmarks/run_interleaved.py` is a separate driver: it uses `interleaved_plan.py` to rotate the first library for each comparison key, then launches exactly one BDN case per invocation and verifies the concatenated child logs against that plan. It requires a clean committed worktree, SDK 10.0.401, locked restore, a Release build, and a new output directory. Each group runs the 394-case correctness gate once. The driver retains failed attempts, verifies source/SDK/parent and child DLL identities, checks one result and child per case, and resumes completed cases without rerunning them. The old type-block output is never imported.
 
-An executing parent driver must run exactly one selected BDN case per plan entry in its own artifact directory, record the launch order, and combine the raw case results afterward. It must keep the once-per-group correctness gate, locked build, source and DLL hashes, expected child count, and FirstSend actual-operation checks. Only a run whose log order matches the plan should be described as cross-library interleaved.
+From the repository root, plan without building or launching BDN:
+
+```powershell
+python benchmarks/Zendiator.UseCaseBenchmarks/run_interleaved.py --group all --output D:\gitroot\zendiator\.local\benchmarks\new-interleaved-run --dry-run
+```
+
+In a quiet measurement slot, use `--max-cases 2` for a bounded two-case smoke. This leaves a partial run without a final outcome or report. After checking its evidence, continue with the same output path and `--resume`, omitting `--max-cases`. A full run omits both flags. The driver has only been checked with dry-run so far; do not label a run interleaved until its case logs, BDN JSON, and child evidence pass final verification.

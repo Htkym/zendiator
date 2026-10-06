@@ -18,9 +18,24 @@ var runtimeHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(Z
 var expectedChildRuntimeHash = Environment.GetEnvironmentVariable("COLD_EXPECT_CHILD_Z_SHA") ?? "SKIP";
 Environment.SetEnvironmentVariable("COLD_EXPECT_Z_SHA", expectedChildRuntimeHash);
 File.WriteAllText(Path.Combine(output, "runtime-sha256.txt"), runtimeHash);
-try { await GeneratedGate.Run(); }
-finally { Correctness.Save(output); }
-Console.WriteLine($"Correctness passed: {Correctness.Results.Count} checks.");
+var skipGate = Environment.GetEnvironmentVariable("COLD_SKIP_GATE") == "1";
+var gateProof = Environment.GetEnvironmentVariable("COLD_GATE_PROOF");
+if (skipGate)
+{
+    if (args.Contains("--validate-only") || string.IsNullOrWhiteSpace(gateProof) || !File.Exists(gateProof))
+        throw new InvalidOperationException("A completed correctness gate is required before a single-case run.");
+    using var proof = JsonDocument.Parse(File.ReadAllText(gateProof));
+    if (proof.RootElement.ValueKind != JsonValueKind.Array || proof.RootElement.GetArrayLength() != 394 ||
+        proof.RootElement.EnumerateArray().Any(row => !row.TryGetProperty("status", out var status) || status.GetString() != "Passed"))
+        throw new InvalidOperationException("Correctness gate evidence is incomplete.");
+    Console.WriteLine("Correctness gate verified from parent run.");
+}
+else
+{
+    try { await GeneratedGate.Run(); }
+    finally { Correctness.Save(output); }
+    Console.WriteLine($"Correctness passed: {Correctness.Results.Count} checks.");
+}
 var hashes = Directory.EnumerateFiles(".").Where(p => Path.GetExtension(p) is ".cs" or ".csproj" or ".ps1" || Path.GetFileName(p) == "packages.lock.json")
     .Select(p => new { path = p, sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(p))) });
 var generated = Directory.Exists(Path.Combine("obj", "Release", "net10.0", "generated"))
@@ -37,6 +52,7 @@ File.WriteAllText(Path.Combine(output, "manifest.json"), JsonSerializer.Serializ
     runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
     runtimeSha256 = runtimeHash,
     expectedChildRuntimeSha256 = expectedChildRuntimeHash,
+    gateProofSha256 = skipGate ? Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(gateProof!))) : null,
     generatorPath,
     generatorSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(generatorPath))),
     assemblySha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(Program).Assembly.Location))),

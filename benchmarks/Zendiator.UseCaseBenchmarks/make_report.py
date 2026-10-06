@@ -49,6 +49,11 @@ def table(cases):
 
 
 metadata = json.loads((OUTPUT / "runs" / "send" / "run-info.json").read_text(encoding="utf-8"))
+execution_order_note = (
+    "ライブラリ横断の比較キー順に各ライブラリを単一ケースで起動し、先頭ライブラリを交代した。実行ログと計画の完全一致を確認した。"
+    if metadata.get("executionOrder") == "cross-library-interleaved-verified" else
+    "BDN 0.15.8 は benchmark type ごとに実行したため、ライブラリ別の連続ブロックとなった。同じケースのライブラリの交互実行や先頭ライブラリの交代は行われておらず、小さな時間差には長時間の状態変化の影響があり得る。"
+)
 revision = metadata.get("revision", metadata.get("commit"))
 if not revision:
     raise ValueError("The send run has no source revision")
@@ -182,7 +187,7 @@ parts += [
     "",
     "## 測定条件と読み方",
     "",
-    "- Release、CPU affinity 1。BDN の子プロセスをケースごとに分離し、warmup 20、測定 12、指定 iteration time 500 ms、1 launch。BDN 0.15.8 は benchmark type ごとに実行したため、ライブラリ別の連続ブロックとなった。同じケースのライブラリの交互実行や先頭ライブラリの交代は行われておらず、小さな時間差には長時間の状態変化の影響があり得る。実行時の CPU・OS・SDK・ライブラリ版は `run.log` と `manifest.json` を参照。全ケースの独立セッション再現や Tier1 JIT 分析まで済んだ正式な最速認定ではない。",
+    f"- Release、CPU affinity 1。BDN の子プロセスをケースごとに分離し、warmup 20、測定 12、指定 iteration time 500 ms、1 launch。{execution_order_note}実行時の CPU・OS・SDK・ライブラリ版は `run.log` と `manifest.json` を参照。全ケースの独立セッション再現や Tier1 JIT 分析まで済んだ正式な最速認定ではない。",
     "- Send と Void のハンドラは同期完了する軽い計算で、要求オブジェクトは事前に作成した。`Typed` の 1～2 ns 付近は測定限界に近く、実業務の I/O や複雑な Handler の所要時間を表さない。Notification の非同期ケースは各ハンドラで `Task.Yield()`、Stream の非同期ケースは列挙中に実際に中断する。入力、業務結果、Behavior 順、キャンセル、例外、通知の購読者数、列挙結果を測定前に確認した。",
     "- Zendiator と DispatchR は共通 Mediator 入口。Immediate は要求ごとの生成入口。MediatR は `Task`、他は主に `ValueTask` を返す。Mediator.SourceGenerator は具体的 Mediator 入口。これらの API 差が実測値に含まれる。",
     "- DI lifetime は各ライブラリの公式登録で Scoped を指定できる範囲に合わせた。Immediate の入口は生成器の形、DispatchR の入口 lifetime は登録に従う。`ScopeK1` は Scope の生成と破棄を含む。`ScopeK10` は 10 件の合計値であり、1 件あたりに割らない。",

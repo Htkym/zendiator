@@ -25,8 +25,14 @@ fixture を変えるときは、`Zendiator.UseCaseBenchmarks` にある `Generat
 
 Send/Void は事前作成した要求と軽い同期完了ハンドラーを使います。Notification と Stream は実際の非同期中断を含みますが、非同期中断する Send、コンテナー構築、Send の例外経路、Native AOT 速度は未測定です。Immediate は要求別の生成入口、Zendiator は共通の `IZendiator.SendAsync` を使います。各ケースは1 launch のため、全体の最速順位や僅差の優劣は主張しません。
 
-### 今後のライブラリ横断実行順
+### ライブラリ横断の実行driver
 
-`Zendiator.UseCaseBenchmarks/interleaved_plan.py` はグループのmatrixから比較キー単位の順序を作ります。同じケースのライブラリを隣接させ、先頭ライブラリをキーごとに交代します。`--verify-log` はBDNの `run.log` をその順番と照合し、今回のtype別ブロック実行を不一致として検出します。このツールは順序の計画と照合のみで、現行 `Run-Comparison.ps1` はまだ計画どおりに実行しません。
+既存 `Run-Comparison.ps1` は、保存済み360件と同じtype別ブロック実行を行います。別の `Zendiator.UseCaseBenchmarks/run_interleaved.py` は `interleaved_plan.py` で比較キーごとの先頭ライブラリを交代し、BDNを1回につき単一ケースだけ起動して、連結した子ログと計画を照合します。cleanなコミット済みworktree、SDK 10.0.401、locked restore、Releaseビルド、新しい出力先が必要です。各グループ前に正当性394件を一度確認します。失敗した試行を残し、ソース・SDK・親子DLLの同一性、ケースごとの結果と子証跡1件を検証し、完了ケースは再実行せず再開できます。旧ブロック実行の出力は取り込みません。
 
-実行driverは計画の各行についてBDNの単一ケースだけを別artifact先で起動し、起動順を保存して生結果を最後に集約する必要があります。グループ前の正当性gate、locked build、ソースとDLLのhash、子件数、FirstSendの実operation確認を維持します。実ログが計画と一致した測定だけをライブラリ横断の交互実行と記載します。
+リポジトリのルートから、ビルド・BDNを起動せず計画を確認する例:
+
+```powershell
+python benchmarks/Zendiator.UseCaseBenchmarks/run_interleaved.py --group all --output D:\gitroot\zendiator\.local\benchmarks\new-interleaved-run --dry-run
+```
+
+PCが静かな時間枠で `--max-cases 2` を付けると2ケースだけのsmokeになり、最終outcomeやreportを書かない途中状態で停止します。証跡を確認した後、同じ出力先を指定して `--resume` を付け、`--max-cases` を外して続けます。全件実行では両方を外します。現時点でdriverはdry-runまでの確認です。実ログ、BDN JSON、子証跡の最終照合が通るまでは交互実行の結果と呼びません。
