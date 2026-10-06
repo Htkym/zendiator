@@ -146,7 +146,16 @@ internal sealed partial class SourceEmitter
             b.AppendLine("""                global::System.ArgumentNullException.ThrowIfNull(notification);""");
         b.AppendLine($$"""
                             if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);
-                            Result = {{ServiceReceiver(Name(handler), contract, handler.DirectCall)}}.HandleAsync(notification, cancellationToken);
+                            var operation = {{ServiceReceiver(Name(handler), contract, handler.DirectCall)}}.HandleAsync(notification, cancellationToken);
+                            if (operation.IsCompletedSuccessfully)
+                            {
+                                operation.GetAwaiter().GetResult();
+                                Result = default;
+                            }
+                            else
+                            {
+                                Result = AwaitSingleSubscriberNotification(operation);
+                            }
                         }
                         catch (global::System.Exception exception)
                         {
