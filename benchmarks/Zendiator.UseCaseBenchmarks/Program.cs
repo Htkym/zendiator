@@ -93,6 +93,9 @@ var selectedCase = Environment.GetEnvironmentVariable("COLD_CASE");
 var matrixFile = Environment.GetEnvironmentVariable("COLD_MATRIX_FILE");
 var matrix = matrixFile is null ? null : JsonSerializer.Deserialize<MatrixCase[]>(File.ReadAllText(matrixFile))
     ?? throw new InvalidOperationException("Matrix file was empty.");
+var singleCase = Environment.GetEnvironmentVariable("COLD_SINGLE_CASE") == "1";
+if (singleCase && (!skipGate || matrix is null || matrix.Length != 1))
+    throw new InvalidOperationException("A single-case run requires one matrix entry and a verified parent gate.");
 var selectedLifetime = Environment.GetEnvironmentVariable("COLD_LIFETIME") ?? "Scoped";
 var pinned = Environment.GetEnvironmentVariable("COLD_PINNED") == "1";
 var job = Job.Default.WithId("Comparison").WithWarmupCount(matrix is not null || formal ? 20 : 10)
@@ -110,7 +113,9 @@ var config = DefaultConfig.Instance.AddJob(job).AddExporter(JsonExporter.Full).W
         if (matrix is not null) return matrix.Any(c => c.Type == name && c.Method == method
             && c.Lifetime == lifetime
             && (c.Count is null || Equals(b.Parameters.Items.FirstOrDefault(p => p.Name == "Count")?.Value, c.Count.Value))
-            && (c.Asynchronous is null || Equals(b.Parameters.Items.FirstOrDefault(p => p.Name == "Asynchronous")?.Value, c.Asynchronous.Value)));
+            && (c.Asynchronous is null || Equals(b.Parameters.Items.FirstOrDefault(p => p.Name == "Asynchronous")?.Value, c.Asynchronous.Value))
+            && (!singleCase || b.Parameters.Items.Count() == (c.Lifetime is null ? 0 : 1)
+                + (c.Count is null ? 0 : 1) + (c.Asynchronous is null ? 0 : 1)));
         if (selectedCase is not null) return name + "." + method == selectedCase && lifetime == selectedLifetime;
         if (name.StartsWith("Direct") || lifetime != "Scoped") return false;
         if (scopedPair) return method == "ScopeK1" && name is "ZendiatorSend0" or "ImmediateSend0";
