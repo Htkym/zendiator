@@ -40,41 +40,65 @@ public sealed class CompletedContextNotificationHandler : INotificationHandler<C
         => new(notification.Source, 0);
 }
 
-public sealed class ContextMutatingSource(AsyncLocal<string?> context) : System.Threading.Tasks.Sources.IValueTaskSource
+public sealed class ContextMutatingSource : System.Threading.Tasks.Sources.IValueTaskSource
 {
+    private readonly AsyncLocal<string?> context;
+    private readonly bool suspend;
+    private System.Threading.Tasks.Sources.ManualResetValueTaskSourceCore<bool> completion = new() { RunContinuationsAsynchronously = true };
+
+    public ContextMutatingSource(AsyncLocal<string?> context, bool suspend = false)
+    {
+        this.context = context;
+        this.suspend = suspend;
+        if (!suspend) Complete();
+    }
+
     public int Consumptions { get; private set; }
+    public void Complete() => completion.SetResult(true);
 
     public void GetResult(short token)
     {
         Consumptions++;
+        completion.GetResult(token);
         context.Value = "source";
     }
 
     public System.Threading.Tasks.Sources.ValueTaskSourceStatus GetStatus(short token)
-        => System.Threading.Tasks.Sources.ValueTaskSourceStatus.Succeeded;
+        => completion.GetStatus(token);
 
     public void OnCompleted(Action<object?> continuation, object? state, short token,
         System.Threading.Tasks.Sources.ValueTaskSourceOnCompletedFlags flags)
-        => throw new InvalidOperationException("Completed source must not register a continuation.");
+    {
+        if (!suspend) throw new InvalidOperationException("Completed source must not register a continuation.");
+        completion.OnCompleted(continuation, state, token, flags);
+    }
 }
 
 public sealed class NotificationContextContractTests
 {
-    [Fact]
-    public async Task Completed_source_does_not_mutate_publish_callers_context()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Source_completion_does_not_mutate_publish_callers_context(bool suspend)
     {
         var services = new ServiceCollection();
         services.AddZendiator();
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
         var context = new AsyncLocal<string?> { Value = "caller" };
-        var source = new ContextMutatingSource(context);
+        var source = new ContextMutatingSource(context, suspend);
 
         var pending = scope.ServiceProvider.GetRequiredService<IZendiator>()
             .PublishAsync(new CompletedContextNotification(source));
 
-        Assert.True(pending.IsCompletedSuccessfully);
         Assert.Equal("caller", context.Value);
+        if (suspend)
+        {
+            Assert.False(pending.IsCompleted);
+            Assert.Equal(0, source.Consumptions);
+            source.Complete();
+        }
+        else Assert.True(pending.IsCompletedSuccessfully);
         await pending;
         Assert.Equal(1, source.Consumptions);
         Assert.Equal("caller", context.Value);

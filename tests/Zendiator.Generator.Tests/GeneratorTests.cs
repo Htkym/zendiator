@@ -658,6 +658,17 @@ public sealed class GeneratorTests
     }
 
     [Fact]
+    public void Single_subscriber_notification_compiles_with_pooled_async_builder()
+    {
+        var source = Head
+            + "public sealed record Note : INotification; "
+            + "public sealed class Handler : INotificationHandler<Note> { "
+            + "public async ValueTask HandleAsync(Note n, CancellationToken c) { await Task.Yield(); } }";
+        var text = Run(Compilation(source), true, emit: true).GeneratedTrees.Single().ToString();
+        Assert.Contains("AsyncMethodBuilderAttribute(typeof(global::System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder))", text);
+    }
+
+    [Fact]
     public void Known_notification_without_subscribers_completes()
     {
         var source = "using Zendiator; using System; using System.Threading; using System.Threading.Tasks; namespace App { [GenerateZendiator] public sealed partial class Zendiator; "

@@ -44,6 +44,7 @@ internal sealed partial class SourceEmitter
         b.AppendLine("""
             #pragma warning disable CS1998
                 private static async global::System.Threading.Tasks.ValueTask Faulted(global::System.Runtime.ExceptionServices.ExceptionDispatchInfo failure) => failure.Throw();
+                [global::System.Runtime.CompilerServices.AsyncMethodBuilderAttribute(typeof(global::System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder))]
                 private static async global::System.Threading.Tasks.ValueTask AwaitSingleSubscriberNotification(global::System.Threading.Tasks.ValueTask operation) => await operation.ConfigureAwait(false);
             #pragma warning restore CS1998
             """);
