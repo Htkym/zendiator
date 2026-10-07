@@ -101,7 +101,11 @@ public class ZendiatorServiceResolver
         var owner = EnterInitialization();
         try
         {
-            var published = AddDependencySetAtSlot(slot, dependencies);
+            ArgumentNullException.ThrowIfNull(dependencies);
+            // This overload already owns the initialization; publish without entering it again.
+            var published = dependencies;
+            if (GetCaptured<TSet>(slot) is { } existing) published = (TSet)existing;
+            else Publish(slot, dependencies, typeof(TSet));
             captureFirst(published);
             return published;
         }
