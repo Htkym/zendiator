@@ -180,7 +180,29 @@ public sealed class HouseholdNameValidator : IStreamRequestValidator<GetHousehol
 configuration.AddStreamRequestValidator(typeof(HouseholdNameValidator), order: 0);
 ```
 
-Validation runs synchronously once per `StreamAsync` call, before an enumerable is created, in ascending validator order. Registered reference requests reject null synchronously; streams without validators keep their null check on first `MoveNextAsync`. Cancellation is checked during enumeration, so entry validation also runs with an already-canceled API token. Failures stop later validator and pipeline resolution. For attribute configuration, use `[StreamRequestValidator(typeof(HouseholdNameValidator), Order = 0)]` on the generated mediator or assembly; do not mix attributes with a configuration lambda. Validators must be synchronous, input-only and safe for concurrent calls. Keep validated input stable and the DI scope valid until enumeration completes. Captured validator instances are reused within a mediator, including Transient registrations. A validator that is also a handler or behavior may be constructed at entry; its pipeline method still runs lazily. Validator orders are independent of behavior orders, and every validator contract must match a closed generated stream route exactly (ZEN0021).
+Validation is opt-in; assembly scanning does not register validators automatically.
+Each registered type must be an accessible, non-abstract closed class. All of its
+`IStreamRequestValidator<TRequest>` contracts must exactly match closed generated
+stream routes. Open-generic validators and base-request matching are unsupported.
+Types and validator orders must be unique within the composition; validator order
+is independent of behavior order.
+
+Validation runs synchronously once per `StreamAsync` call, in ascending order,
+before an enumerable is created. It does not run again when that sequence is
+enumerated. Registered reference requests reject null at entry; streams without
+validators retain their null check on first `MoveNextAsync`. Cancellation is
+checked during enumeration, so entry validation also runs with an already-canceled
+API token. A failure stops later validator and pipeline resolution.
+
+For attribute configuration, use
+`[StreamRequestValidator(typeof(HouseholdNameValidator), Order = 0)]` on the
+generated mediator or assembly. Do not mix attributes with a configuration lambda.
+Validators must be synchronous, input-only and safe for concurrent calls; keep
+asynchronous work and I/O in the handler or stream behavior. Keep the validated
+input stable and the DI scope valid until enumeration completes. Captured validator
+instances are reused within a mediator, including Transient registrations.
+A validator that is also a handler or behavior may be constructed at entry;
+its pipeline method still runs lazily. See [known limitations](docs/release/known-limitations.md).
 
 Consume lazily. The handler starts on first `MoveNextAsync`, not on `StreamAsync`.
 Either the API token or `WithCancellation` can cancel; different tokens are linked only when both are cancelable and different.
@@ -332,11 +354,12 @@ Different spellings that resolve to the same assembly set share one generation u
 | ZEN0018 | Invalid configuration value (namespace, duplicates, lifetime range, order conflicts) |
 | ZEN0019 | Ambiguous registration binding (reserved) |
 | ZEN0020 | `AddZendiator` call cannot be connected to generated registration |
-| ZEN0021 | Explicitly treating a generated mediator as `IDisposable` |
+| ZEN0021 (generator error) | Invalid closed Stream validator type or unmatched validator contract |
+| ZEN0021 (analyzer warning) | Explicitly treating a generated mediator as `IDisposable` |
 | ZEN0022 | Returning a mediator resolved from a `using` scope |
 | ZEN0023 | Sending after explicitly disposing its scope in the same method |
 
-ZEN0021–ZEN0023 are warnings for directly provable cases, not a complete proof of scope safety. See the [migration guide](docs/migrating-from-mediatr.md) for fixes.
+The lifetime analyzer's ZEN0021–ZEN0023 are warnings for directly provable cases, not a complete proof of scope safety. See the [migration guide](docs/migrating-from-mediatr.md) for fixes.
 
 ## Public API
 
@@ -358,15 +381,17 @@ ZEN0021–ZEN0023 are warnings for directly provable cases, not a complete proof
   `ISyncRequestContinuation<TRequest>`, `ISyncPipelineBehavior<TRequest, TResponse>`,
   `ISyncPipelineBehavior<TRequest>`, `IStreamContinuation<TRequest, TItem>`,
   `IStreamPipelineBehavior<TRequest, TItem>`
+- Validators: `IStreamRequestValidator<TRequest>`
 - Attributes: `GenerateZendiatorAttribute`, `IncludeAssemblyAttribute`,
-  `PipelineBehaviorAttribute`, `HandlerOrderAttribute`, `NotificationAttribute`
+  `PipelineBehaviorAttribute`, `HandlerOrderAttribute`, `NotificationAttribute`,
+  `StreamRequestValidatorAttribute`
 
 `Zendiator` (net10.0) holds the DI entry points:
 
 - `ZendiatorConfiguration`: `Namespace`, `ServiceLifetime`,
   `RegisterServicesFromAssemblyContaining<T>()`,
   `RegisterServicesFromAssembly(Assembly)`, `AddOpenBehavior(Type, int)`,
-  `AddOpenStreamBehavior(Type, int)`,
+  `AddOpenStreamBehavior(Type, int)`, `AddStreamRequestValidator(Type, int)`,
   `AddNotification<T>()`, `ConfigureHandlerOrder(Type, int)`, `Snapshot()`
 - `ZendiatorConfigurationSnapshot`: frozen recorded values plus `GetFingerprint()`
 - `ZendiatorServiceCollectionExtensions.AddZendiator` (parameterless and
@@ -411,7 +436,8 @@ and the open-generic/value-type boundary.
 
 Parallel publish, fire-and-forget, persistence/outbox, `Send(object)` for requests,
 cycle detection, CodeFix, CodeLens, built-in `Result` pipeline mapping,
-and built-in logging/validation are not provided.
+built-in logging, and Send input validation are not provided. Stream input validation
+uses the explicitly registered synchronous validators described above.
 Sequential `PublishAsync`, streams via `StreamAsync`, and your own
 `Result` types as ordinary `TResponse` values are supported.
 

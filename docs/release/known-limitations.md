@@ -38,6 +38,20 @@ Re-enumerating the same returned stream and concurrently enumerating it are not
 guaranteed. Call `StreamAsync` again for a fresh stream. Early termination and disposal
 are covered separately by tests.
 
+## Stream entry validation (current repository)
+
+Synchronous Stream validators are explicitly registered closed classes; they do
+not provide asynchronous validation, I/O, open-generic matching, or validation
+of arbitrary runtime-object requests. Validation occurs once at the API entry,
+while handler/behavior execution and cancellation remain at enumeration.
+Keep validated inputs stable and the scope alive. Captured validator instances
+are reused, so they must support concurrent calls when the mediator is shared.
+
+The implementation is provisionally adopted in the current repository.
+Performance non-regression remains unconfirmed for a validator-free Stream in
+a composition that also uses validators on other routes. This adoption is not
+a latency guarantee or evidence that every workload is unaffected.
+
 ## Unsupported dispatch
 
 Parallel Publish is unsupported; notification dispatch is sequential.

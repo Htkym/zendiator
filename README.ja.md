@@ -166,6 +166,25 @@ configuration.AddOpenBehavior(typeof(LoggingBehavior<,>), order: 0);
 configuration.AddOpenStreamBehavior(typeof(StreamLoggingBehavior<,>), order: 2);
 ```
 
+軽い同期の入力検証には、Validator の閉じた具象型を明示的に登録します。
+
+```csharp
+public sealed class HouseholdNameValidator : IStreamRequestValidator<GetHouseholdNames>
+{
+    public void Validate(GetHouseholdNames request) => ArgumentOutOfRangeException.ThrowIfNegative(request.Count);
+}
+
+configuration.AddStreamRequestValidator(typeof(HouseholdNameValidator), order: 0);
+```
+
+Validator はアセンブリ走査では自動登録されません。型はアクセス可能で抽象でない、閉じたクラスに限ります。実装するすべての `IStreamRequestValidator<TRequest>` が、生成対象の閉じた Stream 経路と要求型まで完全に一致する必要があります。オープンジェネリックの Validator や基底要求型への一致には対応していません。登録型と Validator の order は構成内で重複できず、Behavior の order とは独立しています。
+
+検証は `StreamAsync` を呼び出すたびに order の昇順で一度だけ同期実行され、成功してから列挙用オブジェクトを返します。同じ列挙用オブジェクトの列挙では再検証しません。Validator がある参照型要求の null は呼び出し時に拒否し、Validator がない経路の null 検査は従来どおり最初の `MoveNextAsync` で行います。キャンセルの検査は列挙時に行うため、取り消し済みの API トークンでも入口の検証は実行されます。検証が失敗すると、後続の Validator とパイプラインの依存解決を止めます。
+
+属性方式では、生成 Mediator またはアセンブリに `[StreamRequestValidator(typeof(HouseholdNameValidator), Order = 0)]` を付けます。構成ラムダとの併用はできません。Validator は入力だけを検証し、並行呼び出しに対応させてください。非同期処理や I/O はハンドラーまたは Stream Behavior に置きます。検証した入力を列挙終了まで変更せず、DI スコープも維持してください。
+
+取得した Validator は Transient 登録でも Mediator 内で再利用されます。同じ型がハンドラーや Behavior でもある場合は、入口でそのインスタンスを構築することがあります。パイプラインのメソッドは列挙時に実行されます。[既知の制限](docs/release/known-limitations.md)も参照してください。
+
 列挙は遅延実行です。ハンドラーは `StreamAsync` 呼び出し時ではなく、最初の `MoveNextAsync` で開始します。API トークンと `WithCancellation` のどちらでも取り消しできます。両方が取り消し可能かつ異なるトークンである場合のみ連結します。
 
 初回の初期化に失敗した列挙器は再開せず、それ以降の `MoveNextAsync()` は `false` を返します。失敗した場合も `await using` などで破棄してください。再試行するときは `StreamAsync` から新しい列挙を作ります。
@@ -309,11 +328,12 @@ dotnet run --project samples/Zendiator.Sample.Host -c Release
 | ZEN0018 | 不正な構成値（namespace、重複、lifetime 範囲、順序競合） |
 | ZEN0019 | 曖昧な登録束縛（予約） |
 | ZEN0020 | 生成登録へ接続できない `AddZendiator` 呼び出し |
-| ZEN0021 | 生成 Mediator を明示的に `IDisposable` として扱う |
+| ZEN0021（生成器のエラー） | 閉じた Stream Validator の型が不正、または契約に一致する経路がない |
+| ZEN0021（解析器の警告） | 生成 Mediator を明示的に `IDisposable` として扱う |
 | ZEN0022 | `using` スコープから取得した Mediator をそのメソッドから返す |
 | ZEN0023 | 同じメソッド内でスコープを明示的に破棄した後に送信する |
 
-ZEN0021～ZEN0023 は警告です。静的に確定できる形だけを検出し、スコープの安全性を網羅的に証明するものではありません。修正方法は[移行ガイド](docs/migrating-from-mediatr.ja.md)を参照してください。
+有効期間を調べる解析器の ZEN0021～ZEN0023 は警告です。静的に確定できる形だけを検出し、スコープの安全性を網羅的に証明するものではありません。修正方法は[移行ガイド](docs/migrating-from-mediatr.ja.md)を参照してください。
 
 ## 公開 API
 
@@ -335,15 +355,17 @@ ZEN0021～ZEN0023 は警告です。静的に確定できる形だけを検出�
   `ISyncRequestContinuation<TRequest>`、`ISyncPipelineBehavior<TRequest, TResponse>`、
   `ISyncPipelineBehavior<TRequest>`、`IStreamContinuation<TRequest, TItem>`、
   `IStreamPipelineBehavior<TRequest, TItem>`
+- Validator: `IStreamRequestValidator<TRequest>`
 - 属性: `GenerateZendiatorAttribute`、`IncludeAssemblyAttribute`、
-  `PipelineBehaviorAttribute`、`HandlerOrderAttribute`、`NotificationAttribute`
+  `PipelineBehaviorAttribute`、`HandlerOrderAttribute`、`NotificationAttribute`、
+  `StreamRequestValidatorAttribute`
 
 `Zendiator`（net10.0）が DI 入口を持ちます。
 
 - `ZendiatorConfiguration`: `Namespace`、`ServiceLifetime`、
   `RegisterServicesFromAssemblyContaining<T>()`、
   `RegisterServicesFromAssembly(Assembly)`、`AddOpenBehavior(Type, int)`、
-  `AddOpenStreamBehavior(Type, int)`、
+  `AddOpenStreamBehavior(Type, int)`、`AddStreamRequestValidator(Type, int)`、
   `AddNotification<T>()`、`ConfigureHandlerOrder(Type, int)`、`Snapshot()`
 - `ZendiatorConfigurationSnapshot`: 凍結済みの記録値と `GetFingerprint()`
 - `ZendiatorServiceCollectionExtensions.AddZendiator`（引数なしと構成ラムダ付き。
@@ -384,7 +406,7 @@ CI はパッケージを参照する consumer で smoke test と Native AOT の�
 
 ## 対応しない操作
 
-並列配信、fire-and-forget、永続化や outbox、要求の `Send(object)`、循環検出、CodeFix、CodeLens、組み込みの `Result` パイプライン変換、組み込みログ・検証は提供しません。逐次 `PublishAsync` による通知、`StreamAsync` によるストリーム、通常の `TResponse` 値としての利用者独自 `Result` 型は対応しています。
+並列配信、fire-and-forget、永続化や outbox、要求の `Send(object)`、循環検出、CodeFix、CodeLens、組み込みの `Result` パイプライン変換、組み込みログ、Send の入力検証は提供しません。Stream の同期入力検証は、上記の明示登録した Validator で行います。逐次 `PublishAsync` による通知、`StreamAsync` によるストリーム、通常の `TResponse` 値としての利用者独自 `Result` 型は対応しています。
 
 MediatR からの移行は [移行ガイド](docs/migrating-from-mediatr.ja.md) を参照してください。
 
