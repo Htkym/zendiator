@@ -11,23 +11,25 @@ internal sealed partial class SourceEmitter
     private const string InlineAttribute = "[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]";
     private const string NoInlineAttribute = "[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]";
 
-    private sealed class DependencySet(string name, List<EmissionType> types, int first)
+    private sealed class DependencySet(string name, List<EmissionType> types, int first, int firstValidation)
     {
         internal string Name { get; } = name;
         internal List<EmissionType> Types { get; } = types;
         internal int First { get; } = first;
+        internal int FirstValidation { get; } = firstValidation;
         internal int IndexOf(EmissionType type) => Types.FindIndex(t => t.Name == type.Name);
     }
 
-    private readonly record struct RouteServices(string Key, bool IsOpen, List<EmissionType> Types, EmissionType? First);
+    private readonly record struct RouteServices(string Key, bool IsOpen, List<EmissionType> Types, EmissionType? First, EquatableArray<EmissionType> Validators);
 
     private static List<RouteServices> AllRouteServices(GenerationModel model)
     {
         var routes = new List<RouteServices>();
-        void Add(string key, bool isOpen, IEnumerable<EmissionType> types) =>
-            routes.Add(new RouteServices(key, isOpen, types.GroupBy(t => t.Name, StringComparer.Ordinal).Select(g => g.First()).ToList(), null));
+        void Add(string key, bool isOpen, IEnumerable<EmissionType> types, EquatableArray<EmissionType> validators = default) =>
+            routes.Add(new RouteServices(key, isOpen, types.Concat(validators).GroupBy(t => t.Name, StringComparer.Ordinal)
+                .Select(g => g.First()).ToList(), null, validators));
         void AddRoute(string key, EmissionRoute route) =>
-            Add(key, route.IsOpen, route.Behaviors.Append(route.Handler));
+            Add(key, route.IsOpen, route.Behaviors.Append(route.Handler), route.Validators);
         void AddMany(string prefix, EquatableArray<EmissionMultiRoute> multi)
         {
             for (var i = 0; i < multi.Count; i++)
@@ -68,7 +70,9 @@ internal sealed partial class SourceEmitter
                 && !open.Contains(t.Name) && !open.Contains(t.OpenName)).ToList();
             if (owned.Count < 2) continue;
             var first = route.First is { } type ? owned.FindIndex(t => t.Name == type.Name) : -1;
-            sets.Add(route.Key, new DependencySet(route.Key + "Dependencies", owned, first));
+            var firstValidator = route.Validators.FirstOrDefault(v => owned.Any(t => t.Name == v.Name));
+            var firstValidation = firstValidator == null ? -1 : owned.FindIndex(t => t.Name == firstValidator.Name);
+            sets.Add(route.Key, new DependencySet(route.Key + "Dependencies", owned, first, firstValidation));
         }
         return sets;
     }
@@ -117,6 +121,13 @@ internal sealed partial class SourceEmitter
                                 {{InlineAttribute}}
                                 get => global::System.Threading.Volatile.Read(ref _service{{i}}) ?? Services.ResolveDependency(ref _service{{i}});
                             }
+                    """);
+            if (set.FirstValidation >= 0)
+                b.AppendLine($$"""
+                            {{InlineAttribute}}
+                            internal static {{set.Name}} GetForValidation({{ResolverType}} services) => services.GetDependencySet<{{set.Name}}>() ?? CreateForValidation(services);
+                            {{NoInlineAttribute}}
+                            private static {{set.Name}} CreateForValidation({{ResolverType}} services) => services.AddDependencySet(new {{set.Name}}(services), static dependencies => _ = dependencies.Service{{set.FirstValidation}});
                     """);
             var captureFirst = set.First >= 0 ? $", static dependencies => _ = dependencies.Service{set.First}" : "";
             b.AppendLine($$"""

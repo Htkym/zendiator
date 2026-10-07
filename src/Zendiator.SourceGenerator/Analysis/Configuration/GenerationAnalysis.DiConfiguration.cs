@@ -83,7 +83,7 @@ internal sealed partial class GenerationAnalysis
         {
             return AnalyzeDiAssignment(left.Name.Identifier.Text, assignment.Right, model, setting);
         }
-        ErrorAt(17, "Unsupported AddZendiator configuration statement. Use direct recorder calls (RegisterServicesFromAssemblyContaining, AddOpenBehavior, AddOpenStreamBehavior, AddNotification, ConfigureHandlerOrder) and property assignments (Namespace, ServiceLifetime, DependencyLifetime).", statement.GetLocation());
+        ErrorAt(17, "Unsupported AddZendiator configuration statement. Use direct recorder calls (RegisterServicesFromAssemblyContaining, AddOpenBehavior, AddOpenStreamBehavior, AddStreamRequestValidator, AddNotification, ConfigureHandlerOrder) and property assignments (Namespace, ServiceLifetime, DependencyLifetime).", statement.GetLocation());
         return false;
     }
 
@@ -171,6 +171,22 @@ internal sealed partial class GenerationAnalysis
                     setting.Behaviors.Add((isOpen ? behavior.OriginalDefinition : behavior, isOpen, order.Value, key));
                     return true;
                 }
+            case "AddStreamRequestValidator":
+                {
+                    if (invocation.ArgumentList?.Arguments.Count != 2) goto Unsupported;
+                    var validator = TypeofArgument(0, out var supported);
+                    var order = IntArgument(1);
+                    if (!supported || validator == null || order == null) goto Unsupported;
+                    var key = FullNameOf(validator);
+                    if (key == null) goto Unsupported;
+                    if (setting.StreamValidators.Any(entry => entry.Key == key || entry.Order == order))
+                    {
+                        ErrorAt(21, "Validator types and Order values must be unique.", location);
+                        return false;
+                    }
+                    setting.StreamValidators.Add((validator, key, order.Value, location));
+                    return true;
+                }
             case "AddNotification":
                 {
                     if (invocation.ArgumentList?.Arguments.Count != 0) goto Unsupported;
@@ -204,7 +220,7 @@ internal sealed partial class GenerationAnalysis
                     return true;
                 }
             default:
-                ErrorAt(17, $"Unsupported AddZendiator configuration call '{methodName}'. Supported calls: RegisterServicesFromAssemblyContaining, RegisterServicesFromAssembly, AddOpenBehavior, AddOpenStreamBehavior, AddNotification, ConfigureHandlerOrder.", location);
+                ErrorAt(17, $"Unsupported AddZendiator configuration call '{methodName}'. Supported calls: RegisterServicesFromAssemblyContaining, RegisterServicesFromAssembly, AddOpenBehavior, AddOpenStreamBehavior, AddStreamRequestValidator, AddNotification, ConfigureHandlerOrder.", location);
                 return false;
         }
     Unsupported:

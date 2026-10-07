@@ -16,7 +16,7 @@ internal static class GeneratorDiagnostics
         Rule("ZEN0014", "Unsupported notification erasure"), Rule("ZEN0015", "Conflicting configuration source"),
         Rule("ZEN0016", "Conflicting configuration structure"),         Rule("ZEN0017", "Unsupported configuration expression"),
         Rule("ZEN0018", "Invalid configuration value"), Rule("ZEN0019", "Ambiguous registration binding"),
-        Rule("ZEN0020", "Interception connection failure")
+        Rule("ZEN0020", "Interception connection failure"), Rule("ZEN0021", "Invalid stream validator")
     };
 
     internal static DiagnosticDescriptor Rule(string id, string title) =>

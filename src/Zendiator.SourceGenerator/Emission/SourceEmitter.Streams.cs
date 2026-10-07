@@ -34,19 +34,36 @@ internal sealed partial class SourceEmitter
         var item = route.IsOpen ? route.ResponseDisplay : Name(route.Response);
         var cont = $$"""global::Zendiator.IStreamContinuation<{{req}}, {{item}}>""";
         var enumerable = $$"""StreamRoute{{index}}Enumerable""";
+        var set = SetOf("StreamRoute" + index);
         b.AppendLine($$"""
                 /// <summary>Streams items for the request through its configured pipeline. Enumeration is lazy and scope-safe.</summary>
                 [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
                 public {{StreamSignature(route)}}
                 {
             """);
-        // Lazy: no handler execution, no DI resolution here. Only capture scope provider + request + token.
+        if (route.Validators.Count != 0)
+        {
+            if (route.Request.IsReferenceType)
+                b.AppendLine("""        global::System.ArgumentNullException.ThrowIfNull(request);""");
+            var acquiredSet = false;
+            foreach (var validator in route.Validators)
+            {
+                if (!acquiredSet && (set?.IndexOf(validator) ?? -1) >= 0)
+                {
+                    b.AppendLine($"        var dependencies = {set!.Name}.GetForValidation({MediatorServices});");
+                    acquiredSet = true;
+                }
+                var contract = $"global::Zendiator.IStreamRequestValidator<{req}>";
+                var receiver = Receiver(set, validator, Name(validator), contract, validator.DirectCall, MediatorServices);
+                b.AppendLine($"        {receiver}.Validate(request);");
+            }
+        }
+        // Validation is synchronous; handler and behavior execution stays lazy.
         b.AppendLine($$"""
                     return new {{enumerable}}{{tp}}({{MediatorServices}}, request, cancellationToken);
                 }
             """);
         EmitStreamEnumerable(b, route, index);
-        var set = SetOf("StreamRoute" + index);
         for (var node = 0; node <= route.Behaviors.Count; node++)
         {
             b.AppendLine($$"""

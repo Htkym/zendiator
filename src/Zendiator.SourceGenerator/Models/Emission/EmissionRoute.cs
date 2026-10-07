@@ -9,6 +9,7 @@ internal sealed record EmissionRoute
     public bool IsSync { get; init; }
     public bool IsOpen { get; init; }
     public EquatableArray<EmissionType> Behaviors { get; init; }
+    public EquatableArray<EmissionType> Validators { get; init; }
     public EquatableArray<string> OpenTypeParams { get; init; }
     public EquatableArray<string> MethodConstraints { get; init; }
     public string RequestDisplay { get; init; } = "";

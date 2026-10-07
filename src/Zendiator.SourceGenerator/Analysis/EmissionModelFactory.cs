@@ -64,6 +64,7 @@ internal sealed class EmissionModelFactory(GenerationContracts contracts, Func<I
             HandlerDisplay = route.HandlerDisplay,
             HandlerContractDisplay = route.HandlerContractDisplay,
             Behaviors = new(route.Behaviors.Select(b => Service(b, behavior, method))),
+            Validators = new(route.Validators.Select(v => Service(v, contracts.StreamValidator, "Validate"))),
             BehaviorDisplays = new(route.BehaviorDisplays),
             BehaviorContractDisplays = new(route.BehaviorContractDisplays)
         };

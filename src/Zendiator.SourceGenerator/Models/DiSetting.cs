@@ -14,6 +14,7 @@ internal sealed class DiSetting
     public List<(INamedTypeSymbol Type, bool IsOpen, int Order, string Key)> Behaviors { get; } = new();
     public List<(INamedTypeSymbol Type, string Key)> Notifications { get; } = new();
     public List<(INamedTypeSymbol Type, string Key, int Order)> HandlerOrders { get; } = new();
+    public List<(INamedTypeSymbol Type, string Key, int Order, Location Location)> StreamValidators { get; } = new();
     public Location CallLocation = Location.None;
 
     public string StructureKey()
@@ -29,6 +30,10 @@ internal sealed class DiSetting
             "behaviors=" + string.Join(",", Behaviors.OrderBy(static e => e.Order).ThenBy(static e => e.Key, StringComparer.Ordinal).Select(static e => e.Order + ":" + e.Key)),
             "notifications=" + string.Join(",", Notifications.OrderBy(static e => e.Key, StringComparer.Ordinal).Select(static e => e.Key)),
             "orders=" + string.Join(",", HandlerOrders.OrderBy(static e => e.Key, StringComparer.Ordinal).Select(static e => e.Key + ":" + e.Order)),            };
+        if (StreamValidators.Count != 0)
+            parts.Add("streamValidators=" + string.Join(",", StreamValidators.OrderBy(static entry => entry.Order)
+                .ThenBy(static entry => entry.Key, StringComparer.Ordinal).Select(static entry =>
+                    entry.Order.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + entry.Key)));
         return string.Join(";", parts);
     }
 }

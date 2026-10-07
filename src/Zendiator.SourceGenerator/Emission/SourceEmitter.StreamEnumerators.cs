@@ -83,7 +83,7 @@ internal sealed partial class SourceEmitter
                         try
                         {
             """);
-        if (route.Request.IsReferenceType)
+        if (route.Request.IsReferenceType && route.Validators.Count == 0)
             b.AppendLine("""                global::System.ArgumentNullException.ThrowIfNull(_request, "_request");""");
         b.AppendLine($$"""
                             var effective = MergeStreamTokens(_apiToken, _enumToken, out _linked);

@@ -169,6 +169,19 @@ configuration.AddOpenBehavior(typeof(LoggingBehavior<,>), order: 0);
 configuration.AddOpenStreamBehavior(typeof(StreamLoggingBehavior<,>), order: 2);
 ```
 
+For lightweight synchronous input checks, implement a validator and register its closed concrete type explicitly:
+
+```csharp
+public sealed class HouseholdNameValidator : IStreamRequestValidator<GetHouseholdNames>
+{
+    public void Validate(GetHouseholdNames request) => ArgumentOutOfRangeException.ThrowIfNegative(request.Count);
+}
+
+configuration.AddStreamRequestValidator(typeof(HouseholdNameValidator), order: 0);
+```
+
+Validation runs synchronously once per `StreamAsync` call, before an enumerable is created, in ascending validator order. Registered reference requests reject null synchronously; streams without validators keep their null check on first `MoveNextAsync`. Cancellation is checked during enumeration, so entry validation also runs with an already-canceled API token. Failures stop later validator and pipeline resolution. For attribute configuration, use `[StreamRequestValidator(typeof(HouseholdNameValidator), Order = 0)]` on the generated mediator or assembly; do not mix attributes with a configuration lambda. Validators must be synchronous, input-only and safe for concurrent calls. Keep validated input stable and the DI scope valid until enumeration completes. Captured validator instances are reused within a mediator, including Transient registrations. A validator that is also a handler or behavior may be constructed at entry; its pipeline method still runs lazily. Validator orders are independent of behavior orders, and every validator contract must match a closed generated stream route exactly (ZEN0021).
+
 Consume lazily. The handler starts on first `MoveNextAsync`, not on `StreamAsync`.
 Either the API token or `WithCancellation` can cancel; different tokens are linked only when both are cancelable and different.
 

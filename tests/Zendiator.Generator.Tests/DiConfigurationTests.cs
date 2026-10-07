@@ -65,6 +65,59 @@ public sealed class DiConfigurationTests
     }
 
 
+    private const string ValidatorFixtures = """
+        public sealed record Items : IStreamRequest<int>;
+        public sealed class ItemsHandler : IStreamRequestHandler<Items,int>
+        {
+            public async System.Collections.Generic.IAsyncEnumerable<int> HandleAsync(Items r, CancellationToken c)
+            { await Task.Yield(); yield return 1; }
+        }
+        public sealed class V1 : IStreamRequestValidator<Items> { public void Validate(Items r) {} }
+        public sealed class V2 : IStreamRequestValidator<Items> { public void Validate(Items r) {} }
+        """;
+
+    [Theory]
+    [InlineData("V2", 0)]
+    [InlineData("V1", 1)]
+    public void Validator_type_or_order_conflicts_are_structural(string secondType, int secondOrder)
+    {
+        var source = Head + ValidatorFixtures + $$"""
+            public static class App
+            {
+                public static void First(IServiceCollection services) => services.AddZendiator(c => c.AddStreamRequestValidator(typeof(V1), 0));
+                public static void Second(IServiceCollection services) => services.AddZendiator(c => c.AddStreamRequestValidator(typeof({{secondType}}), {{secondOrder}}));
+            }
+            """;
+        var result = Run(source, false);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "ZEN0016");
+        Assert.Empty(result.GeneratedTrees);
+    }
+
+    [Fact]
+    public void Changed_validator_registration_refreshes_the_incremental_model_and_rejects_mixed_sources()
+    {
+        var source = Head + ValidatorFixtures + """
+            public static class App
+            {
+                public static void Register(IServiceCollection services) => services.AddZendiator(c => c.AddStreamRequestValidator(typeof(V1), 0));
+            }
+            """;
+        var driver = Driver().RunGenerators(Compilation(source));
+        var first = driver.GetRunResult().GeneratedTrees.Single(tree => tree.ToString().Contains("interface IZendiator")).ToString();
+        driver = driver.RunGeneratorsAndUpdateCompilation(Compilation(source.Replace("typeof(V1), 0", "typeof(V2), 1")), out var output, out var diagnostics);
+        Assert.Empty(diagnostics.Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        Assert.Empty(output.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        var second = driver.GetRunResult().GeneratedTrees.Single(tree => tree.ToString().Contains("interface IZendiator")).ToString();
+        Assert.NotEqual(first, second);
+        Assert.Contains("typeof(global::App.V2)", second);
+        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["SourceEmission"].SelectMany(step => step.Outputs),
+            item => Assert.Equal(IncrementalStepRunReason.Modified, item.Reason));
+        var mixed = source.Replace("namespace App;", "[assembly: StreamRequestValidator(typeof(App.V1))] namespace App;");
+        Assert.Contains(Run(mixed, false).Diagnostics, diagnostic => diagnostic.Id == "ZEN0015");
+        var duplicate = source.Replace("c => c.AddStreamRequestValidator(typeof(V1), 0)", "c => { c.AddStreamRequestValidator(typeof(V1), 0); c.AddStreamRequestValidator(typeof(V2), 0); }");
+        Assert.Contains(Run(duplicate, false).Diagnostics, diagnostic => diagnostic.Id == "ZEN0021");
+    }
+
     [Fact]
     public void Moving_registration_refreshes_interceptors_but_reuses_mediator_emission()
     {

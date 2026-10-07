@@ -32,6 +32,7 @@ internal sealed partial class GenerationAnalysis(ImmutableArray<INamedTypeSymbol
         BuildSyncRequests();
         BuildNotifications();
         ApplyPipelines();
+        ApplyStreamValidators();
         return EmitResult();
     }
 }

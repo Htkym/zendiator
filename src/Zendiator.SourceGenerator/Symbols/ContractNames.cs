@@ -44,4 +44,6 @@ internal static class ContractNames
     internal const string StreamHandler = "Zendiator.IStreamRequestHandler`2";
 
     internal const string StreamBehavior = "Zendiator.IStreamPipelineBehavior`2";
+
+    internal const string StreamValidator = "Zendiator.IStreamRequestValidator`1";
 }
