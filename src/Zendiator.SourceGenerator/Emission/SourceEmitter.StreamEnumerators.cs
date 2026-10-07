@@ -67,17 +67,11 @@ internal sealed partial class SourceEmitter
                     public global::System.Threading.Tasks.ValueTask<bool> MoveNextAsync()
                     {
                         if (_state == StreamEnumeratorState.Forwarding) return _inner!.MoveNextAsync();
-                        if (_state == StreamEnumeratorState.NotStarted) return StartAndMoveNextAsync();
+                        if (_state == StreamEnumeratorState.NotStarted) return StartCoreAsync();
                         return new global::System.Threading.Tasks.ValueTask<bool>(false);
                     }
-                    private global::System.Threading.Tasks.ValueTask<bool> StartAndMoveNextAsync()
-                    {
-                        var task = StartCoreAsync();
-                        return task.IsCompletedSuccessfully
-                            ? new global::System.Threading.Tasks.ValueTask<bool>(task.Result)
-                            : new global::System.Threading.Tasks.ValueTask<bool>(task);
-                    }
-                    private async global::System.Threading.Tasks.Task<bool> StartCoreAsync()
+                    [global::System.Runtime.CompilerServices.AsyncMethodBuilder(typeof(global::System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder<>))]
+                    private async global::System.Threading.Tasks.ValueTask<bool> StartCoreAsync()
                     {
                         _state = StreamEnumeratorState.Forwarding;
                         try

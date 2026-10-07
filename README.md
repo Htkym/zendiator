@@ -217,6 +217,13 @@ await foreach (var name in zendiator.StreamAsync(new GetHouseholdNames(3), cance
 }
 ```
 
+Consume each `MoveNextAsync()` result once, following the `ValueTask` contract.
+If the same operation must be awaited more than once, call `AsTask()` once before
+consuming it and reuse the returned `Task`, without also consuming the original
+`ValueTask`. Await the current move before starting the next; `await foreach`
+already does this. [CA2012](https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/quality-rules/ca2012)
+can help detect incorrect consumption.
+
 `ref struct` requests use the sync contract (`ISyncRequest` + `SendSync`); async routes
 and stream items diagnose them (ZEN0012). Re-enumeration is not guaranteed; call `StreamAsync` again for a fresh stream.
 Open-generic handlers closed over a value type need runtime generic construction,
