@@ -81,6 +81,8 @@ internal sealed partial class SourceEmitter
         }
         else
         {
+            if (!route.IsOpen)
+                b.AppendLine("""    [global::System.Runtime.CompilerServices.AsyncMethodBuilderAttribute(typeof(global::System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder))]""");
             b.AppendLine($$"""
                     public async {{NotificationSignature(route, publish: false)}}
                     {

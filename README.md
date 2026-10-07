@@ -448,6 +448,11 @@ uses the explicitly registered synchronous validators described above.
 Sequential `PublishAsync`, streams via `StreamAsync`, and your own
 `Result` types as ordinary `TResponse` values are supported.
 
+Consume each `ValueTask` returned by `PublishAsync` or `Publish` once.
+To await the same publish more than once, call `AsTask()` once and reuse that
+`Task`, without also consuming the original `ValueTask`. [CA2012](https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/quality-rules/ca2012)
+can help detect incorrect consumption.
+
 For migrating from MediatR, see [the migration guide](docs/migrating-from-mediatr.md).
 
 ## Development

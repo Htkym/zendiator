@@ -14,6 +14,28 @@ public sealed class TaskBackedNotificationHandler : INotificationHandler<TaskBac
     }
 }
 
+public sealed record ControlledMultiNotification(
+    NotificationCompletion Source, short Version, AsyncLocal<string?> Context, int Id, List<int> Deliveries) : INotification;
+
+public sealed class ControlledMultiFirstHandler : INotificationHandler<ControlledMultiNotification>
+{
+    public ValueTask HandleAsync(ControlledMultiNotification notification, CancellationToken cancellationToken)
+    {
+        notification.Context.Value = "subscriber";
+        return new(notification.Source, notification.Version);
+    }
+}
+
+[HandlerOrder(Order = 1)]
+public sealed class ControlledMultiSecondHandler : INotificationHandler<ControlledMultiNotification>
+{
+    public ValueTask HandleAsync(ControlledMultiNotification notification, CancellationToken cancellationToken)
+    {
+        notification.Deliveries.Add(notification.Id);
+        return default;
+    }
+}
+
 public sealed class NotificationPoolingContractTests
 {
     [Theory]
@@ -61,8 +83,10 @@ public sealed class NotificationPoolingContractTests
         Assert.Equal("caller", context.Value);
     }
 
-    [Fact]
-    public async Task Repeated_overlapping_publishes_keep_outcomes_and_source_consumption_independent()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Repeated_overlapping_publishes_keep_outcomes_and_source_consumption_independent(bool multipleSubscribers)
     {
         await using var provider = Services().BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
@@ -75,6 +99,7 @@ public sealed class NotificationPoolingContractTests
             var sources = new NotificationCompletion[3];
             var tasks = new Task[3];
             var failures = new Exception?[3];
+            var deliveries = new List<int>[3];
             for (var i = 0; i < sources.Length; i++)
             {
                 sources[i] = new NotificationCompletion();
@@ -84,7 +109,11 @@ public sealed class NotificationPoolingContractTests
                     2 => new OperationCanceledException(cancellation.Token),
                     _ => null,
                 };
-                tasks[i] = mediator.PublishAsync(new ControlledNotification(sources[i], sources[i].Version, context)).AsTask();
+                deliveries[i] = [];
+                tasks[i] = multipleSubscribers
+                    ? mediator.PublishAsync(new ControlledMultiNotification(sources[i], sources[i].Version, context, i, deliveries[i])).AsTask()
+                    : mediator.PublishAsync(new ControlledNotification(sources[i], sources[i].Version, context)).AsTask();
+                Assert.False(tasks[i].IsCompleted);
             }
             Assert.Equal("caller", context.Value);
             for (var i = sources.Length - 1; i >= 0; i--) sources[i].Complete(failures[i]);
@@ -105,6 +134,8 @@ public sealed class NotificationPoolingContractTests
                 }
                 else await tasks[i].WaitAsync(TimeSpan.FromSeconds(10));
                 Assert.Equal(1, sources[i].Consumptions);
+                if (multipleSubscribers && failures[i] is null) Assert.Equal([i], deliveries[i]);
+                else Assert.Empty(deliveries[i]);
             }
             Assert.Equal("caller", context.Value);
         }
