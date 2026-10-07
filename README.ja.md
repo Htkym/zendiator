@@ -181,7 +181,7 @@ Validator はアセンブリ走査では自動登録されません。型はア�
 
 検証は `StreamAsync` を呼び出すたびに order の昇順で一度だけ同期実行され、成功してから列挙用オブジェクトを返します。同じ列挙用オブジェクトの列挙では再検証しません。Validator がある参照型要求の null は呼び出し時に拒否し、Validator がない経路の null 検査は従来どおり最初の `MoveNextAsync` で行います。キャンセルの検査は列挙時に行うため、取り消し済みの API トークンでも入口の検証は実行されます。検証が失敗すると、後続の Validator とパイプラインの依存解決を止めます。
 
-属性方式では、生成 Mediator またはアセンブリに `[StreamRequestValidator(typeof(HouseholdNameValidator), Order = 0)]` を付けます。構成ラムダとの併用はできません。Validator は入力だけを検証し、並行呼び出しに対応させてください。非同期処理や I/O はハンドラーまたは Stream Behavior に置きます。検証した入力を列挙終了まで変更せず、DI スコープも維持してください。
+属性方式では、生成 Mediator またはアセンブリに `[StreamRequestValidator(typeof(HouseholdNameValidator), Order = 0)]` を付けます。構成ラムダとの併用はできません。Validator は入力だけを検証し、並行呼び出しに対応させてください。非同期処理や I/O はハンドラーまたは Stream Behavior に置いてください。検証した入力を列挙終了まで変更せず、DI スコープも維持してください。
 
 取得した Validator は Transient 登録でも Mediator 内で再利用されます。同じ型がハンドラーや Behavior でもある場合は、入口でそのインスタンスを構築することがあります。パイプラインのメソッドは列挙時に実行されます。[既知の制限](docs/release/known-limitations.md)も参照してください。
 
