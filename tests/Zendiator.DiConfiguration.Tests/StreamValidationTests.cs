@@ -97,7 +97,7 @@ public sealed class StreamValidationTests
         Assert.Equal(1, trace.LastValidations);
         await using (var enumerator = canceledStream.GetAsyncEnumerator())
         {
-            var pending = enumerator.MoveNextAsync();
+            var pending = enumerator.MoveNextAsync().AsTask();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
             Assert.True(pending.IsCanceled);
             Assert.False(await enumerator.MoveNextAsync());
