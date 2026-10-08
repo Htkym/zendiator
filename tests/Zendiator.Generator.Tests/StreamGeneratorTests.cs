@@ -43,7 +43,8 @@ public sealed class StreamGeneratorTests
     {
         var head = Head.Replace("[GenerateZendiator]", $"[GenerateZendiator, StreamRequestValidator({type})]");
         var result = Run(Compilation(head + StreamReq + StreamHandler + declaration), false);
-        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "ZEN0021" && diagnostic.Location.IsInSource);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "ZEN0024" &&
+            diagnostic.Severity == DiagnosticSeverity.Error && diagnostic.Location.IsInSource);
         Assert.Empty(result.GeneratedTrees);
     }
 

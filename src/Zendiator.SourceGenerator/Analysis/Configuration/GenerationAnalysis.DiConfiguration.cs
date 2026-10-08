@@ -181,7 +181,7 @@ internal sealed partial class GenerationAnalysis
                     if (key == null) goto Unsupported;
                     if (setting.StreamValidators.Any(entry => entry.Key == key || entry.Order == order))
                     {
-                        ErrorAt(21, "Validator types and Order values must be unique.", location);
+                        ErrorAt(GeneratorDiagnostics.StreamValidator, "Validator types and Order values must be unique.", location);
                         return false;
                     }
                     setting.StreamValidators.Add((validator, key, order.Value, location));

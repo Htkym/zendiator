@@ -120,12 +120,12 @@ internal sealed partial class GenerationAnalysis
                 var location = attribute.ApplicationSyntaxReference?.GetSyntax(ct).GetLocation() ?? Location.None;
                 if (attribute.ConstructorArguments.FirstOrDefault().Value is not INamedTypeSymbol validator)
                 {
-                    ErrorAt(21, "StreamRequestValidator requires an implementation type.", location);
+                    ErrorAt(GeneratorDiagnostics.StreamValidator, "StreamRequestValidator requires an implementation type.", location);
                     continue;
                 }
                 var validatorOrder = attribute.NamedArguments.FirstOrDefault(p => p.Key == "Order").Value.Value as int? ?? 0;
                 if (streamValidators.Any(entry => Same(entry.Type, validator) || entry.Order == validatorOrder))
-                    ErrorAt(21, "Validator types and Order values must be unique.", location);
+                    ErrorAt(GeneratorDiagnostics.StreamValidator, "Validator types and Order values must be unique.", location);
                 else streamValidators.Add((validator, validatorOrder, location));
                 continue;
             }

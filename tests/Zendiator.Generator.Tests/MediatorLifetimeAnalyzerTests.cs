@@ -42,7 +42,17 @@ public sealed class MediatorLifetimeAnalyzerTests
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
         var diagnostics = await output.WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new MediatorLifetimeAnalyzer()))
             .GetAnalyzerDiagnosticsAsync();
+        Assert.All(diagnostics, diagnostic => Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity));
         return diagnostics.Select(d => d.Id).OrderBy(id => id).ToArray();
+    }
+
+    [Fact]
+    public void Generator_and_lifetime_diagnostic_ids_do_not_overlap()
+    {
+        var definitions = typeof(ZendiatorGenerator).Assembly.GetType("Zendiator.SourceGenerator.GeneratorDiagnostics", throwOnError: true)!;
+        var rules = (DiagnosticDescriptor[])definitions.GetField("Rules", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetValue(null)!;
+        var ids = rules.Concat(new MediatorLifetimeAnalyzer().SupportedDiagnostics).Select(rule => rule.Id).ToArray();
+        Assert.Equal(ids.Length, ids.Distinct(StringComparer.Ordinal).Count());
     }
 
     [Theory]

@@ -115,7 +115,7 @@ public sealed class DiConfigurationTests
         var mixed = source.Replace("namespace App;", "[assembly: StreamRequestValidator(typeof(App.V1))] namespace App;");
         Assert.Contains(Run(mixed, false).Diagnostics, diagnostic => diagnostic.Id == "ZEN0015");
         var duplicate = source.Replace("c => c.AddStreamRequestValidator(typeof(V1), 0)", "c => { c.AddStreamRequestValidator(typeof(V1), 0); c.AddStreamRequestValidator(typeof(V2), 0); }");
-        Assert.Contains(Run(duplicate, false).Diagnostics, diagnostic => diagnostic.Id == "ZEN0021");
+        Assert.Contains(Run(duplicate, false).Diagnostics, diagnostic => diagnostic.Id == "ZEN0024");
     }
 
     [Fact]
