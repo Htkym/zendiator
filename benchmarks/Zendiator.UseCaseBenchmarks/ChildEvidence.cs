@@ -22,9 +22,15 @@ internal static class ChildEvidence
         var runtime = ArtifactEvidence.Runtime();
         ArtifactEvidence.Write(file, new
         {
-            pid = Environment.ProcessId, startedUtc = DateTimeOffset.UtcNow,
-            scenario, lifetime, processIdentity, phase = "global-setup",
-            runtime = runtime.Framework, runtimeEvidence = runtime, assemblies = ArtifactEvidence.Assemblies()
+            pid = Environment.ProcessId,
+            startedUtc = DateTimeOffset.UtcNow,
+            scenario,
+            lifetime,
+            processIdentity,
+            phase = "global-setup",
+            runtime = runtime.Framework,
+            runtimeEvidence = runtime,
+            assemblies = ArtifactEvidence.Assemblies()
         });
         var initialSha = ArtifactEvidence.Hash(file);
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
@@ -36,9 +42,16 @@ internal static class ChildEvidence
                 var finalRuntime = ArtifactEvidence.Runtime();
                 ArtifactEvidence.Write(finalPath, new
                 {
-                    schemaVersion = 1, pid = Environment.ProcessId, capturedUtc = DateTimeOffset.UtcNow,
-                    scenario, lifetime, processIdentity, phase = "process-exit-after-workload", initialEvidenceSha256 = initialSha,
-                    runtime = finalRuntime.Framework, runtimeEvidence = finalRuntime,
+                    schemaVersion = 1,
+                    pid = Environment.ProcessId,
+                    capturedUtc = DateTimeOffset.UtcNow,
+                    scenario,
+                    lifetime,
+                    processIdentity,
+                    phase = "process-exit-after-workload",
+                    initialEvidenceSha256 = initialSha,
+                    runtime = finalRuntime.Framework,
+                    runtimeEvidence = finalRuntime,
                     assemblies = ArtifactEvidence.Assemblies(),
                     scope = "All currently loaded, file-backed managed assemblies; dynamic/native code is outside this map"
                 });
@@ -46,8 +59,16 @@ internal static class ChildEvidence
             catch (Exception error)
             {
                 // The driver rejects a failed/missing final capture; do not silently reuse setup evidence.
-                try { ArtifactEvidence.Write(finalPath, new { schemaVersion = 1, pid = Environment.ProcessId,
-                    phase = "capture-failed", error = error.ToString() }); }
+                try
+                {
+                    ArtifactEvidence.Write(finalPath, new
+                    {
+                        schemaVersion = 1,
+                        pid = Environment.ProcessId,
+                        phase = "capture-failed",
+                        error = error.ToString()
+                    });
+                }
                 catch { Console.Error.WriteLine("Final child assembly capture failed"); }
             }
         };
