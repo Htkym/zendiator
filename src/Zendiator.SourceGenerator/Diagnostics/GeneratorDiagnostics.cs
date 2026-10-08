@@ -4,6 +4,8 @@ namespace Zendiator.SourceGenerator;
 
 internal static class GeneratorDiagnostics
 {
+    internal static readonly DiagnosticDescriptor StreamValidator = Rule("ZEN0024", "Invalid stream validator");
+
     internal static readonly DiagnosticDescriptor[] Rules =
     {
         Rule("ZEN0001", "Missing handler"), Rule("ZEN0002", "Duplicate handler"),
@@ -16,7 +18,7 @@ internal static class GeneratorDiagnostics
         Rule("ZEN0014", "Unsupported notification erasure"), Rule("ZEN0015", "Conflicting configuration source"),
         Rule("ZEN0016", "Conflicting configuration structure"),         Rule("ZEN0017", "Unsupported configuration expression"),
         Rule("ZEN0018", "Invalid configuration value"), Rule("ZEN0019", "Ambiguous registration binding"),
-        Rule("ZEN0020", "Interception connection failure")
+        Rule("ZEN0020", "Interception connection failure"), StreamValidator
     };
 
     internal static DiagnosticDescriptor Rule(string id, string title) =>

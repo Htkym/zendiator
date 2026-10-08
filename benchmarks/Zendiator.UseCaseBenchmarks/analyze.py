@@ -6,15 +6,20 @@ import re
 import sys
 from pathlib import Path
 
+from interleaved_plan import normalize_case
+
 
 ROOT = Path(__file__).resolve().parent
-if len(sys.argv) != 2:
-    raise SystemExit("Usage: python analyze.py OUTPUT_ROOT")
+if len(sys.argv) not in (2, 4) or (len(sys.argv) == 4 and sys.argv[2] != "--matrix"):
+    raise SystemExit("Usage: python analyze.py OUTPUT_ROOT [--matrix FOCUSED_MATRIX]")
 OUTPUT = Path(sys.argv[1]).resolve()
 FIELDS = ("Type", "Method", "Lifetime", "Count", "Asynchronous")
+MATRICES = ({"custom": Path(sys.argv[3]).resolve()} if len(sys.argv) == 4 else
+            {group: ROOT / f"{group}.json" for group in ("send", "features", "streams", "relay")})
 
 
 def key(case):
+    case = normalize_case(case)
     return tuple(str(case.get(field, "")) for field in FIELDS)
 
 
@@ -29,8 +34,8 @@ def parameters(value):
 expected = {}
 actual = {}
 rows = []
-for group in ("send", "features", "streams"):
-    matrix = json.loads((ROOT / f"{group}.json").read_text(encoding="utf-8"))
+for group, matrix_path in MATRICES.items():
+    matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
     for case in matrix:
         identifier = key(case)
         if identifier in expected:
@@ -73,7 +78,7 @@ with (OUTPUT / "all-results.csv").open("w", encoding="utf-8", newline="") as out
     writer.writeheader()
     writer.writerows(rows)
 
-for group in ("send", "features", "streams"):
+for group in MATRICES:
     wanted = {identifier for identifier, value in expected.items() if value == group}
     found = {identifier for identifier, value in actual.items() if value == group}
     print(f"{group}: {len(found)}/{len(wanted)} cases")

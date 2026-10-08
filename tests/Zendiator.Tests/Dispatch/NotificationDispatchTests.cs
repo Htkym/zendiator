@@ -46,6 +46,39 @@ public sealed class NotificationDispatchTests
         Assert.Equal("caller", context.Value);
     }
 
+    [Fact]
+    public async Task Single_subscriber_publish_reports_synchronous_failures_through_its_result()
+    {
+        var services = Services();
+        var factoryFailure = new InvalidOperationException("factory");
+        var failFactory = false;
+        services.AddTransient(_ => failFactory ? throw factoryFailure : new ControlledNotificationHandler());
+        await using var provider = services.BuildServiceProvider();
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+            var rejected = mediator.PublishAsync((ControlledNotification)null!);
+            Assert.True(rejected.IsFaulted);
+            await Assert.ThrowsAsync<ArgumentNullException>(async () => await rejected);
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+            var completion = new NotificationCompletion();
+            var canceled = mediator.PublishAsync(new ControlledNotification(completion, completion.Version, new AsyncLocal<string?>()), cancellation.Token);
+            Assert.True(canceled.IsCanceled);
+            Assert.Equal(cancellation.Token, (await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await canceled)).CancellationToken);
+            Assert.Equal(0, completion.Consumptions);
+        }
+        failFactory = true;
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var completion = new NotificationCompletion();
+            var failed = scope.ServiceProvider.GetRequiredService<IZendiator>()
+                .PublishAsync(new ControlledNotification(completion, completion.Version, new AsyncLocal<string?>()));
+            Assert.True(failed.IsFaulted);
+            Assert.Same(factoryFailure, await Assert.ThrowsAsync<InvalidOperationException>(async () => await failed));
+        }
+    }
+
     private static ServiceCollection Services()
     {
         var services = new ServiceCollection();
@@ -63,14 +96,8 @@ public sealed class NotificationDispatchTests
         await using var scope = provider.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<IZendiator>().PublishAsync(new UserCreated(7));
         Assert.Equal(["metrics:7", "alpha", "provision:7", "mail:7"], scope.ServiceProvider.GetRequiredService<AuditLog>().Events);
-    }
-
-    [Fact]
-    public async Task Publish_alias_matches_publish_async()
-    {
-        await using var provider = Services().BuildServiceProvider();
-        await using var scope = provider.CreateAsyncScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        scope.ServiceProvider.GetRequiredService<AuditLog>().Events.Clear();
         await mediator.Publish(new UserCreated(8));
         Assert.Equal(["metrics:8", "alpha", "provision:8", "mail:8"], scope.ServiceProvider.GetRequiredService<AuditLog>().Events);
         await Assert.ThrowsAsync<ArgumentNullException>(async () => await mediator.PublishAsync((UserCreated)null!));
@@ -136,15 +163,42 @@ public sealed class NotificationDispatchTests
         }
     }
 
-    [Fact]
-    public async Task Type_erased_publish_uses_the_runtime_type()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Shared_leading_subscriber_failure_or_cancellation_keeps_later_dependencies_unresolved(bool cancel)
     {
-        await using var provider = Services().BuildServiceProvider();
+        var services = Services();
+        var constructions = 0;
+        services.AddScoped<SharedLeadingLaterA>(_ =>
+        {
+            constructions++;
+            throw new InvalidOperationException("must not construct later A");
+        });
+        services.AddScoped<SharedLeadingLaterB>(_ =>
+        {
+            constructions++;
+            throw new InvalidOperationException("must not construct later B");
+        });
+        await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        INotification erased = new UserCreated(9);
-        await mediator.PublishAsync(erased);
-        Assert.Equal(["metrics:9", "alpha", "provision:9", "mail:9"], scope.ServiceProvider.GetRequiredService<AuditLog>().Events);
+        using var cancellation = new CancellationTokenSource();
+        var completion = new NotificationCompletion();
+        var failure = new InvalidOperationException("shared subscriber failure");
+        var pending = scope.ServiceProvider.GetRequiredService<IZendiator>()
+            .PublishAsync(new SharedLeadingNote(completion, completion.Version), cancellation.Token);
+        Assert.False(pending.IsCompleted);
+        Assert.Equal(0, constructions);
+        if (cancel) cancellation.Cancel();
+        completion.Complete(cancel ? null : failure);
+        if (cancel)
+        {
+            var observed = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
+            Assert.Equal(cancellation.Token, observed.CancellationToken);
+        }
+        else Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(async () => await pending));
+        Assert.Equal(0, constructions);
+        Assert.Equal(1, completion.Consumptions);
     }
 
     [Fact]

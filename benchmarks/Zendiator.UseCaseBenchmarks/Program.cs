@@ -8,6 +8,13 @@ using Perfolizer.Horology;
 using System.Security.Cryptography;
 using System.Text.Json;
 
+if (args.Length > 0 && args[0] == "--artifact-gate")
+{
+    if (args.Length != 2) throw new ArgumentException("--artifact-gate requires one saved request file");
+    await ArtifactGate.Run(Path.GetFullPath(args[1]));
+    return;
+}
+
 if (!File.Exists("Zendiator.UseCaseBenchmarks.csproj")) throw new InvalidOperationException("Run from the use-case benchmark directory.");
 if (args.Contains("--help")) { BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args); return; }
 var output = Path.GetFullPath(Environment.GetEnvironmentVariable("COLD_RUN") ?? Path.Combine("..", "..", ".local", "benchmarks", "explore"));
@@ -18,9 +25,24 @@ var runtimeHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(Z
 var expectedChildRuntimeHash = Environment.GetEnvironmentVariable("COLD_EXPECT_CHILD_Z_SHA") ?? "SKIP";
 Environment.SetEnvironmentVariable("COLD_EXPECT_Z_SHA", expectedChildRuntimeHash);
 File.WriteAllText(Path.Combine(output, "runtime-sha256.txt"), runtimeHash);
-try { await GeneratedGate.Run(); }
-finally { Correctness.Save(output); }
-Console.WriteLine($"Correctness passed: {Correctness.Results.Count} checks.");
+var skipGate = Environment.GetEnvironmentVariable("COLD_SKIP_GATE") == "1";
+var gateProof = Environment.GetEnvironmentVariable("COLD_GATE_PROOF");
+if (skipGate)
+{
+    if (args.Contains("--validate-only") || string.IsNullOrWhiteSpace(gateProof) || !File.Exists(gateProof))
+        throw new InvalidOperationException("A completed correctness gate is required before a single-case run.");
+    using var proof = JsonDocument.Parse(File.ReadAllText(gateProof));
+    if (proof.RootElement.ValueKind != JsonValueKind.Array || proof.RootElement.GetArrayLength() != 394 ||
+        proof.RootElement.EnumerateArray().Any(row => !row.TryGetProperty("status", out var status) || status.GetString() != "Passed"))
+        throw new InvalidOperationException("Correctness gate evidence is incomplete.");
+    Console.WriteLine("Correctness gate verified from parent run.");
+}
+else
+{
+    try { await GeneratedGate.Run(); }
+    finally { Correctness.Save(output); }
+    Console.WriteLine($"Correctness passed: {Correctness.Results.Count} checks.");
+}
 var hashes = Directory.EnumerateFiles(".").Where(p => Path.GetExtension(p) is ".cs" or ".csproj" or ".ps1" || Path.GetFileName(p) == "packages.lock.json")
     .Select(p => new { path = p, sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(p))) });
 var generated = Directory.Exists(Path.Combine("obj", "Release", "net10.0", "generated"))
@@ -37,6 +59,7 @@ File.WriteAllText(Path.Combine(output, "manifest.json"), JsonSerializer.Serializ
     runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
     runtimeSha256 = runtimeHash,
     expectedChildRuntimeSha256 = expectedChildRuntimeHash,
+    gateProofSha256 = skipGate ? Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(gateProof!))) : null,
     generatorPath,
     generatorSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(generatorPath))),
     assemblySha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(Program).Assembly.Location))),
@@ -49,6 +72,7 @@ File.WriteAllText(Path.Combine(output, "manifest.json"), JsonSerializer.Serializ
 }, new JsonSerializerOptions { WriteIndented = true }));
 if (args.Contains("--validate-only")) return;
 if (args.Contains("--breakdown")) { await AllocationBreakdown.Run(output); return; }
+if (args.Contains("--stream-breakdown")) { await StreamAllocationProfile.Run(output); return; }
 if (args.Contains("--inspect"))
 {
     var zero = new ZendiatorSend0 { Lifetime = "Scoped" };
@@ -76,6 +100,9 @@ var selectedCase = Environment.GetEnvironmentVariable("COLD_CASE");
 var matrixFile = Environment.GetEnvironmentVariable("COLD_MATRIX_FILE");
 var matrix = matrixFile is null ? null : JsonSerializer.Deserialize<MatrixCase[]>(File.ReadAllText(matrixFile))
     ?? throw new InvalidOperationException("Matrix file was empty.");
+var singleCase = Environment.GetEnvironmentVariable("COLD_SINGLE_CASE") == "1";
+if (singleCase && (!skipGate || matrix is null || matrix.Length != 1))
+    throw new InvalidOperationException("A single-case run requires one matrix entry and a verified parent gate.");
 var selectedLifetime = Environment.GetEnvironmentVariable("COLD_LIFETIME") ?? "Scoped";
 var pinned = Environment.GetEnvironmentVariable("COLD_PINNED") == "1";
 var job = Job.Default.WithId("Comparison").WithWarmupCount(matrix is not null || formal ? 20 : 10)
@@ -84,7 +111,7 @@ var job = Job.Default.WithId("Comparison").WithWarmupCount(matrix is not null ||
     .WithIterationTime(TimeInterval.FromMilliseconds(matrix is not null || formal ? 500 : 300));
 if (pinned) job = job.WithAffinity(new IntPtr(1));
 Environment.SetEnvironmentVariable("COLD_CAPTURE_CHILD", "1");
-var config = DefaultConfig.Instance.AddJob(job).AddExporter(JsonExporter.Full).WithArtifactsPath(output)
+var config = DefaultConfig.Instance.AddJob(job).AddExporter(JsonExporter.Full).WithArtifactsPath(output).WithOptions(ConfigOptions.KeepBenchmarkFiles)
     .AddFilter(new SimpleFilter(b =>
     {
         var name = b.Descriptor.Type.Name;
@@ -93,7 +120,9 @@ var config = DefaultConfig.Instance.AddJob(job).AddExporter(JsonExporter.Full).W
         if (matrix is not null) return matrix.Any(c => c.Type == name && c.Method == method
             && c.Lifetime == lifetime
             && (c.Count is null || Equals(b.Parameters.Items.FirstOrDefault(p => p.Name == "Count")?.Value, c.Count.Value))
-            && (c.Asynchronous is null || Equals(b.Parameters.Items.FirstOrDefault(p => p.Name == "Asynchronous")?.Value, c.Asynchronous.Value)));
+            && (c.Asynchronous is null || Equals(b.Parameters.Items.FirstOrDefault(p => p.Name == "Asynchronous")?.Value, c.Asynchronous.Value))
+            && (!singleCase || b.Parameters.Items.Count() == (c.Lifetime is null ? 0 : 1)
+                + (c.Count is null ? 0 : 1) + (c.Asynchronous is null ? 0 : 1)));
         if (selectedCase is not null) return name + "." + method == selectedCase && lifetime == selectedLifetime;
         if (name.StartsWith("Direct") || lifetime != "Scoped") return false;
         if (scopedPair) return method == "ScopeK1" && name is "ZendiatorSend0" or "ImmediateSend0";
@@ -103,7 +132,19 @@ var config = DefaultConfig.Instance.AddJob(job).AddExporter(JsonExporter.Full).W
             || name == "ZendiatorSend5" && method is "Typed" or "ScopeK1"
             || name == "MediatRHistoricalSend0" && method == "ScopeK1";
     }));
+if (matrix is not null) config = config.WithOrderer(new InterleavedOrderer()).WithOptions(ConfigOptions.JoinSummary | ConfigOptions.KeepBenchmarkFiles);
 var summaries = BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, config);
+ArtifactEvidence.Write(Path.Combine(output, "build-artifacts.json"), new
+{
+    schemaVersion = 1,
+    reports = summaries.SelectMany(s => s.Reports).Select(report => new
+    {
+        type = report.BenchmarkCase.Descriptor.Type.Name,
+        method = report.BenchmarkCase.Descriptor.WorkloadMethod.Name,
+        buildSuccess = report.BuildResult.IsBuildSuccess,
+        paths = report.BuildResult.ArtifactsPaths
+    }).ToArray()
+});
 var cases = summaries.Sum(s => s.Reports.Length);
 var failures = summaries.Sum(s => s.Reports.Count(r => !r.Success));
 File.WriteAllText(Path.Combine(output, "outcome.json"), JsonSerializer.Serialize(new

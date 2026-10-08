@@ -29,7 +29,10 @@ internal static class SymbolUtilities
                     var definition = QualifiedMetadataName(named.OriginalDefinition);
                     if (definition == null) return null;
                     var args = new List<string>();
-                    foreach (var argument in named.TypeArguments)
+                    var containingTypes = new Stack<INamedTypeSymbol>();
+                    for (var current = named; current != null; current = current.ContainingType)
+                        containingTypes.Push(current);
+                    foreach (var argument in containingTypes.SelectMany(static current => current.TypeArguments))
                     {
                         var name = FullNameOf(argument);
                         if (name == null) return null;

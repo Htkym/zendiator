@@ -32,20 +32,16 @@ public sealed class VoidDispatchTests
     {
         GuardedDeleteHandler.Calls = 0;
         var services = Services();
-        services.AddScoped<GuardedDeleteHandler>(_ => throw new InvalidOperationException("must not construct"));
+        var factories = 0;
+        services.AddTransient<GuardedDeleteHandler>(_ => { factories++; return new(); });
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
-        await scope.ServiceProvider.GetRequiredService<IZendiator>().SendAsync(new GuardedDelete(0));
+        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        await mediator.SendAsync(new GuardedDelete(0));
+        Assert.Equal(0, factories);
         Assert.Equal(0, GuardedDeleteHandler.Calls);
-    }
-
-    [Fact]
-    public async Task Void_handler_runs_when_not_short_circuited()
-    {
-        GuardedDeleteHandler.Calls = 0;
-        await using var provider = Services().BuildServiceProvider();
-        await using var scope = provider.CreateAsyncScope();
-        await scope.ServiceProvider.GetRequiredService<IZendiator>().SendAsync(new GuardedDelete(3));
+        await mediator.SendAsync(new GuardedDelete(3));
+        Assert.Equal(1, factories);
         Assert.Equal(1, GuardedDeleteHandler.Calls);
     }
 

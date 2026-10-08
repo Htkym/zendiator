@@ -9,10 +9,12 @@ namespace Zendiator.DiConfiguration.Tests;
 public sealed class DiRuntimeTests
 {
     internal static ServiceCollection CreateServices(ServiceLifetime lifetime = ServiceLifetime.Scoped, bool staticForm = false,
-        ServiceLifetime? dependencyLifetime = null)
+        ServiceLifetime? dependencyLifetime = null, Action<IServiceCollection>? configureDependencies = null)
     {
         var services = new ServiceCollection();
         services.AddScoped<Trace>();
+        services.AddSingleton<StreamValidationTrace>();
+        configureDependencies?.Invoke(services);
         if (staticForm)
         {
             global::Zendiator.DependencyInjection.ZendiatorServiceCollectionExtensions.AddZendiator(services, static configuration =>
@@ -25,6 +27,10 @@ public sealed class DiRuntimeTests
                 configuration.AddOpenBehavior(typeof(DiVoidBehavior<>), order: 1);
                 configuration.AddOpenBehavior(typeof(DiSyncBehavior<,>), order: 2);
                 configuration.AddOpenStreamBehavior(typeof(DiStreamBehavior<,>), order: 3);
+                configuration.AddOpenStreamBehavior(typeof(ValidatedStreamBehavior), order: 6);
+                configuration.AddStreamRequestValidator(typeof(SharedStreamValidator), order: 0);
+                configuration.AddStreamRequestValidator(typeof(EntryValidators<int>.Middle), order: 1);
+                configuration.AddStreamRequestValidator(typeof(ValidatedStreamHandler), order: 2);
                 configuration.AddOpenBehavior(typeof(NewResponseBehavior<,>), order: 4);
                 configuration.AddOpenBehavior(typeof(ClosedBehavior<Add, int>), order: 5);
                 configuration.AddNotification<Lonely>();
@@ -43,6 +49,10 @@ public sealed class DiRuntimeTests
                 configuration.AddOpenBehavior(typeof(DiVoidBehavior<>), order: 1);
                 configuration.AddOpenBehavior(typeof(DiSyncBehavior<,>), order: 2);
                 configuration.AddOpenStreamBehavior(typeof(DiStreamBehavior<,>), order: 3);
+                configuration.AddOpenStreamBehavior(typeof(ValidatedStreamBehavior), order: 6);
+                configuration.AddStreamRequestValidator(typeof(SharedStreamValidator), order: 0);
+                configuration.AddStreamRequestValidator(typeof(EntryValidators<int>.Middle), order: 1);
+                configuration.AddStreamRequestValidator(typeof(ValidatedStreamHandler), order: 2);
                 configuration.AddOpenBehavior(typeof(NewResponseBehavior<,>), order: 4);
                 configuration.AddOpenBehavior(typeof(ClosedBehavior<Add, int>), order: 5);
                 configuration.AddNotification<Lonely>();
@@ -121,6 +131,10 @@ public sealed class DiRuntimeTests
             configuration.AddOpenBehavior(typeof(DiVoidBehavior<>), order: 1);
             configuration.AddOpenBehavior(typeof(DiSyncBehavior<,>), order: 2);
             configuration.AddOpenStreamBehavior(typeof(DiStreamBehavior<,>), order: 3);
+            configuration.AddOpenStreamBehavior(typeof(ValidatedStreamBehavior), order: 6);
+            configuration.AddStreamRequestValidator(typeof(SharedStreamValidator), order: 0);
+            configuration.AddStreamRequestValidator(typeof(EntryValidators<int>.Middle), order: 1);
+            configuration.AddStreamRequestValidator(typeof(ValidatedStreamHandler), order: 2);
             configuration.AddOpenBehavior(typeof(NewResponseBehavior<,>), order: 4);
             configuration.AddOpenBehavior(typeof(ClosedBehavior<Add, int>), order: 5);
             configuration.AddNotification<Lonely>();

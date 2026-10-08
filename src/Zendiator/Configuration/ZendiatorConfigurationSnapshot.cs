@@ -17,14 +17,15 @@ public sealed class ZendiatorConfigurationSnapshot
         List<string> assemblies,
         List<(string BehaviorType, int Order)> behaviors,
         List<string> notifications,
-        List<(string HandlerType, int Order)> handlerOrders)
+        List<(string HandlerType, int Order)> handlerOrders,
+        List<(string ValidatorType, int Order)>? streamValidators = null)
     {
         Namespace = @namespace;
         ServiceLifetime = serviceLifetime;
         DependencyLifetime = dependencyLifetime;
         AssemblyMarkers = assemblyMarkers;
         Assemblies = assemblies;
-        Behaviors = behaviors;
+        Behaviors = streamValidators == null ? behaviors : new StreamValidatorRegistrations(behaviors, streamValidators);
         Notifications = notifications;
         HandlerOrders = handlerOrders;
     }
@@ -35,7 +36,7 @@ public sealed class ZendiatorConfigurationSnapshot
     /// <summary>Gets the mediator lifetime.</summary>
     public ServiceLifetime ServiceLifetime { get; }
 
-    /// <summary>Gets the optional Handler and Behavior registration lifetime override.</summary>
+    /// <summary>Gets the optional Handler, Behavior and Validator registration lifetime override.</summary>
     public ServiceLifetime? DependencyLifetime { get; }
 
     /// <summary>Gets marker types with their assemblies, sorted by marker type.</summary>
@@ -46,6 +47,11 @@ public sealed class ZendiatorConfigurationSnapshot
 
     /// <summary>Gets behaviors ordered by order, then type.</summary>
     public IReadOnlyList<(string BehaviorType, int Order)> Behaviors { get; }
+
+    /// <summary>Gets synchronous stream validators ordered by order, then type.</summary>
+    public IReadOnlyList<(string ValidatorType, int Order)> StreamRequestValidators =>
+        Behaviors is StreamValidatorRegistrations registrations
+            ? registrations.Validators : Array.Empty<(string ValidatorType, int Order)>();
 
     /// <summary>Gets the sorted notification type names.</summary>
     public IReadOnlyList<string> Notifications { get; }
@@ -68,6 +74,9 @@ public sealed class ZendiatorConfigurationSnapshot
             "notifications=" + string.Join(",", Notifications),
             "orders=" + string.Join(",", HandlerOrders.Select(static entry => entry.HandlerType + ":" + entry.Order)),
         };
+        if (Behaviors is StreamValidatorRegistrations validators)
+            parts.Add("streamValidators=" + string.Join(",", validators.Validators.Select(static entry =>
+                entry.Order.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + entry.ValidatorType)));
         return string.Join(";", parts);
     }
 }

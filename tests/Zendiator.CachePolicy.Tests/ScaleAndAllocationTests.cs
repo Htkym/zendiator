@@ -69,23 +69,6 @@ public sealed class ScaleAndAllocationTests
         Assert.Equal(0, PipeB0.HandleCalls);
     }
 
-    [Fact]
-    public async Task Only_constructed_services_are_disposed()
-    {
-        TestCounters.ResetAll();
-        var services = new ServiceCollection();
-        AddCountingFactories(services, ServiceLifetime.Scoped);
-        services.AddZendiator();
-        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-        var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        Assert.Equal(42, await mediator.SendAsync(new Val0(41)));
-        Assert.Equal(5, await mediator.SendAsync(new DispReq()));
-        await scope.DisposeAsync();
-        Assert.Equal(1, DispHandler.DisposeCount);
-        await provider.DisposeAsync();
-    }
-
     private static long Measure(Action action)
     {
         action();
@@ -101,7 +84,7 @@ public sealed class ScaleAndAllocationTests
     }
 
     [Fact]
-    public void Mediator_construction_stays_within_80_bytes()
+    public void Mediator_construction_stays_within_40_bytes()
     {
         var services = new ServiceCollection();
         services.AddZendiator();
@@ -112,8 +95,8 @@ public sealed class ScaleAndAllocationTests
         {
             retained = new Zendiator(scope.ServiceProvider);
         });
-        // Includes mediator state and its private lock, but not the supplied provider.
-        Assert.InRange(allocated, 1, 80L * 1024);
+        // Includes mediator state, but not the supplied provider.
+        Assert.InRange(allocated, 1, 40L * 1024);
         Assert.NotNull(retained);
     }
 

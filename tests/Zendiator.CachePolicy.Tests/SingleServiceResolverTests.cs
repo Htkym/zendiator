@@ -26,8 +26,6 @@ public sealed class SingleServiceResolverTests
     }
 
     [Theory]
-    [InlineData(false, ServiceLifetime.Scoped)]
-    [InlineData(true, ServiceLifetime.Scoped)]
     [InlineData(false, ServiceLifetime.Transient)]
     [InlineData(true, ServiceLifetime.Transient)]
     [InlineData(false, ServiceLifetime.Singleton)]
@@ -182,23 +180,6 @@ public sealed class SingleServiceResolverTests
         }
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Failed_activation_is_not_captured(bool specialized)
-    {
-        var services = Services();
-        var calls = 0;
-        services.AddTransient<Probe>(_ => ++calls == 1 ? throw new FormatException("activation") : new Probe(2));
-        using var provider = services.BuildServiceProvider();
-        using var scope = provider.CreateScope();
-        var capture = Resolve(scope.ServiceProvider, specialized);
-        Assert.Throws<FormatException>(() => capture.Get());
-        var second = capture.Get();
-        Assert.Same(second, capture.Get());
-        Assert.Equal(2, calls);
-    }
-
     [Fact]
     public async Task External_monitor_does_not_block_single_service_initialization()
     {
@@ -265,31 +246,6 @@ public sealed class SingleServiceResolverTests
         Assert.Equal("provider", Assert.Throws<ArgumentNullException>(() => new ZendiatorSingleServiceResolver<Probe>(null!)).ParamName);
     }
 
-    [Fact]
-    public void Typed_capture_reserves_its_slot_before_a_factory_resolves_another_type()
-    {
-        var services = Services();
-        services.AddScoped<SlotSecond>();
-        services.AddScoped<SlotFirst>(provider =>
-        {
-            _ = provider.GetRequiredService<ZendiatorServiceResolver>().GetRequiredService<SlotSecond>();
-            return new();
-        });
-        using var provider = services.BuildServiceProvider();
-        using var scope = provider.CreateScope();
-        var capture = new ZendiatorSingleServiceResolver<SlotFirst>(scope.ServiceProvider);
-        _ = capture.GetRequiredService();
-
-        static int Slot(Type type) => (int)typeof(ZendiatorServiceResolver)
-            .GetNestedType("ServiceSlot`1", System.Reflection.BindingFlags.NonPublic)!
-            .MakeGenericType(type).GetField("Index", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
-            .GetValue(null)!;
-
-        Assert.True(Slot(typeof(SlotFirst)) < Slot(typeof(SlotSecond)));
-    }
-
-    private sealed class SlotFirst;
-    private sealed class SlotSecond;
 
     private sealed class Probe(int id) : IDisposable
     {

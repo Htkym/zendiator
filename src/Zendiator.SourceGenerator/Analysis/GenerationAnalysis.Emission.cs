@@ -44,5 +44,5 @@ internal sealed partial class GenerationAnalysis
         new RequestContracts(handlerDefinition, behaviorDefinition, voidHandlerDefinition, voidBehaviorDefinition),
         new RequestContracts(syncHandlerDefinition, syncBehaviorDefinition, syncVoidHandlerDefinition, syncVoidBehaviorDefinition),
         new PipelineContracts(streamHandlerDefinition, streamBehaviorDefinition),
-        notificationHandlerDefinition);
+        notificationHandlerDefinition, streamValidatorDefinition);
 }

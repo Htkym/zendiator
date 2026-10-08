@@ -32,8 +32,8 @@ internal sealed partial class SourceEmitter
 
     private void EmitNotifications(StringBuilder b)
     {
-        foreach (var route in _model.Routes.Notifications)
-            EmitNotification(b, route);
+        for (var index = 0; index < _model.Routes.Notifications.Count; index++)
+            EmitNotification(b, _model.Routes.Notifications[index], index);
         var closed = _model.Routes.Notifications.Where(static n => !n.IsOpen).ToList();
         if (closed.Count != 0)
         {
@@ -57,8 +57,9 @@ internal sealed partial class SourceEmitter
         }
     }
 
-    private void EmitNotification(StringBuilder b, EmissionNotificationRoute route)
+    private void EmitNotification(StringBuilder b, EmissionNotificationRoute route, int index)
     {
+        var set = SetOf("NotificationRoute" + index);
         b.AppendLine("""    /// <summary>Publishes the notification to subscribers in order.</summary>""");
         if (route.Subscribers.Count == 0)
         {
@@ -74,8 +75,14 @@ internal sealed partial class SourceEmitter
                     }
                 """);
         }
+        else if (route.Subscribers.Count == 1 && !route.IsOpen)
+        {
+            EmitSingleSubscriberNotification(b, route, index);
+        }
         else
         {
+            if (!route.IsOpen)
+                b.AppendLine("""    [global::System.Runtime.CompilerServices.AsyncMethodBuilderAttribute(typeof(global::System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder))]""");
             b.AppendLine($$"""
                     public async {{NotificationSignature(route, publish: false)}}
                     {
@@ -83,6 +90,7 @@ internal sealed partial class SourceEmitter
             if (route.Notification.IsReferenceType)
                 b.AppendLine("""        global::System.ArgumentNullException.ThrowIfNull(notification);""");
             b.AppendLine("""        if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
+            var hasDependencies = false;
             for (var i = 0; i < route.Subscribers.Count; i++)
             {
                 var sub = route.Subscribers[i];
@@ -99,9 +107,14 @@ internal sealed partial class SourceEmitter
                 }
 
                 var direct = sub.Handler.DirectCall;
-                var recv = ServiceReceiver(handlerName, contract, direct, MediatorServices);
+                var recv = Receiver(set, sub.Handler, handlerName, contract, direct, MediatorServices);
                 if (i != 0)
                     b.AppendLine("""        if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
+                if (!hasDependencies && set != null && set.IndexOf(sub.Handler) >= 0)
+                {
+                    b.AppendLine("        var dependencies = " + set.Name + ".Get(" + MediatorServices + ");");
+                    hasDependencies = true;
+                }
                 b.AppendLine($$"""
                             await {{recv}}.HandleAsync(notification, cancellationToken).ConfigureAwait(false);
                     """);
@@ -112,6 +125,52 @@ internal sealed partial class SourceEmitter
 
         b.AppendLine($$"""
                 public {{NotificationSignature(route, publish: true)}} => PublishAsync(notification, cancellationToken);
+            """);
+    }
+
+    // Start restores the caller's contexts like an async method without boxing a state machine.
+    private void EmitSingleSubscriberNotification(StringBuilder b, EmissionNotificationRoute route, int index)
+    {
+        var handler = route.Subscribers[0].Handler;
+        var contract = $$"""global::Zendiator.INotificationHandler<{{route.NotificationDisplay}}>""";
+        var publish = $"NotificationRoute{index}Publish";
+        b.AppendLine($$"""
+                public {{NotificationSignature(route, publish: false)}}
+                {
+                    var publish = new {{publish}}({{MediatorServices}}, notification, cancellationToken);
+                    global::System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder.Create().Start(ref publish);
+                    return publish.Result;
+                }
+                private struct {{publish}}({{ResolverType}} services, {{route.NotificationDisplay}} notification, global::System.Threading.CancellationToken cancellationToken) : global::System.Runtime.CompilerServices.IAsyncStateMachine
+                {
+                    internal global::System.Threading.Tasks.ValueTask Result;
+                    public void MoveNext()
+                    {
+                        try
+                        {
+            """);
+        if (route.Notification.IsReferenceType)
+            b.AppendLine("""                global::System.ArgumentNullException.ThrowIfNull(notification);""");
+        b.AppendLine($$"""
+                            if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);
+                            var operation = {{ServiceReceiver(Name(handler), contract, handler.DirectCall)}}.HandleAsync(notification, cancellationToken);
+                            if (operation.IsCompletedSuccessfully)
+                            {
+                                operation.GetAwaiter().GetResult();
+                                Result = default;
+                            }
+                            else
+                            {
+                                Result = AwaitSingleSubscriberNotification(operation);
+                            }
+                        }
+                        catch (global::System.Exception exception)
+                        {
+                            Result = Faulted(global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception));
+                        }
+                    }
+                    public void SetStateMachine(global::System.Runtime.CompilerServices.IAsyncStateMachine stateMachine) { }
+                }
             """);
     }
 }

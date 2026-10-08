@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <IsPackable>false</IsPackable>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <Authors>tkym</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/Htkym/zendiator</RepositoryUrl>
@@ -13,7 +13,7 @@
     <PackageProjectUrl>https://github.com/Htkym/zendiator</PackageProjectUrl>
     <PackageTags>mediator;source-generator;CQRS;AOT</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Zendiator 0.3.0: generated handlers and behaviors default to Transient with a Scoped mediator; generated mediators no longer implement IDisposable or guarantee ObjectDisposedException after scope disposal. Lifetime analyzer warnings, composition-specific resolver slots, and a reproducible use-case benchmark are included. AddZendiator() and IZendiator.SendAsync remain the standard entry points. See https://github.com/Htkym/zendiator/blob/v0.3.0/docs/release/0.3.0-release-notes.md</PackageReleaseNotes>
+    <PackageReleaseNotes>Zendiator 0.4.0: explicit synchronous stream validators, caller-owned Span results, and lower allocation in dependency capture and asynchronous dispatch. Keep each ValueTask single-consumption; generated interfaces and bases may require recompilation. See https://github.com/Htkym/zendiator/blob/v0.4.0/docs/release/0.4.0-release-notes.md</PackageReleaseNotes>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>

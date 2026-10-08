@@ -65,7 +65,7 @@ internal sealed partial class SourceEmitter
             var direct = route.Handler.DirectCall;
             var receiver = _singleServiceTypeName != null
                 ? $$"""{{MediatorServices}}.GetRequiredService()"""
-                : $$"""{{MediatorServices}}.GetRequiredService<{{Name(route.Handler)}}>()""";
+                : $$"""{{MediatorServices}}.GetDispatchService<{{Name(route.Handler)}}>()""";
             if (!direct)
                 receiver = "((" + HandlerContract(route) + ")" + receiver + ")";
             b.AppendLine($$"""
@@ -79,30 +79,31 @@ internal sealed partial class SourceEmitter
                     return new Route{{index}}Node0({{MediatorServices}}).InvokeAsync(request, cancellationToken);
                 }
             """);
+        var set = SetOf("Route" + index);
         for (var node = 0; node <= route.Behaviors.Count; node++)
         {
             b.AppendLine($$"""
-                    private readonly struct Route{{index}}Node{{node}}(global::Zendiator.DependencyInjection.ZendiatorServiceResolver<Zendiator> services) : {{ContinuationContract(route)}}
+                    private readonly struct Route{{index}}Node{{node}}({{NodeParameter(set, node)}}) : {{ContinuationContract(route)}}
                     {
                         [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
                         public {{TaskContract(route)}} InvokeAsync({{Name(route.Request)}} request, global::System.Threading.CancellationToken cancellationToken)
                         {
                 """);
             Guard(b, route, "            ");
+            EmitSetLookup(b, set, node, "            ");
+            var services = NodeServices(set, node);
             if (node == route.Behaviors.Count)
             {
-                if (route.Handler.DirectCall)
-                    HandlerCallDirect(b, route);
-                else
-                    HandlerCall(b, route, "services", "            ");
+                var receiver = Receiver(set, route.Handler, Name(route.Handler), HandlerContract(route), route.Handler.DirectCall, services);
+                b.AppendLine($$"""
+                                return {{receiver}}.HandleAsync(request, cancellationToken);
+                    """);
             }
             else
             {
-                var receiver = $$"""services.GetRequiredService<{{Name(route.Behaviors[node])}}>()""";
-                if (!route.Behaviors[node].DirectCall)
-                    receiver = "((" + BehaviorContract(route) + ")" + receiver + ")";
+                var receiver = Receiver(set, route.Behaviors[node], Name(route.Behaviors[node]), BehaviorContract(route), route.Behaviors[node].DirectCall, services);
                 b.AppendLine($$"""
-                                return {{receiver}}.HandleAsync(request, new Route{{index}}Node{{node + 1}}(services), cancellationToken);
+                                return {{receiver}}.HandleAsync(request, new Route{{index}}Node{{node + 1}}({{NodeArgument(set)}}), cancellationToken);
                     """);
             }
 

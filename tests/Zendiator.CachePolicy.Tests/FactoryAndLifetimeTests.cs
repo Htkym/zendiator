@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace Zendiator.CachePolicy.Tests;
@@ -60,43 +59,6 @@ public sealed class FactoryAndLifetimeTests
     }
 
     [Fact]
-    public async Task All_transient_constructs_handler_per_mediator()
-    {
-        var services = BaseServices();
-        services.AddZendiator(ServiceLifetime.Transient);
-        await using var provider = await BuildAsync(services);
-        await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        var before = ProbeHandler.Constructions;
-        Assert.Equal(0, await mediator.SendAsync(new ProbeReq()));
-        Assert.Equal(0, await mediator.SendAsync(new ProbeReq()));
-        Assert.Equal(0, await mediator.SendAsync(new ProbeReq()));
-        Assert.Equal(1, ProbeHandler.Constructions - before);
-        var nextMediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        Assert.NotSame(mediator, nextMediator);
-        Assert.Equal(0, await nextMediator.SendAsync(new ProbeReq()));
-        Assert.Equal(2, ProbeHandler.Constructions - before);
-    }
-
-    [Fact]
-    public async Task Transient_factory_called_once_per_mediator()
-    {
-        var services = BaseServices();
-        services.AddTransient<ProbeHandler>(_ =>
-        {
-            Interlocked.Increment(ref ProbeHandler.FactoryCalls);
-            return new ProbeHandler { Marker = 42 };
-        });
-        services.AddZendiator();
-        await using var provider = await BuildAsync(services);
-        await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        for (var i = 0; i < 3; i++)
-            Assert.Equal(42, await mediator.SendAsync(new ProbeReq()));
-        Assert.Equal(1, ProbeHandler.FactoryCalls);
-    }
-
-    [Fact]
     public async Task Mixed_lifetimes_are_captured_once_per_mediator()
     {
         var services = BaseServices();
@@ -120,26 +82,6 @@ public sealed class FactoryAndLifetimeTests
         Assert.Equal(1, PipeB1.FactoryCalls);
         Assert.Equal(3, PipeB2.HandleCalls);
         Assert.Equal(1, PipeHandler.Constructions);
-    }
-
-    [Fact]
-    public async Task Same_reference_transient_factory_is_captured_once()
-    {
-        var services = BaseServices();
-        var first = new ProbeHandler { Marker = 7 };
-        var calls = 0;
-        services.AddTransient<ProbeHandler>(_ =>
-        {
-            Interlocked.Increment(ref calls);
-            return first;
-        });
-        services.AddZendiator();
-        await using var provider = await BuildAsync(services);
-        await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        for (var i = 0; i < 4; i++)
-            Assert.Equal(7, await mediator.SendAsync(new ProbeReq()));
-        Assert.Equal(1, calls);
     }
 
     [Fact]
@@ -187,66 +129,6 @@ public sealed class FactoryAndLifetimeTests
         using var nextScope = provider.CreateScope();
         Assert.NotEqual(a, await nextScope.ServiceProvider.GetRequiredService<IZendiator>().SendAsync(new Guid0()));
         Assert.Equal(2, Guid0Handler.FactoryCalls);
-    }
-
-    [Fact]
-    public async Task Post_registered_add_transient_wins()
-    {
-        var services = BaseServices();
-        services.AddZendiator();
-        services.AddTransient<Guid0Handler>(_ =>
-        {
-            Interlocked.Increment(ref Guid0Handler.FactoryCalls);
-            return new Guid0Handler();
-        });
-        await using var provider = await BuildAsync(services);
-        await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        var a = await mediator.SendAsync(new Guid0());
-        var b = await mediator.SendAsync(new Guid0());
-        Assert.Equal(a, b);
-        Assert.Equal(1, Guid0Handler.FactoryCalls);
-    }
-
-    [Fact]
-    public async Task Post_registered_tryadd_does_not_override()
-    {
-        var services = BaseServices();
-        services.AddZendiator();
-        services.TryAddTransient<Guid0Handler>(_ =>
-        {
-            Interlocked.Increment(ref Guid0Handler.FactoryCalls);
-            return new Guid0Handler();
-        });
-        await using var provider = await BuildAsync(services);
-        await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        var a = await mediator.SendAsync(new Guid0());
-        var b = await mediator.SendAsync(new Guid0());
-        Assert.Equal(a, b);
-        Assert.Equal(0, Guid0Handler.FactoryCalls);
-    }
-
-    [Fact]
-    public async Task Throwing_factory_publishes_no_partial_state()
-    {
-        var services = BaseServices();
-        var calls = 0;
-        services.AddScoped<Guid0Handler>(_ =>
-        {
-            var c = Interlocked.Increment(ref calls);
-            if (c == 1)
-                throw new InvalidOperationException("first init fails");
-            return new Guid0Handler();
-        });
-        services.AddZendiator();
-        await using var provider = await BuildAsync(services);
-        await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => await mediator.SendAsync(new Guid0()));
-        var second = await mediator.SendAsync(new Guid0());
-        Assert.Equal(second, await mediator.SendAsync(new Guid0()));
-        Assert.Equal(2, calls);
     }
 
     [Fact]

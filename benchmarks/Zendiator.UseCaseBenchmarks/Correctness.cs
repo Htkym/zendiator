@@ -81,30 +81,30 @@ public static class Correctness
                 Order(probe, behaviors);
                 Require(probe.Disposals == 1, $"{library}: full disposal");
 
-                probe = new();
-                await foreach (int item in stream(count, asynchronous, probe, default))
-                    break;
-                Require(probe.Items == Math.Min(count, 1) && probe.Disposals == 1, $"{library}: early break");
-
-                using var cts = new CancellationTokenSource();
-                probe = new();
-                await using (var e = stream(count, asynchronous, probe, cts.Token).GetAsyncEnumerator())
-                {
-                    await e.MoveNextAsync();
-                    cts.Cancel();
-                    if (count > 1)
-                    {
-                        try
-                        {
-                            await e.MoveNextAsync();
-                            throw new InvalidOperationException($"{library}: midstream cancellation not propagated");
-                        }
-                        catch (OperationCanceledException) { }
-                    }
-                }
-                Require(probe.Disposals == 1, $"{library}: cancelled disposal");
                 Results.Add(new { library, suite = "Stream", behaviors, count, asynchronous, status = "Passed" });
             }
+        foreach (bool asynchronous in new[] { false, true })
+        {
+            var probe = new Probe();
+            await foreach (int item in stream(16, asynchronous, probe, default))
+                break;
+            Require(probe.Items == 1 && probe.Disposals == 1, $"{library}: early break");
+
+            using var cts = new CancellationTokenSource();
+            probe = new();
+            await using (var e = stream(16, asynchronous, probe, cts.Token).GetAsyncEnumerator())
+            {
+                await e.MoveNextAsync();
+                cts.Cancel();
+                try
+                {
+                    await e.MoveNextAsync();
+                    throw new InvalidOperationException($"{library}: midstream cancellation not propagated");
+                }
+                catch (OperationCanceledException) { }
+            }
+            Require(probe.Disposals == 1, $"{library}: cancelled disposal");
+        }
         var failing = new Probe { Fail = true };
         try
         {
@@ -126,6 +126,45 @@ public static class Correctness
             catch (OperationCanceledException) { }
             Require(probe.Handlers == 0, $"{library}: precancelled stream executed handler");
         }
+    }
+
+    // Records when each library runs relay pre-processing and where a pre-processing failure surfaces.
+    public static async Task RelayTiming(string library, int behaviors, Func<Probe, IAsyncEnumerable<int>> stream)
+    {
+        var probe = new Probe();
+        var sequence = stream(probe);
+        var atCreation = probe.Events.Count;
+        int atEnumerator, atFirstMove;
+        await using (var e = sequence.GetAsyncEnumerator())
+        {
+            atEnumerator = probe.Events.Count;
+            Require(await e.MoveNextAsync(), $"{library}: relay first item");
+            atFirstMove = probe.Events.Count;
+        }
+        Order(probe, behaviors);
+        var failing = new Probe { FailRelay = true };
+        var stage = "creation";
+        try
+        {
+            var failingSequence = stream(failing);
+            stage = "enumerator";
+            var e = failingSequence.GetAsyncEnumerator();
+            try
+            {
+                stage = "move-call";
+                var move = e.MoveNextAsync();
+                stage = "move-await";
+                await move;
+                stage = "none";
+            }
+            finally { await e.DisposeAsync(); }
+        }
+        catch (ArithmeticException) { }
+        Require(stage != "none", $"{library}: relay failure not propagated");
+        Require(failing.Handlers == 0, $"{library}: relay failure started the handler");
+        if (library == "Zendiator")
+            Require(atCreation == 0 && atEnumerator == 0 && stage == "move-await", "Zendiator: relay pre-processing must start on the first move");
+        Results.Add(new { library, suite = "RelayTiming", behaviors, eventsAtCreation = atCreation, eventsAtEnumerator = atEnumerator, eventsAtFirstMove = atFirstMove, failureStage = stage, status = "Passed" });
     }
 
     public static void Save(string directory)

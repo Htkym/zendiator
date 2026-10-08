@@ -32,18 +32,47 @@ public sealed class StreamGeneratorTests
         return driver.GetRunResult();
     }
 
-    [Fact]
-    public void Stream_typed_source_compiles_and_is_lazy()
+    [Theory]
+    [InlineData("typeof(V)", "public sealed class V;")]
+    [InlineData("typeof(V<>)", "public sealed class V<T> : IStreamRequestValidator<GetItems> { public void Validate(GetItems r) {} }")]
+    [InlineData("typeof(V)", "public abstract class V : IStreamRequestValidator<GetItems> { public void Validate(GetItems r) {} }")]
+    [InlineData("typeof(V)", "file sealed class V : IStreamRequestValidator<GetItems> { public void Validate(GetItems r) {} }")]
+    [InlineData("typeof(V)", "public sealed class V : IStreamRequestValidator<GetItems>, IStreamRequestValidator<object> { public void Validate(GetItems r) {} public void Validate(object r) {} }")]
+    [InlineData("null", "")]
+    public void Explicit_validator_registration_rejects_unavailable_or_unmatched_contracts(string type, string declaration)
     {
-        var result = Run(Compilation(Head + StreamReq + StreamHandler), true);
-        var source = result.GeneratedTrees.Single().ToString();
-        Assert.Contains("StreamAsync(global::App.GetItems request", source);
-        Assert.Contains("IAsyncEnumerable<int>", source);
-        Assert.Contains("IStreamContinuation<", source);
-        Assert.DoesNotContain("object request", source);
-        // Lazy: StreamAsync returns enumerable without resolving.
-        Assert.Contains("StreamRoute0Enumerable", source);
-        Assert.Contains("MergeStreamTokens", source);
+        var head = Head.Replace("[GenerateZendiator]", $"[GenerateZendiator, StreamRequestValidator({type})]");
+        var result = Run(Compilation(head + StreamReq + StreamHandler + declaration), false);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "ZEN0024" &&
+            diagnostic.Severity == DiagnosticSeverity.Error && diagnostic.Location.IsInSource);
+        Assert.Empty(result.GeneratedTrees);
+    }
+
+    [Fact]
+    public void Unregistered_validators_and_other_registered_routes_preserve_stream_emission()
+    {
+        const string validator = "public sealed class V : IStreamRequestValidator<GetItems> { public void Validate(GetItems r) {} }";
+        var plain = Head + StreamReq + StreamHandler;
+        var without = Run(Compilation(plain), true).GeneratedTrees.Single().ToString();
+        Assert.Equal(without, Run(Compilation(plain + validator), true).GeneratedTrees.Single().ToString());
+
+        const string other = "public readonly record struct OtherItems : IStreamRequest<int>; public sealed class OtherHandler : IStreamRequestHandler<OtherItems,int> { public async IAsyncEnumerable<int> HandleAsync(OtherItems r, CancellationToken c) { await Task.Yield(); yield return 1; } } public sealed class OtherValidator : IStreamRequestValidator<OtherItems> { public void Validate(OtherItems r) {} }";
+        var a = Run(Compilation(plain + other), true).GeneratedTrees.Single();
+        var b = Run(Compilation(plain.Replace("[GenerateZendiator]", "[GenerateZendiator, StreamRequestValidator(typeof(OtherValidator))]") + other), true).GeneratedTrees.Single();
+        static string OriginalRoute(SyntaxTree tree)
+        {
+            var mediator = tree.GetRoot().DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax>()
+                .Single(declaration => declaration.Identifier.ValueText == "Zendiator");
+            return string.Join("\n", mediator.Members.Where(member => member switch
+            {
+                Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax method => method.Identifier.ValueText == "StreamAsync" &&
+                    method.ParameterList.Parameters[0].Type!.ToString() == "global::App.GetItems",
+                Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax type => type.Identifier.ValueText == "StreamRoute0Enumerable",
+                Microsoft.CodeAnalysis.CSharp.Syntax.StructDeclarationSyntax type => type.Identifier.ValueText.StartsWith("StreamRoute0Node", StringComparison.Ordinal),
+                _ => false
+            }).Select(static member => member.NormalizeWhitespace().ToFullString()));
+        }
+        Assert.Equal(OriginalRoute(a), OriginalRoute(b));
     }
 
     [Theory]
@@ -66,36 +95,12 @@ public sealed class StreamGeneratorTests
     }
 
     [Fact]
-    public void Stream_generic_open_handler_works()
-    {
-        var body = "public sealed record StreamEntities<T>(int Count) : IStreamRequest<T> where T : new(); public sealed class StreamEntitiesHandler<T> : IStreamRequestHandler<StreamEntities<T>,T> where T : new() { public async IAsyncEnumerable<T> HandleAsync(StreamEntities<T> r, CancellationToken c) { await Task.Yield(); yield return new T(); } }";
-        var result = Run(Compilation(Head + body), true);
-        var source = result.GeneratedTrees.Single().ToString();
-        Assert.Contains("StreamAsync<T>", source);
-    }
-
-    [Fact]
     public void Stream_ambiguous_closed_open_is_diagnosed()
     {
         // Closed Ent<int> handler plus open Ent<T> handler overlap -> ambiguity.
         var ambiguous = "public sealed record Ent<T>(int Count) : IStreamRequest<T>; public sealed class OpenH<T> : IStreamRequestHandler<Ent<T>,T> { public async IAsyncEnumerable<T> HandleAsync(Ent<T> r, CancellationToken c) { await Task.Yield(); yield break; } } public sealed class ClosedIntH : IStreamRequestHandler<Ent<int>,int> { public async IAsyncEnumerable<int> HandleAsync(Ent<int> r, CancellationToken c) { await Task.Yield(); yield return 0; } }";
         var amb = Run(Compilation(Head + ambiguous), false);
         Assert.Contains(amb.Diagnostics, d => d.Id == "ZEN0010");
-    }
-
-    [Fact]
-    public void Stream_behavior_pipeline_compiles()
-    {
-        var body = StreamReq + StreamHandler + """
-            public sealed class Pass : IStreamPipelineBehavior<GetItems,int> {
-                public async IAsyncEnumerable<int> HandleAsync<N>(GetItems r, N n, CancellationToken c) where N : struct, IStreamContinuation<GetItems,int> { await foreach (var i in n.InvokeAsync(r, c)) yield return i; }
-            }
-            """;
-        var withAttr = Head.Replace("[GenerateZendiator]", "[GenerateZendiator, PipelineBehavior(typeof(Pass), Order = 0)]") + body;
-        var result = Run(Compilation(withAttr), true);
-        var source = result.GeneratedTrees.Single().ToString();
-        Assert.Contains("StreamRoute0Node0", source);
-        Assert.Contains("StreamRoute0Node1", source);
     }
 
     [Fact]

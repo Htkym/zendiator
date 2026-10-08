@@ -82,6 +82,8 @@ internal sealed partial class SourceEmitter
         var streamServices = new List<string>();
         foreach (var route in _model.Routes.Streams)
         {
+            foreach (var validator in route.Validators)
+                streamServices.Add($$"""typeof({{Name(validator)}}), typeof({{Name(validator)}})""");
             foreach (var behavior in route.Behaviors)
             {
                 streamServices.Add(route.IsOpen ? $$"""typeof({{OpenTypeofName(behavior)}}), typeof({{OpenTypeofName(behavior)}})""" : $$"""typeof({{Name(behavior)}}), typeof({{Name(behavior)}})""");

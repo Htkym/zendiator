@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('all', 'send', 'features', 'streams', 'smoke')]
+    [ValidateSet('all', 'send', 'features', 'streams', 'relay', 'smoke')]
     [string]$Group = 'all',
     [string]$OutputRoot
 )
@@ -29,14 +29,72 @@ function Get-SourceDigest {
     return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
 }
 
+function Test-FirstSendActualOperations {
+    param([string]$LogPath, [string[]]$ExpectedLabels)
+
+    $issues = [System.Collections.Generic.List[string]]::new()
+    $seenLabels = [System.Collections.Generic.List[string]]::new()
+    $actualRows = 0
+    $inFirstSend = $false
+    $rowsForCase = 0
+    $benchmarkLabel = ''
+    if (-not (Test-Path -LiteralPath $LogPath)) {
+        $issues.Add("Missing BDN log: $LogPath")
+    }
+    else {
+        foreach ($line in [IO.File]::ReadLines($LogPath)) {
+            if ($line.StartsWith('// Benchmark: ')) {
+                if ($inFirstSend -and $rowsForCase -ne 12) {
+                    $issues.Add("$benchmarkLabel has $rowsForCase WorkloadActual rows; expected 12")
+                }
+                $inFirstSend = $line -match '^// Benchmark: (?<label>\S+\.FirstSend): .*\[Lifetime=(?<lifetime>[^\]]+)\]$'
+                if ($inFirstSend) {
+                    $benchmarkLabel = $Matches.label
+                    $seenLabels.Add("$($Matches.label)|$($Matches.lifetime)")
+                    $rowsForCase = 0
+                    if ($line -notmatch 'InvocationCount=16384, IterationCount=12, .*LaunchCount=1, UnrollFactor=1, WarmupCount=20') {
+                        $issues.Add("$benchmarkLabel has an unexpected BDN job configuration")
+                    }
+                }
+            }
+            elseif ($inFirstSend -and $line -match '^WorkloadActual\s+\d+: (?<operations>\d+) op,') {
+                $rowsForCase++
+                $actualRows++
+                if ([int]$Matches.operations -ne 16384) {
+                    $issues.Add("$benchmarkLabel WorkloadActual row $rowsForCase has $($Matches.operations) operations; expected 16384")
+                }
+            }
+        }
+        if ($inFirstSend -and $rowsForCase -ne 12) {
+            $issues.Add("$benchmarkLabel has $rowsForCase WorkloadActual rows; expected 12")
+        }
+    }
+    if ($seenLabels.Count -ne $ExpectedLabels.Count) {
+        $issues.Add("Found $($seenLabels.Count) FirstSend cases; expected $($ExpectedLabels.Count)")
+    }
+    foreach ($expectedLabel in $ExpectedLabels) {
+        if (@($seenLabels | Where-Object { $_ -ceq $expectedLabel }).Count -ne 1) {
+            $issues.Add("Expected exactly one FirstSend case $expectedLabel")
+        }
+    }
+    return [pscustomobject]@{
+        passed = $issues.Count -eq 0
+        cases = $seenLabels.Count
+        actualRows = $actualRows
+        operationsPerActualRow = 16384
+        errors = @($issues)
+    }
+}
+
 $revision = (git -C $repo rev-parse HEAD).Trim()
+$sdk = (dotnet --version).Trim()
 $sourceBefore = Get-SourceDigest
 dotnet restore $project --locked-mode *> (Join-Path $output 'restore.log')
 if ($LASTEXITCODE -ne 0) { throw "Restore failed; see $output/restore.log" }
 dotnet build $project -c Release --no-restore *> (Join-Path $output 'build.log')
 if ($LASTEXITCODE -ne 0) { throw "Build failed; see $output/build.log" }
 
-$groups = if ($Group -eq 'all') { @('send', 'features', 'streams') } else { @($Group) }
+$groups = if ($Group -eq 'all') { @('send', 'features', 'streams', 'relay') } else { @($Group) }
 $saved = @{}
 foreach ($key in 'COLD_RUN', 'COLD_MATRIX_FILE', 'COLD_CASE', 'COLD_FORMAL', 'COLD_PINNED', 'COLD_EXPECT_CHILD_Z_SHA') {
     $saved[$key] = [Environment]::GetEnvironmentVariable($key, 'Process')
@@ -45,7 +103,8 @@ $productHash = $null
 try {
     foreach ($name in $groups) {
         $matrix = Join-Path $projectDirectory "$name.json"
-        $expected = @(Get-Content -LiteralPath $matrix -Raw | ConvertFrom-Json).Count
+        $matrixCases = @(Get-Content -LiteralPath $matrix -Raw | ConvertFrom-Json)
+        $expected = $matrixCases.Count
         $run = Join-Path $output "runs/$name"
         New-Item -ItemType Directory -Path $run -Force | Out-Null
         $env:COLD_RUN = $run
@@ -70,15 +129,22 @@ try {
             ((Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).assemblies |
                 Where-Object name -eq 'Zendiator').sha256
         } | Sort-Object -Unique)
+        $firstSendCheck = if ($name -eq 'send') {
+            $expectedFirstSend = @($matrixCases | Where-Object Method -eq 'FirstSend' |
+                ForEach-Object { "$($_.Type).$($_.Method)|$($_.Lifetime)" })
+            Test-FirstSendActualOperations (Join-Path $run 'run.log') $expectedFirstSend
+        } else { $null }
         [pscustomobject]@{
-            group = $name; revision = $revision; expectedCases = $expected
+            group = $name; revision = $revision; sdk = $sdk; expectedCases = $expected
             exitCode = $runExit; outcome = $outcome; childCount = $children.Count
             productHashes = $hashes; sourceDigest = $sourceBefore
+            firstSendActual = $firstSendCheck
             profile = 'Release; affinity 1; 20 warmup; 12 measurement; 500 ms requested iteration; 1 launch'
         } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $run 'run-info.json')
         if ($runExit -ne 0 -or $null -eq $outcome -or $outcome.cases -ne $expected -or
             $outcome.failures -ne 0 -or $outcome.validationErrors -ne 0 -or
             $children.Count -ne $expected -or $hashes.Count -ne 1 -or
+            ($name -eq 'send' -and -not $firstSendCheck.passed) -or
             ($productHash -and $hashes[0] -ne $productHash)) {
             throw "Invalid $name run; see $run"
         }

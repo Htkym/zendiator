@@ -18,6 +18,7 @@ internal sealed partial class GenerationAnalysis
     private string? diNamespace;
     private readonly HashSet<IAssemblySymbol> diAssemblies = new HashSet<IAssemblySymbol>(SymbolEqualityComparer.Default);
     private readonly List<(INamedTypeSymbol Type, int Order, bool IsOpenBehavior)> diPipelines = new List<(INamedTypeSymbol Type, int Order, bool IsOpenBehavior)>();
+    private readonly List<(INamedTypeSymbol Type, int Order, Location Location)> diStreamValidators = new();
     private readonly List<INamedTypeSymbol> diNotifications = new List<INamedTypeSymbol>();
     private readonly List<INamedTypeSymbol> diOpenNotifications = new List<INamedTypeSymbol>();
     private readonly Dictionary<string, (int Order, Location Location)> diHandlerOrders = new Dictionary<string, (int Order, Location Location)>(StringComparer.Ordinal);
@@ -220,7 +221,7 @@ internal sealed partial class GenerationAnalysis
             foreach (var attribute in compilation.Assembly.GetAttributes())
             {
                 var name = attribute.AttributeClass?.ToDisplayString();
-                if (name is "Zendiator.IncludeAssemblyAttribute" or "Zendiator.PipelineBehaviorAttribute" or "Zendiator.NotificationAttribute")
+                if (name is "Zendiator.IncludeAssemblyAttribute" or "Zendiator.PipelineBehaviorAttribute" or "Zendiator.NotificationAttribute" or "Zendiator.StreamRequestValidatorAttribute")
                 {
                     ErrorAt(15, $"Conflicting configuration sources: assembly-level {name} cannot be combined with AddZendiator configuration. Move the setting into the lambda.", attribute.ApplicationSyntaxReference?.GetSyntax(ct).GetLocation() ?? Location.None);
                 }
@@ -245,6 +246,8 @@ internal sealed partial class GenerationAnalysis
                 }
                 foreach (var entry in representative.Behaviors)
                     diPipelines.Add((entry.Type, entry.Order, entry.IsOpen));
+                foreach (var entry in representative.StreamValidators)
+                    diStreamValidators.Add((entry.Type, entry.Order, entry.Location));
                 foreach (var entry in representative.Notifications)
                 {
                     var notification = entry.Type;

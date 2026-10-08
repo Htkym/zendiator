@@ -30,6 +30,8 @@ internal sealed partial class GenerationAnalysis
     private INamedTypeSymbol streamRequestDefinition = null!;
     private INamedTypeSymbol streamHandlerDefinition = null!;
     private INamedTypeSymbol streamBehaviorDefinition = null!;
+    private INamedTypeSymbol streamValidatorDefinition = null!;
+    private readonly List<(INamedTypeSymbol Type, int Order, Location Location)> streamValidators = new();
     private readonly List<(INamedTypeSymbol Type, int Order, bool IsOpenBehavior)> pipelines = new List<(INamedTypeSymbol Type, int Order, bool IsOpenBehavior)>();
     private ISymbol accessContext = null!;
     private readonly Dictionary<INamedTypeSymbol, ITypeSymbol> requests = new Dictionary<INamedTypeSymbol, ITypeSymbol>(SymbolEqualityComparer.Default);
@@ -77,6 +79,7 @@ internal sealed partial class GenerationAnalysis
         streamRequestDefinition = compilation.GetTypeByMetadataName(StreamRequest)!;
         streamHandlerDefinition = compilation.GetTypeByMetadataName(StreamHandler)!;
         streamBehaviorDefinition = compilation.GetTypeByMetadataName(StreamBehavior)!;
+        streamValidatorDefinition = compilation.GetTypeByMetadataName(StreamValidator)!;
         if (requestDefinition == null || handlerDefinition == null || behaviorDefinition == null ||
             voidRequestDefinition == null || voidHandlerDefinition == null || voidBehaviorDefinition == null ||
             notificationDefinition == null || notificationHandlerDefinition == null ||
@@ -85,7 +88,7 @@ internal sealed partial class GenerationAnalysis
             syncHandlerDefinition == null || syncVoidHandlerDefinition == null ||
             syncBehaviorDefinition == null || syncVoidBehaviorDefinition == null ||
             syncMultiResponseDefinition == null || syncMultiVoidDefinition == null ||
-            streamRequestDefinition == null || streamHandlerDefinition == null || streamBehaviorDefinition == null)
+            streamRequestDefinition == null || streamHandlerDefinition == null || streamBehaviorDefinition == null || streamValidatorDefinition == null)
         {
             Error(3, "Reference Zendiator.Abstractions.");
             return new GenerationResult(null, null, errors);
@@ -95,6 +98,7 @@ internal sealed partial class GenerationAnalysis
         {
             foreach (var assembly in diAssemblies) assemblies.Add(assembly);
             foreach (var pipeline in diPipelines) pipelines.Add(pipeline);
+            streamValidators.AddRange(diStreamValidators);
         }
         accessContext = assemblyMode || diMode ? compilation.Assembly : mediator!;
 
@@ -110,6 +114,20 @@ internal sealed partial class GenerationAnalysis
                 if (attribute.ConstructorArguments.FirstOrDefault().Value is INamedTypeSymbol marker)
                     assemblies.Add(marker.ContainingAssembly);
                 else Error(5, "IncludeAssembly requires a marker type.", mediator);
+            }
+            if (name == "Zendiator.StreamRequestValidatorAttribute")
+            {
+                var location = attribute.ApplicationSyntaxReference?.GetSyntax(ct).GetLocation() ?? Location.None;
+                if (attribute.ConstructorArguments.FirstOrDefault().Value is not INamedTypeSymbol validator)
+                {
+                    ErrorAt(GeneratorDiagnostics.StreamValidator, "StreamRequestValidator requires an implementation type.", location);
+                    continue;
+                }
+                var validatorOrder = attribute.NamedArguments.FirstOrDefault(p => p.Key == "Order").Value.Value as int? ?? 0;
+                if (streamValidators.Any(entry => Same(entry.Type, validator) || entry.Order == validatorOrder))
+                    ErrorAt(GeneratorDiagnostics.StreamValidator, "Validator types and Order values must be unique.", location);
+                else streamValidators.Add((validator, validatorOrder, location));
+                continue;
             }
             if (name != "Zendiator.PipelineBehaviorAttribute") continue;
             if (attribute.ConstructorArguments.FirstOrDefault().Value is not INamedTypeSymbol type)

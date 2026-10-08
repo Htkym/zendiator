@@ -18,7 +18,10 @@ internal sealed partial class GenerationAnalysis(ImmutableArray<INamedTypeSymbol
         declarations.FirstOrDefault()?.Locations.FirstOrDefault(static l => l.IsInSource) ?? Location.None, message));
 
     private void ErrorAt(int rule, string message, Location location) =>
-        errors.Add(Diagnostic.Create(Rules[rule - 1], location, message));
+        ErrorAt(Rules[rule - 1], message, location);
+
+    private void ErrorAt(DiagnosticDescriptor rule, string message, Location location) =>
+        errors.Add(Diagnostic.Create(rule, location, message));
 
     internal GenerationResult Generate()
     {
@@ -32,6 +35,7 @@ internal sealed partial class GenerationAnalysis(ImmutableArray<INamedTypeSymbol
         BuildSyncRequests();
         BuildNotifications();
         ApplyPipelines();
+        ApplyStreamValidators();
         return EmitResult();
     }
 }

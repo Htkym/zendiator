@@ -17,7 +17,7 @@ public sealed class ZendiatorConfiguration
     private readonly List<string> _assemblyMarkers = new();
     private readonly List<string> _assemblyMarkerAssemblies = new();
     private readonly List<string> _assemblies = new();
-    private readonly List<(string BehaviorType, int Order)> _behaviors = new();
+    private List<(string BehaviorType, int Order)> _behaviors = new();
     private readonly List<string> _notifications = new();
     private readonly List<(string HandlerType, int Order)> _handlerOrders = new();
 
@@ -43,7 +43,7 @@ public sealed class ZendiatorConfiguration
         }
     }
 
-    /// <summary>Overrides the lifetime of generated Handler and Behavior registrations. Null uses Transient for a Scoped mediator, or the mediator lifetime otherwise.</summary>
+    /// <summary>Overrides the lifetime of generated Handler, Behavior and Validator registrations. Null uses Transient for a Scoped mediator, or the mediator lifetime otherwise.</summary>
     public ServiceLifetime? DependencyLifetime
     {
         get => _dependencyLifetime;
@@ -86,6 +86,26 @@ public sealed class ZendiatorConfiguration
         _behaviors.Add((TypeName(behaviorType), order));
     }
 
+    /// <summary>Adds a closed synchronous stream validator with an explicit, unique validator order.</summary>
+    /// <remarks>Validators run at StreamAsync entry. Their captured instances follow the same DI
+    /// lifetime and reuse rules as generated handlers and behaviors.</remarks>
+    public void AddStreamRequestValidator(Type validatorType, int order)
+    {
+        ThrowIfFrozen();
+        ArgumentNullException.ThrowIfNull(validatorType);
+        var name = TypeName(validatorType);
+        if (_behaviors is not StreamValidatorRegistrations registrations)
+        {
+            registrations = new StreamValidatorRegistrations(_behaviors, new());
+            _behaviors = registrations;
+        }
+        if (registrations.Validators.Any(entry => entry.ValidatorType == name))
+            throw new InvalidOperationException($"Validator {name} is registered more than once. Register each validator type once.");
+        if (registrations.Validators.Any(entry => entry.Order == order))
+            throw new InvalidOperationException($"Validator order {order} is used more than once. Validator order values must be unique.");
+        registrations.Validators.Add((name, order));
+    }
+
     /// <summary>Declares a known notification type, including subscriber-less and closed generic targets.</summary>
     public void AddNotification<TNotification>()
     {
@@ -118,7 +138,10 @@ public sealed class ZendiatorConfiguration
             _assemblies.OrderBy(static name => name, StringComparer.Ordinal).ToList(),
             _behaviors.OrderBy(static entry => entry.Order).ThenBy(static entry => entry.BehaviorType, StringComparer.Ordinal).ToList(),
             _notifications.OrderBy(static name => name, StringComparer.Ordinal).ToList(),
-            _handlerOrders.OrderBy(static entry => entry.HandlerType, StringComparer.Ordinal).ToList());
+            _handlerOrders.OrderBy(static entry => entry.HandlerType, StringComparer.Ordinal).ToList(),
+            _behaviors is StreamValidatorRegistrations validators
+                ? validators.Validators.OrderBy(static entry => entry.Order).ThenBy(static entry => entry.ValidatorType, StringComparer.Ordinal).ToList()
+                : null);
     }
 
     private static string TypeName(Type type) => type.IsGenericTypeDefinition ? type.FullName ?? type.Name : type.ToString();

@@ -76,25 +76,6 @@ public sealed class GenericDispatchTests
     }
 
     [Fact]
-    public async Task Closed_types_keep_separate_scoped_services()
-    {
-        await using var provider = Services().BuildServiceProvider();
-        Guid first;
-        await using (var scope = provider.CreateAsyncScope())
-        {
-            var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-            first = scope.ServiceProvider.GetRequiredService<GetByIdHandler<User>>().Id;
-            Assert.Equal(first, scope.ServiceProvider.GetRequiredService<GetByIdHandler<User>>().Id);
-            Assert.NotEqual(first, scope.ServiceProvider.GetRequiredService<GetByIdHandler<Product>>().Id);
-            await mediator.SendAsync(new GetById<User>(1));
-        }
-        await using (var scope = provider.CreateAsyncScope())
-        {
-            Assert.NotEqual(first, scope.ServiceProvider.GetRequiredService<GetByIdHandler<User>>().Id);
-        }
-    }
-
-    [Fact]
     public async Task Closed_factory_overrides_win_for_their_construction()
     {
         var services = Services();

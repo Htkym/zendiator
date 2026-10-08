@@ -16,16 +16,15 @@ runtime assembly scanning, reflective invocation, or `dynamic`.
 ## Installation
 
 ```shell
-dotnet add package Zendiator
+dotnet add package Zendiator --version 0.4.0
 ```
 
 `Zendiator` includes an Abstractions dependency and the source generator. A
 contracts-only project can reference `Zendiator.Abstractions` instead. Pin the
 package versions used by your application and keep both packages aligned.
 
-This README describes the current repository, which may differ from published
-packages. Consult the release notes for the version you use; do not assume that
-installing a released package includes every change described here.
+This README describes 0.4.0. See the [release notes](docs/release/0.4.0-release-notes.md)
+for API and migration changes when upgrading.
 
 Suggested project responsibilities:
 
@@ -169,8 +168,46 @@ configuration.AddOpenBehavior(typeof(LoggingBehavior<,>), order: 0);
 configuration.AddOpenStreamBehavior(typeof(StreamLoggingBehavior<,>), order: 2);
 ```
 
+For lightweight synchronous input checks, implement a validator and register its closed concrete type explicitly:
+
+```csharp
+public sealed class HouseholdNameValidator : IStreamRequestValidator<GetHouseholdNames>
+{
+    public void Validate(GetHouseholdNames request) => ArgumentOutOfRangeException.ThrowIfNegative(request.Count);
+}
+
+configuration.AddStreamRequestValidator(typeof(HouseholdNameValidator), order: 0);
+```
+
+Validation is opt-in; assembly scanning does not register validators automatically.
+Each registered type must be an accessible, non-abstract closed class. All of its
+`IStreamRequestValidator<TRequest>` contracts must exactly match closed generated
+stream routes. Open-generic validators and base-request matching are unsupported.
+Types and validator orders must be unique within the composition; validator order
+is independent of behavior order.
+
+Validation runs synchronously once per `StreamAsync` call, in ascending order,
+before an enumerable is created. It does not run again when that sequence is
+enumerated. Registered reference requests reject null at entry; streams without
+validators retain their null check on first `MoveNextAsync`. Cancellation is
+checked during enumeration, so entry validation also runs with an already-canceled
+API token. A failure stops later validator and pipeline resolution.
+
+For attribute configuration, use
+`[StreamRequestValidator(typeof(HouseholdNameValidator), Order = 0)]` on the
+generated mediator or assembly. Do not mix attributes with a configuration lambda.
+Validators must be synchronous, input-only and safe for concurrent calls; keep
+asynchronous work and I/O in the handler or stream behavior. Keep the validated
+input stable and the DI scope valid until enumeration completes. Captured validator
+instances are reused within a mediator, including Transient registrations.
+A validator that is also a handler or behavior may be constructed at entry;
+its pipeline method still runs lazily. See [known limitations](docs/release/known-limitations.md).
+
 Consume lazily. The handler starts on first `MoveNextAsync`, not on `StreamAsync`.
 Either the API token or `WithCancellation` can cancel; different tokens are linked only when both are cancelable and different.
+
+If startup fails, that enumerator does not restart: subsequent `MoveNextAsync()` calls return `false`.
+Dispose it even after failure, for example with `await using`. Call `StreamAsync` again to retry with a fresh enumeration.
 
 ```csharp
 await foreach (var name in zendiator.StreamAsync(new GetHouseholdNames(3), cancellationToken))
@@ -179,10 +216,46 @@ await foreach (var name in zendiator.StreamAsync(new GetHouseholdNames(3), cance
 }
 ```
 
+Consume each `MoveNextAsync()` or `DisposeAsync()` result once, following the `ValueTask` contract.
+If the same operation must be awaited more than once, call `AsTask()` once before
+consuming it and reuse the returned `Task`, without also consuming the original
+`ValueTask`. Await the current move before starting the next; `await foreach`
+already does this. [CA2012](https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/quality-rules/ca2012)
+can help detect incorrect consumption.
+
+`await using` consumes the disposal result once. Pooled disposal may retain a
+reference to the enumerator until its returned `ValueTask` is consumed, even
+after disposal completes.
+
 `ref struct` requests use the sync contract (`ISyncRequest` + `SendSync`); async routes
 and stream items diagnose them (ZEN0012). Re-enumeration is not guaranteed; call `StreamAsync` again for a fresh stream.
 Open-generic handlers closed over a value type need runtime generic construction,
 which NativeAOT cannot provide (see [known limitations](docs/release/known-limitations.md)).
+
+## Synchronous multiple results
+
+For `ISyncMultiRequest<T>`, `SendAllSync(request, cancellationToken)` returns handler results
+in order as `IReadOnlyList<T>`. Do not depend on a concrete collection type.
+
+To reuse caller-owned storage, use the Span overload. This example assumes that
+`GetValues` has two handlers returning `int`:
+
+```csharp
+Span<int> results = stackalloc int[2];
+int written = zendiator.SendAllSync(new GetValues(), results, cancellationToken);
+// results[..written] contains the results in handler order.
+```
+
+All three arguments are required. Validation checks a null request, pre-cancellation,
+then capacity. Insufficient capacity throws `ArgumentException` before resolving handlers
+or dependencies. The dispatcher writes results only after all handlers succeed and leaves
+unused capacity untouched. On failure, it does not write to the destination; handler side
+effects are not rolled back. Input `ReadOnlySpan<T>` and output storage may overlap because
+output is written after all handlers execute.
+
+For reference-type results, pass a Span over an array owned by the caller. Reusing storage
+avoids the result-container allocation; first-time DI resolution and handler allocations
+remain separate. `SendAllAsync` does not accept a Span destination.
 
 ## Lifetimes
 
@@ -294,60 +367,48 @@ Different spellings that resolve to the same assembly set share one generation u
 | ZEN0021 | Explicitly treating a generated mediator as `IDisposable` |
 | ZEN0022 | Returning a mediator resolved from a `using` scope |
 | ZEN0023 | Sending after explicitly disposing its scope in the same method |
+| ZEN0024 | Invalid closed Stream validator type or unmatched validator contract |
 
-ZEN0021–ZEN0023 are warnings for directly provable cases, not a complete proof of scope safety. See the [migration guide](docs/migrating-from-mediatr.md) for fixes.
+The lifetime analyzer's ZEN0021–ZEN0023 are warnings for directly provable cases, not a complete proof of scope safety. See the [migration guide](docs/migrating-from-mediatr.md) for fixes.
 
 ## Public API
 
-`Zendiator.Abstractions` (net10.0, no external dependencies) holds the contracts:
+The source generator creates a concrete overload for each configured route. Call through the generated `IZendiator` with a concrete request type.
 
-- Requests: `IRequest<TResponse>`, `ICommand<TResponse>`, `IQuery<TResponse>`,
-  `IRequest`, `ICommand`, `IMultiRequest<TResponse>`, `IMultiRequest`,
-  `ISyncRequest<TResponse>`, `ISyncRequest`, `ISyncCommand`,
-  `ISyncMultiRequest<TResponse>`, `ISyncMultiRequest`, `INotification`, `Unit`,
-  `IStreamRequest<TItem>`
-- Handlers: `IRequestHandler<TRequest, TResponse>`, `IRequestHandler<TRequest>`,
-  `ICommandHandler<TCommand, TResponse>`, `ICommandHandler<TCommand>`,
-  `IQueryHandler<TQuery, TResponse>`, `INotificationHandler<TNotification>`,
-  `ISyncRequestHandler<TRequest, TResponse>`, `ISyncRequestHandler<TRequest>`,
-  `IStreamRequestHandler<TRequest, TItem>`
-- Pipelines: `IRequestContinuation<TRequest, TResponse>`,
-  `IRequestContinuation<TRequest>`, `IPipelineBehavior<TRequest, TResponse>`,
-  `IPipelineBehavior<TRequest>`, `ISyncRequestContinuation<TRequest, TResponse>`,
-  `ISyncRequestContinuation<TRequest>`, `ISyncPipelineBehavior<TRequest, TResponse>`,
-  `ISyncPipelineBehavior<TRequest>`, `IStreamContinuation<TRequest, TItem>`,
-  `IStreamPipelineBehavior<TRequest, TItem>`
-- Attributes: `GenerateZendiatorAttribute`, `IncludeAssemblyAttribute`,
-  `PipelineBehaviorAttribute`, `HandlerOrderAttribute`, `NotificationAttribute`
+|Contract|Generated operation|
+|---|---|
+|`IRequest<T>`, `ICommand<T>`, `IQuery<T>`|`SendAsync(request, cancellationToken)`|
+|`IRequest`, `ICommand`|`SendAsync(request, cancellationToken)` returning `ValueTask`|
+|`ISyncRequest<T>`, `ISyncRequest`, `ISyncCommand`|`SendSync(request, cancellationToken)`|
+|`IMultiRequest<T>`, `IMultiRequest`|`SendAllAsync(request, cancellationToken)`|
+|`ISyncMultiRequest<T>`, `ISyncMultiRequest`|`SendAllSync(request, cancellationToken)`|
+|`INotification`|Sequential `PublishAsync`; `Publish` is an alias returning `ValueTask`|
+|`IStreamRequest<T>`|`StreamAsync(request, cancellationToken)` returning `IAsyncEnumerable<T>`|
 
-`Zendiator` (net10.0) holds the DI entry points:
-
-- `ZendiatorConfiguration`: `Namespace`, `ServiceLifetime`,
-  `RegisterServicesFromAssemblyContaining<T>()`,
-  `RegisterServicesFromAssembly(Assembly)`, `AddOpenBehavior(Type, int)`,
-  `AddOpenStreamBehavior(Type, int)`,
-  `AddNotification<T>()`, `ConfigureHandlerOrder(Type, int)`, `Snapshot()`
-- `ZendiatorConfigurationSnapshot`: frozen recorded values plus `GetFingerprint()`
-- `ZendiatorServiceCollectionExtensions.AddZendiator` (parameterless and
-  configuration-lambda overloads; unintercepted calls fail fast)
-
-Generated code per consumer compilation (`IZendiator`, `Zendiator`, and either
-`ZendiatorServiceCollectionExtensions.AddZendiator` or the DI registrar plus
-interceptors) is treated as part of the product.
-Before `1.0.0`, APIs and architecture may change without a compatibility mode.
-Document breaking changes explicitly rather than retaining an obsolete execution path.
+Request and stream dispatch do not accept arbitrary runtime objects or a request stored only as its contract interface. Notification erasure is a separate supported path. Configure assembly discovery, behavior order and lifetimes with `AddZendiator`; use attributes as an alternative, not in the same compilation. Keep the runtime and generator package versions aligned.
 
 ## Performance
 
-With warmed-up scopes and synchronously completing allocation-free handlers/Behaviors,
-0 B of additional allocation per send is verified (the 0- and 1-stage sync paths are also pinned by tests).
-First-time DI resolution, logging, and async suspension are outside that 0 B claim. No latency numbers are guaranteed.
+These selected observations help distinguish steady-state dispatch from first use and stream consumption. Lower mean time and lower managed allocation are separate benefits.
 
-Dispatch uses one lazy, mediator-instance cache with standard DI construction.
-See [construction and dispatch lifetime](docs/optimized-dispatch.md) for dependency
-reuse, the Transient default for generated dependencies, and disposal rules.
-The [use-case benchmark](benchmarks/README.md) can reproduce comparisons for Send,
-Notification, and Stream. Measurement data and improvement notes stay local.
+|Operation|Zendiator Mean ns|B/op|Peer|Mean ns|B/op|
+|---|---:|---:|---|---:|---:|
+|Resolve + Send in an existing scope; 5 behaviors|32.25|0|Immediate|46.07|0|
+|New scope + first resolve + Send + dispose; 0 behaviors|79.43|376|Immediate|96.47|368|
+|New scope + first resolve + Send + dispose; 5 behaviors|169.08|568|Immediate|121.61|568|
+|First resolve + Send in a pre-created scope; 5 behaviors|807.98|440|Immediate|605.65|440|
+|Synchronous notification; 16 subscribers|121.77|0|DispatchR|175.40|0|
+|Synchronous stream; all 1024 items; 0 behaviors|14,190.35|216|Immediate|14,222.54|144|
+|Synchronous stream; early break from a 16-item input; 0 behaviors|62.57|216|Immediate|42.84|144|
+|Synchronous relay; all 1024 items; 5 preprocessing stages|15,028.75|216|DispatchR|13,610.87|144|
+
+The existing-scope Send above has a lower observed mean than Immediate, while first resolve with behaviors and the one-send new-scope workload have higher means. The 1024-item Stream0 time difference is only about 0.23%; it does not establish a ranking, and Zendiator allocates 72 B more. Partial stream consumption and relay remain unfavorable in these examples.
+
+Source snapshot `1c41d2b105073d2dc9be2c0e8684fdce2fa11f55`, measured 2026-10-08: Windows 11 x64, Intel Core Ultra 7 258V, SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8, Release, affinity mask 1, 20 warmups, 12 measurements, requested 500 ms iterations, 1 launch per case. Peers shown are Immediate.Handlers 4.2.0 and DispatchR.Mediator 2.3.1; DI is 10.0.12.
+
+Means are after BDN overhead adjustment and outlier handling; retained N is 9–12. The [unrounded selected data](benchmarks/results/20261008-1c41d2b-summary.csv) separates Mean, confidence-interval Error, StdDev, N and allocation. The full run covered 360 cases across 74 comparison keys. One launch does not establish independent-run reproducibility, universal non-regression, or a controlled before/after improvement.
+
+Handlers are deliberately lightweight. API shapes and DI registrations differ between libraries. ScopeK1 includes creation and disposal; FirstSend excludes them. Stream/relay figures include the complete benchmark operation, not one item. The relay behaviors synchronously preprocess and directly return the next enumerable. These results do not predict application startup, HTTP latency or asynchronous I/O. See the [benchmark instructions](benchmarks/README.md) for the fixture and reproduction conditions.
 
 ## AOT and trimming
 
@@ -370,13 +431,14 @@ and the open-generic/value-type boundary.
 
 Parallel publish, fire-and-forget, persistence/outbox, `Send(object)` for requests,
 cycle detection, CodeFix, CodeLens, built-in `Result` pipeline mapping,
-and built-in logging/validation are not provided.
+built-in logging, and Send input validation are not provided. Stream input validation
+uses the explicitly registered synchronous validators described above.
 Sequential `PublishAsync`, streams via `StreamAsync`, and your own
 `Result` types as ordinary `TResponse` values are supported.
 
+Consume each `ValueTask` returned by `PublishAsync` or `Publish` once.
+To await the same publish more than once, call `AsTask()` once and reuse that
+`Task`, without also consuming the original `ValueTask`. [CA2012](https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/quality-rules/ca2012)
+can help detect incorrect consumption.
+
 For migrating from MediatR, see [the migration guide](docs/migrating-from-mediatr.md).
-
-## Development
-
-The [CI workflow](.github/workflows/ci.yml) defines integration checks; package
-versions are defined in [Directory.Build.props](Directory.Build.props).

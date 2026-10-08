@@ -1,22 +1,45 @@
-# ユースケース別ベンチマーク
+# 利用条件別のベンチマーク
 
-[English version](README.md)
+[English](README.md)
 
-`Zendiator.UseCaseBenchmarks` を現行実装の標準的な競合比較に使います。Send の Behavior 0/1/3/5 段、Void、Generic、Notification の購読者 0/1/4/16 件、Stream の生成・全列挙・部分列挙・早期終了・途中キャンセルを、固定した5ライブラリの公式入口で比較します。生成された fixture もリポジトリに置き、比較条件をレビューできます。
+チェックインしたfixtureで、ZendiatorとImmediate.Handlers 4.2.0、DispatchR.Mediator 2.3.1、Mediator 3.0.2、MediatR 14.2.0を比べます。入口と登録方法は各ライブラリの公開仕様に沿っています。全体はSend 125件、features 55件、streams 120件、relay 60件、74比較キーです。対応しない組合せは未測定として扱います。
 
-リポジトリ直下で .NET 10、PowerShell、Python 3 を使います。
+## 比較の読み方
+
+[README](../README.ja.md#性能比較)には、2026-10-08の全体比較から有利・不利な条件を含む8例を載せています。ソース版は `1c41d2b105073d2dc9be2c0e8684fdce2fa11f55` です。[丸めていない抜粋データ](results/20261008-1c41d2b-summary.csv)にはMean、信頼区間の半幅であるError、StdDev、標準誤差、N、管理ヒープの割り当てを別列で載せています。
+
+測定環境はWindows 11 x64、Intel Core Ultra 7 258V、SDK 10.0.401、.NET 10.0.12、DI 10.0.12、BenchmarkDotNet 0.15.8、Releaseです。affinity mask 1、warmup20、measurement12、要求iteration 500 ms、各ケース1 launchで、比較キーごとに先頭のライブラリを交代しました。394件の正しさのgateと、保存した各consumerのartifact gateが通っています。BDNのoverhead補正と外れ値処理後のNは各ケース9〜12でした。
+
+測る区間はケースごとに異なります。
+
+| ケース | 測る操作 |
+|---|---|
+| Typed | 取得済みの入口でSend |
+| ResolveSend | 同じScopeで入口を再取得してSend |
+| ScopeK1 / ScopeK10 | Scope作成、初回取得、1回 / 10回のSend、破棄 |
+| ScopeOnly / ScopeResolve | Scope作成・破棄だけ / さらに入口を初回取得 |
+| FirstSend | 初回取得とSendだけ。Scope作成・破棄は測定外 |
+| Stream | 作成だけ、または指定範囲の列挙と破棄 |
+| Relay | 同期の前処理で、次のEnumerableを直接返す |
+
+FirstSendは測定iterationごとに事前作成したScopeを16384個使い、unroll factorは1です。Streamは1項目でなく操作全体の値です。Handlerは軽い処理で、NotificationとStreamには非同期に中断する条件もありますが、SendのHandlerは同期完了します。API形状とDI登録はライブラリ間で異なります。1 launchの値から、独立実行での順位再現、アプリ起動やHTTP・I/Oの時間、変更前後の因果的な改善、全条件の順位は確定しません。
+
+## 再現手順
+
+.NET 10、PowerShell、Python 3を用意します。パッケージ版はlock fileで固定しています。リポジトリのルートから実行します。
 
 ```powershell
 pwsh -NoProfile -File benchmarks/Run-Comparison.ps1 -Group smoke
-pwsh -NoProfile -File benchmarks/Run-Comparison.ps1 -Group all
 ```
 
-`smoke` は新 Scope の Send と非同期 Notification の2件を確認します。`all` は Send 80件、Void・Generic・Notification 55件、Stream 120件です。固定パッケージを復元して Release ビルドし、各グループの測定前に正しさ304件を確認します。BenchmarkDotNet は CPU affinity 1、ウォームアップ20回、測定12回、指定 iteration time 500 ms、各ケース1 launch・別子プロセスです。実行後にケース数、失敗数、ソースの不変性、製品 DLL の hash を照合します。
+`-Group all` は、ライブラリの型ごとのブロックで全体を測ります。BDN条件は同じですが、上の比較とは実行順が違います。新しい `.local/benchmarks/<timestamp>` にログと全BDN JSONを保存し、既存の出力先は上書きしません。
 
-結果は毎回、新しい Git 管理外の `.local/benchmarks/<timestamp>` に保存します。BDN の生 JSON、警告を含むログ、子プロセスのアセンブリ hash、ソースの revision、失敗ログを残します。全件成功時は、各ケースの mean・median・標準偏差・確保量を `all-results.csv` に、比較表を `RESULT.ja.md` に出力します。`-Group send`、`features`、`streams` は一つのグループだけを実行します。`-OutputRoot` で新しい出力先を指定できます。既存の出力先は上書きしません。
+比較キーごとに先頭を交代する場合は、SDK 10.0.401を使い、変更のないcommit済みcheckoutから実行します。出力はcheckoutの外に置きます。
 
-fixture を変えるときは、`Zendiator.UseCaseBenchmarks` にある `Generate.ps1` または `build_case_lists.py` を実行し、生成された C# と JSON の差分を確認します。
+```powershell
+python benchmarks/Zendiator.UseCaseBenchmarks/run_interleaved.py --group all --output D:/zendiator-results/new-run --dry-run
+```
 
-機械語を調べるときは `pwsh -NoProfile -File benchmarks/Run-Jit.ps1` を実行します。Send0/Send5 の新 Scope 経路をウォームアップして、指定したメソッドの Tier1 出力を `.local` に残します。`-Pattern` で対象を変えられます。機械語のサイズだけで速度改善を判断しません。
+計画を確認した後、`--dry-run` を外すと測定します。`--max-cases 2` なら2ケースだけの途中結果を作れます。同じ出力先に `--resume` を指定し、`--max-cases` を外すと続行します。同じcheckout、commit、SDK、matrixと、保存した実行物の有効な証明が必要です。ビルドや別の測定と同時に実行しません。checkout内に別のcheckoutがあるとBDNが複数のprojectを見つけるため、独立したcheckoutを使います。
 
-Send/Void は事前作成した要求と軽い同期完了ハンドラーを使います。Notification と Stream は実際の非同期中断を含みますが、非同期中断する Send、コンテナー構築、Send の例外経路、Native AOT 速度は未測定です。Immediate は要求別の生成入口、Zendiator は共通の `IZendiator.SendAsync` を使います。各ケースは1 launch のため、全体の最速順位や僅差の優劣は主張しません。
+fixtureとmatrixは [Zendiator.UseCaseBenchmarks](Zendiator.UseCaseBenchmarks) にあります。ケースを意図して変える場合だけ `Generate.ps1` / `build_case_lists.py` で再生成し、差分と正しさのgateを確認します。`Run-Jit.ps1` や `--breakdown` はコード・割り当ての別診断で、競合ライブラリとの時間比較には混ぜません。

@@ -11,6 +11,7 @@ internal sealed class Route(INamedTypeSymbol request, ITypeSymbol response, INam
     public bool IsVoid { get; } = isVoid;
     public bool IsSync { get; } = isSync;
     public List<INamedTypeSymbol> Behaviors { get; } = new();
+    public List<INamedTypeSymbol> Validators { get; } = new();
     public bool IsOpen { get; set; }
     public List<string> OpenTypeParams { get; } = new();
     public List<string> MethodConstraints { get; } = new();
