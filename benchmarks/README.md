@@ -17,7 +17,7 @@ The cases distinguish operations with different boundaries:
 | Typed | Send through an already resolved entry |
 | ResolveSend | Resolve the entry again in the same scope, then Send |
 | ScopeK1 / ScopeK10 | Create a scope, first resolve, send 1 / 10 times, dispose |
-| ScopeOnly / ScopeResolve | Scope creation/disposal, with / without first entry resolution |
+| ScopeOnly / ScopeResolve | Scope creation/disposal, without / with first entry resolution |
 | FirstSend | First entry resolution and Send; scope creation/disposal is outside the measurement |
 | Stream | Creation or the specified consumption, including its disposal |
 | Relay | Synchronous preprocessing that directly returns the next enumerable |
