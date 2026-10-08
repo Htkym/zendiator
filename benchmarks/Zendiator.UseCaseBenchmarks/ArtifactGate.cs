@@ -84,13 +84,23 @@ internal static class ArtifactGate
                 throw new InvalidOperationException("Artifact gate request changed while validating");
             ArtifactEvidence.Write(System.IO.Path.Combine(request.Output, "artifact-proof.json"), new
             {
-                schemaVersion = 1, protocol = Protocol, request.Session, request.Case, request.ChildPid,
-                request.ChildProofSha256, requestHash, request.GateImplementationSha256, request.GateDriverSha256,
-                processId = Environment.ProcessId, startedFrom = "preserved consumer entry, separate process",
+                schemaVersion = 1,
+                protocol = Protocol,
+                request.Session,
+                request.Case,
+                request.ChildPid,
+                request.ChildProofSha256,
+                requestHash,
+                request.GateImplementationSha256,
+                request.GateDriverSha256,
+                processId = Environment.ProcessId,
+                startedFrom = "preserved consumer entry, separate process",
                 benchmarkGateCases = Correctness.Results.Count,
                 correctnessSha256 = ArtifactEvidence.Hash(System.IO.Path.Combine(request.Output, "correctness.json")),
-                bundleBeforeAndAfterVerified = true, request.BundleFiles,
-                runtimeEvidence = ArtifactEvidence.Runtime(request.RuntimeConfigPath, request.DepsPath), assemblies = loaded,
+                bundleBeforeAndAfterVerified = true,
+                request.BundleFiles,
+                runtimeEvidence = ArtifactEvidence.Runtime(request.RuntimeConfigPath, request.DepsPath),
+                assemblies = loaded,
                 scope = "394 benchmark-gate checks; focused notification contracts and full-suite tests remain separate"
             });
         }
