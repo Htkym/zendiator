@@ -90,6 +90,7 @@ internal sealed partial class SourceEmitter
             if (route.Notification.IsReferenceType)
                 b.AppendLine("""        global::System.ArgumentNullException.ThrowIfNull(notification);""");
             b.AppendLine("""        if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
+            var hasDependencies = false;
             for (var i = 0; i < route.Subscribers.Count; i++)
             {
                 var sub = route.Subscribers[i];
@@ -106,10 +107,14 @@ internal sealed partial class SourceEmitter
                 }
 
                 var direct = sub.Handler.DirectCall;
-                var recv = Receiver(set, sub.Handler, handlerName, contract, direct, MediatorServices,
-                    set == null ? "" : set.Name + ".Get(" + MediatorServices + ")");
+                var recv = Receiver(set, sub.Handler, handlerName, contract, direct, MediatorServices);
                 if (i != 0)
                     b.AppendLine("""        if (cancellationToken.IsCancellationRequested) ThrowDispatchCancellation(cancellationToken);""");
+                if (!hasDependencies && set != null && set.IndexOf(sub.Handler) >= 0)
+                {
+                    b.AppendLine("        var dependencies = " + set.Name + ".Get(" + MediatorServices + ");");
+                    hasDependencies = true;
+                }
                 b.AppendLine($$"""
                             await {{recv}}.HandleAsync(notification, cancellationToken).ConfigureAwait(false);
                     """);

@@ -163,6 +163,44 @@ public sealed class NotificationDispatchTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Shared_leading_subscriber_failure_or_cancellation_keeps_later_dependencies_unresolved(bool cancel)
+    {
+        var services = Services();
+        var constructions = 0;
+        services.AddScoped<SharedLeadingLaterA>(_ =>
+        {
+            constructions++;
+            throw new InvalidOperationException("must not construct later A");
+        });
+        services.AddScoped<SharedLeadingLaterB>(_ =>
+        {
+            constructions++;
+            throw new InvalidOperationException("must not construct later B");
+        });
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        using var cancellation = new CancellationTokenSource();
+        var completion = new NotificationCompletion();
+        var failure = new InvalidOperationException("shared subscriber failure");
+        var pending = scope.ServiceProvider.GetRequiredService<IZendiator>()
+            .PublishAsync(new SharedLeadingNote(completion, completion.Version), cancellation.Token);
+        Assert.False(pending.IsCompleted);
+        Assert.Equal(0, constructions);
+        if (cancel) cancellation.Cancel();
+        completion.Complete(cancel ? null : failure);
+        if (cancel)
+        {
+            var observed = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
+            Assert.Equal(cancellation.Token, observed.CancellationToken);
+        }
+        else Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(async () => await pending));
+        Assert.Equal(0, constructions);
+        Assert.Equal(1, completion.Consumptions);
+    }
+
     [Fact]
     public async Task Struct_notifications_use_the_typed_route()
     {
