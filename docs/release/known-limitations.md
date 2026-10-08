@@ -1,6 +1,6 @@
-# Known limitations (0.3.0)
+# Known limitations (0.4.0)
 
-These boundaries apply to the 0.3.0 design. See the [release notes](0.3.0-release-notes.md)
+These boundaries apply to the 0.4.0 design. See the [release notes](0.4.0-release-notes.md)
 and [construction and dispatch lifetime](../optimized-dispatch.md) before upgrading.
 
 ## Dependency capture and lifetime
@@ -38,7 +38,7 @@ Re-enumerating the same returned stream and concurrently enumerating it are not
 guaranteed. Call `StreamAsync` again for a fresh stream. Early termination and disposal
 are covered separately by tests.
 
-## Stream entry validation (current repository)
+## Stream entry validation
 
 Synchronous Stream validators are explicitly registered closed classes; they do
 not provide asynchronous validation, I/O, open-generic matching, or validation
@@ -47,10 +47,9 @@ while handler/behavior execution and cancellation remain at enumeration.
 Keep validated inputs stable and the scope alive. Captured validator instances
 are reused, so they must support concurrent calls when the mediator is shared.
 
-The implementation is provisionally adopted in the current repository.
-Performance non-regression remains unconfirmed for a validator-free Stream in
-a composition that also uses validators on other routes. This adoption is not
-a latency guarantee or evidence that every workload is unaffected.
+Performance non-regression is not established for every composition, including a
+validator-free Stream in a composition with validators on other routes. Small
+observed time differences are not latency guarantees.
 
 ## Unsupported dispatch
 

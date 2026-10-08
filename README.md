@@ -16,16 +16,15 @@ runtime assembly scanning, reflective invocation, or `dynamic`.
 ## Installation
 
 ```shell
-dotnet add package Zendiator
+dotnet add package Zendiator --version 0.4.0
 ```
 
 `Zendiator` includes an Abstractions dependency and the source generator. A
 contracts-only project can reference `Zendiator.Abstractions` instead. Pin the
 package versions used by your application and keep both packages aligned.
 
-This README describes the current repository, which may differ from published
-packages. Consult the release notes for the version you use; do not assume that
-installing a released package includes every change described here.
+This README describes 0.4.0. See the [release notes](docs/release/0.4.0-release-notes.md)
+for API and migration changes when upgrading.
 
 Suggested project responsibilities:
 
@@ -374,57 +373,42 @@ The lifetime analyzer's ZEN0021–ZEN0023 are warnings for directly provable cas
 
 ## Public API
 
-`Zendiator.Abstractions` (net10.0, no external dependencies) holds the contracts:
+The source generator creates a concrete overload for each configured route. Call through the generated `IZendiator` with a concrete request type.
 
-- Requests: `IRequest<TResponse>`, `ICommand<TResponse>`, `IQuery<TResponse>`,
-  `IRequest`, `ICommand`, `IMultiRequest<TResponse>`, `IMultiRequest`,
-  `ISyncRequest<TResponse>`, `ISyncRequest`, `ISyncCommand`,
-  `ISyncMultiRequest<TResponse>`, `ISyncMultiRequest`, `INotification`, `Unit`,
-  `IStreamRequest<TItem>`
-- Handlers: `IRequestHandler<TRequest, TResponse>`, `IRequestHandler<TRequest>`,
-  `ICommandHandler<TCommand, TResponse>`, `ICommandHandler<TCommand>`,
-  `IQueryHandler<TQuery, TResponse>`, `INotificationHandler<TNotification>`,
-  `ISyncRequestHandler<TRequest, TResponse>`, `ISyncRequestHandler<TRequest>`,
-  `IStreamRequestHandler<TRequest, TItem>`
-- Pipelines: `IRequestContinuation<TRequest, TResponse>`,
-  `IRequestContinuation<TRequest>`, `IPipelineBehavior<TRequest, TResponse>`,
-  `IPipelineBehavior<TRequest>`, `ISyncRequestContinuation<TRequest, TResponse>`,
-  `ISyncRequestContinuation<TRequest>`, `ISyncPipelineBehavior<TRequest, TResponse>`,
-  `ISyncPipelineBehavior<TRequest>`, `IStreamContinuation<TRequest, TItem>`,
-  `IStreamPipelineBehavior<TRequest, TItem>`
-- Validators: `IStreamRequestValidator<TRequest>`
-- Attributes: `GenerateZendiatorAttribute`, `IncludeAssemblyAttribute`,
-  `PipelineBehaviorAttribute`, `HandlerOrderAttribute`, `NotificationAttribute`,
-  `StreamRequestValidatorAttribute`
+|Contract|Generated operation|
+|---|---|
+|`IRequest<T>`, `ICommand<T>`, `IQuery<T>`|`SendAsync(request, cancellationToken)`|
+|`IRequest`, `ICommand`|`SendAsync(request, cancellationToken)` returning `ValueTask`|
+|`ISyncRequest<T>`, `ISyncRequest`, `ISyncCommand`|`SendSync(request, cancellationToken)`|
+|`IMultiRequest<T>`, `IMultiRequest`|`SendAllAsync(request, cancellationToken)`|
+|`ISyncMultiRequest<T>`, `ISyncMultiRequest`|`SendAllSync(request, cancellationToken)`|
+|`INotification`|Sequential `PublishAsync`; `Publish` is an alias returning `ValueTask`|
+|`IStreamRequest<T>`|`StreamAsync(request, cancellationToken)` returning `IAsyncEnumerable<T>`|
 
-`Zendiator` (net10.0) holds the DI entry points:
-
-- `ZendiatorConfiguration`: `Namespace`, `ServiceLifetime`,
-  `RegisterServicesFromAssemblyContaining<T>()`,
-  `RegisterServicesFromAssembly(Assembly)`, `AddOpenBehavior(Type, int)`,
-  `AddOpenStreamBehavior(Type, int)`, `AddStreamRequestValidator(Type, int)`,
-  `AddNotification<T>()`, `ConfigureHandlerOrder(Type, int)`, `Snapshot()`
-- `ZendiatorConfigurationSnapshot`: frozen recorded values plus `GetFingerprint()`
-- `ZendiatorServiceCollectionExtensions.AddZendiator` (parameterless and
-  configuration-lambda overloads; unintercepted calls fail fast)
-
-Generated code per consumer compilation (`IZendiator`, `Zendiator`, and either
-`ZendiatorServiceCollectionExtensions.AddZendiator` or the DI registrar plus
-interceptors) is treated as part of the product.
-Before `1.0.0`, APIs and architecture may change without a compatibility mode.
-Document breaking changes explicitly rather than retaining an obsolete execution path.
+Request and stream dispatch do not accept arbitrary runtime objects or a request stored only as its contract interface. Notification erasure is a separate supported path. Configure assembly discovery, behavior order and lifetimes with `AddZendiator`; use attributes as an alternative, not in the same compilation. Keep the runtime and generator package versions aligned.
 
 ## Performance
 
-With warmed-up scopes and synchronously completing allocation-free handlers/Behaviors,
-0 B of additional allocation per send is verified (the 0- and 1-stage sync paths are also pinned by tests).
-First-time DI resolution, logging, and async suspension are outside that 0 B claim. No latency numbers are guaranteed.
+These selected observations help distinguish steady-state dispatch from first use and stream consumption. Lower mean time and lower managed allocation are separate benefits.
 
-Dispatch uses one lazy, mediator-instance cache with standard DI construction.
-See [construction and dispatch lifetime](docs/optimized-dispatch.md) for dependency
-reuse, the Transient default for generated dependencies, and disposal rules.
-The [use-case benchmark](benchmarks/README.md) can reproduce comparisons for Send,
-Notification, and Stream. Measurement data and improvement notes stay local.
+|Operation|Zendiator Mean ns|B/op|Peer|Mean ns|B/op|
+|---|---:|---:|---|---:|---:|
+|Resolve + Send in an existing scope; 5 behaviors|32.25|0|Immediate|46.07|0|
+|New scope + first resolve + Send + dispose; 0 behaviors|79.43|376|Immediate|96.47|368|
+|New scope + first resolve + Send + dispose; 5 behaviors|169.08|568|Immediate|121.61|568|
+|First resolve + Send in a pre-created scope; 5 behaviors|807.98|440|Immediate|605.65|440|
+|Synchronous notification; 16 subscribers|121.77|0|DispatchR|175.40|0|
+|Synchronous stream; all 1024 items; 0 behaviors|14,190.35|216|Immediate|14,222.54|144|
+|Synchronous stream; early break from a 16-item input; 0 behaviors|62.57|216|Immediate|42.84|144|
+|Synchronous relay; all 1024 items; 5 preprocessing stages|15,028.75|216|DispatchR|13,610.87|144|
+
+The existing-scope Send above has a lower observed mean than Immediate, while first resolve with behaviors and the one-send new-scope workload have higher means. The 1024-item Stream0 time difference is only about 0.23%; it does not establish a ranking, and Zendiator allocates 72 B more. Partial stream consumption and relay remain unfavorable in these examples.
+
+Source snapshot `1c41d2b105073d2dc9be2c0e8684fdce2fa11f55`, measured 2026-10-08: Windows 11 x64, Intel Core Ultra 7 258V, SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8, Release, affinity mask 1, 20 warmups, 12 measurements, requested 500 ms iterations, 1 launch per case. Peers shown are Immediate.Handlers 4.2.0 and DispatchR.Mediator 2.3.1; DI is 10.0.12.
+
+Means are after BDN overhead adjustment and outlier handling; retained N is 9–12. The [unrounded selected data](benchmarks/results/20261008-1c41d2b-summary.csv) separates Mean, confidence-interval Error, StdDev, N and allocation. The full run covered 360 cases across 74 comparison keys. One launch does not establish independent-run reproducibility, universal non-regression, or a controlled before/after improvement.
+
+Handlers are deliberately lightweight. API shapes and DI registrations differ between libraries. ScopeK1 includes creation and disposal; FirstSend excludes them. Stream/relay figures include the complete benchmark operation, not one item. The relay behaviors synchronously preprocess and directly return the next enumerable. These results do not predict application startup, HTTP latency or asynchronous I/O. See the [benchmark instructions](benchmarks/README.md) for the fixture and reproduction conditions.
 
 ## AOT and trimming
 
@@ -458,8 +442,3 @@ To await the same publish more than once, call `AsTask()` once and reuse that
 can help detect incorrect consumption.
 
 For migrating from MediatR, see [the migration guide](docs/migrating-from-mediatr.md).
-
-## Development
-
-The [CI workflow](.github/workflows/ci.yml) defines integration checks; package
-versions are defined in [Directory.Build.props](Directory.Build.props).

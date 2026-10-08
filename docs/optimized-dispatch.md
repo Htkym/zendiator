@@ -1,6 +1,6 @@
 # Construction and dispatch lifetime
 
-Zendiator has one dispatch path. It lazily captures each Handler and Behavior from
+Zendiator has one dispatch path. It lazily captures each Handler, Behavior and registered Stream validator from
 standard DI on first use, then reuses that dependency for the mediator instance.
 There is no optimized-mode switch, custom provider, or provider factory.
 
@@ -28,9 +28,9 @@ lifetime contracts differ; the setup similarity is not a claim of equivalence.
 
 The default mediator lifetime remains `Scoped`. Generated Handler and Behavior
 registrations default to `Transient` when the mediator is Scoped; the mediator
-still captures each instance on first use. Every service type is resolved
-only when its pipeline node is first reached, including notification subscribers,
-synchronous handlers, and stream handlers. Short-circuiting does not construct
+still captures each instance on first use. Handlers, Behaviors and subscribers are resolved
+only when their pipeline node is first reached, including synchronous and stream
+handlers. Explicit Stream validators are resolved at the StreamAsync entry. Short-circuiting does not construct
 unused downstream dependencies. Retrying a continuation invokes it again with the
 new request/token but reuses the dependency already captured by that mediator.
 
@@ -62,32 +62,14 @@ lock. A synchronous factory can reenter a different route on the same thread.
 Factories must not block waiting for another thread to dispatch through the same
 mediator during initialization. Failed activation is not cached and can be retried.
 
-When all closed ordinary request routes use one public reference-type Handler,
-the generator can use a typed field cache. Closed synchronous request routes
-may share that same Handler and cache. Behaviors, other route kinds, open routes,
-or an explicit base-class declaration keep the general cache. Both follow the
-same lazy-resolution and disposal contract. The resolver base type is generated
-infrastructure; applications should use the generated constructor and dispatch
-APIs rather than depend on that base type.
-
-The general generated resolver assigns service slots per mediator composition.
-Unrelated compositions therefore do not enlarge its page table merely by using
-other service types first. The same concrete service type keeps one slot across
-routes in a composition. This changes neither the DI lifetime nor who disposes
-the dependency. The non-generic `ZendiatorServiceResolver` remains available
-for code that constructs that helper directly.
-
-A closed route whose Handler and Behaviors include at least two reference types
-that no other route uses keeps those captures in a typed dependency set. The
-mediator creates the set when the route first runs, and each dependency in it is
-still resolved only when its pipeline node is first reached. Types shared by
-several routes, value types, and generic definitions that an open route can close
-keep composition slots. A direct `GetRequiredService<T>()` call on the generated
-mediator returns the same capture that the route set holds, in either order.
+The generator selects resolver base types and dependency storage for the
+composition. Applications should use the generated interface and constructor,
+and recompile with matching generator and runtime versions when upgrading,
+rather than depend on a concrete generated base type.
 
 ## Ownership and disposal
 
-DI owns Handler and Behavior disposal. The generated mediator does not implement
+DI owns Handler, Behavior and Validator disposal. The generated mediator does not implement
 `IDisposable` and does not dispose cached dependencies. Keep its scope alive until
 sends and stream enumeration finish. Sending after scope or root-provider disposal
 is unsupported: a cached route may still call its former handler, while a route
@@ -102,7 +84,7 @@ Disposal follows the standard container. If a service throws while disposing, DI
 may stop before disposing later services. Do not reuse a scope or mediator after
 disposal starts, whether disposal succeeds or throws.
 
-## Preview breaking changes
+## Migration from earlier previews
 
 General generated mediators now derive from
 `ZendiatorServiceResolver<Zendiator>` instead of the non-generic helper. Code
