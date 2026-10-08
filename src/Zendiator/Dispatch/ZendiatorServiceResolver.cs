@@ -211,14 +211,18 @@ public class ZendiatorServiceResolver
         var structure = storage;
         if (storage is not null && !IsPageStorage(storage))
         {
-            structure = Place(null, (_layout >> CapacityBits) - 1, storage);
+            var singleSlot = (_layout >> CapacityBits) - 1;
+            var firstPageLength = Math.Max(_layout & CapacityMask, singleSlot + 1);
+            var fullFirstPage = (uint)singleSlot < PageSize && firstPageLength < PageSize
+                && slot >= firstPageLength;
+            structure = Place(null, singleSlot, storage, fullFirstPage);
             _layout &= CapacityMask;
         }
         structure = Place(structure, slot, service);
         if (!ReferenceEquals(structure, storage)) Volatile.Write(ref _storage, structure);
     }
 
-    private object Place(object? structure, int slot, object service)
+    private object Place(object? structure, int slot, object service, bool fullFirstPage = false)
     {
         var pageIndex = slot >> PageBits;
         var offset = slot & (PageSize - 1);
@@ -231,7 +235,9 @@ public class ZendiatorServiceResolver
             {
                 if (offset >= page.Length)
                 {
-                    var expanded = new object?[page.Length == 0 ? Math.Max(_layout & CapacityMask, offset + 1) : PageSize];
+                    var capacity = page.Length == 0 && !fullFirstPage
+                        ? Math.Max(_layout & CapacityMask, offset + 1) : PageSize;
+                    var expanded = new object?[capacity];
                     Array.Copy(page, expanded, page.Length);
                     page = expanded;
                 }

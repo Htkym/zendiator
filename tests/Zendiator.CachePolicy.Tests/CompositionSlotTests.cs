@@ -51,6 +51,7 @@ public sealed class CompositionSlotTests
         _ = resolver.GetRequiredService<SlotFiller<T>>();
 
     [Theory]
+    [InlineData(false, 1)]
     [InlineData(false, 2)]
     [InlineData(true, 32)]
     public async Task Captures_survive_page_growth_and_high_slot_first_use(bool reverse, int capacity)
@@ -74,7 +75,6 @@ public sealed class CompositionSlotTests
         var resolver = new ZendiatorServiceResolver<PromotionComposition>(provider, capacity);
         var captured = new object?[calls.Length];
         captured[0] = calls[0].Invoke(resolver, null);
-        captured[1] = calls[1].Invoke(resolver, null);
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var finished = new ManualResetEventSlim();
         var reader = Task.Factory.StartNew(() =>
@@ -82,13 +82,13 @@ public sealed class CompositionSlotTests
             started.SetResult();
             do
             {
-                Assert.Same(captured[1], calls[1].Invoke(resolver, null));
+                Assert.Same(captured[0], calls[0].Invoke(resolver, null));
             } while (!finished.IsSet);
         }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         try
         {
             await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            for (var index = 2; index < calls.Length; index++)
+            for (var index = 1; index < calls.Length; index++)
                 captured[index] = calls[index].Invoke(resolver, null);
         }
         finally
