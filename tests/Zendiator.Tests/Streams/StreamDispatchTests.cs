@@ -6,11 +6,13 @@ namespace Zendiator.Tests;
 public sealed class StreamDispatchTests
 {
     [Theory]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    public async Task Disposal_preserves_context_and_captures_synchronous_exceptions(bool throws, bool linked)
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, true)]
+    [InlineData(false, false, true)]
+    public async Task Disposal_preserves_context_and_captures_synchronous_exceptions(bool throws, bool linked, bool asynchronousFailure)
     {
         using var provider = Services().BuildServiceProvider();
         using var scope = provider.CreateScope();
@@ -37,8 +39,16 @@ public sealed class StreamDispatchTests
         else
         {
             Assert.False(pending.IsCompleted);
-            completion.SetResult();
-            await pending;
+            if (asynchronousFailure)
+            {
+                completion.SetException(failure);
+                Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(async () => await pending));
+            }
+            else
+            {
+                completion.SetResult();
+                await pending;
+            }
         }
         await e.DisposeAsync();
         Assert.Equal(1, calls);

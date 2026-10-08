@@ -99,6 +99,7 @@ internal sealed partial class SourceEmitter
                         _state = StreamEnumeratorState.Stopped;
                         return default;
                     }
+                    [global::System.Runtime.CompilerServices.AsyncMethodBuilder(typeof(global::System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder))]
                     private async global::System.Threading.Tasks.ValueTask DisposeInnerAsync()
                     {
                         _state = StreamEnumeratorState.Stopped;

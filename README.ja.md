@@ -196,6 +196,8 @@ await foreach (var name in zendiator.StreamAsync(new GetHouseholdNames(3), cance
 }
 ```
 
+`DisposeAsync()` が返す `ValueTask` は一度だけ消費してください。通常の `await using` はこの条件を満たします。プール化された終了処理では、完了後も返値を消費するまで列挙器への参照が保持されることがあります。
+
 `ref struct` の要求は同期契約（`ISyncRequest` ＋ `SendSync`）を使います。非同期経路とストリーム要素は診断します（ZEN0012）。再列挙は保証しないため、新しい列挙には `StreamAsync` を呼び直します。値型で閉じたオープンジェネリックは Native AOT では動作しません（[既知の制限](docs/release/known-limitations.md)）。
 
 ## 同期の複数結果
