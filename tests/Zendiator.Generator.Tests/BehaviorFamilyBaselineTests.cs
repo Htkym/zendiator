@@ -38,11 +38,37 @@ public sealed class BehaviorFamilyBaselineTests
     private static string Multiple(string request, string handler, string body) =>
         $"public sealed record Request : {request}; public sealed class HandlerA : {handler} {{ {body} }} public sealed class HandlerB : {handler} {{ {body} }}";
 
+    private static string Consumer(string id, string methodName, string shape)
+    {
+        var resultType = id switch
+        {
+            "send-async-response" => "ValueTask<int>",
+            "send-async-open" => "ValueTask<T>",
+            "send-async-void" or "send-all-async-void" => "ValueTask",
+            "send-all-async-response" => "ValueTask<IReadOnlyList<int>>",
+            "send-sync-response" or "send-sync-ref" => "int",
+            "send-all-sync-response" or "send-all-sync-ref" => "IReadOnlyList<int>",
+            "send-sync-void" or "send-all-sync-void" => "void",
+            "stream" => "IAsyncEnumerable<int>",
+            "notification-empty" or "notification-single" or "notification-multiple" => "ValueTask",
+            _ => throw new ArgumentException("Unknown consumer", nameof(id))
+        };
+        var generic = shape == "open" ? "<T>" : "";
+        var request = shape == "open" ? "Request<T>" : "Request";
+        var scoped = shape is "ref" or "ref-span" ? "scoped " : "";
+        var call = $"mediator.{methodName}{generic}(request, token)";
+        var body = resultType == "void" ? call + ";" : $"{resultType} result = {call}; return result;";
+        var span = shape is "multi-sync-span" or "ref-span"
+            ? $"public static int UseSpan(Zendiator mediator, {scoped}{request} request, scoped Span<int> destination, CancellationToken token) {{ int written = mediator.SendAllSync(request, destination, token); return written; }}"
+            : "";
+        return $"public static class Consumer {{ public static {resultType} Use{generic}(Zendiator mediator, {scoped}{request} request, CancellationToken token) {{ {body} }} {span} }}";
+    }
+
     [Theory]
     [MemberData(nameof(Consumers))]
     public void No_hook_consumers_keep_family_specific_typed_generation(string id, string body, string methodName, string shape)
     {
-        var source = Head + body;
+        var source = Head + body + Consumer(id, methodName, shape);
         var options = new CSharpParseOptions(LanguageVersion.Preview);
         var input = CSharpCompilation.Create("G01_" + id.Replace('-', '_'), [CSharpSyntaxTree.ParseText(source, options)], References,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
@@ -53,6 +79,19 @@ public sealed class BehaviorFamilyBaselineTests
         using var assembly = new MemoryStream();
         var emitted = output.Emit(assembly);
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        var inputTree = Assert.Single(input.SyntaxTrees);
+        var semantic = output.GetSemanticModel(inputTree);
+        var consumer = inputTree.GetRoot().DescendantNodes().OfType<ClassDeclarationSyntax>()
+            .Single(node => node.Identifier.ValueText == "Consumer");
+        foreach (var use in consumer.Members.OfType<MethodDeclarationSyntax>())
+        {
+            var call = Assert.Single(use.DescendantNodes().OfType<InvocationExpressionSyntax>());
+            var selected = Assert.IsAssignableFrom<IMethodSymbol>(semantic.GetSymbolInfo(call).Symbol);
+            Assert.Equal(methodName, selected.Name);
+            Assert.Equal("App.Zendiator", selected.ContainingType.ToDisplayString());
+            Assert.True(SymbolEqualityComparer.Default.Equals(semantic.GetDeclaredSymbol(use)!.ReturnType, selected.ReturnType));
+            Assert.True(SymbolEqualityComparer.Default.Equals(semantic.GetDeclaredSymbol(use.ParameterList.Parameters[1])!.Type, selected.Parameters[0].Type));
+        }
         var tree = Assert.Single(driver.GetRunResult().GeneratedTrees);
         var text = tree.ToString();
         var mediator = tree.GetRoot().DescendantNodes().OfType<ClassDeclarationSyntax>()
@@ -106,8 +145,26 @@ public sealed class BehaviorFamilyBaselineTests
             Assert.Contains("StartCoreAsync", text);
         }
         if (shape == "notification-empty") Assert.Contains("return default;", Assert.Single(methods).ToString());
-        if (shape == "notification-single") Assert.Contains("AsyncValueTaskMethodBuilder", text);
-        if (shape == "notification-multiple") Assert.Contains("PoolingAsyncValueTaskMethodBuilder", text);
+        if (shape == "notification-single")
+        {
+            var method = Assert.Single(methods);
+            Assert.False(method.Modifiers.Any(SyntaxKind.AsyncKeyword));
+            var start = method.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                .Single(call => call.Expression is MemberAccessExpressionSyntax member && member.Name.Identifier.ValueText == "Start");
+            var create = Assert.IsType<InvocationExpressionSyntax>(Assert.IsType<MemberAccessExpressionSyntax>(start.Expression).Expression);
+            var member = Assert.IsType<MemberAccessExpressionSyntax>(create.Expression);
+            Assert.Equal("Create", member.Name.Identifier.ValueText);
+            Assert.Equal("global::System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder", member.Expression.ToString());
+        }
+        if (shape == "notification-multiple")
+        {
+            var method = Assert.Single(methods);
+            Assert.True(method.Modifiers.Any(SyntaxKind.AsyncKeyword));
+            var attribute = Assert.Single(method.AttributeLists.SelectMany(list => list.Attributes),
+                attribute => attribute.Name.ToString() == "global::System.Runtime.CompilerServices.AsyncMethodBuilderAttribute");
+            var argument = Assert.Single(attribute.ArgumentList!.Arguments);
+            Assert.Equal("global::System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder", Assert.IsType<TypeOfExpressionSyntax>(argument.Expression).Type.ToString());
+        }
         SaveSnapshot(id, source, text);
     }
 
@@ -123,6 +180,8 @@ public sealed class BehaviorFamilyBaselineTests
             Roslyn = typeof(CSharpCompilation).Assembly.GetName().Version!.ToString(),
             Generator = typeof(ZendiatorGenerator).Assembly.GetName().Version!.ToString(),
             EmittedConsumer = true,
+            ConsumerCallsCompiled = true,
+            ExactReturnTypesChecked = true,
             LegacyDiscoveryControl = true
         }));
     }
