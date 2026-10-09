@@ -4,8 +4,10 @@ using System.Threading.Tasks.Sources;
 namespace Zendiator.Tests.Contracts;
 
 // Test-only trace shared by canonical controls and future generated backend adapters.
+// Values keep their declared type and boxed copy; references use recorder-local identity.
+internal sealed record ContractRequest(Type Type, object? Value, int Reference);
 internal sealed record ContractEvent(string Family, int Branch, int Invocation, string Stage, string Kind,
-    string Request, int Token, int Error, int Service, string? Resolution, string? Ambient, string Culture, string? Context, string? Detail);
+    ContractRequest Request, int Token, int Error, int Service, string? Resolution, string? Ambient, string Culture, string? Context, string? Detail);
 
 internal sealed class ContractEvents(string family, int invocation, int branch = 0)
 {
@@ -18,9 +20,10 @@ internal sealed class ContractEvents(string family, int invocation, int branch =
     {
         lock (_events)
         {
-            var requestId = typeof(R).IsValueType ? "value:" + request : request is null ? "null" : "ref:" + Id(request);
+            var snapshot = typeof(R).IsValueType ? new ContractRequest(typeof(R), request, 0)
+                : new ContractRequest(typeof(R), null, request is null ? 0 : Id(request));
             if (token.CanBeCanceled && !_tokens.ContainsKey(token)) _tokens.Add(token, _tokens.Count + 1);
-            _events.Add(new(family, branch, invocation, stage, kind, requestId,
+            _events.Add(new(family, branch, invocation, stage, kind, snapshot,
                 token.CanBeCanceled ? _tokens[token] : 0, error is null ? 0 : Id(error), service is null ? 0 : Id(service), resolution, Ambient.Value,
                 CultureInfo.CurrentCulture.Name, SynchronizationContext.Current?.GetType().Name, detail));
         }

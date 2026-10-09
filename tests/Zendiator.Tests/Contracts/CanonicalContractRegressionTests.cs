@@ -7,6 +7,7 @@ public sealed class CanonicalContractRegressionTests
 {
     private sealed record Request(int Value);
     private readonly record struct LargeRequest(long A, long B, long C, long D, long E, long F, long G, long H);
+    private struct PlainValueRequest { public int Value; }
 
     private sealed class Source(ContractEvents events, int count) : IAsyncEnumerable<int>, IAsyncEnumerator<int>
     {
@@ -332,6 +333,23 @@ public sealed class CanonicalContractRegressionTests
         Assert.Equal(rows[0].Error, rows[1].Error); Assert.NotEqual(rows[0].Error, rows[2].Error);
         Assert.Equal(rows[0].Service, rows[1].Service); Assert.NotEqual(rows[0].Service, rows[2].Service);
         Assert.Equal(new[] { "first", "reuse", "first" }, rows.Select(e => e.Resolution));
+    }
+
+    [Fact]
+    public void Recorder_value_snapshots_detect_equal_text_with_different_values_and_types()
+    {
+        var original = new PlainValueRequest { Value = 1 }; var changed = new PlainValueRequest { Value = 2 };
+        Assert.Equal(original.ToString(), changed.ToString());
+        var expected = new ContractEvents("SendAsync", 1); var actual = new ContractEvents("SendAsync", 1); var same = new ContractEvents("SendAsync", 1);
+        expected.Add("handler", "enter", original); actual.Add("handler", "enter", changed); same.Add("handler", "enter", new PlainValueRequest { Value = 1 });
+        var snapshot = expected.Snapshot().Single();
+        Assert.NotEqual(snapshot, actual.Snapshot().Single()); Assert.Equal(snapshot, same.Snapshot().Single());
+        original.Value = 9; Assert.Equal(1, Assert.IsType<PlainValueRequest>(snapshot.Request.Value).Value);
+        Assert.Equal(typeof(PlainValueRequest), snapshot.Request.Type);
+        var narrow = new ContractEvents("SendAsync", 1); var wide = new ContractEvents("SendAsync", 1);
+        Assert.Equal(1.ToString(), 1L.ToString()); narrow.Add("handler", "enter", 1); wide.Add("handler", "enter", 1L);
+        Assert.NotEqual(narrow.Snapshot().Single(), wide.Snapshot().Single());
+        Assert.Equal(typeof(int), narrow.Snapshot().Single().Request.Type); Assert.Equal(typeof(long), wide.Snapshot().Single().Request.Type);
     }
 
     [Fact]
