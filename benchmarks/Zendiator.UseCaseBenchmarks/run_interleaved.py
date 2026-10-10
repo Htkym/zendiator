@@ -6,10 +6,12 @@ never reused or merged into an interleaved run.
 
 import argparse
 import hashlib
+import math
 import os
 import re
 import shutil
 import signal
+import statistics
 import subprocess
 import uuid
 from pathlib import Path
@@ -24,6 +26,46 @@ PROJECT = Path(__file__).resolve().parent
 REPO = PROJECT.parent.parent
 GROUPS = ("send", "features", "streams", "relay")
 PROFILE = "Release; affinity 1; 20 warmup; 12 measurement; 500 ms requested iteration; 1 launch"
+SEND_DIAGNOSTIC_INVOCATIONS = 268435456
+
+
+def send_diagnostic_profile(mode, group, cases, resume=False, max_cases=None):
+    if mode is None:
+        return PROFILE
+    if (mode not in ("adaptive", "fixed") or group != "custom" or
+            cases != [{"Type": "ZendiatorSend0", "Method": "Typed", "Lifetime": "Scoped"}] or
+            resume or max_cases is not None):
+        raise ValueError("Send diagnostic requires one Scoped ZendiatorSend0.Typed case, without resume or partial runs")
+    return PROFILE + "; Send diagnostic " + mode + (
+        f"; InvocationCount={SEND_DIAGNOSTIC_INVOCATIONS}; iteration time not enforced" if mode == "fixed" else "; adaptive pilot")
+
+
+def check_send_diagnostic(result, mode):
+    display = result["DisplayInfo"]
+    required = ("Affinity=00000001", "IterationCount=12", "IterationTime=500ms", "LaunchCount=1", "WarmupCount=20")
+    if any(not re.search(r"\b" + re.escape(token) + r"(?=[,)])", display) for token in required):
+        raise ValueError("Send diagnostic job differs from reviewed profile")
+    points = result["Measurements"]
+    select = lambda stage: [x for x in points if x["IterationMode"] == "Workload" and x["IterationStage"] == stage]
+    actual, warmup, pilot = select("Actual"), select("Warmup"), select("Pilot")
+    overhead = [x for x in points if x["IterationMode"] == "Overhead" and x["IterationStage"] == "Actual"]
+    if len(actual) != 12 or len(warmup) != 20:
+        raise ValueError("Send diagnostic requires all 12 Actual and 20 Warmup points")
+    if not overhead or any(type(x["Operations"]) is not int or x["Operations"] <= 0 or
+           type(x["Nanoseconds"]) not in (int, float) or not math.isfinite(x["Nanoseconds"]) or x["Nanoseconds"] <= 0
+           for x in actual + warmup + pilot + overhead):
+        raise ValueError("Send diagnostic has invalid raw observations")
+    operations = {x["Operations"] for x in actual + warmup + overhead}
+    explicit = re.search(r"\bInvocationCount=(\d+)\b", display)
+    if mode == "fixed":
+        if not explicit or int(explicit[1]) != SEND_DIAGNOSTIC_INVOCATIONS or pilot or operations != {SEND_DIAGNOSTIC_INVOCATIONS}:
+            raise ValueError("Fixed Send diagnostic requires exact operations and no pilot")
+    elif mode != "adaptive" or explicit or not pilot or len(operations) != 1:
+        raise ValueError("Adaptive Send diagnostic requires an adaptive pilot and no fixed job count")
+    milliseconds = [x["Nanoseconds"] / 1e6 for x in actual]
+    return {"mode": mode, "actualRows": len(actual), "warmupRows": len(warmup), "overheadRows": len(overhead), "pilotRows": len(pilot),
+            "operationsPerIteration": next(iter(operations)), "actualMilliseconds": milliseconds,
+            "actualMedianMilliseconds": statistics.median(milliseconds), "noPerformanceAdoption": True}
 
 
 def command(args, cwd=REPO):
@@ -213,6 +255,8 @@ def check_case(row, attempt, session, require_artifact_gate=True):
     record = {"attempt": attempt.name, "case": row["Case"], "childSha256": hashes[0],
               "childAssemblies": assemblies, "reportSha256": sha(reports[0]),
               "childEvidenceSha256": sha(children[0])}
+    if session.get("sendDiagnostic") is not None:
+        record["sendDiagnostic"] = check_send_diagnostic(result, session["sendDiagnostic"])
     if require_artifact_gate:
         record["artifactGate"] = check_artifact_binding(row, attempt, session, PROJECT)
     return record
@@ -293,7 +337,7 @@ def finish_group(run, plan, cases, session):
                "childAssemblyHashes": assembly_hashes, "runtime": session["runtime"],
                "executionOrder": "cross-library-interleaved-verified", "firstSendActual": firstsend,
                "artifactGateProtocol": session["artifactGateProtocol"], "artifactGateProofs": artifact_proofs,
-               "profile": PROFILE})
+               "profile": session.get("profile", PROFILE)})
     write_json(run / "outcome.json", {"cases": len(plan), "failures": 0, "validationErrors": 0})
     return next(iter(hashes))
 
@@ -307,6 +351,7 @@ def main():
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--max-cases", type=int, help="Stop after this many completed cases; leave a resumable partial run")
     parser.add_argument("--expect-sdk", default="10.0.401")
+    parser.add_argument("--send-diagnostic", choices=("adaptive", "fixed"), help="Separate Send0.Typed control diagnostic; fixed uses 268435456 invocations")
     args = parser.parse_args()
     if (args.group == "custom") != (args.matrix is not None):
         parser.error("--matrix must be supplied exactly when --group custom is selected")
@@ -318,6 +363,7 @@ def main():
         plan, keys = make_plan(cases)
         plans[group] = (cases, plan)
         print(f"{group}: {len(plan)} cases, {keys} comparison keys; first: {plan[0]['Library']}")
+    profile = send_diagnostic_profile(args.send_diagnostic, args.group, plans[groups[0]][0], args.resume, args.max_cases)
     if args.dry_run:
         return
     check_project_discovery()
@@ -342,7 +388,9 @@ def main():
     current = {"revision": command(["git", "rev-parse", "HEAD"]), "sdk": sdk,
                "sourceDigest": source_digest(), "groups": list(groups),
                "matrixSha256": {group: sha(matrix_paths[group]) for group in groups},
-               "profile": PROFILE, "artifactGateProtocol": ARTIFACT_GATE_PROTOCOL}
+               "profile": profile, "artifactGateProtocol": ARTIFACT_GATE_PROTOCOL}
+    if args.send_diagnostic is not None:
+        current["sendDiagnostic"] = args.send_diagnostic
     if args.resume:
         session = read(output / "session.json")
         if not session.get("sessionId"):
@@ -421,7 +469,10 @@ def main():
             env = clean_env()
             env.update(COLD_RUN=str(attempt), COLD_MATRIX_FILE=str(one_case), COLD_PINNED="1",
                        COLD_SKIP_GATE="1", COLD_SINGLE_CASE="1", COLD_GATE_PROOF=str(proof), COLD_EXPECT_CHILD_Z_SHA="SKIP")
-            run_logged(["dotnet", str(PROJECT / "bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll"), "--filter", "*"], attempt / "run.log", env)
+            benchmark_args = ["dotnet", str(PROJECT / "bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll"), "--filter", "*"]
+            if args.send_diagnostic == "fixed":
+                benchmark_args.extend(["--invocationCount", str(SEND_DIAGNOSTIC_INVOCATIONS)])
+            run_logged(benchmark_args, attempt / "run.log", env)
             check_case(row, attempt, session, require_artifact_gate=False)
             ensure_artifact_gate(row, attempt, session, PROJECT, run_logged, clean_env)
             write_json(case_dir / "complete.json", check_case(row, attempt, session))
