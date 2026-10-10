@@ -1,10 +1,11 @@
 """Check the predeclared matrix against BDN JSON and export every observation."""
 
 import csv
-import json
 import re
 import sys
 from pathlib import Path
+
+from artifact_gate import filesystem_path, resolve_path, glob_paths, read
 
 from interleaved_plan import normalize_case
 
@@ -12,9 +13,9 @@ from interleaved_plan import normalize_case
 ROOT = Path(__file__).resolve().parent
 if len(sys.argv) not in (2, 4) or (len(sys.argv) == 4 and sys.argv[2] != "--matrix"):
     raise SystemExit("Usage: python analyze.py OUTPUT_ROOT [--matrix FOCUSED_MATRIX]")
-OUTPUT = Path(sys.argv[1]).resolve()
+OUTPUT = resolve_path(sys.argv[1])
 FIELDS = ("Type", "Method", "Lifetime", "Count", "Asynchronous")
-MATRICES = ({"custom": Path(sys.argv[3]).resolve()} if len(sys.argv) == 4 else
+MATRICES = ({"custom": resolve_path(sys.argv[3])} if len(sys.argv) == 4 else
             {group: ROOT / f"{group}.json" for group in ("send", "features", "streams", "relay")})
 
 
@@ -35,17 +36,17 @@ expected = {}
 actual = {}
 rows = []
 for group, matrix_path in MATRICES.items():
-    matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
+    matrix = read(matrix_path)
     for case in matrix:
         identifier = key(case)
         if identifier in expected:
             raise ValueError(f"Duplicate predeclared case: {identifier}")
         expected[identifier] = group
     result_dir = OUTPUT / "runs" / group / "results"
-    if not result_dir.exists():
+    if not filesystem_path(result_dir).exists():
         continue
-    for path in result_dir.glob("*-full.json"):
-        data = json.loads(path.read_text(encoding="utf-8"))
+    for path in glob_paths(result_dir, "*-full.json"):
+        data = read(path)
         for benchmark in data["Benchmarks"]:
             case = {
                 "Type": benchmark["Type"],
@@ -73,7 +74,7 @@ for group, matrix_path in MATRICES.items():
             )
 
 rows.sort(key=lambda row: (row["Group"], row["Type"], row["Method"], row["Lifetime"], str(row["Count"]), str(row["Asynchronous"])))
-with (OUTPUT / "all-results.csv").open("w", encoding="utf-8", newline="") as output:
+with filesystem_path(OUTPUT / "all-results.csv").open("w", encoding="utf-8", newline="") as output:
     writer = csv.DictWriter(output, fieldnames=("Group", *FIELDS, "MeanNs", "MedianNs", "N", "StdDevNs", "AllocatedBytes"))
     writer.writeheader()
     writer.writerows(rows)
@@ -82,5 +83,5 @@ for group in MATRICES:
     wanted = {identifier for identifier, value in expected.items() if value == group}
     found = {identifier for identifier, value in actual.items() if value == group}
     print(f"{group}: {len(found)}/{len(wanted)} cases")
-    if (OUTPUT / "runs" / group / "outcome.json").exists() and wanted != found:
+    if filesystem_path(OUTPUT / "runs" / group / "outcome.json").exists() and wanted != found:
         raise ValueError(f"Missing {group}: {wanted - found}")

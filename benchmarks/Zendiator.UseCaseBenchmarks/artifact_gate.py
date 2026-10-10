@@ -30,17 +30,38 @@ CONTROLS = {"DOTNET_gcServer", "COMPlus_gcServer", "DOTNET_gcConcurrent", "COMPl
             "DOTNET_PROCESSOR_COUNT"}
 
 
-def filesystem_path(path):
-    """Use Windows extended paths only for I/O; retain ordinary paths in evidence."""
+def ordinary_path(path):
+    """Keep the same drive/UNC spelling in evidence and containment comparisons."""
     path = Path(path)
     if os.name != "nt":
         return path
-    value = str(path.absolute())
-    if value.startswith("\\\\?\\"):
+    value = str(path)
+    if value[:8].upper() == "\\\\?\\UNC\\":
+        return Path("\\\\" + value[8:])
+    if value.startswith("\\\\?\\") and re.match(r"[A-Za-z]:\\", value[4:]):
+        return Path(value[4:])
+    return path
+
+
+def filesystem_path(path):
+    """Use extended paths at I/O boundaries, after normalizing dot segments."""
+    path = ordinary_path(path)
+    if os.name != "nt":
         return path
+    value = os.path.abspath(path)
+    if value.startswith("\\\\?\\"):
+        return Path(value)
     if value.startswith("\\\\"):
         return Path("\\\\?\\UNC\\" + value[2:])
     return Path("\\\\?\\" + value)
+
+
+def resolve_path(path):
+    return ordinary_path(filesystem_path(path).resolve())
+
+
+def glob_paths(directory, pattern):
+    return (ordinary_path(path) for path in filesystem_path(directory).glob(pattern))
 
 
 def read(path):
@@ -60,7 +81,7 @@ def digest(value):
 
 
 def write(path, value):
-    path = Path(path)
+    path = filesystem_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -68,11 +89,11 @@ def write(path, value):
 
 
 def same_path(left, right):
-    return os.path.normcase(str(Path(left).resolve())) == os.path.normcase(str(Path(right).resolve()))
+    return os.path.normcase(str(resolve_path(left))) == os.path.normcase(str(resolve_path(right)))
 
 
 def within(file, directory):
-    file, directory = Path(file).resolve(), Path(directory).resolve()
+    file, directory = resolve_path(file), resolve_path(directory)
     try:
         file.relative_to(directory)
         return True
@@ -110,7 +131,7 @@ def assembly_map(items):
 
 
 def child_snapshot(row, attempt):
-    children, finals = list(attempt.glob("child-*.json")), list(attempt.glob("loaded-final-*.json"))
+    children, finals = list(glob_paths(attempt, "child-*.json")), list(glob_paths(attempt, "loaded-final-*.json"))
     if len(children) != 1 or len(finals) != 1:
         raise ValueError("Exactly one setup and one post-workload child snapshot are required")
     initial, final = read(children[0]), read(finals[0])
@@ -169,7 +190,7 @@ def semantic_identity(final, session, project, runtime, bundle_files):
 
 
 def mapped(path, build_root, bundle, framework_root):
-    path = Path(path).resolve()
+    path = resolve_path(path)
     if within(path, build_root):
         return str(bundle / path.relative_to(build_root))
     if within(path, framework_root):
@@ -178,30 +199,31 @@ def mapped(path, build_root, bundle, framework_root):
 
 
 def prepare_bundle(row, attempt, final, project):
+    attempt, project = ordinary_path(attempt), ordinary_path(project)
     data = read(attempt / "build-artifacts.json")
     reports = data.get("reports", [])
     if (data.get("schemaVersion") != 1 or len(reports) != 1 or reports[0].get("buildSuccess") is not True or
         reports[0]["type"] != row["Case"]["Type"] or reports[0]["method"] != row["Case"]["Method"]):
         raise ValueError("Missing/substituted structured BDN build identity")
     paths = reports[0]["paths"]
-    build_root = Path(paths["buildArtifactsDirectoryPath"]).resolve()
-    binaries = Path(paths["binariesDirectoryPath"]).resolve()
+    build_root = resolve_path(paths["buildArtifactsDirectoryPath"])
+    binaries = resolve_path(paths["binariesDirectoryPath"])
     if not within(build_root, project / "bin") or not within(binaries, build_root):
         raise ValueError("BDN build path is outside the owned benchmark output")
     for name in ("projectFilePath", "programCodePath", "executablePath"):
-        if not within(paths[name], build_root) or not Path(paths[name]).is_file():
+        if not within(paths[name], build_root) or not filesystem_path(paths[name]).is_file():
             raise ValueError("Generated project/source/host was not retained")
     if within(attempt, project.parent.parent):
         raise ValueError("Store artifact-gate measurements outside the source worktree")
     bundle = attempt / "bundle"
-    if bundle.exists():
+    if filesystem_path(bundle).exists():
         raise ValueError("Existing artifact bundle must be checked through its binding; never overwrite")
     source_files = tree_hashes(build_root)
     shutil.copytree(filesystem_path(build_root), filesystem_path(bundle))
     if tree_hashes(build_root) != source_files or tree_hashes(bundle) != source_files:
         raise ValueError("Generated artifacts changed while archiving")
     runtime = json.loads(json.dumps(final["runtimeEvidence"]))
-    framework = Path(runtime["frameworkDirectory"]).resolve()
+    framework = resolve_path(runtime["frameworkDirectory"])
     expected = []
     for original in final["assemblies"]:
         item = dict(original, path=mapped(original["path"], build_root, bundle, framework))
@@ -230,8 +252,8 @@ def verify_runtime(actual, expected):
         if actual[key]["sha256"] != expected[key]["sha256"] or not same_path(actual[key]["path"], expected[key]["path"]):
             raise ValueError("Gate used a different runtimeconfig/deps file")
     for key in ("appDeps", "nativeRuntime"):
-        if {(os.path.normcase(str(Path(item["path"]).resolve())), item["sha256"]) for item in actual[key]} != {
-            (os.path.normcase(str(Path(item["path"]).resolve())), item["sha256"]) for item in expected[key]}:
+        if {(os.path.normcase(str(resolve_path(item["path"]))), item["sha256"]) for item in actual[key]} != {
+            (os.path.normcase(str(resolve_path(item["path"]))), item["sha256"]) for item in expected[key]}:
             raise ValueError("Gate used a different actual dependency context/native runtime")
 
 
@@ -268,6 +290,7 @@ def verify_gate(request_path, proof_path):
 
 
 def ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env):
+    attempt, project = ordinary_path(attempt), ordinary_path(project)
     final, final_path, loaded = child_snapshot(row, attempt)
     bundle, files, expected, runtime, build_root = prepare_bundle(row, attempt, final, project)
     semantic = semantic_identity(final, session, project, runtime, files)
@@ -285,7 +308,7 @@ def ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env):
                "gateDriverSha256": semantic["gateDriverSha256"]}
     request_path = attempt / "artifact-gate-request.json"
     write(request_path, request)
-    reused = cache.exists()
+    reused = filesystem_path(cache).exists()
     if reused:
         saved = read(cache)
         if saved.get("semantic") != semantic or saved.get("key") != key:
@@ -332,6 +355,7 @@ def ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env):
 
 
 def check_artifact_binding(row, attempt, session, project):
+    attempt, project = ordinary_path(attempt), ordinary_path(project)
     path = attempt / "artifact-binding.json"
     binding = read(path)
     final, final_path, _ = child_snapshot(row, attempt)

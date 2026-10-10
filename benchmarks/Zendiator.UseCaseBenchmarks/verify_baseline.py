@@ -10,7 +10,7 @@ import zipfile
 from collections import Counter
 from pathlib import Path, PurePosixPath
 
-from artifact_gate import read, sha
+from artifact_gate import read, sha, filesystem_path, resolve_path
 from interleaved_plan import identity, normalize_case
 
 
@@ -24,8 +24,8 @@ def require(condition, message):
 
 
 def within(root, name):
-    path = (root / name).resolve()
-    require(path.is_relative_to(root.resolve()), f"Path outside baseline root: {name}")
+    path = resolve_path(root / name)
+    require(path.is_relative_to(resolve_path(root)), f"Path outside baseline root: {name}")
     return path
 
 
@@ -120,7 +120,7 @@ def validate(root, manifest):
     require(len({pin["path"] for pin in pins}) == len(pins), "Duplicate pinned file")
     for pin in pins:
         path = within(root, pin["path"])
-        require(path.stat().st_size == pin["bytes"] and sha(path) == pin["sha256"].upper(),
+        require(filesystem_path(path).stat().st_size == pin["bytes"] and sha(path) == pin["sha256"].upper(),
                 f"Pinned file hash/size mismatch: {pin['path']}")
     review = results / "review-materials"
     current = read(root / ".local/CURRENT-BASELINE.json")
@@ -129,8 +129,8 @@ def validate(root, manifest):
     verification = read(review / "verification.json")
     require(current["sourceSha"] == session["revision"] == verification["fixedSha"] == SOURCE_SHA,
             "Wrong baseline source SHA")
-    require(Path(current["results"]).resolve() == results and
-            Path(current["control"]).resolve() == control, "Baseline pointer mismatch")
+    require(resolve_path(current["results"]) == results and
+            resolve_path(current["control"]) == control, "Baseline pointer mismatch")
     require(session["sessionId"] == verification["sessionId"] == manifest["sessionId"] and
             session["sourceDigest"] == verification["sourceDigest"] == manifest["sourceDigest"],
             "Mixed baseline session/source digest")
@@ -151,7 +151,7 @@ def validate(root, manifest):
     index = {record["caseId"]: record for record in records}
     require(len(index) == len(records) == 360 and
             Counter(record["group"] for record in records) == COUNTS, "Missing/duplicate baseline cases")
-    with (results / "all-results.csv").open(encoding="utf-8-sig", newline="") as stream:
+    with filesystem_path(results / "all-results.csv").open(encoding="utf-8-sig", newline="") as stream:
         summaries = list(csv.DictReader(stream))
     by_workload = {(record["group"], record["type"], record["method"],
                     str(record["lifetime"] or ""), str(record["count"]) if record["count"] is not None else "",
@@ -170,7 +170,7 @@ def validate(root, manifest):
     inventory = read(review / "raw-archive-manifest.json")
     excluded = []
     retained = {}
-    with zipfile.ZipFile(review / "raw-bdn-evidence.zip") as archive:
+    with zipfile.ZipFile(filesystem_path(review / "raw-bdn-evidence.zip")) as archive:
         verify_archive(archive, inventory)
         require(archived_json(archive, "session.json") == session, "Archive/session mismatch")
         for group, count in COUNTS.items():
@@ -212,7 +212,7 @@ def validate(root, manifest):
                     require(binding["semantic"]["bundleFiles"][relative] == expected_hash and
                             sha(path) == expected_hash, f"Retained binary hash mismatch: {path}")
                     retained[path.relative_to(root).as_posix()] = expected_hash
-    with (review / "excluded-actual-iterations.csv").open(encoding="utf-8-sig", newline="") as stream:
+    with filesystem_path(review / "excluded-actual-iterations.csv").open(encoding="utf-8-sig", newline="") as stream:
         rows = list(csv.DictReader(stream))
     declared = [(row["CaseId"], int(row["launchIndex"]), int(row["iterationIndex"]),
                  int(row["operations"]), float(row["rawNanosecondsBeforeOverheadCorrection"])) for row in rows]
@@ -233,7 +233,7 @@ def main():
     parser.add_argument("--repository-root", type=Path, default=Path(__file__).resolve().parents[2])
     args = parser.parse_args()
     try:
-        result = validate(args.repository_root.resolve(), read(args.manifest))
+        result = validate(resolve_path(args.repository_root), read(args.manifest))
     except (ValueError, KeyError, OSError, zipfile.BadZipFile) as error:
         print(f"Baseline audit failed: {error}", file=sys.stderr)
         return 1

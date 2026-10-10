@@ -12,8 +12,11 @@ import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 import artifact_gate as gate
+import run_interleaved as driver
+from interleaved_plan import make_plan
 
 
 class ArtifactGateContracts(unittest.TestCase):
@@ -61,11 +64,12 @@ class ArtifactGateContracts(unittest.TestCase):
                         "controls": {name: None for name in gate.CONTROLS}}
         self.gate_calls = []
 
-    def case(self, ordinal=1, type="ZendiatorNotification1", pid=111):
+    def case(self, ordinal=1, type="ZendiatorNotification1", pid=111, results=None):
         row = {"Library": "Zendiator" if type.startswith("Zendiator") else "MediatRHistorical",
                "Case": {"Type": type, "Method": "Dispatch"}}
-        attempt = self.root / f"results/runs/custom/cases/{ordinal:04d}/attempt-0001"
-        attempt.mkdir(parents=True)
+        results = results if results is not None else self.root / "results"
+        attempt = results / f"runs/custom/cases/{ordinal:04d}/attempt-0001"
+        gate.filesystem_path(attempt).mkdir(parents=True)
         initial_path = attempt / "child-setup.json"
         identity = {"pid": pid, "platform": "windows" if os.name == "nt" else "linux", "startToken": str(638000000000000000 + pid) if os.name == "nt" else "00000000-0000-0000-0000-000000000001:" + str(pid)}
         gate.write(initial_path, {"pid": pid, "processIdentity": identity, "scenario": type, "lifetime": "Default", "assemblies": self.loads})
@@ -161,6 +165,70 @@ class ArtifactGateContracts(unittest.TestCase):
         relative = leaf.relative_to(self.build).as_posix()
         self.assertIn(relative, request["bundleFiles"])
         self.assertEqual(gate.sha(attempt / "bundle" / relative), gate.sha(leaf))
+
+    def test_normal_and_long_child_proofs_are_saved_read_and_resumed_with_all_guards(self):
+        # Only synthetic files/proofs: no .NET consumer or process is started.
+        self.assertTrue(gate.resolve_path(self.root).is_relative_to(Path(tempfile.gettempdir()).resolve()))
+        self.addCleanup(shutil.rmtree, gate.filesystem_path(self.root))
+        for index, results in enumerate((self.root / "short", self.root / ("session-" + "a" * 90) / ("shard-" + "b" * 70)), 1):
+            with self.subTest(results=results), patch.object(driver, "PROJECT", self.project):
+                row, attempt = self.case(1, type="ZendiatorNotification4", pid=111 + index, results=results)
+                child = attempt / ("child-13200-ZendiatorNotification4-Default-" + "c" * 32 + ".json")
+                gate.filesystem_path(attempt / "child-setup.json").replace(gate.filesystem_path(child))
+                if index == 2:
+                    self.assertGreaterEqual(len(str(child)), 264)
+                initial = gate.read(child)
+                initial["runtime"] = self.runtime["framework"]
+                gate.write(child, initial)
+                final_path = next(gate.glob_paths(attempt, "loaded-final-*.json"))
+                final = gate.read(final_path)
+                final["initialEvidenceSha256"] = gate.sha(child)
+                gate.write(final_path, final)
+                hashes = {item["name"]: item["sha256"] for item in self.loads}
+                group = attempt.parents[2]
+                gate.write(group / "correctness.json", [{"status": "Passed"} for _ in range(394)])
+                self.session.update(runtimeSha256=hashes["Zendiator"], benchmarkSha256=hashes["Zendiator.UseCaseBenchmarks"],
+                                    generatorSha256="A" * 64, diSha256=hashes["Microsoft.Extensions.DependencyInjection"],
+                                    runtime=self.runtime["framework"], gateSha256={"custom": gate.sha(group / "correctness.json")})
+                gate.write(attempt / "manifest.json", dict(self.session, assemblySha256=self.session["benchmarkSha256"],
+                                                          gateProofSha256=self.session["gateSha256"]["custom"]))
+                gate.write(attempt / "outcome.json", {"cases": 1, "failures": 0, "validationErrors": 0})
+                gate.write(attempt / "results/fixture-full.json", {"Benchmarks": [{**row["Case"], "Parameters": ""}]})
+                gate.filesystem_path(attempt / "run.log").write_text("// Benchmark: ZendiatorNotification4.Dispatch: Comparison()\n", encoding="utf-8")
+                marker = attempt / "run.log.process.json"
+                clean = {"schemaVersion": 2, "state": "exited", "cleanupVerified": True}
+                for path in (results / "restore.log.process.json", results / "build.log.process.json", marker):
+                    driver.write_json(path, clean)
+                self.validate(row, attempt)
+                record = driver.check_case(row, attempt, self.session)
+                case_dir = attempt.parent
+                driver.write_json(case_dir / "complete.json", record)
+                with patch.object(driver, "process_alive", return_value=False):
+                    driver.check_resume_ownership(results)
+                self.assertEqual(driver.completed(row, case_dir, self.session), record)
+                self.assertEqual(driver.completed(row, gate.filesystem_path(case_dir), self.session), record)
+                plan, _ = make_plan([row["Case"]])
+                driver.finish_group(group, plan, [row["Case"]], self.session)
+                self.assertEqual(gate.sha(group / "child-0001.json"), gate.sha(child))
+                self.assertTrue(gate.same_path(child, gate.filesystem_path(child)))
+                if os.name == "nt":
+                    self.assertEqual(gate.sha(attempt / "unused" / ".." / child.name), gate.sha(child))
+                    unc = Path(r"\\server\share\folder\..\proof.json")
+                    self.assertEqual(str(gate.ordinary_path(gate.filesystem_path(unc))), r"\\server\share\proof.json")
+                request = gate.read(attempt / "artifact-gate-request.json")
+                self.assertFalse(request["bundleRoot"].startswith("\\\\?\\"))
+                driver.write_json(marker, dict(clean, cleanupVerified=False))
+                with self.assertRaisesRegex(RuntimeError, "termination is unverified"):
+                    driver.check_resume_ownership(results)
+                binding = gate.read(attempt / "artifact-binding.json")
+                proof_path = Path(binding["proofPath"])
+                proof = gate.read(proof_path)
+                proof["benchmarkGateCases"] = 393
+                gate.write(proof_path, proof)
+                binding["proofSha256"] = gate.sha(proof_path)
+                gate.write(attempt / "artifact-binding.json", binding)
+                with self.assertRaisesRegex(ValueError, "proof"):
+                    driver.completed(row, case_dir, self.session)
 
 
     def test_resume_reads_saved_runtime_config_after_mutable_bdn_files_disappear(self):

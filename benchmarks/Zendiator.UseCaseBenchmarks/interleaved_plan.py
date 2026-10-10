@@ -11,6 +11,8 @@ import re
 from collections import OrderedDict
 from pathlib import Path
 
+from artifact_gate import filesystem_path, read
+
 
 LIBRARIES = ("Zendiator", "MediatRHistorical", "Mediator", "DispatchR", "Immediate")
 FIELDS = ("Type", "Method", "Lifetime", "Count", "Asynchronous")
@@ -71,7 +73,7 @@ def make_plan(cases):
 
 def logged_cases(path):
     result = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in filesystem_path(path).read_text(encoding="utf-8").splitlines():
         match = BENCHMARK.match(line)
         if not match:
             continue
@@ -107,10 +109,10 @@ def main():
     parser.add_argument("--verify-log", type=Path)
     args = parser.parse_args()
 
-    cases = json.loads(args.matrix.read_text(encoding="utf-8"))
+    cases = read(args.matrix)
     plan, keys = make_plan(cases)
     if args.output:
-        args.output.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        filesystem_path(args.output).write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if args.verify_log:
         verify_log(plan, args.verify_log)
     print(f"{len(plan)} cases across {keys} comparison keys; first libraries: " +

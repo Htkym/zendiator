@@ -6,7 +6,6 @@ never reused or merged into an interleaved run.
 
 import argparse
 import hashlib
-import json
 import os
 import re
 import shutil
@@ -17,7 +16,8 @@ from pathlib import Path
 
 from interleaved_plan import identity, make_plan, normalize_case, verify_log
 from owned_process import OwnedCommand, process_alive, process_identity
-from artifact_gate import PROTOCOL as ARTIFACT_GATE_PROTOCOL, ensure_artifact_gate, check_artifact_binding
+from artifact_gate import (PROTOCOL as ARTIFACT_GATE_PROTOCOL, ensure_artifact_gate, check_artifact_binding,
+                           filesystem_path, ordinary_path, resolve_path, glob_paths, read, sha, write as write_json)
 
 
 PROJECT = Path(__file__).resolve().parent
@@ -28,17 +28,6 @@ PROFILE = "Release; affinity 1; 20 warmup; 12 measurement; 500 ms requested iter
 
 def command(args, cwd=REPO):
     return subprocess.check_output(args, cwd=cwd, text=True).strip()
-
-
-def sha(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
-
-
-def write_json(path, value):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(path.name + ".tmp")
-    temp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    temp.replace(path)
 
 
 def source_digest():
@@ -52,8 +41,8 @@ def source_digest():
 
 
 def check_project_discovery():
-    expected = (PROJECT / "Zendiator.UseCaseBenchmarks.csproj").resolve()
-    matches = sorted(path.resolve() for path in REPO.rglob(expected.name))
+    expected = resolve_path(PROJECT / "Zendiator.UseCaseBenchmarks.csproj")
+    matches = sorted(resolve_path(path) for path in glob_paths(REPO, "**/" + expected.name))
     if matches != [expected]:
         found = ", ".join(str(path) for path in matches) or "none"
         raise ValueError("BDN requires exactly one benchmark project below this worktree; "
@@ -69,13 +58,13 @@ def check_binary_identity(session):
 
 
 def run_logged(args, path, env, cwd=PROJECT):
-    path.parent.mkdir(parents=True, exist_ok=True)
+    filesystem_path(path.parent).mkdir(parents=True, exist_ok=True)
     marker = path.with_name(path.name + ".process.json")
     record = {"schemaVersion": 2, "pid": None, "command": args,
               "state": "preparing", "cleanupVerified": False}
     # Persist uncertainty before launching: a crash without ChildEvidence must block resume.
     write_json(marker, record)
-    with path.open("w", encoding="utf-8") as log:
+    with filesystem_path(path).open("w", encoding="utf-8") as log:
         owned = OwnedCommand(args, cwd, env, log)
         old_term = signal.getsignal(signal.SIGTERM)
 
@@ -122,20 +111,20 @@ def run_logged(args, path, env, cwd=PROJECT):
 
 
 def check_owned_markers(directory):
-    for marker in directory.rglob("*.process.json"):
-        state = json.loads(marker.read_text(encoding="utf-8"))
+    for marker in glob_paths(directory, "**/*.process.json"):
+        state = read(marker)
         if (state.get("schemaVersion") != 2 or state.get("cleanupVerified") is not True or
             state.get("state") not in ("exited", "interrupted", "failed")):
             raise RuntimeError(f"Owned process tree termination is unverified; do not resume: {marker}")
 
 
 def check_abandoned(case_dir):
-    for attempt in case_dir.glob("attempt-*"):
-        if not list(attempt.glob("*.process.json")):
+    for attempt in glob_paths(case_dir, "attempt-*"):
+        if not list(glob_paths(attempt, "*.process.json")):
             raise RuntimeError(f"No process containment evidence; do not resume: {attempt}")
         check_owned_markers(attempt)
-        for evidence in attempt.glob("child-*.json"):
-            child = json.loads(evidence.read_text(encoding="utf-8"))
+        for evidence in glob_paths(attempt, "child-*.json"):
+            child = read(evidence)
             identity = child.get("processIdentity")
             if not isinstance(identity, dict) or identity.get("pid") != child["pid"]:
                 raise RuntimeError(f"Missing or inconsistent child process identity; do not resume: {evidence}")
@@ -146,13 +135,13 @@ def check_abandoned(case_dir):
 def check_resume_ownership(output):
     # Include restore/build/gate and completed cases, not just an unfinished BDN case.
     for name in ("restore.log.process.json", "build.log.process.json"):
-        if not (output / name).exists():
+        if not filesystem_path(output / name).exists():
             raise RuntimeError(f"Missing build containment evidence; do not resume: {output / name}")
     check_owned_markers(output)
-    for cases in output.glob("runs/*/cases"):
-        for case_dir in cases.iterdir():
+    for cases in glob_paths(output, "runs/*/cases"):
+        for case_dir in filesystem_path(cases).iterdir():
             if case_dir.is_dir():
-                check_abandoned(case_dir)
+                check_abandoned(ordinary_path(case_dir))
 
 
 def clean_env():
@@ -171,24 +160,24 @@ def build_env():
 
 
 def gate_valid(path):
-    if not path.exists():
+    if not filesystem_path(path).exists():
         return False
-    records = json.loads(path.read_text(encoding="utf-8"))
+    records = read(path)
     return len(records) == 394 and all(row.get("status") == "Passed" for row in records)
 
 
 def check_case(row, attempt, session, require_artifact_gate=True):
-    outcome = json.loads((attempt / "outcome.json").read_text(encoding="utf-8"))
+    outcome = read(attempt / "outcome.json")
     if any(outcome.get(key) != value for key, value in (("cases", 1), ("failures", 0), ("validationErrors", 0))):
         raise ValueError(f"Incomplete BDN result: {attempt}")
     verify_log([row], attempt / "run.log")
     if row["Case"]["Method"] == "FirstSend":
         check_firstsend(attempt / "run.log", [row["Case"]])
-    children = list(attempt.glob("child-*.json"))
-    reports = list((attempt / "results").glob("*-full.json"))
+    children = list(glob_paths(attempt, "child-*.json"))
+    reports = list(glob_paths(attempt / "results", "*-full.json"))
     if len(children) != 1 or len(reports) != 1:
         raise ValueError(f"Expected one child and one report: {attempt}")
-    data = json.loads(reports[0].read_text(encoding="utf-8"))
+    data = read(reports[0])
     if len(data["Benchmarks"]) != 1:
         raise ValueError(f"Expected one benchmark result: {reports[0]}")
     result = data["Benchmarks"][0]
@@ -205,14 +194,14 @@ def check_case(row, attempt, session, require_artifact_gate=True):
             result_case[name] = value
     if identity(result_case) != identity(row["Case"]):
         raise ValueError(f"BDN JSON differs from selected case: {reports[0]}")
-    child = json.loads(children[0].read_text(encoding="utf-8"))
+    child = read(children[0])
     assemblies = {assembly["name"]: assembly["sha256"] for assembly in child["assemblies"]}
     if len(assemblies) != len(child["assemblies"]) or any(not digest for digest in assemblies.values()):
         raise ValueError(f"Duplicate assembly names or missing child SHA: {children[0]}")
     hashes = [assemblies.get("Zendiator")]
     if len(hashes) != 1 or not hashes[0]:
         raise ValueError(f"Missing child product SHA: {children[0]}")
-    manifest = json.loads((attempt / "manifest.json").read_text(encoding="utf-8"))
+    manifest = read(attempt / "manifest.json")
     if (manifest["runtimeSha256"] != session["runtimeSha256"] or
         manifest["assemblySha256"] != session["benchmarkSha256"] or
         manifest["generatorSha256"] != session["generatorSha256"] or
@@ -231,9 +220,9 @@ def check_case(row, attempt, session, require_artifact_gate=True):
 
 def completed(row, case_dir, session):
     marker = case_dir / "complete.json"
-    if not marker.exists():
+    if not filesystem_path(marker).exists():
         return None
-    saved = json.loads(marker.read_text(encoding="utf-8"))
+    saved = read(marker)
     if identity(saved["case"]) != identity(row["Case"]):
         raise ValueError(f"Completed case differs from plan: {case_dir}")
     checked = check_case(row, case_dir / saved["attempt"], session)
@@ -245,7 +234,7 @@ def completed(row, case_dir, session):
 def check_firstsend(log, expected):
     seen = {}
     label = None
-    for line in log.read_text(encoding="utf-8").splitlines():
+    for line in filesystem_path(log).read_text(encoding="utf-8").splitlines():
         if line.startswith("// Benchmark: "):
             match = re.match(r"// Benchmark: (\S+\.FirstSend): .*\[Lifetime=([^]]+)\]$", line)
             label = f"{match.group(1)}|{match.group(2)}" if match else None
@@ -267,8 +256,8 @@ def check_firstsend(log, expected):
 def finish_group(run, plan, cases, session):
     expected_names = {f"{i:04d}-full.json" for i in range(1, len(plan) + 1)}
     result_dir = run / "results"
-    result_dir.mkdir(exist_ok=True)
-    if {path.name for path in result_dir.glob("*-full.json")} - expected_names:
+    filesystem_path(result_dir).mkdir(exist_ok=True)
+    if {path.name for path in glob_paths(result_dir, "*-full.json")} - expected_names:
         raise ValueError(f"Unexpected aggregate reports in {result_dir}")
     logs = []
     hashes = set()
@@ -279,11 +268,11 @@ def finish_group(run, plan, cases, session):
         if record is None:
             raise ValueError(f"Missing completed case {ordinal}")
         attempt = run / "cases" / f"{ordinal:04d}" / record["attempt"]
-        report = next((attempt / "results").glob("*-full.json"))
-        child = next(attempt.glob("child-*.json"))
-        shutil.copyfile(report, result_dir / f"{ordinal:04d}-full.json")
-        shutil.copyfile(child, run / f"child-{ordinal:04d}.json")
-        logs.append((attempt / "run.log").read_text(encoding="utf-8"))
+        report = next(glob_paths(attempt / "results", "*-full.json"))
+        child = next(glob_paths(attempt, "child-*.json"))
+        shutil.copyfile(filesystem_path(report), filesystem_path(result_dir / f"{ordinal:04d}-full.json"))
+        shutil.copyfile(filesystem_path(child), filesystem_path(run / f"child-{ordinal:04d}.json"))
+        logs.append(filesystem_path(attempt / "run.log").read_text(encoding="utf-8"))
         hashes.add(record["childSha256"])
         artifact_proofs.append(record["artifactGate"])
         for name, digest in record["childAssemblies"].items():
@@ -295,7 +284,7 @@ def finish_group(run, plan, cases, session):
     if len(hashes) != 1:
         raise ValueError(f"Child product DLL differs across cases: {hashes}")
     log = run / "run.log"
-    log.write_text("\n".join(logs), encoding="utf-8")
+    filesystem_path(log).write_text("\n".join(logs), encoding="utf-8")
     verify_log(plan, log)
     firstsend = check_firstsend(log, cases) if any(case["Method"] == "FirstSend" for case in cases) else None
     write_json(run / "run-info.json", {"group": run.name, "revision": session["revision"],
@@ -322,10 +311,10 @@ def main():
     if (args.group == "custom") != (args.matrix is not None):
         parser.error("--matrix must be supplied exactly when --group custom is selected")
     groups = GROUPS if args.group == "all" else (args.group,)
-    matrix_paths = {group: (args.matrix.resolve() if group == "custom" else PROJECT / f"{group}.json") for group in groups}
+    matrix_paths = {group: (resolve_path(args.matrix) if group == "custom" else PROJECT / f"{group}.json") for group in groups}
     plans = {}
     for group in groups:
-        cases = [normalize_case(case) for case in json.loads(matrix_paths[group].read_text(encoding="utf-8"))]
+        cases = [normalize_case(case) for case in read(matrix_paths[group])]
         plan, keys = make_plan(cases)
         plans[group] = (cases, plan)
         print(f"{group}: {len(plan)} cases, {keys} comparison keys; first: {plan[0]['Library']}")
@@ -339,23 +328,23 @@ def main():
     sdk = command(["dotnet", "--version"])
     if sdk != args.expect_sdk:
         raise ValueError(f"SDK {sdk} differs from requested {args.expect_sdk}")
-    output = args.output.resolve()
+    output = resolve_path(args.output)
     if output == REPO or REPO in output.parents:
         raise ValueError("The retained child-artifact protocol requires output outside the source worktree")
     if args.resume:
-        if not (output / "session.json").exists():
+        if not filesystem_path(output / "session.json").exists():
             raise ValueError("No session to resume")
         check_resume_ownership(output)
-    elif output.exists():
+    elif filesystem_path(output).exists():
         raise ValueError(f"Output already exists: {output}")
     else:
-        output.mkdir(parents=True)
+        filesystem_path(output).mkdir(parents=True)
     current = {"revision": command(["git", "rev-parse", "HEAD"]), "sdk": sdk,
                "sourceDigest": source_digest(), "groups": list(groups),
                "matrixSha256": {group: sha(matrix_paths[group]) for group in groups},
                "profile": PROFILE, "artifactGateProtocol": ARTIFACT_GATE_PROTOCOL}
     if args.resume:
-        session = json.loads((output / "session.json").read_text(encoding="utf-8"))
+        session = read(output / "session.json")
         if not session.get("sessionId"):
             raise ValueError("No session identity for exact-child artifact proofs; cannot resume")
         if any(session.get(key) != value for key, value in current.items()):
@@ -379,23 +368,23 @@ def main():
     for group in groups:
         cases, plan = plans[group]
         run = output / "runs" / group
-        run.mkdir(parents=True, exist_ok=True)
+        filesystem_path(run).mkdir(parents=True, exist_ok=True)
         plan_file = run / "execution-plan.json"
-        if plan_file.exists():
-            if json.loads(plan_file.read_text(encoding="utf-8")) != plan:
+        if filesystem_path(plan_file).exists():
+            if read(plan_file) != plan:
                 raise ValueError(f"Plan changed: {run}")
         else:
             write_json(plan_file, plan)
         proof = run / "correctness.json"
         if not gate_valid(proof):
-            if proof.exists():
+            if filesystem_path(proof).exists():
                 raise ValueError(f"Existing gate evidence is invalid: {proof}")
             env = clean_env()
             env.update(COLD_RUN=str(run), COLD_PINNED="1", COLD_EXPECT_CHILD_Z_SHA="SKIP")
             run_logged(["dotnet", str(PROJECT / "bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll"), "--validate-only"], run / "gate.log", env)
             if not gate_valid(proof):
                 raise ValueError(f"Correctness gate failed: {run}")
-        gate_manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+        gate_manifest = read(run / "manifest.json")
         if (gate_manifest["runtimeSha256"] != session["runtimeSha256"] or
             gate_manifest["assemblySha256"] != session["benchmarkSha256"] or
             gate_manifest["generatorSha256"] != session["generatorSha256"]):
@@ -424,9 +413,9 @@ def main():
                 raise ValueError("Source or SDK changed during measurement")
             check_binary_identity(session)
             check_abandoned(case_dir)
-            case_dir.mkdir(parents=True, exist_ok=True)
-            attempt = case_dir / f"attempt-{len(list(case_dir.glob('attempt-*'))) + 1:04d}"
-            attempt.mkdir()
+            filesystem_path(case_dir).mkdir(parents=True, exist_ok=True)
+            attempt = case_dir / f"attempt-{len(list(glob_paths(case_dir, 'attempt-*'))) + 1:04d}"
+            filesystem_path(attempt).mkdir()
             one_case = attempt / "matrix.json"
             write_json(one_case, [row["Case"]])
             env = clean_env()
@@ -442,7 +431,7 @@ def main():
         if product_hash and child_hash != product_hash:
             raise ValueError("Child product DLL differs across groups")
         product_hash = child_hash
-        group_assemblies = json.loads((run / "run-info.json").read_text(encoding="utf-8"))["childAssemblyHashes"]
+        group_assemblies = read(run / "run-info.json")["childAssemblyHashes"]
         for name, digest in group_assemblies.items():
             if name in known_assemblies and known_assemblies[name] != digest:
                 raise ValueError(f"Child assembly {name} differs across groups")
