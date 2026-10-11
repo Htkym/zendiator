@@ -960,6 +960,138 @@ public sealed class GeneratorTests
             Assert.All(value.GetRunResult().Results.Single().TrackedSteps["SourceEmission"].SelectMany(s => s.Outputs),
                 output => Assert.Equal(reason, output.Reason));
     }
+
+    [Fact]
+    public void Production_fusion_normalization_preserves_opaque_routes_and_actual_incremental_edits()
+    {
+        const string wrapper = """
+            public sealed class Wrapper : IPipelineBehavior<Ping,int> {
+                public ValueTask<int> HandleAsync<TNext>(Ping request, TNext next, CancellationToken ct)
+                    where TNext : struct, IRequestContinuation<Ping,int> => next.InvokeAsync(request, ct);
+            }
+            """;
+        var head = Head.Replace("[GenerateZendiator]", "[GenerateZendiator, PipelineBehavior(typeof(Wrapper))]");
+        var input = Compilation(head + Request + Handler + wrapper);
+        var driver = Driver().RunGeneratorsAndUpdateCompilation(input, out var output, out var diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        var normalized = Normalized(driver);
+        var plan = Assert.Single(normalized.Routes);
+        Assert.Equal(FusionContractOrigin.LegacyEmissionBoundary, plan.Core.Input.ContractOrigin);
+        Assert.Equal(FusionDispatchKind.SendAsync, plan.Core.Input.DispatchKind);
+        Assert.Equal("global::App.Wrapper", Assert.Single(plan.Core.Input.DeclaredStages).Type.Name);
+        Assert.Equal(new[] { 0 }, plan.Core.AdvancedWrapperBoundaries);
+        Assert.Empty(plan.Core.Input.GuardSites);
+        Assert.Empty(plan.Core.Input.ResolutionSites);
+        Assert.Contains(plan.Core.DiagnosticFacts, f => f.Key == "CanonicalGuardResolutionScheduleUnavailable");
+        Assert.Contains(plan.Core.DiagnosticFacts, f => f.Key == "CanonicalAwaitScheduleUnavailable");
+        Assert.Empty(plan.Core.Segments);
+        Assert.Null(plan.Send);
+        Assert.Null(plan.Stream);
+        var initial = driver.GetRunResult().GeneratedTrees.Single().ToString();
+
+        input = input.AddSyntaxTrees(CSharpSyntaxTree.ParseText("namespace Other { class Unrelated {} }",
+            new CSharpParseOptions(LanguageVersion.Preview)));
+        driver = driver.RunGenerators(input);
+        Assert.Equal(normalized, Normalized(driver));
+        AssertNormalizedReason(driver, IncrementalStepRunReason.Cached);
+        var bodyEdit = Compilation(head + Request + Handler.Replace("new(1)", "new(2)") + wrapper);
+        driver = driver.RunGenerators(bodyEdit);
+        Assert.Equal(normalized, Normalized(driver));
+        AssertNormalizedReason(driver, IncrementalStepRunReason.Cached);
+        Assert.Equal(initial, driver.GetRunResult().GeneratedTrees.Single().ToString());
+
+        var contractEdit = Compilation(head + Request + Handler.Replace("public ValueTask<int> HandleAsync",
+            "ValueTask<int> IRequestHandler<Ping,int>.HandleAsync") + wrapper);
+        driver = driver.RunGeneratorsAndUpdateCompilation(contractEdit, out output, out diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        Assert.False(Assert.Single(Normalized(driver).Routes).Core.Input.Handler.DirectCall);
+        AssertNormalizedReason(driver, IncrementalStepRunReason.Modified);
+
+        driver = driver.RunGenerators(Compilation(Head + Request));
+        var error = Assert.Single(driver.GetRunResult().Diagnostics, d => d.Id == "ZEN0001");
+        var moved = Compilation("\n\n" + Head + Request);
+        driver = driver.RunGenerators(moved);
+        var movedError = Assert.Single(driver.GetRunResult().Diagnostics, d => d.Id == "ZEN0001");
+        Assert.Same(moved.SyntaxTrees[0], movedError.Location.SourceTree);
+        Assert.Equal(error.Location.SourceSpan.Start + 2, movedError.Location.SourceSpan.Start);
+        AssertNormalizedReason(driver, IncrementalStepRunReason.Cached);
+        Assert.Empty(driver.GetRunResult().GeneratedTrees);
+
+        static FusionGenerationModel Normalized(GeneratorDriver value) => Assert.IsType<FusionGenerationModel>(
+            Assert.Single(value.GetRunResult().Results.Single().TrackedSteps["FusionNormalization"]
+                .SelectMany(s => s.Outputs)).Value);
+        static void AssertNormalizedReason(GeneratorDriver value, IncrementalStepRunReason reason) =>
+            Assert.All(value.GetRunResult().Results.Single().TrackedSteps["FusionNormalization"].SelectMany(s => s.Outputs),
+                result => Assert.Equal(reason, result.Reason));
+    }
+
+    [Fact]
+    public void Production_stream_normalization_keeps_missing_move_and_dispose_lowering_explicit()
+    {
+        var source = Head + """
+            public sealed record Items : IStreamRequest<int>;
+            public sealed class ItemsHandler : IStreamRequestHandler<Items,int> {
+                public async System.Collections.Generic.IAsyncEnumerable<int> HandleAsync(Items request,
+                    [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct) {
+                    await Task.Yield(); yield return 1;
+                }
+            }
+            """;
+        var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source), out var output, out var diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        var normalized = Assert.IsType<FusionGenerationModel>(Assert.Single(driver.GetRunResult().Results.Single()
+            .TrackedSteps["FusionNormalization"].SelectMany(s => s.Outputs)).Value);
+        var plan = Assert.Single(normalized.Routes);
+        Assert.Equal(FusionDispatchKind.Stream, plan.Core.Input.DispatchKind);
+        Assert.Equal("legacy-emission-v0.4", plan.Core.Input.ContextModelId);
+        Assert.Contains(plan.Core.DiagnosticFacts, f => f.Key == "CanonicalSourceMoveScheduleUnavailable");
+        Assert.Contains(plan.Core.DiagnosticFacts, f => f.Key == "CanonicalDisposeOwnershipUnavailable");
+        Assert.Null(plan.Stream);
+        Assert.Contains("MoveNextAsync", driver.GetRunResult().GeneratedTrees.Single().ToString());
+    }
+
+    [Fact]
+    public void Production_normalization_keeps_sendall_branches_and_void_shapes_separate()
+    {
+        var source = Head + """
+            public sealed record Multi : IMultiRequest<int>;
+            public sealed class MultiA : IRequestHandler<Multi,int> {
+                public ValueTask<int> HandleAsync(Multi r, CancellationToken c) => new(1);
+            }
+            public sealed class MultiB : IRequestHandler<Multi,int> {
+                public ValueTask<int> HandleAsync(Multi r, CancellationToken c) => new(2);
+            }
+            public sealed record Sync : ISyncRequest;
+            public sealed class SyncHandler : ISyncRequestHandler<Sync> {
+                public void Handle(Sync r, CancellationToken c) {}
+            }
+            public sealed record SyncMulti : ISyncMultiRequest;
+            public sealed class SyncMultiA : ISyncRequestHandler<SyncMulti> {
+                public void Handle(SyncMulti r, CancellationToken c) {}
+            }
+            public sealed class SyncMultiB : ISyncRequestHandler<SyncMulti> {
+                public void Handle(SyncMulti r, CancellationToken c) {}
+            }
+            """;
+        var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source), out var output, out var diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        var normalized = Assert.IsType<FusionGenerationModel>(Assert.Single(driver.GetRunResult().Results.Single()
+            .TrackedSteps["FusionNormalization"].SelectMany(s => s.Outputs)).Value);
+        Assert.Equal(5, normalized.Routes.Count);
+        Assert.Equal(5, normalized.Routes.Select(p => p.Core.Input.RouteKey).Distinct().Count());
+        Assert.Equal(2, normalized.Routes.Count(p => p.Core.Input.DispatchKind == FusionDispatchKind.SendAllAsyncBranch));
+        Assert.Equal(2, normalized.Routes.Count(p => p.Core.Input.DispatchKind == FusionDispatchKind.SendAllSyncBranch));
+        Assert.All(normalized.Routes.Where(p => p.Core.Input.DispatchKind != FusionDispatchKind.SendAllAsyncBranch), p =>
+        {
+            Assert.Equal(FusionResultKind.Void, p.Core.Input.ResultKind);
+            Assert.Null(p.Core.Input.Result);
+        });
+        Assert.All(normalized.Routes, p => { Assert.Null(p.Send); Assert.Null(p.Stream); });
+    }
     [Fact]
     public void Shared_generator_keeps_parallel_compositions_isolated()
     {

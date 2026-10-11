@@ -27,7 +27,9 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
 
         // Structural equality stops template expansion before allocating generated text.
         var model = result.Select(static (r, _) => r.Model).WithTrackingName("EmissionModel");
-        var source = model.Select(static (m, _) => m == null ? "" : new SourceEmitter(m).Emit())
+        var fusion = model.Select(static (m, _) => m == null ? null : FusionGenerationNormalizer.Create(m))
+            .WithTrackingName("FusionNormalization");
+        var source = fusion.Select(static (m, _) => m == null ? "" : new SourceEmitter(m).Emit())
             .WithTrackingName("SourceEmission")
             .Select(static (text, _) => text).WithTrackingName("SourceText");
         context.RegisterSourceOutput(source, static (ctx, text) =>

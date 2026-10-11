@@ -59,6 +59,18 @@ internal static class BehaviorFusionPlanner
         void Reject(string key, int stage = -1) => facts.Add(new(key, stage));
         var stream = input.DispatchKind == FusionDispatchKind.Stream;
         var sync = input.DispatchKind is FusionDispatchKind.SendSync or FusionDispatchKind.SendAllSyncBranch;
+        if (!Enum.IsDefined(typeof(FusionContractOrigin), input.ContractOrigin)) Reject("UnknownContractOrigin");
+        if (input.ContractOrigin == FusionContractOrigin.LegacyEmissionBoundary)
+        {
+            Reject("OpaqueLegacyContractBoundary");
+            Reject("CanonicalGuardResolutionScheduleUnavailable");
+            if (!sync) Reject("CanonicalAwaitScheduleUnavailable");
+            if (stream)
+            {
+                Reject("CanonicalSourceMoveScheduleUnavailable");
+                Reject("CanonicalDisposeOwnershipUnavailable");
+            }
+        }
         if (!Enum.IsDefined(typeof(FusionDispatchKind), input.DispatchKind)) Reject("UnsupportedFamily");
         if (string.IsNullOrEmpty(input.RouteKey) || string.IsNullOrEmpty(input.ContextModelId)) Reject("MissingRouteOrContext");
         if ((stream && (input.ResultKind != FusionResultKind.Item || input.Result is null)) ||

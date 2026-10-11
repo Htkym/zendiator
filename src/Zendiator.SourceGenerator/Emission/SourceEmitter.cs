@@ -11,8 +11,13 @@ internal sealed partial class SourceEmitter
     private readonly string? _singleServiceTypeName;
     private readonly Dictionary<string, DependencySet> _dependencySets;
     private string MediatorServices => _model.Target.InheritServiceResolver ? "this" : "_services";
-    internal SourceEmitter(GenerationModel model)
+    internal SourceEmitter(FusionGenerationModel normalized)
     {
+        var model = normalized.Emission;
+        // Until canonical lowering is bound, only the explicit existing typed boundary is renderable.
+        if (normalized.Routes.Any(plan => plan.Core.Input.ContractOrigin != FusionContractOrigin.LegacyEmissionBoundary ||
+            plan.Send != null || plan.Stream != null))
+            throw new InvalidOperationException("Canonical fusion lowering is not bound for this emitter.");
         _model = model;
         _singleServiceTypeName = SingleServiceTypeName(model);
         _dependencySets = PlanDependencySets(model, _singleServiceTypeName != null);

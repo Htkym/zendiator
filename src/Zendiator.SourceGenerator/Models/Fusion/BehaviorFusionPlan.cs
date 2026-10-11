@@ -7,6 +7,7 @@ internal enum FusionSitePhase { OperationEntry, StageEntry, HandlerEntry, FirstM
 internal enum FusionGuardKind { Argument, Cancellation, TokenComposition, DestinationCapacity }
 internal enum FusionOwnership { BorrowedService, BorrowedResource, OwnedSession }
 internal enum FusionCleanupKind { None, Sync, Async }
+internal enum FusionContractOrigin { CanonicalPrototype, LegacyEmissionBoundary }
 
 [System.Flags]
 internal enum FusionCapabilities
@@ -51,7 +52,11 @@ internal sealed record FusionPlanInput(
     EquatableArray<FusionDeclaredStage> DeclaredStages,
     EquatableArray<FusionGuardSite> GuardSites,
     EquatableArray<FusionResolutionSite> ResolutionSites,
-    string ContextModelId);
+    string ContextModelId)
+{
+    // Legacy wrapper order is not the C01 source-to-consumer declaration contract.
+    public FusionContractOrigin ContractOrigin { get; init; }
+}
 
 /// <summary>Symbol-free generation-time IR. It does not add a runtime dispatch engine.</summary>
 internal sealed record BehaviorFusionPlanCore(
