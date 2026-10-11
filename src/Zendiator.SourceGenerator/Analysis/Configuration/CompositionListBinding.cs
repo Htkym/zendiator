@@ -64,6 +64,7 @@ internal sealed class CompositionListBinding
         }
         var entries = ImmutableArray.CreateBuilder<Entry>();
         var stage = _compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly.GetTypeByMetadataName("Zendiator.Stage");
+        var handlerEntry = _compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly.GetTypeByMetadataName("Zendiator.HandlerEntry");
         for (var index = offset; index < arguments.Count; index++)
         {
             _ct.ThrowIfCancellationRequested();
@@ -75,6 +76,25 @@ internal sealed class CompositionListBinding
             var kind = FusionStageKind.Hook;
             if (handlerList && expression is TypeOfExpressionSyntax handlerType)
                 type = _semantic.GetTypeInfo(handlerType.Type, _ct).Type as INamedTypeSymbol;
+            else if (handlerList && expression is InvocationExpressionSyntax handlerFactory &&
+                _semantic.GetSymbolInfo(handlerFactory, _ct).Symbol is IMethodSymbol handlerMethod && Same(handlerMethod.ContainingType, handlerEntry) &&
+                handlerMethod.Name is "Service" or "Session" && handlerFactory.ArgumentList.Arguments.All(a => a.NameColon == null))
+            {
+                type = handlerMethod.Arity is 1 or 2 && handlerFactory.ArgumentList.Arguments.Count == 0
+                    ? handlerMethod.TypeArguments[0] as INamedTypeSymbol
+                    : handlerMethod.Name == "Service" && handlerFactory.ArgumentList.Arguments.Count == 1 &&
+                        handlerFactory.ArgumentList.Arguments[0].Expression is TypeOfExpressionSyntax serviceType
+                            ? _semantic.GetTypeInfo(serviceType.Type, _ct).Type as INamedTypeSymbol : null;
+                if (handlerMethod.Name == "Session" && handlerMethod.Arity == 2 && handlerFactory.ArgumentList.Arguments.Count == 0)
+                {
+                    factoryType = handlerMethod.TypeArguments[1] as INamedTypeSymbol;
+                    if (factoryType == null)
+                    {
+                        Reject("UnsupportedGenerationShape", entryAnchor, "A handler session factory requires a known closed type; an unbound type parameter is not a DI service declaration.");
+                        continue;
+                    }
+                }
+            }
             else if (!handlerList && expression is InvocationExpressionSyntax factory &&
                 _semantic.GetSymbolInfo(factory, _ct).Symbol is IMethodSymbol factoryMethod && Same(factoryMethod.ContainingType, stage) &&
                 factoryMethod.Name is "Hook" or "Wrapper" && factory.ArgumentList.Arguments.All(a => a.NameColon == null))
@@ -97,7 +117,7 @@ internal sealed class CompositionListBinding
             if (type == null)
             {
                 Reject("UnsupportedGenerationShape", entryAnchor, handlerList
-                    ? "Handlers requires literal typeof entries; helpers and array variables are not evaluated."
+                    ? "Handlers requires literal typeof or HandlerEntry.Service/Session entries; helpers and array variables are not evaluated."
                     : "Pipeline requires literal Stage.Hook/Wrapper entries with a known type; helpers and array variables are not evaluated.");
                 continue;
             }
@@ -201,7 +221,7 @@ internal sealed class CompositionListBinding
                 result ??= nextResult;
                 var member = contract.GetMembers().OfType<IMethodSymbol>().SingleOrDefault();
                 var implementation = member == null ? null : entry.Type.FindImplementationForInterfaceMember(member) as IMethodSymbol;
-                handlers.Add(new(entry.Anchor, Identity(entry.Type), Name(entry.Type), Identity(contract), nextResult == null ? null : Identity(nextResult),
+                var handlerModel = new BoundHandlerModel(entry.Anchor, Identity(entry.Type), Name(entry.Type), Identity(contract), nextResult == null ? null : Identity(nextResult),
                     implementation == null ? "<missing>" : implementation.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) +
                     "/return=" + Identity(implementation.ReturnType) + "/constraints=" + Constraints(implementation.TypeParameters),
                     FusionOwnership.BorrowedService, implementation == null, implementation == null ? null : new(
@@ -210,9 +230,19 @@ internal sealed class CompositionListBinding
                         Identity(contract), implementation.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat),
                         new(implementation.Parameters.Select(p => new BoundParameterModel(Identity(p.Type), p.RefKind.ToString(), p.ScopedKind.ToString()))),
                         Identity(implementation.ReturnType), Constraints(implementation.TypeParameters),
-                        family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync)));
+                        family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync));
+                if (entry.Factory != null && !handlerModel.CompilerOwnsError)
+                {
+                    var binding = SessionFactoryContractBinding.Bind(entry.Factory, entry.Type, declaration.Request, family.Value,
+                        entry.Anchor, _compilation, Facts);
+                    handlerModel = handlerModel with { CompilerOwnsError = binding.CompilerOwnsError,
+                        ServiceOwnership = binding.Session?.Ownership ?? handlerModel.ServiceOwnership,
+                        Sessions = binding.Session == null ? default : new(new[] { binding.Session! }) };
+                }
+                handlers.Add(handlerModel);
             }
-            if ((multiple && handlerEntries.Length == 0) || (!multiple && handlerEntries.Length != 1))
+            if ((explicitHandlers == null || !HasDeclarationError(explicitHandlers.Anchor)) &&
+                ((multiple && handlerEntries.Length == 0) || (!multiple && handlerEntries.Length != 1)))
                 Reject("UnsupportedGenerationShape", explicitHandlers?.Anchor ?? declaration.Anchor,
                     multiple ? "SendAll requires at least one handler." : "Send/Stream requires exactly one selected handler; use an explicit list to resolve ambiguity.");
             var stages = new List<BoundStageModel>();

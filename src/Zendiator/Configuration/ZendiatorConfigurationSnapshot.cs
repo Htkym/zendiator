@@ -22,7 +22,7 @@ public sealed class ZendiatorConfigurationSnapshot
         bool useLocalHandlers = false,
         List<string>? handlers = null,
         List<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)>? pipelines = null,
-        List<(Type Request, DispatchFamily Family, IReadOnlyList<Type> Handlers)>? routeHandlers = null)
+        List<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)>? routeHandlers = null)
     {
         Namespace = @namespace;
         ServiceLifetime = serviceLifetime;
@@ -76,7 +76,7 @@ public sealed class ZendiatorConfigurationSnapshot
     /// <summary>Gets declared pipelines with their original stage order.</summary>
     public IReadOnlyList<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)> Pipelines { get; }
     /// <summary>Gets authoritative route handler lists with their original order.</summary>
-    public IReadOnlyList<(Type Request, DispatchFamily Family, IReadOnlyList<Type> Handlers)> RouteHandlers { get; }
+    public IReadOnlyList<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)> RouteHandlers { get; }
 
     /// <summary>Returns the normalized structural fingerprint. Equal configurations share one generated unit.</summary>
     public string GetFingerprint()
@@ -100,10 +100,12 @@ public sealed class ZendiatorConfigurationSnapshot
             parts.Add("localHandlers=" + UseLocalHandlers + ";handlers=" + string.Join(",", Handlers));
         if (Pipelines.Count != 0)
             parts.Add("pipelines=" + string.Join("|", Pipelines.Select(static p => p.Request.AssemblyQualifiedName + ":" + p.Family + ":" +
-                string.Join(",", p.Stages.Select(static s => s.Kind + ":" + s.Type!.AssemblyQualifiedName)))));
+                string.Join(",", p.Stages.Select(static s => s.Kind + ":" + s.Type!.AssemblyQualifiedName +
+                    (s.FactoryType == null ? "" : ":factory=" + s.FactoryType.AssemblyQualifiedName))))));
         if (RouteHandlers.Count != 0)
             parts.Add("routeHandlers=" + string.Join("|", RouteHandlers.Select(static p => p.Request.AssemblyQualifiedName + ":" + p.Family + ":" +
-                string.Join(",", p.Handlers.Select(static t => t.AssemblyQualifiedName)))));
+                string.Join(",", p.Handlers.Select(static entry => entry.Type!.AssemblyQualifiedName +
+                    (entry.FactoryType == null ? "" : ":factory=" + entry.FactoryType.AssemblyQualifiedName))))));
         return string.Join(";", parts);
     }
 }

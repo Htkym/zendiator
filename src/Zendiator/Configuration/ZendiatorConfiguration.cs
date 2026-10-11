@@ -23,7 +23,7 @@ public sealed class ZendiatorConfiguration
     private bool _useLocalHandlers;
     private readonly List<Type> _handlers = new();
     private readonly List<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)> _pipelines = new();
-    private readonly List<(Type Request, DispatchFamily Family, IReadOnlyList<Type> Handlers)> _routeHandlers = new();
+    private readonly List<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)> _routeHandlers = new();
 
     /// <summary>Declares stages in order, inferring an unambiguous dispatch family from selected handlers.</summary>
     public void Pipeline<TRequest>(params Stage[] stages) => RecordPipeline(typeof(TRequest), null, stages);
@@ -34,9 +34,23 @@ public sealed class ZendiatorConfiguration
     {
         ThrowIfFrozen();
         ArgumentNullException.ThrowIfNull(handlers);
-        if (!Enum.IsDefined(family)) throw new ArgumentOutOfRangeException(nameof(family));
         if (handlers.Any(static type => type == null)) throw new ArgumentException("Every handler entry must name a type.", nameof(handlers));
-        _routeHandlers.Add((typeof(TRequest), family, Array.AsReadOnly(handlers.ToArray())));
+        RecordHandlers(typeof(TRequest), family, handlers.Select(static type => HandlerEntry.Service(type)).ToArray());
+    }
+
+    /// <summary>Declares an authoritative list containing explicit handler sessions and borrowed service entries.</summary>
+    public void Handlers<TRequest>(DispatchFamily family, HandlerEntry first, params HandlerEntry[] rest)
+    {
+        ThrowIfFrozen();
+        ArgumentNullException.ThrowIfNull(rest);
+        RecordHandlers(typeof(TRequest), family, new[] { first }.Concat(rest).ToArray());
+    }
+
+    private void RecordHandlers(Type request, DispatchFamily family, HandlerEntry[] handlers)
+    {
+        if (!Enum.IsDefined(family)) throw new ArgumentOutOfRangeException(nameof(family));
+        if (handlers.Any(static entry => entry.Type == null)) throw new ArgumentException("Every handler entry must name a type.", nameof(handlers));
+        _routeHandlers.Add((request, family, Array.AsReadOnly(handlers.ToArray())));
     }
 
     private void RecordPipeline(Type request, DispatchFamily? family, Stage[] stages)

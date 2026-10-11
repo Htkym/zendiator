@@ -353,9 +353,9 @@ public sealed class DiConfigurationTests
         handlers[0] = typeof(DateTime);
         var snapshot = configuration.Snapshot();
         Assert.Equal(new[] { typeof(object), typeof(string) }, snapshot.Pipelines[0].Stages.Select(s => s.Type));
-        Assert.Equal(new[] { typeof(int), typeof(Guid) }, snapshot.RouteHandlers[0].Handlers);
+        Assert.Equal(new[] { typeof(int), typeof(Guid) }, snapshot.RouteHandlers[0].Handlers.Select(e => e.Type));
         Assert.Throws<NotSupportedException>(() => ((IList<Stage>)snapshot.Pipelines[0].Stages)[0] = default);
-        Assert.Throws<NotSupportedException>(() => ((IList<Type>)snapshot.RouteHandlers[0].Handlers)[0] = typeof(DateTime));
+        Assert.Throws<NotSupportedException>(() => ((IList<HandlerEntry>)snapshot.RouteHandlers[0].Handlers)[0] = typeof(DateTime));
         Assert.Throws<InvalidOperationException>(() => configuration.Pipeline<object>());
         Assert.Throws<InvalidOperationException>(() => configuration.Handlers<object>(DispatchFamily.Notification));
         var other = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
@@ -365,6 +365,45 @@ public sealed class DiConfigurationTests
         var invalid = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
         Assert.Throws<ArgumentException>(() => invalid.Pipeline<object>(default(Stage)));
         Assert.Throws<ArgumentOutOfRangeException>(() => invalid.Handlers<object>((DispatchFamily)999));
+    }
+
+    [Fact]
+    public void Handler_factory_entry_recording_copies_factory_identity_and_freezes_authoritative_entries()
+    {
+        var configuration = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+        var rest = new[] { HandlerEntry.Session<string,Uri>(), HandlerEntry.Service<Guid>() };
+        configuration.Handlers<object>(DispatchFamily.SendAllAsync, typeof(int), rest);
+        rest[0] = HandlerEntry.Service<DateTime>();
+        var snapshot = configuration.Snapshot(); var entries = snapshot.RouteHandlers[0].Handlers;
+        Assert.Equal(new[] { typeof(int), typeof(string), typeof(Guid) }, entries.Select(e => e.Type));
+        Assert.Equal(new Type?[] { null, typeof(Uri), null }, entries.Select(e => e.FactoryType));
+        Assert.Throws<NotSupportedException>(() => ((IList<HandlerEntry>)entries)[1] = default);
+        Assert.Throws<InvalidOperationException>(() => configuration.Handlers<object>(DispatchFamily.SendAsync, HandlerEntry.Service<object>()));
+        var invalid = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+        Assert.Throws<ArgumentException>(() => invalid.Handlers<object>(DispatchFamily.SendAsync, default(HandlerEntry)));
+        Assert.Throws<ArgumentNullException>(() => HandlerEntry.Service(null!));
+    }
+
+    [Fact]
+    public void Handler_and_Stage_factory_identity_changes_fingerprint_while_plain_service_spelling_is_equivalent()
+    {
+        string HandlerFingerprint(HandlerEntry entry)
+        {
+            var c = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+            c.Handlers<object>(DispatchFamily.SendAsync, entry); return c.Snapshot().GetFingerprint();
+        }
+        string StageFingerprint(Stage stage)
+        {
+            var c = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+            c.Pipeline<object>(DispatchFamily.SendAsync, stage); return c.Snapshot().GetFingerprint();
+        }
+        var plain = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+        plain.Handlers<object>(DispatchFamily.SendAsync, typeof(object));
+        Assert.Equal(plain.Snapshot().GetFingerprint(), HandlerFingerprint(HandlerEntry.Service<object>()));
+        Assert.NotEqual(HandlerFingerprint(HandlerEntry.Session<object,string>()), HandlerFingerprint(HandlerEntry.Session<object,Uri>()));
+        Assert.NotEqual(HandlerFingerprint(HandlerEntry.Service<object>()), HandlerFingerprint(HandlerEntry.Session<object,string>()));
+        Assert.NotEqual(StageFingerprint(Stage.Hook<object,string>()), StageFingerprint(Stage.Hook<object,Uri>()));
+        Assert.NotEqual(StageFingerprint(Stage.Hook<object>()), StageFingerprint(Stage.Hook<object,string>()));
     }
 
     [Fact]
