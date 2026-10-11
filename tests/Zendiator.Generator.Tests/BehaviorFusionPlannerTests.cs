@@ -15,7 +15,10 @@ public sealed class BehaviorFusionPlannerTests
     internal static FusionPlanInput Input(FusionDispatchKind kind, params FusionDeclaredStage[] stages) => new(
         "global::App.Mediator/Request", kind, Type("global::App.Request"), Type("global::App.Handler"),
         kind == FusionDispatchKind.Stream ? FusionResultKind.Item : FusionResultKind.Response,
-        Item, default, new(stages), default, default, "operation-callback-v1");
+        Item, default, new(stages), default, default, "operation-callback-v1")
+    {
+        ContractOrigin = FusionContractOrigin.CanonicalPrototype
+    };
 
     [Fact]
     public void Maximal_segments_stop_at_each_opaque_wrapper_and_keep_repeated_stage_slots()
@@ -97,6 +100,8 @@ public sealed class BehaviorFusionPlannerTests
     public void Unsupported_inputs_retain_facts_without_fused_projections()
     {
         var cases = new[] {
+            (Input(FusionDispatchKind.SendAsync) with { ContractOrigin = default }, "MissingContractOrigin"),
+            (Input(FusionDispatchKind.SendAsync) with { ContractOrigin = (FusionContractOrigin)999 }, "UnknownContractOrigin"),
             (Input(FusionDispatchKind.SendSync, Hook("A", FusionCapabilities.Before | FusionCapabilities.Async)), "AsyncOnSyncRoute"),
             (Input(FusionDispatchKind.SendAsync) with { Request = Type("Span", true) }, "RefLikeAcrossAsyncBoundary"),
             (Input((FusionDispatchKind)999), "UnsupportedFamily"),

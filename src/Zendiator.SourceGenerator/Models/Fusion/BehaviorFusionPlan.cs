@@ -7,7 +7,7 @@ internal enum FusionSitePhase { OperationEntry, StageEntry, HandlerEntry, FirstM
 internal enum FusionGuardKind { Argument, Cancellation, TokenComposition, DestinationCapacity }
 internal enum FusionOwnership { BorrowedService, BorrowedResource, OwnedSession }
 internal enum FusionCleanupKind { None, Sync, Async }
-internal enum FusionContractOrigin { CanonicalPrototype, LegacyEmissionBoundary }
+internal enum FusionContractOrigin { Unspecified, CanonicalPrototype, LegacyEmissionBoundary }
 
 [System.Flags]
 internal enum FusionCapabilities
@@ -38,8 +38,9 @@ internal sealed record FusionDiagnosticFact(string Key, int StageIndex);
 internal sealed record FusionSegment(int Start, int Length);
 
 /// <summary>
-/// The normalized semantic input: Send stages are outer-to-inner entry order;
-/// Stream stages are source-to-consumer item order (C01).
+/// For an explicitly classified canonical prototype, Send stages are outer-to-inner entry
+/// order and Stream stages are source-to-consumer item order (C01). RouteKey is a local
+/// semantic label, not a persistent identity or a key for retaining source locations.
 /// </summary>
 internal sealed record FusionPlanInput(
     string RouteKey,
@@ -54,7 +55,8 @@ internal sealed record FusionPlanInput(
     EquatableArray<FusionResolutionSite> ResolutionSites,
     string ContextModelId)
 {
-    // Legacy wrapper order is not the C01 source-to-consumer declaration contract.
+    // Unspecified never authorizes a projection. A prototype origin is not proof of
+    // production canonical completeness; legacy wrapper order is not the C01 contract.
     public FusionContractOrigin ContractOrigin { get; init; }
 }
 

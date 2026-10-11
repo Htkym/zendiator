@@ -1009,6 +1009,16 @@ public sealed class GeneratorTests
         Assert.False(Assert.Single(Normalized(driver).Routes).Core.Input.Handler.DirectCall);
         AssertNormalizedReason(driver, IncrementalStepRunReason.Modified);
 
+        var inserted = Compilation(head + Request + Handler + wrapper +
+            "public sealed record A : IRequest<int>; public sealed class AHandler : IRequestHandler<A,int> { " +
+            "public ValueTask<int> HandleAsync(A request, CancellationToken ct) => new(3); }");
+        driver = driver.RunGeneratorsAndUpdateCompilation(inserted, out output, out diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Equal("global::App.A", Normalized(driver).Routes[0].Core.Input.Request.Name);
+        Assert.Equal(plan.Core.Input.RouteKey, Normalized(driver).Routes
+            .Single(p => p.Core.Input.Request.Name == "global::App.Ping").Core.Input.RouteKey);
+
         driver = driver.RunGenerators(Compilation(Head + Request));
         var error = Assert.Single(driver.GetRunResult().Diagnostics, d => d.Id == "ZEN0001");
         var moved = Compilation("\n\n" + Head + Request);
