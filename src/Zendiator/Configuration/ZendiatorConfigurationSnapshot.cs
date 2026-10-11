@@ -20,7 +20,9 @@ public sealed class ZendiatorConfigurationSnapshot
         List<(string HandlerType, int Order)> handlerOrders,
         List<(string ValidatorType, int Order)>? streamValidators = null,
         bool useLocalHandlers = false,
-        List<string>? handlers = null)
+        List<string>? handlers = null,
+        List<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)>? pipelines = null,
+        List<(Type Request, DispatchFamily Family, IReadOnlyList<Type> Handlers)>? routeHandlers = null)
     {
         Namespace = @namespace;
         ServiceLifetime = serviceLifetime;
@@ -32,6 +34,8 @@ public sealed class ZendiatorConfigurationSnapshot
         HandlerOrders = handlerOrders;
         UseLocalHandlers = useLocalHandlers;
         Handlers = handlers ?? new();
+        Pipelines = (pipelines ?? new()).AsReadOnly();
+        RouteHandlers = (routeHandlers ?? new()).AsReadOnly();
     }
 
     /// <summary>Gets the generation namespace, or null for the default.</summary>
@@ -69,6 +73,11 @@ public sealed class ZendiatorConfigurationSnapshot
     /// <summary>Gets explicitly selected handler identities, sorted by identity.</summary>
     public IReadOnlyList<string> Handlers { get; }
 
+    /// <summary>Gets declared pipelines with their original stage order.</summary>
+    public IReadOnlyList<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)> Pipelines { get; }
+    /// <summary>Gets authoritative route handler lists with their original order.</summary>
+    public IReadOnlyList<(Type Request, DispatchFamily Family, IReadOnlyList<Type> Handlers)> RouteHandlers { get; }
+
     /// <summary>Returns the normalized structural fingerprint. Equal configurations share one generated unit.</summary>
     public string GetFingerprint()
     {
@@ -89,6 +98,12 @@ public sealed class ZendiatorConfigurationSnapshot
                 entry.Order.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + entry.ValidatorType)));
         if (UseLocalHandlers || Handlers.Count != 0)
             parts.Add("localHandlers=" + UseLocalHandlers + ";handlers=" + string.Join(",", Handlers));
+        if (Pipelines.Count != 0)
+            parts.Add("pipelines=" + string.Join("|", Pipelines.Select(static p => p.Request.AssemblyQualifiedName + ":" + p.Family + ":" +
+                string.Join(",", p.Stages.Select(static s => s.Kind + ":" + s.Type!.AssemblyQualifiedName)))));
+        if (RouteHandlers.Count != 0)
+            parts.Add("routeHandlers=" + string.Join("|", RouteHandlers.Select(static p => p.Request.AssemblyQualifiedName + ":" + p.Family + ":" +
+                string.Join(",", p.Handlers.Select(static t => t.AssemblyQualifiedName)))));
         return string.Join(";", parts);
     }
 }

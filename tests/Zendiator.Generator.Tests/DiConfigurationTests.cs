@@ -342,6 +342,32 @@ public sealed class DiConfigurationTests
     }
 
     [Fact]
+    public void Ordered_list_recording_copies_inputs_preserves_order_and_freezes_with_its_snapshot()
+    {
+        var configuration = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+        var stages = new[] { Stage.Hook<object>(), Stage.Wrapper<string>() };
+        var handlers = new[] { typeof(int), typeof(Guid) };
+        configuration.Pipeline<object>(DispatchFamily.SendAllAsync, stages);
+        configuration.Handlers<object>(DispatchFamily.SendAllAsync, handlers);
+        stages[0] = Stage.Hook<DateTime>();
+        handlers[0] = typeof(DateTime);
+        var snapshot = configuration.Snapshot();
+        Assert.Equal(new[] { typeof(object), typeof(string) }, snapshot.Pipelines[0].Stages.Select(s => s.Type));
+        Assert.Equal(new[] { typeof(int), typeof(Guid) }, snapshot.RouteHandlers[0].Handlers);
+        Assert.Throws<NotSupportedException>(() => ((IList<Stage>)snapshot.Pipelines[0].Stages)[0] = default);
+        Assert.Throws<NotSupportedException>(() => ((IList<Type>)snapshot.RouteHandlers[0].Handlers)[0] = typeof(DateTime));
+        Assert.Throws<InvalidOperationException>(() => configuration.Pipeline<object>());
+        Assert.Throws<InvalidOperationException>(() => configuration.Handlers<object>(DispatchFamily.Notification));
+        var other = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+        other.Pipeline<object>(DispatchFamily.SendAllAsync, Stage.Wrapper<string>(), Stage.Hook<object>());
+        other.Handlers<object>(DispatchFamily.SendAllAsync, typeof(Guid), typeof(int));
+        Assert.NotEqual(snapshot.GetFingerprint(), other.Snapshot().GetFingerprint());
+        var invalid = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+        Assert.Throws<ArgumentException>(() => invalid.Pipeline<object>(default(Stage)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => invalid.Handlers<object>((DispatchFamily)999));
+    }
+
+    [Fact]
     public void Attribute_and_config_orders_must_agree()
     {
         var source = Head + Fixtures + "public sealed class App { public void Register(" + Services + " services) { "

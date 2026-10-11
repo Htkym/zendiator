@@ -101,6 +101,7 @@ public sealed class BehaviorFusionPlannerTests
     {
         var cases = new[] {
             (Input(FusionDispatchKind.SendAsync) with { ContractOrigin = default }, "MissingContractOrigin"),
+            (Input(FusionDispatchKind.SendAsync) with { ContractOrigin = FusionContractOrigin.NewCanonical }, "CanonicalExecutionContractUnavailable"),
             (Input(FusionDispatchKind.SendAsync) with { ContractOrigin = (FusionContractOrigin)999 }, "UnknownContractOrigin"),
             (Input(FusionDispatchKind.SendSync, Hook("A", FusionCapabilities.Before | FusionCapabilities.Async)), "AsyncOnSyncRoute"),
             (Input(FusionDispatchKind.SendAsync) with { Request = Type("Span", true) }, "RefLikeAcrossAsyncBoundary"),

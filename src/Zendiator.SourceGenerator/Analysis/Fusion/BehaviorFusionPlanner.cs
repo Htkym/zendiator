@@ -61,6 +61,8 @@ internal static class BehaviorFusionPlanner
         var sync = input.DispatchKind is FusionDispatchKind.SendSync or FusionDispatchKind.SendAllSyncBranch;
         if (input.ContractOrigin == FusionContractOrigin.Unspecified) Reject("MissingContractOrigin");
         if (!Enum.IsDefined(typeof(FusionContractOrigin), input.ContractOrigin)) Reject("UnknownContractOrigin");
+        if (input.ContractOrigin == FusionContractOrigin.NewCanonical)
+            Reject("CanonicalExecutionContractUnavailable");
         if (input.ContractOrigin == FusionContractOrigin.LegacyEmissionBoundary)
         {
             Reject("OpaqueLegacyContractBoundary");

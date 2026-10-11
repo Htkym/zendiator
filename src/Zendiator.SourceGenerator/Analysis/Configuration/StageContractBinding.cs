@@ -1,0 +1,102 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.CodeAnalysis;
+using static Zendiator.SourceGenerator.SymbolUtilities;
+using static Zendiator.SourceGenerator.MarkedHandlerDiscovery;
+
+namespace Zendiator.SourceGenerator;
+
+/// <summary>Reads only dedicated interfaces of a supplied stage. Method bodies never grant capabilities.</summary>
+internal static class StageContractBinding
+{
+    private sealed record Role(string Name, BoundCallbackPhase Phase, BoundCompletionKind Completion,
+        bool ResponseOnly = false, bool VoidOnly = false, bool Wrapper = false, bool Stream = false);
+    private static readonly Role[] Roles =
+    {
+        new("ISendRequestTransform`1", BoundCallbackPhase.Before, BoundCompletionKind.Synchronous),
+        new("ISendResponseTransform`2", BoundCallbackPhase.Success, BoundCompletionKind.Synchronous, ResponseOnly: true),
+        new("ISendSuccessObserver`1", BoundCallbackPhase.Success, BoundCompletionKind.Synchronous, VoidOnly: true),
+        new("ISendExceptionObserver`1", BoundCallbackPhase.Exception, BoundCompletionKind.Synchronous),
+        new("ISendFinallyObserver`1", BoundCallbackPhase.Finally, BoundCompletionKind.Synchronous),
+        new("IAsyncSendRequestTransform`1", BoundCallbackPhase.Before, BoundCompletionKind.ValueTask),
+        new("IAsyncSendResponseTransform`2", BoundCallbackPhase.Success, BoundCompletionKind.ValueTask, ResponseOnly: true),
+        new("IAsyncSendSuccessObserver`1", BoundCallbackPhase.Success, BoundCompletionKind.ValueTask, VoidOnly: true),
+        new("IAsyncSendExceptionObserver`1", BoundCallbackPhase.Exception, BoundCompletionKind.ValueTask),
+        new("IAsyncSendFinallyObserver`1", BoundCallbackPhase.Finally, BoundCompletionKind.ValueTask),
+        new("ISendWrapper`2", BoundCallbackPhase.Wrapper, BoundCompletionKind.Synchronous, ResponseOnly: true, Wrapper: true),
+        new("ISendWrapper`1", BoundCallbackPhase.Wrapper, BoundCompletionKind.Synchronous, VoidOnly: true, Wrapper: true),
+        new("IAsyncSendWrapper`2", BoundCallbackPhase.Wrapper, BoundCompletionKind.ValueTask, ResponseOnly: true, Wrapper: true),
+        new("IAsyncSendWrapper`1", BoundCallbackPhase.Wrapper, BoundCompletionKind.ValueTask, VoidOnly: true, Wrapper: true),
+        new("IStreamItemFilter`2", BoundCallbackPhase.Filter, BoundCompletionKind.Synchronous, Stream: true),
+        new("IStreamItemMap`2", BoundCallbackPhase.Map, BoundCompletionKind.Synchronous, Stream: true),
+        new("IStreamWrapper`2", BoundCallbackPhase.Wrapper, BoundCompletionKind.Enumerable, Wrapper: true, Stream: true)
+    };
+
+    internal static BoundStageModel Bind(INamedTypeSymbol type, FusionStageKind kind, string anchor,
+        INamedTypeSymbol request, BoundDispatchFamily family, FusionResultKind resultKind, ITypeSymbol? result,
+        Compilation compilation, List<CompositionDiagnosticFact> facts)
+    {
+        var before = facts.Count;
+        var hierarchy = new List<string>();
+        for (var current = type; current != null; current = current.BaseType)
+        {
+            hierarchy.Add(Identity(current) + "/" + current.TypeKind + "/" + current.DeclaredAccessibility +
+                "/abstract=" + current.IsAbstract + "/ref=" + current.IsRefLikeType +
+                "/static=" + current.IsStatic);
+            for (var owner = current; owner != null; owner = owner.ContainingType)
+                hierarchy.Add(Identity(owner) + "/constraints=" + Constraints(owner.OriginalDefinition.TypeParameters));
+        }
+        var callbacks = new List<BoundCallbackModel>();
+        var compilerOwned = false;
+        void Reject(string key, string message) => facts.Add(new(key, anchor, message));
+        if (type.TypeKind == TypeKind.Error) { compilerOwned = true; return Value(); }
+        if (!compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
+            Reject("InaccessibleStage", $"Stage {Name(type)} is inaccessible to generated code.");
+        if (type.IsRefLikeType) Reject("RefLikeCapture", $"Stage {Name(type)} cannot be held as a borrowed DI service.");
+        if (type.IsAbstract || type.IsStatic || type.IsUnboundGenericType || HasOpenShape(type) ||
+            type.TypeKind is not (TypeKind.Class or TypeKind.Struct))
+            Reject("UnsupportedGenerationShape", $"Stage {Name(type)} requires a closed, concrete class or struct; open binding is not connected yet.");
+        if (facts.Count != before) return Value();
+        var assembly = compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly;
+        var stream = family == BoundDispatchFamily.Stream;
+        var sync = family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync;
+        var matches = new List<(INamedTypeSymbol Contract, Role Role)>();
+        foreach (var role in Roles.Where(r => r.Stream == stream && r.Wrapper == (kind == FusionStageKind.Wrapper)))
+        {
+            var definition = assembly?.GetTypeByMetadataName("Zendiator." + role.Name);
+            foreach (var contract in type.AllInterfaces.Where(i => Same(i.OriginalDefinition, definition)))
+                matches.Add((contract, role));
+        }
+        if (matches.Count == 0) Reject("StageContractMismatch", $"Stage {Name(type)} has no dedicated {kind} contract for {family}.");
+        var relevant = matches.Where(m => RegistrationIdentity(m.Contract.TypeArguments[0], compilation) == RegistrationIdentity(request, compilation)).ToArray();
+        if (matches.Count != 0 && relevant.Length == 0)
+            Reject("StageTypeMismatch", $"Stage {Name(type)} has no contract for request {Name(request)}.");
+        foreach (var (contract, role) in relevant)
+        {
+            if ((role.ResponseOnly && resultKind == FusionResultKind.Void) || (role.VoidOnly && resultKind != FusionResultKind.Void))
+                Reject("CapabilityResultShapeMismatch", $"Stage {Name(type)} has a capability for a different response/void shape.");
+            else if (contract.TypeArguments.Length == 2 && (result == null ||
+                RegistrationIdentity(contract.TypeArguments[1], compilation) != RegistrationIdentity(result, compilation)))
+                Reject("StageTypeMismatch", $"Stage {Name(type)} has a response/item type different from this route.");
+            if (sync && role.Completion == BoundCompletionKind.ValueTask)
+                Reject("AsyncHookOnSyncRoute", $"Stage {Name(type)} supplies an asynchronous callback on {family}; blocking conversion is unsupported.");
+            var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
+            var implementation = members.Length == 1 ? type.FindImplementationForInterfaceMember(members[0]) as IMethodSymbol : null;
+            if (implementation == null) { compilerOwned = true; continue; }
+            callbacks.Add(new(role.Phase, role.Completion, Identity(contract),
+                implementation.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) + "/" + implementation.DeclaredAccessibility +
+                "/explicit=" + !implementation.ExplicitInterfaceImplementations.IsEmpty + "/virtual=" + implementation.IsVirtual +
+                "/override=" + implementation.IsOverride + "/abstract=" + implementation.IsAbstract,
+                new(implementation.Parameters.Select(p => new BoundParameterModel(Identity(p.Type), p.RefKind.ToString(), p.ScopedKind.ToString()))),
+                Identity(implementation.ReturnType), Constraints(implementation.TypeParameters), role.Completion == BoundCompletionKind.ValueTask));
+        }
+        if (callbacks.GroupBy(c => c.Phase).Any(g => g.Count() > 1) ||
+            (stream && callbacks.Any(c => c.Phase == BoundCallbackPhase.Filter) && callbacks.Any(c => c.Phase == BoundCallbackPhase.Map)))
+            Reject("AmbiguousStageContract", $"Stage {Name(type)} has multiple contracts for one phase, or both Stream Filter and Map. Declare separate stage types.");
+        return Value();
+
+        BoundStageModel Value() => new(anchor, Identity(type), Name(type), kind, new(hierarchy),
+            new(callbacks.OrderBy(c => c.Phase).ThenBy(c => c.Interface, StringComparer.Ordinal)), FusionOwnership.BorrowedService, compilerOwned);
+    }
+}

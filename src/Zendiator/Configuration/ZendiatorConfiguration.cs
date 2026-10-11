@@ -22,6 +22,31 @@ public sealed class ZendiatorConfiguration
     private readonly List<(string HandlerType, int Order)> _handlerOrders = new();
     private bool _useLocalHandlers;
     private readonly List<Type> _handlers = new();
+    private readonly List<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)> _pipelines = new();
+    private readonly List<(Type Request, DispatchFamily Family, IReadOnlyList<Type> Handlers)> _routeHandlers = new();
+
+    /// <summary>Declares stages in order, inferring an unambiguous dispatch family from selected handlers.</summary>
+    public void Pipeline<TRequest>(params Stage[] stages) => RecordPipeline(typeof(TRequest), null, stages);
+    /// <summary>Declares stages in order for one explicit dispatch family.</summary>
+    public void Pipeline<TRequest>(DispatchFamily family, params Stage[] stages) => RecordPipeline(typeof(TRequest), family, stages);
+    /// <summary>Declares the authoritative handler order for one route.</summary>
+    public void Handlers<TRequest>(DispatchFamily family, params Type[] handlers)
+    {
+        ThrowIfFrozen();
+        ArgumentNullException.ThrowIfNull(handlers);
+        if (!Enum.IsDefined(family)) throw new ArgumentOutOfRangeException(nameof(family));
+        if (handlers.Any(static type => type == null)) throw new ArgumentException("Every handler entry must name a type.", nameof(handlers));
+        _routeHandlers.Add((typeof(TRequest), family, Array.AsReadOnly(handlers.ToArray())));
+    }
+
+    private void RecordPipeline(Type request, DispatchFamily? family, Stage[] stages)
+    {
+        ThrowIfFrozen();
+        ArgumentNullException.ThrowIfNull(stages);
+        if (family is { } value && !Enum.IsDefined(value)) throw new ArgumentOutOfRangeException(nameof(family));
+        if (stages.Any(static stage => stage.Type == null)) throw new ArgumentException("Every stage entry must name a type.", nameof(stages));
+        _pipelines.Add((request, family, Array.AsReadOnly(stages.ToArray())));
+    }
 
     /// <summary>Selects marked handlers from the calling compilation for a 0.5 composition.</summary>
     public void UseLocalHandlers()
@@ -165,7 +190,8 @@ public sealed class ZendiatorConfiguration
                 ? validators.Validators.OrderBy(static entry => entry.Order).ThenBy(static entry => entry.ValidatorType, StringComparer.Ordinal).ToList()
                 : null,
             _useLocalHandlers,
-            _handlers.Select(static type => type.AssemblyQualifiedName ?? TypeName(type)).OrderBy(static name => name, StringComparer.Ordinal).ToList());
+            _handlers.Select(static type => type.AssemblyQualifiedName ?? TypeName(type)).OrderBy(static name => name, StringComparer.Ordinal).ToList(),
+            _pipelines.ToList(), _routeHandlers.ToList());
     }
 
     private static string TypeName(Type type) => type.IsGenericTypeDefinition ? type.FullName ?? type.Name : type.ToString();

@@ -12,7 +12,8 @@ namespace Zendiator.SourceGenerator;
 /// <summary>Binds explicit composition membership before either generation backend is chosen.</summary>
 internal static class CompositionSelectionDiscovery
 {
-    internal sealed record Binding(CompositionSelectionModel Model, InvocationExpressionSyntax Invocation);
+    internal sealed record Binding(CompositionSelectionModel Model, InvocationExpressionSyntax Invocation,
+        ImmutableDictionary<string, Location> Sources);
 
     internal static ImmutableArray<Binding> Bind(ImmutableArray<InvocationExpressionSyntax> invocations,
         Compilation compilation, ImmutableArray<MarkedHandlerDiscovery.Candidate> marked, MarkedHandlerCatalog catalog, CancellationToken ct)
@@ -33,7 +34,7 @@ internal static class CompositionSelectionDiscovery
             // An explicit new selection operation identifies a new default composition.
             var explicitDefault = method.Arity == 0 && lambda != null && lambda.DescendantNodes().OfType<InvocationExpressionSyntax>().Any(call =>
                 semantic.GetSymbolInfo(call, ct).Symbol is IMethodSymbol operation && Same(operation.ContainingType, configuration) &&
-                operation.Name is "UseLocalHandlers" or "AddHandler");
+                operation.Name is "UseLocalHandlers" or "AddHandler" or "Pipeline" or "Handlers");
             if (method.Arity == 0 && !explicitDefault) continue;
 
             var errors = new List<string>();
@@ -60,7 +61,8 @@ internal static class CompositionSelectionDiscovery
             else if (method.Arity != 0) errors.Add("The composition marker could not be bound.");
 
             var selected = new Dictionary<INamedTypeSymbol, SelectedHandlerModel>(SymbolEqualityComparer.Default);
-            var explicitTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+            var explicitTypes = new HashSet<string>(StringComparer.Ordinal);
+            var lists = new CompositionListBinding(compilation, semantic, marked, Select, ct);
             if (explicitDefault) SelectLocal(); // The new default composition has implicit local membership.
             var parameter = lambda switch
             {
@@ -79,8 +81,9 @@ internal static class CompositionSelectionDiscovery
             };
             if (calls == null || parameterSymbol == null || lambda!.AsyncKeyword != default)
                 errors.Add("Composition selection requires a direct configuration lambda with supported selection calls; helpers and control flow are not evaluated.");
-            else foreach (var call in calls)
+            else for (var ordinal = 0; ordinal < calls.Length; ordinal++)
             {
+                var call = calls[ordinal];
                 ct.ThrowIfCancellationRequested();
                 if (call.Expression is not MemberAccessExpressionSyntax member ||
                     !Same(semantic.GetSymbolInfo(member.Expression, ct).Symbol, parameterSymbol) ||
@@ -99,15 +102,19 @@ internal static class CompositionSelectionDiscovery
                     else
                     {
                         if (type.IsUnboundGenericType) type = type.OriginalDefinition;
-                        if (!explicitTypes.Add(type)) errors.Add($"Handler {Name(type)} is explicitly selected more than once.");
+                        if (!explicitTypes.Add(MarkedHandlerDiscovery.RegistrationIdentity(type, compilation)))
+                            errors.Add($"Handler {Name(type)} is explicitly selected more than once.");
                         Select(type);
                     }
                 }
+                else if (operation.Name is "Pipeline" or "Handlers") lists.Parse(call, operation, ordinal);
                 else errors.Add($"Composition selection operation {operation.Name} is not connected yet.");
             }
+            var pipelines = lists.Bind(selected.Keys);
             var model = new CompositionSelectionModel(identity, key,
-                new(selected.Values.OrderBy(h => h.Identity, StringComparer.Ordinal)), new(errors), compilerOwned);
-            result.Add(new(model, invocation));
+                new(selected.Values.OrderBy(h => h.Identity, StringComparer.Ordinal)), new(errors), compilerOwned,
+                pipelines, new(lists.Facts));
+            result.Add(new(model, invocation, lists.Sources.ToImmutableDictionary(StringComparer.Ordinal)));
 
             void SelectLocal()
             {
@@ -146,12 +153,38 @@ internal static class CompositionSelectionDiscovery
                 context.ReportDiagnostic(Diagnostic.Create(GeneratorDiagnostics.UnsupportedGenerationShape, location,
                     new[] { current[prior].Invocation.GetLocation() }, null,
                     $"Composition {composition.Key} requires one authoritative configuration call site and a unique marker/key."));
-            else if (composition.Errors.Count != 0)
+            else
+            {
                 foreach (var error in composition.Errors)
                     context.ReportDiagnostic(Diagnostic.Create(GeneratorDiagnostics.UnsupportedGenerationShape, location, error));
-            else if (!composition.CompilerOwnsHandlerError || composition.Handlers.Count != 0)
-                context.ReportDiagnostic(Diagnostic.Create(GeneratorDiagnostics.UnsupportedGenerationShape, location,
-                    $"Composition {composition.Key} requires the 0.5 canonical generation backend, which is not connected yet."));
+                foreach (var fact in composition.Facts)
+                {
+                    var sources = current[index].Sources;
+                    var primary = sources.TryGetValue(fact.Anchor, out var source) ? source : location;
+                    var additional = fact.AdditionalAnchor != null && sources.TryGetValue(fact.AdditionalAnchor, out var original)
+                        ? new[] { original } : System.Array.Empty<Location>();
+                    context.ReportDiagnostic(Diagnostic.Create(Descriptor(fact.Key), primary, additional, null, fact.Message));
+                }
+                if (composition.Errors.Count == 0 && composition.Facts.Count == 0 && composition.Pipelines.Count == 0 &&
+                    (!composition.CompilerOwnsHandlerError || composition.Handlers.Count != 0))
+                    context.ReportDiagnostic(Diagnostic.Create(GeneratorDiagnostics.UnsupportedGenerationShape, location,
+                        $"Composition {composition.Key} requires the 0.5 canonical generation backend, which is not connected yet."));
+            }
         }
     }
+
+    private static DiagnosticDescriptor Descriptor(string key) => key switch
+    {
+        "StageContractMismatch" => GeneratorDiagnostics.StageContractMismatch,
+        "StageTypeMismatch" => GeneratorDiagnostics.StageTypeMismatch,
+        "AmbiguousStageContract" => GeneratorDiagnostics.AmbiguousStageContract,
+        "AmbiguousPipelineOrder" => GeneratorDiagnostics.AmbiguousPipelineOrder,
+        "UnsupportedDispatchFamily" => GeneratorDiagnostics.UnsupportedDispatchFamily,
+        "AsyncHookOnSyncRoute" => GeneratorDiagnostics.AsyncHookOnSyncRoute,
+        "CapabilityResultShapeMismatch" => GeneratorDiagnostics.CapabilityResultShapeMismatch,
+        "InaccessibleStage" => GeneratorDiagnostics.InaccessibleStage,
+        "RefLikeCapture" => GeneratorDiagnostics.RefLikeCapture,
+        "IncompleteExecutionContract" => GeneratorDiagnostics.IncompleteExecutionContract,
+        _ => GeneratorDiagnostics.UnsupportedGenerationShape
+    };
 }

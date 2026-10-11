@@ -11,5 +11,6 @@ internal sealed record MarkedHandlerCatalog(
 
 internal sealed record SelectedHandlerModel(string Identity, MarkedHandlerModel Definition);
 internal sealed record CompositionSelectionModel(string Identity, string Key,
-    EquatableArray<SelectedHandlerModel> Handlers, EquatableArray<string> Errors, bool CompilerOwnsHandlerError);
+    EquatableArray<SelectedHandlerModel> Handlers, EquatableArray<string> Errors, bool CompilerOwnsHandlerError,
+    EquatableArray<BoundPipelineModel> Pipelines = default, EquatableArray<CompositionDiagnosticFact> Facts = default);
 internal sealed record CompositionSelectionCatalog(EquatableArray<CompositionSelectionModel> Compositions);

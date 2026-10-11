@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Zendiator.Generator.Tests;
 
-public sealed class GeneratorTests
+public sealed partial class GeneratorTests
 {
     private const string Head = "using Zendiator; using System; using System.Threading; using System.Threading.Tasks; namespace App; [GenerateZendiator] public sealed partial class Zendiator; ";
 

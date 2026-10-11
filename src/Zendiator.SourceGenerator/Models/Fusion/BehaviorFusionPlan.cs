@@ -7,7 +7,7 @@ internal enum FusionSitePhase { OperationEntry, StageEntry, HandlerEntry, FirstM
 internal enum FusionGuardKind { Argument, Cancellation, TokenComposition, DestinationCapacity }
 internal enum FusionOwnership { BorrowedService, BorrowedResource, OwnedSession }
 internal enum FusionCleanupKind { None, Sync, Async }
-internal enum FusionContractOrigin { Unspecified, CanonicalPrototype, LegacyEmissionBoundary }
+internal enum FusionContractOrigin { Unspecified, CanonicalPrototype, LegacyEmissionBoundary, NewCanonical }
 
 [System.Flags]
 internal enum FusionCapabilities

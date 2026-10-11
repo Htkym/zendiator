@@ -84,7 +84,23 @@ internal static class MarkedHandlerDiscovery
 
     private static string Part(string value) => value.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + value;
 
-    private static string Constraints(ImmutableArray<ITypeParameterSymbol> parameters) => string.Join(";", parameters.Select(p =>
+    // CLR registration/route equivalence is separate from the public nullable/dynamic shape.
+    internal static string RegistrationIdentity(ITypeSymbol type, Compilation compilation) => type switch
+    {
+        IDynamicTypeSymbol => RegistrationIdentity(compilation.GetSpecialType(SpecialType.System_Object), compilation),
+        INamedTypeSymbol named => "named(" + Part(named.ContainingAssembly?.Identity.ToString() ?? "") +
+            Part(QualifiedMetadataName(named.OriginalDefinition) ?? Name(named)) +
+            Part(named.ContainingType == null ? "" : RegistrationIdentity(named.ContainingType, compilation)) +
+            string.Join("", named.TypeArguments.Select(t => Part(RegistrationIdentity(t, compilation)))) + ")",
+        IArrayTypeSymbol array => "array(" + array.Rank + Part(RegistrationIdentity(array.ElementType, compilation)) + ")",
+        IPointerTypeSymbol pointer => "pointer(" + Part(RegistrationIdentity(pointer.PointedAtType, compilation)) + ")",
+        _ => Identity(type)
+    };
+
+    internal static bool HasOpenShape(ITypeSymbol type) => HasOpenArguments(type) ||
+        (type is INamedTypeSymbol { ContainingType: { } owner } && HasOpenShape(owner));
+
+    internal static string Constraints(ImmutableArray<ITypeParameterSymbol> parameters) => string.Join(";", parameters.Select(p =>
         p.Ordinal + ":" + p.Name + ":" + p.Variance + ":" + p.HasReferenceTypeConstraint + ":" + p.ReferenceTypeConstraintNullableAnnotation +
         ":" + p.HasValueTypeConstraint + ":" + p.HasUnmanagedTypeConstraint + ":" + p.HasNotNullConstraint +
         ":" + p.HasConstructorConstraint + ":" + p.AllowsRefLikeType + ":" + string.Join(",", p.ConstraintTypes.Select(Identity))));
