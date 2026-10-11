@@ -194,7 +194,13 @@ internal sealed class CompositionListBinding
                 handlers.Add(new(entry.Anchor, Identity(entry.Type), Name(entry.Type), Identity(contract), nextResult == null ? null : Identity(nextResult),
                     implementation == null ? "<missing>" : implementation.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) +
                     "/return=" + Identity(implementation.ReturnType) + "/constraints=" + Constraints(implementation.TypeParameters),
-                    FusionOwnership.BorrowedService, implementation == null));
+                    FusionOwnership.BorrowedService, implementation == null, implementation == null ? null : new(
+                        BoundCallbackPhase.Handler, family == BoundDispatchFamily.Stream ? BoundCompletionKind.Enumerable :
+                            family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync ? BoundCompletionKind.ValueTask : BoundCompletionKind.Synchronous,
+                        Identity(contract), implementation.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat),
+                        new(implementation.Parameters.Select(p => new BoundParameterModel(Identity(p.Type), p.RefKind.ToString(), p.ScopedKind.ToString()))),
+                        Identity(implementation.ReturnType), Constraints(implementation.TypeParameters),
+                        family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync)));
             }
             if ((multiple && handlerEntries.Length == 0) || (!multiple && handlerEntries.Length != 1))
                 Reject("UnsupportedGenerationShape", explicitHandlers?.Anchor ?? declaration.Anchor,
@@ -209,7 +215,7 @@ internal sealed class CompositionListBinding
                 (explicitHandlers == null || !HasDeclarationError(explicitHandlers.Anchor)) && !stages.Any(s => s.CompilerOwnsError) &&
                 !handlers.Any(h => h.CompilerOwnsError) && handlers.Count == handlerEntries.Length && resultKind != null)
                 Reject("IncompleteExecutionContract", declaration.Anchor,
-                    "Dedicated callback metadata is bound, but required sites, order, await and owner graph are pending. New canonical emission is blocked.");
+                    "Dedicated callback metadata is bound. New canonical emission remains blocked pending its graph and runtime backend acceptance.");
 
             BoundPipelineModel Model(FusionResultKind? shape, ITypeSymbol? resultType, IEnumerable<BoundHandlerModel> boundHandlers,
                 IEnumerable<BoundStageModel> boundStages, bool explicitOrder) => new(declaration.Anchor, Identity(declaration.Request), Name(declaration.Request),

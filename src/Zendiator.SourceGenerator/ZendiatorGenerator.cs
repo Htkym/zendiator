@@ -35,8 +35,10 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
                 input.Left.Right, input.Right, ct));
         var compositionValue = compositions.Select(static (current, _) => CompositionSelectionDiscovery.Normalize(current));
         var compositionModel = compositionValue.Select(static (model, _) => model).WithTrackingName("CompositionSelectionModel");
-        context.RegisterSourceOutput(compositionModel.Combine(compositions), static (ctx, input) =>
-            CompositionSelectionDiscovery.Report(ctx, input.Left, input.Right));
+        var executionValue = compositionModel.Select(static (catalog, _) => CanonicalExecutionGraphNormalizer.Create(catalog));
+        var executionModel = executionValue.Select(static (model, _) => model).WithTrackingName("CanonicalExecutionGraphModel");
+        context.RegisterSourceOutput(compositionModel.Combine(executionModel).Combine(compositions), static (ctx, input) =>
+            CompositionSelectionDiscovery.Report(ctx, input.Left.Left, input.Right, input.Left.Right));
         var legacyInvocations = invocations.Combine(compositions)
             .Select(static (input, _) => CompositionSelectionDiscovery.LegacyInvocations(input.Left, input.Right));
         // Discovery metadata alone never gates unrelated legacy generation.

@@ -141,7 +141,8 @@ internal static class CompositionSelectionDiscovery
     internal static ImmutableArray<InvocationExpressionSyntax> LegacyInvocations(ImmutableArray<InvocationExpressionSyntax> invocations,
         ImmutableArray<Binding> compositions) => invocations.Where(i => !compositions.Any(c => c.Invocation == i)).ToImmutableArray();
 
-    internal static void Report(SourceProductionContext context, CompositionSelectionCatalog catalog, ImmutableArray<Binding> current)
+    internal static void Report(SourceProductionContext context, CompositionSelectionCatalog catalog, ImmutableArray<Binding> current,
+        CanonicalExecutionGraphCatalog execution)
     {
         for (var index = 0; index < catalog.Compositions.Count; index++)
         {
@@ -163,7 +164,16 @@ internal static class CompositionSelectionDiscovery
                     var primary = sources.TryGetValue(fact.Anchor, out var source) ? source : location;
                     var additional = fact.AdditionalAnchor != null && sources.TryGetValue(fact.AdditionalAnchor, out var original)
                         ? new[] { original } : System.Array.Empty<Location>();
-                    context.ReportDiagnostic(Diagnostic.Create(Descriptor(fact.Key), primary, additional, null, fact.Message));
+                    var message = fact.Message;
+                    if (fact.Key == "IncompleteExecutionContract")
+                    {
+                        var graph = execution.Compositions[index].FirstOrDefault(g => g.Contract.Anchor == fact.Anchor);
+                        if (graph != null)
+                            message = graph.IsValid
+                                ? "The Send execution graph satisfies its structural contract. Canonical runtime generation and equivalence are pending; emission remains blocked."
+                                : "The execution graph is incomplete: " + string.Join(", ", graph.Facts.Select(f => f.Reason)) + ". Canonical emission remains blocked.";
+                    }
+                    context.ReportDiagnostic(Diagnostic.Create(Descriptor(fact.Key), primary, additional, null, message));
                 }
                 if (composition.Errors.Count == 0 && composition.Facts.Count == 0 && composition.Pipelines.Count == 0 &&
                     (!composition.CompilerOwnsHandlerError || composition.Handlers.Count != 0))
