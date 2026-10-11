@@ -21,6 +21,7 @@ internal static class CanonicalSendGraphValidator
         if (all && !route.ExplicitHandlerOrder) Reject("AuthoritativeBranchOrderRequired");
         foreach (var handler in route.Handlers)
         {
+            CheckSessions(handler.Sessions, handler.Anchor);
             if (handler.ServiceOwnership != FusionOwnership.BorrowedService) Reject("OwnedHandlerAcquisitionAndCleanupUnavailable", handler.Anchor);
             if (handler.CompilerOwnsError || handler.Callback == null) { Reject("HandlerImplementationUnavailable", handler.Anchor); continue; }
             if (handler.Callback.Phase != BoundCallbackPhase.Handler || handler.Callback.Completion !=
@@ -29,6 +30,7 @@ internal static class CanonicalSendGraphValidator
         }
         foreach (var stage in route.Stages)
         {
+            CheckSessions(stage.Sessions, stage.Anchor);
             if (stage.ServiceOwnership != FusionOwnership.BorrowedService) Reject("OwnedStageAcquisitionAndCleanupUnavailable", stage.Anchor);
             if (stage.CompilerOwnsError || stage.Callbacks.Count == 0) Reject("StageImplementationUnavailable", stage.Anchor);
             if (stage.Callbacks.GroupBy(c => c.Phase).Any(g => g.Count() != 1)) Reject("DuplicateCallbackPhase", stage.Anchor);
@@ -44,6 +46,28 @@ internal static class CanonicalSendGraphValidator
             foreach (var callback in stage.Callbacks) CheckCallback(callback, stage.Anchor);
         }
         return new(facts);
+
+        void CheckSessions(EquatableArray<BoundSessionModel> sessions, string anchor)
+        {
+            foreach (var session in sessions)
+            {
+                if (string.IsNullOrEmpty(session.FactoryServiceType) || string.IsNullOrEmpty(session.ResourceType)) Reject("ExplicitSessionFactoryRequired", anchor);
+                if (session.Acquire.Phase != BoundCallbackPhase.SessionAcquire) Reject("SessionAcquisitionPhaseRequired", anchor);
+                CheckCallback(session.Acquire, anchor);
+                if (session.Ownership is not (FusionOwnership.OwnedSession or FusionOwnership.BorrowedResource)) Reject("ExplicitResourceOwnershipRequired", anchor);
+                if (session.Ownership == FusionOwnership.BorrowedResource)
+                {
+                    if (session.Cleanup != null) Reject("BorrowedResourceHasCleanup", anchor);
+                }
+                else if (session.Cleanup == null) Reject("OwnedSessionCleanupRequired", anchor);
+                else
+                {
+                    CheckCallback(session.Cleanup, anchor);
+                    if (session.Cleanup.Phase != BoundCallbackPhase.SessionCleanup || session.Cleanup.Completion !=
+                        (async ? BoundCompletionKind.ValueTask : BoundCompletionKind.Synchronous)) Reject("SessionCleanupModeMismatch", anchor);
+                }
+            }
+        }
 
         void CheckCallback(BoundCallbackModel callback, string anchor)
         {
@@ -77,7 +101,10 @@ internal static class CanonicalSendGraphValidator
         Compare(required.Scopes, candidate.Scopes, "Scope");
         Compare(required.Awaits, candidate.Awaits, "Await");
         Compare(required.Transfers, candidate.Transfers, "ValueTransfer");
+        Compare(required.SessionTransfers, candidate.SessionTransfers, "SessionTransfer");
+        Compare(required.SessionCalls, candidate.SessionCalls, "SessionCall");
         facts.AddRange(CanonicalSendControlValidator.Validate(route, candidate));
+        facts.AddRange(CanonicalSendSessionValidator.Validate(route, candidate));
         if (candidate.ContextModelId != "operation-callback-v1") Reject("ContextBoundaryMismatch");
         if (candidate.EscapingOceIsCanceled != required.Async) Reject("EscapingOceBoundaryMismatch");
 

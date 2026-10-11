@@ -63,8 +63,9 @@ internal sealed class CanonicalSendScheduleBuilder
             Link(commit, returned, SendOrderCondition.SpanDestination);
         }
         Link(Site(_route.Handlers.Count - 1, 0, SendExecutionPhase.ScopeExit), returned, SendOrderCondition.AllBranchesSuccess);
-        return new(new(_sites), new(_orders), new(_owners), new(_states), new(_scopes), new(_awaits), "operation-callback-v1", _async)
-        { Transfers = new(_transfers), ControlFlows = CanonicalSendControlBuilder.Build(_route) };
+        return CanonicalSendSessionBuilder.Attach(_route,
+            new(new(_sites), new(_orders), new(_owners), new(_states), new(_scopes), new(_awaits), "operation-callback-v1", _async)
+            { Transfers = new(_transfers), ControlFlows = CanonicalSendControlBuilder.Build(_route) });
     }
 
     private void BuildScope(int branch, int stageIndex, string parent, SendOwnerMultiplicity multiplicity, SendValueKind requestSource)

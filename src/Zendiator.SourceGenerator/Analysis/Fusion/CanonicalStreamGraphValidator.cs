@@ -14,6 +14,7 @@ internal static class CanonicalStreamGraphValidator
         if (route.Handlers.Count != 1) Reject("SingleStreamHandlerRequired");
         foreach (var handler in route.Handlers)
         {
+            if (handler.Sessions.Count != 0) Reject("StreamSessionAcquisitionAndCleanupUnavailable", handler.Anchor);
             if (handler.ServiceOwnership != FusionOwnership.BorrowedService) Reject("OwnedHandlerAcquisitionAndCleanupUnavailable", handler.Anchor);
             if (handler.CompilerOwnsError || handler.Callback == null) { Reject("HandlerImplementationUnavailable", handler.Anchor); continue; }
             if (handler.Callback.Phase != BoundCallbackPhase.Handler || handler.Callback.Completion != BoundCompletionKind.Enumerable || handler.Callback.RequiresSingleConsumption)
@@ -22,6 +23,7 @@ internal static class CanonicalStreamGraphValidator
         }
         foreach (var stage in route.Stages)
         {
+            if (stage.Sessions.Count != 0) Reject("StreamSessionAcquisitionAndCleanupUnavailable", stage.Anchor);
             if (stage.ServiceOwnership != FusionOwnership.BorrowedService) Reject("OwnedStageAcquisitionAndCleanupUnavailable", stage.Anchor);
             if (stage.CompilerOwnsError || stage.Callbacks.Count != 1) Reject("SingleRoleStreamStageRequired", stage.Anchor);
             if (stage.Kind is not (FusionStageKind.Hook or FusionStageKind.Wrapper)) Reject("SingleRoleStreamStageRequired", stage.Anchor);

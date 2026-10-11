@@ -24,6 +24,8 @@ internal static class CanonicalSendControlValidator
         public bool SuccessCompleted { get; init; }
         public bool ObserverCompleted { get; init; }
         public bool Returned { get; init; }
+        public ImmutableHashSet<int> CommittedSessions { get; init; } = ImmutableHashSet<int>.Empty;
+        public ImmutableHashSet<int> DetachedSessions { get; init; } = ImmutableHashSet<int>.Empty;
     }
 
     internal static EquatableArray<CanonicalExecutionGraphFact> Validate(BoundPipelineModel route, CanonicalSendExecutionSchedule schedule)
@@ -59,7 +61,7 @@ internal static class CanonicalSendControlValidator
             {
                 if (edge.Outcome is not (SendControlOutcome.Always or SendControlOutcome.Success or SendControlOutcome.Failure)) Reject("UnknownControlOutcome");
                 if (edge.Predicate is not (SendControlPredicate.Any or SendControlPredicate.HasFailure or SendControlPredicate.NoFailure or
-                    SendControlPredicate.SpanDestination or SendControlPredicate.NoSpanDestination)) Reject("UnknownControlPredicate");
+                    SendControlPredicate.SpanDestination or SendControlPredicate.NoSpanDestination or SendControlPredicate.SessionPresent or SendControlPredicate.SessionAbsent)) Reject("UnknownControlPredicate");
             }
             var edges = flow.Edges.ToLookup(e => e.From);
             var reachable = new HashSet<SendControlPoint>();
@@ -92,7 +94,8 @@ internal static class CanonicalSendControlValidator
                         state = EnterPoint(contract, state, phase.Value, span);
                     }
                     var pure = phase == null || phase is SendExecutionPhase.Entered or SendExecutionPhase.OperationBoundary or
-                        SendExecutionPhase.DestinationCommit or SendExecutionPhase.OperationReturn;
+                        SendExecutionPhase.DestinationCommit or SendExecutionPhase.OperationReturn or SendExecutionPhase.CommitSession or
+                        SendExecutionPhase.DetachSession or SendExecutionPhase.SessionPresent or SendExecutionPhase.SessionResult;
                     var outcomes = pure ? new[] { SendControlOutcome.Always } : new[] { SendControlOutcome.Success, SendControlOutcome.Failure };
                     if (edges[state.Point].Any(e => !outcomes.Contains(e.Outcome))) Reject("UnexpectedControlOutcome");
                     foreach (var outcome in outcomes)
@@ -113,7 +116,8 @@ internal static class CanonicalSendControlValidator
                         }
                         if (phase == SendExecutionPhase.OperationBoundary) next = next with { Guards = next.Guards | 16 };
                         if (phase == SendExecutionPhase.DestinationCommit) next = next with { Guards = next.Guards | 32 };
-                        var choices = edges[state.Point].Where(e => e.Outcome == outcome && Predicate(e.Predicate, next.Failed, span)).ToArray();
+                        var present = state.Point.Site != null && next.DetachedSessions.Contains(state.Point.Site.Session);
+                        var choices = edges[state.Point].Where(e => e.Outcome == outcome && Predicate(e.Predicate, next.Failed, span, present)).ToArray();
                         if (choices.Length != 1)
                         {
                             Reject(choices.Length == 0 ? "MissingControlOutcome" : "AmbiguousControlOutcome");
@@ -160,6 +164,14 @@ internal static class CanonicalSendControlValidator
                 if ((state.Guards & 7) != 7 || state.Failed) Reject("EnteredNotDominatedByGuardsAndResolution");
                 return state with { Entered = true };
             }
+            if (phase == SendExecutionPhase.CommitSession)
+                return state with { CommittedSessions = state.CommittedSessions.Add(state.Point.Site!.Session) };
+            if (phase == SendExecutionPhase.DetachSession)
+            {
+                var session = state.Point.Site!.Session;
+                return state with { DetachedSessions = state.CommittedSessions.Contains(session) ? state.DetachedSessions.Add(session) : state.DetachedSessions };
+            }
+            if (phase is SendExecutionPhase.SessionPresent or SendExecutionPhase.CleanupSession or SendExecutionPhase.SessionResult) return state;
             var callback = phase is SendExecutionPhase.Before or SendExecutionPhase.InvokeInner or SendExecutionPhase.InvokeHandler or
                 SendExecutionPhase.InvokeWrapper or SendExecutionPhase.Success or SendExecutionPhase.Exception or SendExecutionPhase.Finally;
             if (callback && !state.Entered) Reject("CallbackReachedBeforeEntered");
@@ -242,10 +254,11 @@ internal static class CanonicalSendControlValidator
         }
     }
 
-    private static bool Predicate(SendControlPredicate predicate, bool failed, bool span) => predicate switch
+    private static bool Predicate(SendControlPredicate predicate, bool failed, bool span, bool present) => predicate switch
     {
         SendControlPredicate.Any => true, SendControlPredicate.HasFailure => failed, SendControlPredicate.NoFailure => !failed,
-        SendControlPredicate.SpanDestination => span, SendControlPredicate.NoSpanDestination => !span, _ => false
+        SendControlPredicate.SpanDestination => span, SendControlPredicate.NoSpanDestination => !span,
+        SendControlPredicate.SessionPresent => present, SendControlPredicate.SessionAbsent => !present, _ => false
     };
 
     private static IEnumerable<Contract> DeriveContracts(BoundPipelineModel route)
@@ -267,8 +280,18 @@ internal static class CanonicalSendControlValidator
                 if (capabilities.Contains(BoundCallbackPhase.Success)) phases.Add(SendExecutionPhase.Success);
                 if (capabilities.Contains(BoundCallbackPhase.Exception)) phases.Add(SendExecutionPhase.Exception);
                 if (capabilities.Contains(BoundCallbackPhase.Finally)) phases.Add(SendExecutionPhase.Finally);
+                var sessionSites = new List<SendExecutionSiteId>();
+                var sessions = Sessions(route, b, s);
+                for (var i = 0; i < sessions.Count; i++)
+                {
+                    var sessionPhases = new List<SendExecutionPhase> { SendExecutionPhase.SessionGuard, SendExecutionPhase.ResolveSessionFactory,
+                        SendExecutionPhase.AcquireSession, SendExecutionPhase.CommitSession, SendExecutionPhase.DetachSession };
+                    if (sessions[i].Ownership == FusionOwnership.OwnedSession) sessionPhases.AddRange(new[] { SendExecutionPhase.SessionPresent, SendExecutionPhase.CleanupSession });
+                    sessionSites.AddRange(sessionPhases.Select(p => SessionSite(b, s, i, p)));
+                }
+                if (sessions.Count != 0) sessionSites.Add(SessionSite(b, s, -1, SendExecutionPhase.SessionResult));
                 yield return new(Scope(b, s), b, s, false, false, capabilities.Contains(BoundCallbackPhase.Before), capabilities.Contains(BoundCallbackPhase.Success),
-                    capabilities.Contains(BoundCallbackPhase.Exception), capabilities.Contains(BoundCallbackPhase.Finally), false, new(phases.Select(p => Site(b, s, p))));
+                    capabilities.Contains(BoundCallbackPhase.Exception), capabilities.Contains(BoundCallbackPhase.Finally), false, new(phases.Select(p => Site(b, s, p)).Concat(sessionSites)));
                 if (wrapper) yield return new(Next(b, s), b, s, false, true, false, false, false, false, false, new(new[] { Site(b, s, SendExecutionPhase.NextCall) }));
             }
     }

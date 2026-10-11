@@ -17,6 +17,8 @@ internal sealed class RequiredSendExecutionContract
     internal readonly List<SendExecutionScope> Scopes = new();
     internal readonly List<SendExecutionAwait> Awaits = new();
     internal readonly List<SendValueTransfer> Transfers = new();
+    internal readonly List<SendSessionTransfer> SessionTransfers = new();
+    internal readonly List<SendSessionCall> SessionCalls = new();
     internal bool Async { get; private set; }
 
     internal static RequiredSendExecutionContract Derive(BoundPipelineModel route)
@@ -104,6 +106,7 @@ internal sealed class RequiredSendExecutionContract
                 else required.Hook(route, b, s);
             }
         }
+        RequiredSendSessionContract.Append(route, required);
         return required;
     }
 
