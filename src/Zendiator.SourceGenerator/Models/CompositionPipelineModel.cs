@@ -19,9 +19,14 @@ internal sealed record BoundHandlerModel(string Anchor, string Type, string Name
     public EquatableArray<BoundSessionModel> Sessions { get; init; }
 }
 // Explicit factory facts for operation state. DI services remain borrowed; no callback body
-// or IDisposable interface on a service authorizes an ownership transfer. Frontend API binding is pending.
+// or IDisposable interface on a service authorizes an ownership transfer.
 internal sealed record BoundSessionModel(string FactoryServiceType, string ResourceType,
-    BoundCallbackModel Acquire, FusionOwnership Ownership, BoundCallbackModel? Cleanup);
+    BoundCallbackModel Acquire, FusionOwnership Ownership, BoundCallbackModel? Cleanup)
+{
+    // A factory-produced callback receiver cannot be lowered as a separately resolved DI service.
+    public bool SuppliesCallbackReceiver { get; init; }
+    public EquatableArray<string> FactoryHierarchy { get; init; }
+}
 internal sealed record BoundPipelineModel(string Anchor, string Request, string RequestName,
     BoundDispatchFamily? Family, FusionResultKind? ResultKind, string? Result,
     EquatableArray<BoundHandlerModel> Handlers, EquatableArray<BoundStageModel> Stages,

@@ -38,15 +38,7 @@ internal static class StageContractBinding
         Compilation compilation, List<CompositionDiagnosticFact> facts)
     {
         var before = facts.Count;
-        var hierarchy = new List<string>();
-        for (var current = type; current != null; current = current.BaseType)
-        {
-            hierarchy.Add(Identity(current) + "/" + current.TypeKind + "/" + current.DeclaredAccessibility +
-                "/abstract=" + current.IsAbstract + "/ref=" + current.IsRefLikeType +
-                "/static=" + current.IsStatic);
-            for (var owner = current; owner != null; owner = owner.ContainingType)
-                hierarchy.Add(Identity(owner) + "/constraints=" + Constraints(owner.OriginalDefinition.TypeParameters));
-        }
+        var hierarchy = DescribeHierarchy(type);
         var callbacks = new List<BoundCallbackModel>();
         var compilerOwned = false;
         void Reject(string key, string message) => facts.Add(new(key, anchor, message));
@@ -115,8 +107,22 @@ internal static class StageContractBinding
             Reject("AmbiguousStageContract", $"Stage {Name(type)} has multiple contracts for one phase, or both Stream Filter and Map. Declare separate stage types.");
         return Value();
 
-        BoundStageModel Value() => new(anchor, Identity(type), Name(type), kind, new(hierarchy),
+        BoundStageModel Value() => new(anchor, Identity(type), Name(type), kind, hierarchy,
             new(callbacks.OrderBy(c => c.Phase).ThenBy(c => c.Interface, StringComparer.Ordinal)), FusionOwnership.BorrowedService, compilerOwned);
+    }
+
+    internal static EquatableArray<string> DescribeHierarchy(INamedTypeSymbol type)
+    {
+        var hierarchy = new List<string>();
+        for (var current = type; current != null; current = current.BaseType)
+        {
+            hierarchy.Add(Identity(current) + "/" + current.TypeKind + "/" + current.DeclaredAccessibility +
+                "/abstract=" + current.IsAbstract + "/ref=" + current.IsRefLikeType +
+                "/static=" + current.IsStatic);
+            for (var owner = current; owner != null; owner = owner.ContainingType)
+                hierarchy.Add(Identity(owner) + "/constraints=" + Constraints(owner.OriginalDefinition.TypeParameters));
+        }
+        return new(hierarchy);
     }
 
     private static bool ContinuationMatches(INamedTypeSymbol contract, bool stream, bool sync,

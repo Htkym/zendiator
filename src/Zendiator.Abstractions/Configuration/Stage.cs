@@ -29,17 +29,23 @@ public enum StageKind
 /// <summary>An explicit stage declaration. Its position in the pipeline defines order.</summary>
 public readonly record struct Stage
 {
-    private Stage(Type type, StageKind kind) { Type = type; Kind = kind; }
-    /// <summary>Gets the declared service type.</summary>
+    private Stage(Type type, StageKind kind, Type? factoryType = null) { Type = type; Kind = kind; FactoryType = factoryType; }
+    /// <summary>Gets the declared callback type, resolved from DI or returned by FactoryType.</summary>
     public Type? Type { get; }
+    /// <summary>Gets the borrowed DI factory type, or null for a directly borrowed service.</summary>
+    public Type? FactoryType { get; }
     /// <summary>Gets the explicit role.</summary>
     public StageKind Kind { get; }
     /// <summary>Declares a dedicated hook.</summary>
     public static Stage Hook<T>() => Hook(typeof(T));
+    /// <summary>Declares a session hook from one explicit Owned or Borrowed factory contract.</summary>
+    public static Stage Hook<TSession, TFactory>() where TSession : class => new(typeof(TSession), StageKind.Hook, typeof(TFactory));
     /// <summary>Declares a dedicated hook by its known type.</summary>
     public static Stage Hook(Type type) => new(type ?? throw new ArgumentNullException(nameof(type)), StageKind.Hook);
     /// <summary>Declares an opaque wrapper.</summary>
     public static Stage Wrapper<T>() => Wrapper(typeof(T));
+    /// <summary>Declares a session wrapper from one explicit Owned or Borrowed factory contract.</summary>
+    public static Stage Wrapper<TSession, TFactory>() where TSession : class => new(typeof(TSession), StageKind.Wrapper, typeof(TFactory));
     /// <summary>Declares an opaque wrapper by its known type.</summary>
     public static Stage Wrapper(Type type) => new(type ?? throw new ArgumentNullException(nameof(type)), StageKind.Wrapper);
 }

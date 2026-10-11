@@ -51,6 +51,7 @@ internal static class CanonicalSendGraphValidator
         {
             foreach (var session in sessions)
             {
+                if (session.SuppliesCallbackReceiver) Reject("SessionCallbackReceiverGraphUnavailable", anchor);
                 if (string.IsNullOrEmpty(session.FactoryServiceType) || string.IsNullOrEmpty(session.ResourceType)) Reject("ExplicitSessionFactoryRequired", anchor);
                 if (session.Acquire.Phase != BoundCallbackPhase.SessionAcquire) Reject("SessionAcquisitionPhaseRequired", anchor);
                 CheckCallback(session.Acquire, anchor);

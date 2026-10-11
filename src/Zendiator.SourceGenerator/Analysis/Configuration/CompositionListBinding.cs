@@ -13,7 +13,7 @@ namespace Zendiator.SourceGenerator;
 /// <summary>Literal ordered lists are frontend input. No execution sites are inferred here.</summary>
 internal sealed class CompositionListBinding
 {
-    private sealed record Entry(INamedTypeSymbol Type, string Anchor, FusionStageKind Kind = FusionStageKind.Hook);
+    private sealed record Entry(INamedTypeSymbol Type, string Anchor, FusionStageKind Kind = FusionStageKind.Hook, INamedTypeSymbol? Factory = null);
     private sealed record Declaration(string Anchor, INamedTypeSymbol Request, BoundDispatchFamily? Family,
         bool HandlerList, ImmutableArray<Entry> Entries);
     private readonly Compilation _compilation;
@@ -71,6 +71,7 @@ internal sealed class CompositionListBinding
             var expression = arguments[index].Expression;
             Sources.Add(entryAnchor, expression.GetLocation());
             INamedTypeSymbol? type = null;
+            INamedTypeSymbol? factoryType = null;
             var kind = FusionStageKind.Hook;
             if (handlerList && expression is TypeOfExpressionSyntax handlerType)
                 type = _semantic.GetTypeInfo(handlerType.Type, _ct).Type as INamedTypeSymbol;
@@ -79,10 +80,19 @@ internal sealed class CompositionListBinding
                 factoryMethod.Name is "Hook" or "Wrapper" && factory.ArgumentList.Arguments.All(a => a.NameColon == null))
             {
                 kind = factoryMethod.Name == "Hook" ? FusionStageKind.Hook : FusionStageKind.Wrapper;
-                type = factoryMethod.Arity == 1 && factory.ArgumentList.Arguments.Count == 0
+                type = factoryMethod.Arity is 1 or 2 && factory.ArgumentList.Arguments.Count == 0
                     ? factoryMethod.TypeArguments[0] as INamedTypeSymbol
                     : factory.ArgumentList.Arguments.Count == 1 && factory.ArgumentList.Arguments[0].Expression is TypeOfExpressionSyntax stageType
                         ? _semantic.GetTypeInfo(stageType.Type, _ct).Type as INamedTypeSymbol : null;
+                if (factoryMethod.Arity == 2 && factory.ArgumentList.Arguments.Count == 0)
+                {
+                    factoryType = factoryMethod.TypeArguments[1] as INamedTypeSymbol;
+                    if (factoryType == null)
+                    {
+                        Reject("UnsupportedGenerationShape", entryAnchor, "A session factory requires a known closed type; an unbound type parameter is not a DI service declaration.");
+                        continue;
+                    }
+                }
             }
             if (type == null)
             {
@@ -94,7 +104,7 @@ internal sealed class CompositionListBinding
             var prior = entries.FirstOrDefault(e => Key(e.Type) == Key(type));
             if (prior != null) Reject("UnsupportedGenerationShape", entryAnchor,
                 $"Type {Name(type)} occurs more than once in this ordered list. Stage tags do not create separate registrations.", prior.Anchor);
-            entries.Add(new(type, entryAnchor, kind));
+            entries.Add(new(type, entryAnchor, kind, factoryType));
             if (handlerList && _marked.Any(c => Same(c.Symbol, type.OriginalDefinition))) _select(type);
         }
         _declarations.Add(new(anchor, request, family, handlerList, entries.ToImmutable()));
@@ -208,8 +218,19 @@ internal sealed class CompositionListBinding
             var stages = new List<BoundStageModel>();
             if (resultKind != null && handlers.Count == handlerEntries.Length)
                 foreach (var entry in declaration.HandlerList ? ImmutableArray<Entry>.Empty : declaration.Entries)
-                    stages.Add(StageContractBinding.Bind(entry.Type, entry.Kind, entry.Anchor, declaration.Request, family.Value,
-                        resultKind.Value, result, _compilation, Facts));
+                {
+                    var stageModel = StageContractBinding.Bind(entry.Type, entry.Kind, entry.Anchor, declaration.Request, family.Value,
+                        resultKind.Value, result, _compilation, Facts);
+                    if (entry.Factory != null && !stageModel.CompilerOwnsError)
+                    {
+                        var binding = SessionFactoryContractBinding.Bind(entry.Factory, entry.Type, declaration.Request, family.Value,
+                            entry.Anchor, _compilation, Facts);
+                        stageModel = stageModel with { CompilerOwnsError = binding.CompilerOwnsError,
+                            ServiceOwnership = binding.Session?.Ownership ?? stageModel.ServiceOwnership,
+                            Sessions = binding.Session == null ? default : new(new[] { binding.Session! }) };
+                    }
+                    stages.Add(stageModel);
+                }
             output.Add(Model(resultKind, result, handlers, stages, explicitHandlers != null));
             if (Facts.Count == before && !HasDeclarationError(declaration.Anchor) &&
                 (explicitHandlers == null || !HasDeclarationError(explicitHandlers.Anchor)) && !stages.Any(s => s.CompilerOwnsError) &&
