@@ -142,6 +142,14 @@ internal sealed class CompositionListBinding
             }
             var explicitHandlers = resolved.FirstOrDefault(d => d.Declaration.HandlerList && d.Family == family &&
                 Key(d.Declaration.Request) == Key(declaration.Request)).Declaration;
+            var multiple = family is BoundDispatchFamily.SendAllAsync or BoundDispatchFamily.SendAllSync;
+            if (multiple && explicitHandlers == null)
+            {
+                Reject("AmbiguousPipelineOrder", declaration.Anchor,
+                    "SendAll requires an explicit Handlers list to declare branch order; candidate identity or discovery order cannot supply it.");
+                output.Add(Model(null, null, Array.Empty<BoundHandlerModel>(), Array.Empty<BoundStageModel>(), false));
+                continue;
+            }
             var handlerEntries = explicitHandlers?.Entries ?? selectedTypes.Where(t => Contracts(t, declaration.Request, family.Value).Any())
                 .OrderBy(Identity, StringComparer.Ordinal).Select(t => new Entry(t, declaration.Anchor)).ToImmutableArray();
             var handlers = new List<BoundHandlerModel>();
@@ -188,7 +196,6 @@ internal sealed class CompositionListBinding
                     "/return=" + Identity(implementation.ReturnType) + "/constraints=" + Constraints(implementation.TypeParameters),
                     FusionOwnership.BorrowedService, implementation == null));
             }
-            var multiple = family is BoundDispatchFamily.SendAllAsync or BoundDispatchFamily.SendAllSync;
             if ((multiple && handlerEntries.Length == 0) || (!multiple && handlerEntries.Length != 1))
                 Reject("UnsupportedGenerationShape", explicitHandlers?.Anchor ?? declaration.Anchor,
                     multiple ? "SendAll requires at least one handler." : "Send/Stream requires exactly one selected handler; use an explicit list to resolve ambiguity.");

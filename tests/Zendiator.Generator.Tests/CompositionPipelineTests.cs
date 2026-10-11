@@ -240,6 +240,106 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
+    public void Sendall_pipeline_requires_explicit_handler_order_for_both_backends_even_with_one_candidate()
+    {
+        foreach (var sync in new[] { false, true })
+        {
+            var family = sync ? "SendAllSync" : "SendAllAsync";
+            foreach (var useLocal in new[] { false, true })
+            foreach (var defaultComposition in new[] { false, true })
+            {
+                var selection = useLocal ? "c.UseLocalHandlers(); " : "c.AddHandler<A>(); ";
+                var body = selection + $"c.Pipeline<Ping>(DispatchFamily.{family});";
+                var driver = BindLists(FamilyFixture(body, sync, isVoid: false, defaultComposition), "ZEN0028");
+                var route = Assert.Single(Selection(driver).Pipelines);
+                Assert.False(route.ExplicitHandlerOrder);
+                Assert.Empty(route.Handlers); // A sorted candidate set cannot become a branch list.
+                Assert.Null(route.ResultKind);
+                var diagnostic = Assert.Single(driver.GetRunResult().Diagnostics);
+                Assert.Contains("explicit Handlers list", diagnostic.GetMessage());
+                Assert.Equal("c.Pipeline<Ping>(DispatchFamily." + family + ")", diagnostic.Location.SourceTree!.GetText().ToString(diagnostic.Location.SourceSpan));
+
+                // The list may occur later in the lambda; its declared B,A order is authoritative.
+                var explicitOrder = BindLists(FamilyFixture(body + $" c.Handlers<Ping>(DispatchFamily.{family},typeof(B),typeof(A));",
+                    sync, isVoid: false, defaultComposition), "ZEN0037");
+                var ordered = Assert.Single(Selection(explicitOrder).Pipelines);
+                Assert.True(ordered.ExplicitHandlerOrder);
+                Assert.Equal(new[] { "global::App.B", "global::App.A" }, ordered.Handlers.Select(h => h.Name));
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Wrapper_continuation_mode_matches_each_family_and_shape_while_sync_hooks_remain_legal(bool isVoid)
+    {
+        foreach (var sync in new[] { false, true })
+        foreach (var sendAll in new[] { false, true })
+        {
+            var family = sync ? (sendAll ? "SendAllSync" : "SendSync") : (sendAll ? "SendAllAsync" : "SendAsync");
+            var compatible = sync ? "SyncOpaque" : "Opaque";
+            var incompatible = sync ? "Opaque" : "SyncOpaque";
+            var required = sync ? "ISendContinuation" : "IAsyncSendContinuation";
+            string Body(string wrapper) => $"c.Handlers<Ping>(DispatchFamily.{family},typeof(A)); " +
+                $"c.Pipeline<Ping>(DispatchFamily.{family},Stage.Hook<Last>(),Stage.Wrapper<{wrapper}>());";
+            var driver = BindLists(FamilyFixture(Body(compatible), sync, isVoid), "ZEN0037");
+            var route = Assert.Single(Selection(driver).Pipelines);
+            Assert.Equal(isVoid ? FusionResultKind.Void : FusionResultKind.Response, route.ResultKind);
+            Assert.Equal(BoundCompletionKind.Synchronous, Assert.Single(route.Stages[0].Callbacks).Completion);
+            var callback = Assert.Single(route.Stages[1].Callbacks);
+            Assert.Equal(BoundCallbackPhase.Wrapper, callback.Phase);
+            Assert.Contains(required, callback.GenericConstraints);
+            Assert.Equal(sync ? BoundCompletionKind.Synchronous : BoundCompletionKind.ValueTask, callback.Completion);
+
+            var wrongSource = FamilyFixture(Body(incompatible), sync, isVoid);
+            var wrong = BindLists(wrongSource, "ZEN0025");
+            Assert.Contains(required, Assert.Single(wrong.GetRunResult().Diagnostics).GetMessage());
+            Assert.Empty(Assert.Single(Selection(wrong).Pipelines).Stages[1].Callbacks);
+            if (!sync && !sendAll && !isVoid)
+            {
+                var initial = Selection(wrong);
+                var diagnostic = Assert.Single(wrong.GetRunResult().Diagnostics);
+                var moved = Compilation("\n\n" + wrongSource);
+                wrong = wrong.RunGenerators(moved);
+                Assert.Equal(initial, Selection(wrong));
+                SelectionReason(wrong, IncrementalStepRunReason.Cached);
+                var current = Assert.Single(wrong.GetRunResult().Diagnostics);
+                Assert.Same(moved.SyntaxTrees[0], current.Location.SourceTree);
+                Assert.Equal(diagnostic.Location.SourceSpan.Start + 2, current.Location.SourceSpan.Start);
+            }
+
+            // S01 keeps both wrapper contracts ambiguous, even if this route has a matching one.
+            var dual = BindLists(FamilyFixture(Body("DualOpaque"), sync, isVoid), "ZEN0027");
+            Assert.Contains("same phase", Assert.Single(dual.GetRunResult().Diagnostics).GetMessage());
+            Assert.Empty(Assert.Single(Selection(dual).Pipelines).Stages[1].Callbacks);
+        }
+    }
+
+    private static string FamilyFixture(string body, bool sync, bool isVoid, bool defaultComposition = false)
+    {
+        var source = ListFixture(body, defaultComposition) + """
+            public sealed class SyncOpaque : ISendWrapper<Ping,int> {
+                public int Invoke<N>(Ping r,N n,CancellationToken c) where N:ISendContinuation<Ping,int> => n.Invoke(r,c);
+            }
+            public sealed class DualOpaque : ISendWrapper<Ping,int>,IAsyncSendWrapper<Ping,int> {
+                public int Invoke<N>(Ping r,N n,CancellationToken c) where N:ISendContinuation<Ping,int> => n.Invoke(r,c);
+                public ValueTask<int> InvokeAsync<N>(Ping r,N n,CancellationToken c) where N:IAsyncSendContinuation<Ping,int> => n.InvokeAsync(r,c);
+            }
+            """;
+        if (sync) source = source.Replace("IRequest<int>", "ISyncRequest<int>").Replace("IRequestHandler<Ping,int>", "ISyncRequestHandler<Ping,int>")
+            .Replace("ValueTask<int> HandleAsync", "int Handle").Replace("=> new(1);", "=> 1;");
+        if (isVoid) source = source.Replace("IRequest<int>", "IRequest").Replace("ISyncRequest<int>", "ISyncRequest")
+            .Replace("IRequestHandler<Ping,int>", "IRequestHandler<Ping>").Replace("ISyncRequestHandler<Ping,int>", "ISyncRequestHandler<Ping>")
+            .Replace("ValueTask<int> HandleAsync", "ValueTask HandleAsync").Replace("int Handle(", "void Handle(")
+            .Replace("=> new(1);", "=> default;").Replace("=> 1;", "{}")
+            .Replace("ISendWrapper<Ping,int>", "ISendWrapper<Ping>").Replace("IAsyncSendWrapper<Ping,int>", "IAsyncSendWrapper<Ping>")
+            .Replace("ISendContinuation<Ping,int>", "ISendContinuation<Ping>").Replace("IAsyncSendContinuation<Ping,int>", "IAsyncSendContinuation<Ping>")
+            .Replace("int Invoke<", "void Invoke<").Replace("ValueTask<int> InvokeAsync", "ValueTask InvokeAsync");
+        return source;
+    }
+
+    [Fact]
     public void Missing_interface_implementation_and_duplicate_marker_remain_compiler_owned_in_lists()
     {
         var source = ListFixture("c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(A)); c.Pipeline<Ping>(Stage.Hook<Missing>());") +

@@ -72,6 +72,25 @@ internal static class StageContractBinding
         var relevant = matches.Where(m => RegistrationIdentity(m.Contract.TypeArguments[0], compilation) == RegistrationIdentity(request, compilation)).ToArray();
         if (matches.Count != 0 && relevant.Length == 0)
             Reject("StageTypeMismatch", $"Stage {Name(type)} has no contract for request {Name(request)}.");
+        if (kind == FusionStageKind.Wrapper && relevant.Length != 0)
+        {
+            // Hook completion and wrapper continuation are independent contracts.
+            // S01 rejects synchronous/asynchronous contracts for one phase in the MVP.
+            if (relevant.Select(m => m.Role.Completion).Distinct().Count() > 1)
+            {
+                Reject("AmbiguousStageContract", $"Wrapper {Name(type)} has synchronous and asynchronous contracts for the same phase. Declare separate stage types or an explicit adaptor.");
+                return Value();
+            }
+            var compatible = relevant.Where(m => ContinuationMatches(m.Contract, stream, sync, assembly, compilation)).ToArray();
+            if (compatible.Length == 0)
+            {
+                Reject("StageContractMismatch", $"Wrapper {Name(type)} requires " +
+                    (stream ? "IStreamUpstream" : sync ? "ISendContinuation" : "IAsyncSendContinuation") +
+                    $" for {family}; the declared wrapper continuation is incompatible.");
+                return Value();
+            }
+            relevant = compatible;
+        }
         foreach (var (contract, role) in relevant)
         {
             if ((role.ResponseOnly && resultKind == FusionResultKind.Void) || (role.VoidOnly && resultKind != FusionResultKind.Void))
@@ -79,7 +98,7 @@ internal static class StageContractBinding
             else if (contract.TypeArguments.Length == 2 && (result == null ||
                 RegistrationIdentity(contract.TypeArguments[1], compilation) != RegistrationIdentity(result, compilation)))
                 Reject("StageTypeMismatch", $"Stage {Name(type)} has a response/item type different from this route.");
-            if (sync && role.Completion == BoundCompletionKind.ValueTask)
+            if (sync && !role.Wrapper && role.Completion == BoundCompletionKind.ValueTask)
                 Reject("AsyncHookOnSyncRoute", $"Stage {Name(type)} supplies an asynchronous callback on {family}; blocking conversion is unsupported.");
             var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
             var implementation = members.Length == 1 ? type.FindImplementationForInterfaceMember(members[0]) as IMethodSymbol : null;
@@ -98,5 +117,19 @@ internal static class StageContractBinding
 
         BoundStageModel Value() => new(anchor, Identity(type), Name(type), kind, new(hierarchy),
             new(callbacks.OrderBy(c => c.Phase).ThenBy(c => c.Interface, StringComparer.Ordinal)), FusionOwnership.BorrowedService, compilerOwned);
+    }
+
+    private static bool ContinuationMatches(INamedTypeSymbol contract, bool stream, bool sync,
+        IAssemblySymbol? assembly, Compilation compilation)
+    {
+        var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
+        if (members.Length != 1 || members[0].TypeParameters.Length != 1) return false;
+        var name = stream ? "IStreamUpstream" : sync ? "ISendContinuation" : "IAsyncSendContinuation";
+        var definition = assembly?.GetTypeByMetadataName("Zendiator." + name + "`" + contract.TypeArguments.Length);
+        var constraints = members[0].TypeParameters[0].ConstraintTypes.OfType<INamedTypeSymbol>()
+            .Where(c => Same(c.OriginalDefinition, definition)).ToArray();
+        return constraints.Length == 1 && constraints[0].TypeArguments.Length == contract.TypeArguments.Length &&
+            constraints[0].TypeArguments.Select(t => RegistrationIdentity(t, compilation))
+                .SequenceEqual(contract.TypeArguments.Select(t => RegistrationIdentity(t, compilation)));
     }
 }
