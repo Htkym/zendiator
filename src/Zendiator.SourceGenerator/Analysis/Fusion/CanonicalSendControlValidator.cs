@@ -23,6 +23,8 @@ internal static class CanonicalSendControlValidator
         public bool InvocationSucceeded { get; init; }
         public bool SuccessCompleted { get; init; }
         public bool ObserverCompleted { get; init; }
+        public bool FinallyCompleted { get; init; }
+        public bool SessionCleanupStarted { get; init; }
         public bool Returned { get; init; }
         public ImmutableHashSet<int> CommittedSessions { get; init; } = ImmutableHashSet<int>.Empty;
         public ImmutableHashSet<int> DetachedSessions { get; init; } = ImmutableHashSet<int>.Empty;
@@ -107,6 +109,7 @@ internal static class CanonicalSendControlValidator
                             next = next with { InvocationCompleted = true, InvocationSucceeded = outcome == SendControlOutcome.Success };
                         if (phase == SendExecutionPhase.Success) next = next with { SuccessCompleted = true };
                         if (phase == SendExecutionPhase.Exception) next = next with { ObserverCompleted = true };
+                        if (phase == SendExecutionPhase.Finally) next = next with { FinallyCompleted = true };
                         if (outcome == SendControlOutcome.Success)
                         {
                             var bit = phase switch { SendExecutionPhase.ArgumentGuard => 1, SendExecutionPhase.CancellationGuard => 2,
@@ -166,6 +169,11 @@ internal static class CanonicalSendControlValidator
             }
             if (phase == SendExecutionPhase.CommitSession)
                 return state with { CommittedSessions = state.CommittedSessions.Add(state.Point.Site!.Session) };
+            if (phase is SendExecutionPhase.DetachSession or SendExecutionPhase.SessionPresent or SendExecutionPhase.CleanupSession)
+            {
+                if (!state.SessionCleanupStarted && !ReadyForSessionCleanup(contract, state)) Reject("SessionCleanupStartedBeforeBodyOutcome");
+                state = state with { SessionCleanupStarted = true };
+            }
             if (phase == SendExecutionPhase.DetachSession)
             {
                 var session = state.Point.Site!.Session;
@@ -175,6 +183,7 @@ internal static class CanonicalSendControlValidator
             var callback = phase is SendExecutionPhase.Before or SendExecutionPhase.InvokeInner or SendExecutionPhase.InvokeHandler or
                 SendExecutionPhase.InvokeWrapper or SendExecutionPhase.Success or SendExecutionPhase.Exception or SendExecutionPhase.Finally;
             if (callback && !state.Entered) Reject("CallbackReachedBeforeEntered");
+            if (callback && state.SessionCleanupStarted) Reject("SessionBodyCallbackAfterDetach");
             if (state.Failed && phase is not (SendExecutionPhase.Exception or SendExecutionPhase.Finally)) Reject("ExecutionContinuedAfterFailure");
             switch (phase)
             {
@@ -207,6 +216,21 @@ internal static class CanonicalSendControlValidator
                     return state with { Finally = state.Finally + 1 };
                 default: return state;
             }
+        }
+
+        bool ReadyForSessionCleanup(Contract contract, Path state)
+        {
+            if (!state.Entered) return state.Failed && state.FirstFailure is
+                SendExecutionPhase.ArgumentGuard or SendExecutionPhase.CancellationGuard or SendExecutionPhase.Resolve or
+                SendExecutionPhase.SessionGuard or SendExecutionPhase.ResolveSessionFactory or SendExecutionPhase.AcquireSession;
+            var hook = contract.Stage < route.Stages.Count && route.Stages[contract.Stage].Kind == FusionStageKind.Hook;
+            if (!hook) return state.InvocationCompleted;
+            var failedBefore = state.FirstFailure == SendExecutionPhase.Before && !state.BeforeSucceeded;
+            if (!failedBefore && !state.InvocationCompleted) return false;
+            if (state.InvocationSucceeded && contract.Success && !state.SuccessCompleted) return false;
+            var observes = state.FirstFailure is SendExecutionPhase.Before or SendExecutionPhase.InvokeInner or SendExecutionPhase.Success;
+            if (observes && contract.Observer && !state.ObserverCompleted) return false;
+            return !contract.Finally || state.FinallyCompleted;
         }
 
         void CheckDeclaredOrders(Contract contract, Path state, SendExecutionSiteId after, bool span)

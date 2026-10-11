@@ -137,6 +137,114 @@ public sealed partial class GeneratorTests
             Assert.Contains(CanonicalSendSessionValidator.Validate(route, candidate), fact => fact.Reason == reason);
     }
 
+    private static BoundPipelineModel CleanupBoundaryRoute(int scope, bool hasFinally, bool sync = false)
+    {
+        var route = SessionRoute(sync);
+        var sessions = new EquatableArray<BoundSessionModel>(new[] { SessionBinding(sync) });
+        return route with {
+            Stages = new(route.Stages.Select((s, i) => s with {
+                Sessions = i == scope ? sessions : default,
+                Callbacks = i == scope && !hasFinally ? new(s.Callbacks.Where(c => c.Phase != BoundCallbackPhase.Finally)) : s.Callbacks
+            })),
+            Handlers = new(route.Handlers.Select(h => h with { Sessions = scope == route.Stages.Count ? sessions : default }))
+        };
+    }
+
+    [Theory]
+    [InlineData(3, false, false)]
+    [InlineData(1, false, false)]
+    [InlineData(2, false, false)]
+    [InlineData(0, true, false)]
+    [InlineData(3, false, true)]
+    [InlineData(1, false, true)]
+    [InlineData(2, false, true)]
+    [InlineData(0, true, true)]
+    public void Cleanup_boundary_accepts_completed_or_failed_body_and_partial_startup_for_each_scope(int scope, bool hasFinally, bool sync)
+    {
+        var route = CleanupBoundaryRoute(scope, hasFinally, sync);
+        var graph = CanonicalExecutionGraphNormalizer.Create(route);
+        Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
+        var inspection = CanonicalSendSessionValidator.Inspect(route, graph.Schedule!);
+        Assert.Empty(inspection.Facts);
+        Assert.Empty(CanonicalSendControlValidator.Validate(route, graph.Schedule!));
+        var paths = inspection.Paths.Where(p => p.Owner == Scope(0, scope)).ToArray();
+        var invocation = scope == route.Stages.Count ? SendExecutionPhase.InvokeHandler :
+            route.Stages[scope].Kind == FusionStageKind.Wrapper ? SendExecutionPhase.InvokeWrapper : SendExecutionPhase.InvokeInner;
+        var body = Site(0, scope, invocation);
+        Assert.Contains(paths, p => p.EscapingError == null && p.Visited.Contains(body) && p.CleanupOrder.SequenceEqual(new[] { 0 }));
+        Assert.Contains(paths, p => p.EscapingError == "fault:" + body && p.FailureOrder.Count == 1 && p.CleanupOrder.SequenceEqual(new[] { 0 }));
+        Assert.Contains(paths, p => p.EscapingError == "fault:" + SessionSite(0, scope, 0, SendExecutionPhase.AcquireSession) &&
+            p.Acquired.Count == 0 && p.CleanupOrder.Count == 0 && !p.Visited.Contains(Site(0, scope, SendExecutionPhase.Entered)));
+        if (invocation == SendExecutionPhase.InvokeInner)
+        {
+            foreach (var callback in new[] { SendExecutionPhase.Before, SendExecutionPhase.Success, SendExecutionPhase.Exception }
+                .Concat(hasFinally ? new[] { SendExecutionPhase.Finally } : Array.Empty<SendExecutionPhase>()))
+                Assert.Contains(paths, p => p.EscapingError == "fault:" + Site(0, scope, callback) && p.CleanupOrder.SequenceEqual(new[] { 0 }));
+            Assert.Contains(paths, p => p.EscapingError == "fault:" + Site(0, scope, SendExecutionPhase.Before) &&
+                !p.Visited.Contains(body) && p.Visited.Contains(Site(0, scope, SendExecutionPhase.Exception)) &&
+                (p.Visited.Contains(Site(0, scope, SendExecutionPhase.Finally)) == hasFinally));
+        }
+    }
+
+    [Theory]
+    [InlineData(3, false)]
+    [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(0, true)]
+    public void Metadata_preserving_CFG_rejects_detach_cleanup_then_body_even_when_release_count_and_Orders_match(int scope, bool hasFinally)
+    {
+        var route = CleanupBoundaryRoute(scope, hasFinally);
+        var schedule = CanonicalSendScheduleBuilder.Build(route);
+        var owner = Scope(0, scope);
+        var entered = Point(owner, Site(0, scope, SendExecutionPhase.Entered));
+        var originalBody = Assert.Single(schedule.ControlFlows.Single(f => f.Owner == owner).Edges, e => e.From == entered).To;
+        var detach = Point(owner, SessionSite(0, scope, 0, SendExecutionPhase.DetachSession));
+        var cleanup = Point(owner, SessionSite(0, scope, 0, SendExecutionPhase.CleanupSession));
+        var result = Point(owner, SessionSite(0, scope, -1, SendExecutionPhase.SessionResult));
+        var candidate = schedule with { ControlFlows = new(schedule.ControlFlows.Select(f => f.Owner != owner ? f : f with {
+            Edges = new(f.Edges.Select(e => e.From == entered ? e with { To = detach } :
+                e.From == cleanup && e.Outcome == SendControlOutcome.Success ? e with { To = originalBody, Predicate = SendControlPredicate.NoFailure } :
+                e.To == detach && e.From.Site?.Phase is SendExecutionPhase.Before or SendExecutionPhase.InvokeInner or SendExecutionPhase.InvokeHandler or
+                    SendExecutionPhase.InvokeWrapper or SendExecutionPhase.Success or SendExecutionPhase.Exception or SendExecutionPhase.Finally ? e with { To = result } : e)
+                .Append(new(cleanup, result, SendControlOutcome.Success, SendControlPredicate.HasFailure)))
+        })) };
+        // Sites, Orders, owners, scopes, calls, transfers and await metadata are completely unchanged.
+        Assert.Equal(schedule, candidate with { ControlFlows = schedule.ControlFlows });
+        var independent = CanonicalSendSessionValidator.Inspect(route, candidate);
+        Assert.Contains(independent.Facts, f => f.Reason == "SessionCleanupStartedBeforeBodyOutcome");
+        Assert.Contains(independent.Facts, f => f.Reason == "SessionBodyCallbackAfterDetach");
+        Assert.Contains(CanonicalSendControlValidator.Validate(route, candidate), f => f.Reason == "SessionCleanupStartedBeforeBodyOutcome");
+        Assert.Contains(CanonicalSendControlValidator.Validate(route, candidate), f => f.Reason == "SessionBodyCallbackAfterDetach");
+        // The dangerous successful path does release once and execute the body afterwards.
+        Assert.Contains(independent.Paths, p => p.Owner == owner && p.EscapingError == null &&
+            p.CleanupOrder.SequenceEqual(new[] { 0 }) && p.Visited.ToList().IndexOf(cleanup.Site!) < p.Visited.ToList().IndexOf(originalBody.Site!));
+    }
+
+    [Fact]
+    public void Hook_detach_requires_normal_After_and_failure_observer_completion_before_optional_Finally()
+    {
+        foreach (var hasFinally in new[] { false, true })
+        {
+            var scope = hasFinally ? 0 : 2;
+            var route = CleanupBoundaryRoute(scope, hasFinally);
+            var schedule = CanonicalSendScheduleBuilder.Build(route);
+            var owner = Scope(0, scope);
+            var detach = Point(owner, SessionSite(0, scope, 0, SendExecutionPhase.DetachSession));
+            foreach (var cut in new[] {
+                (Phase: SendExecutionPhase.Before, Outcome: SendControlOutcome.Success),
+                (Phase: SendExecutionPhase.Before, Outcome: SendControlOutcome.Failure),
+                (Phase: SendExecutionPhase.InvokeInner, Outcome: SendControlOutcome.Success),
+                (Phase: SendExecutionPhase.InvokeInner, Outcome: SendControlOutcome.Failure)
+            })
+            {
+                var candidate = ChangeControl(schedule, owner, e => e.From.Site?.Phase == cut.Phase && e.Outcome == cut.Outcome ? e with { To = detach } : e);
+                Assert.Equal(schedule, candidate with { ControlFlows = schedule.ControlFlows });
+                Assert.Contains(CanonicalSendSessionValidator.Validate(route, candidate), f => f.Reason == "SessionCleanupStartedBeforeBodyOutcome");
+                Assert.Contains(CanonicalSendControlValidator.Validate(route, candidate), f => f.Reason == "SessionCleanupStartedBeforeBodyOutcome");
+            }
+        }
+    }
+
     [Fact]
     public void Session_contract_refuses_implicit_DI_ownership_async_cleanup_on_sync_and_unconnected_Stream()
     {

@@ -20,7 +20,13 @@ internal static class CanonicalSendSessionValidator
 {
     private sealed record State(SendControlPoint Point, ImmutableDictionary<string, string?> Values,
         ImmutableHashSet<int> Guarded, ImmutableHashSet<int> Acquired, ImmutableArray<int> Released,
-        ImmutableArray<SendExecutionSiteId> Visited, ImmutableArray<string> Failures, bool Entered, string? Error);
+        ImmutableArray<SendExecutionSiteId> Visited, ImmutableArray<string> Failures, bool Entered, string? Error)
+    {
+        public ImmutableHashSet<SendExecutionPhase> CompletedCallbacks { get; init; } = ImmutableHashSet<SendExecutionPhase>.Empty;
+        public ImmutableHashSet<SendExecutionPhase> SuccessfulCallbacks { get; init; } = ImmutableHashSet<SendExecutionPhase>.Empty;
+        public SendExecutionSiteId? FirstFailure { get; init; }
+        public bool CleanupStarted { get; init; }
+    }
 
     internal static EquatableArray<CanonicalExecutionGraphFact> Validate(BoundPipelineModel route, CanonicalSendExecutionSchedule schedule) => Inspect(route, schedule).Facts;
 
@@ -70,6 +76,16 @@ internal static class CanonicalSendSessionValidator
                             var sessionPhase = id.Phase is SendExecutionPhase.SessionGuard or SendExecutionPhase.ResolveSessionFactory or SendExecutionPhase.AcquireSession or
                                 SendExecutionPhase.CommitSession or SendExecutionPhase.DetachSession or SendExecutionPhase.SessionPresent or SendExecutionPhase.CleanupSession;
                             if (sessionPhase && (index < 0 || index >= declared.Count)) { Reject("UnknownSessionIndex"); continue; }
+                            if (IsBodyCallback(id.Phase))
+                            {
+                                if (!state.Entered) Reject("CallbackReachedBeforeSessionScopeEntered");
+                                if (state.CleanupStarted) Reject("SessionBodyCallbackAfterDetach");
+                            }
+                            if (id.Phase is SendExecutionPhase.DetachSession or SendExecutionPhase.SessionPresent or SendExecutionPhase.CleanupSession)
+                            {
+                                if (!state.CleanupStarted && !ReadyForCleanup(state)) Reject("SessionCleanupStartedBeforeBodyOutcome");
+                                state = state with { CleanupStarted = true };
+                            }
                             switch (id.Phase)
                             {
                                 case SendExecutionPhase.SessionGuard:
@@ -102,7 +118,7 @@ internal static class CanonicalSendSessionValidator
                                     var next = state.Acquired.Where(i => declared[i].Ownership == FusionOwnership.OwnedSession && !state.Released.Contains(i)).OrderByDescending(i => i).DefaultIfEmpty(-1).First();
                                     if (next != index) Reject("SessionCleanupOrderOrDuplicateMismatch");
                                     if (state.Entered && stage < route.Stages.Count && route.Stages[stage].Callbacks.Any(c => c.Phase == BoundCallbackPhase.Finally) &&
-                                        !state.Visited.Contains(Site(branch, stage, SendExecutionPhase.Finally))) Reject("OwnedCleanupBeforeHookFinally");
+                                        !state.CompletedCallbacks.Contains(SendExecutionPhase.Finally)) Reject("OwnedCleanupBeforeHookFinally");
                                     var call = Call(id);
                                     if (call == null || Read(state, call.Receiver) != Resource(index) + "/instance") Reject("CleanupReceiverIsNotTransferredSession");
                                     if (declared[index].Cleanup != null) CheckCall(id, declared[index].Cleanup!, true);
@@ -117,6 +133,11 @@ internal static class CanonicalSendSessionValidator
                         {
                             var outcome = completion.Outcome;
                             var next = state;
+                            if (id != null && IsBodyCallback(id.Phase))
+                                next = next with {
+                                    CompletedCallbacks = next.CompletedCallbacks.Add(id.Phase),
+                                    SuccessfulCallbacks = outcome == SendControlOutcome.Success ? next.SuccessfulCallbacks.Add(id.Phase) : next.SuccessfulCallbacks
+                                };
                             if (id != null && outcome == SendControlOutcome.Success)
                             {
                                 var resource = Resource(id.Session);
@@ -136,7 +157,7 @@ internal static class CanonicalSendSessionValidator
                                 var call = id == null ? null : Call(id);
                                 // Policies on actual calls specify natural replacement, never aggregation or reconstruction.
                                 if (call != null && (!call.PreserveIdentityAndToken || !call.ReplacePreviousError || call.Aggregate)) Reject("SessionExceptionReplacementIdentityMismatch");
-                                next = next with { Error = error, Failures = next.Failures.Add(error) };
+                                next = next with { Error = error, Failures = next.Failures.Add(error), FirstFailure = next.FirstFailure ?? id };
                             }
                             var present = id != null && Read(next, Resource(id.Session) + "/detached") != null;
                             var selected = edges[state.Point].Where(e => e.Outcome == outcome && (e.Predicate switch
@@ -152,6 +173,25 @@ internal static class CanonicalSendSessionValidator
                             else work.Push(next with { Point = selected[0].To });
                         }
                     }
+                bool ReadyForCleanup(State state)
+                {
+                    // A startup failure may release partial acquisitions without entering this body.
+                    if (!state.Entered) return state.Error != null && state.FirstFailure?.Phase is
+                        SendExecutionPhase.ArgumentGuard or SendExecutionPhase.CancellationGuard or SendExecutionPhase.Resolve or
+                        SendExecutionPhase.SessionGuard or SendExecutionPhase.ResolveSessionFactory or SendExecutionPhase.AcquireSession;
+                    if (stage == route.Stages.Count) return state.CompletedCallbacks.Contains(SendExecutionPhase.InvokeHandler);
+                    if (route.Stages[stage].Kind == FusionStageKind.Wrapper) return state.CompletedCallbacks.Contains(SendExecutionPhase.InvokeWrapper);
+                    var callbacks = route.Stages[stage].Callbacks;
+                    bool Has(BoundCallbackPhase phase) => callbacks.Any(c => c.Phase == phase);
+                    var failedBefore = state.FirstFailure?.Phase == SendExecutionPhase.Before &&
+                        state.CompletedCallbacks.Contains(SendExecutionPhase.Before) && !state.SuccessfulCallbacks.Contains(SendExecutionPhase.Before);
+                    if (!failedBefore && !state.CompletedCallbacks.Contains(SendExecutionPhase.InvokeInner)) return false;
+                    if (state.SuccessfulCallbacks.Contains(SendExecutionPhase.InvokeInner) && Has(BoundCallbackPhase.Success) &&
+                        !state.CompletedCallbacks.Contains(SendExecutionPhase.Success)) return false;
+                    var observedFailure = state.FirstFailure?.Phase is SendExecutionPhase.Before or SendExecutionPhase.InvokeInner or SendExecutionPhase.Success;
+                    if (observedFailure && Has(BoundCallbackPhase.Exception) && !state.CompletedCallbacks.Contains(SendExecutionPhase.Exception)) return false;
+                    return !Has(BoundCallbackPhase.Finally) || state.CompletedCallbacks.Contains(SendExecutionPhase.Finally);
+                }
                 State Transfer(State state, SendExecutionSiteId id)
                 {
                     foreach (var transfer in schedule.SessionTransfers.Where(t => t.At == id))
@@ -182,4 +222,6 @@ internal static class CanonicalSendSessionValidator
     }
 
     private static string? Read(State state, string slot) => state.Values.TryGetValue(slot, out var value) ? value : null;
+    private static bool IsBodyCallback(SendExecutionPhase phase) => phase is SendExecutionPhase.Before or SendExecutionPhase.InvokeInner or
+        SendExecutionPhase.InvokeHandler or SendExecutionPhase.InvokeWrapper or SendExecutionPhase.Success or SendExecutionPhase.Exception or SendExecutionPhase.Finally;
 }
