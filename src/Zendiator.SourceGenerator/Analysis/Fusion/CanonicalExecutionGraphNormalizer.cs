@@ -12,6 +12,13 @@ internal static class CanonicalExecutionGraphNormalizer
 
     internal static CanonicalExecutionGraphModel Create(BoundPipelineModel route)
     {
+        if (route.Family == BoundDispatchFamily.Stream)
+        {
+            var streamFacts = CanonicalStreamGraphValidator.CheckContract(route);
+            if (streamFacts.Count != 0) return new(route, null, streamFacts);
+            var stream = CanonicalStreamScheduleBuilder.Build(route);
+            return new(route, null, CanonicalStreamGraphValidator.Validate(route, stream)) { StreamSchedule = stream };
+        }
         var facts = CanonicalSendGraphValidator.CheckContract(route);
         if (facts.Count != 0) return new(route, null, facts);
         var schedule = CanonicalSendScheduleBuilder.Build(route);

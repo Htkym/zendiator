@@ -60,7 +60,8 @@ internal sealed record CanonicalExecutionGraphFact(string Reason, string Anchor)
 internal sealed record CanonicalExecutionGraphModel(BoundPipelineModel Contract, CanonicalSendExecutionSchedule? Schedule,
     EquatableArray<CanonicalExecutionGraphFact> Facts)
 {
-    public bool IsValid => Schedule != null && Facts.Count == 0;
+    public CanonicalStreamExecutionSchedule? StreamSchedule { get; init; }
+    public bool IsValid => (Schedule != null || StreamSchedule != null) && Facts.Count == 0;
 }
 internal sealed record CanonicalExecutionGraphCatalog(EquatableArray<EquatableArray<CanonicalExecutionGraphModel>> Compositions);
 

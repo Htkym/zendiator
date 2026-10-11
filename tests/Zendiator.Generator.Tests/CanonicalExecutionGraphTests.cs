@@ -216,7 +216,7 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
-    public void Unsupported_stream_lifecycle_and_owned_sessions_keep_execution_blocked_instead_of_aliasing_send_sites()
+    public void Stream_graph_is_separate_from_send_and_owned_sessions_keep_execution_blocked()
     {
         var source = ListFixture("c.Handlers<Items>(DispatchFamily.Stream,typeof(ItemsHandler));") + """
             public sealed record Items : IStreamRequest<int>;
@@ -225,9 +225,9 @@ public sealed partial class GeneratorTests
             }
             """;
         var stream = Graph(BindLists(source, "ZEN0037"));
-        Assert.False(stream.IsValid);
+        Assert.True(stream.IsValid, string.Join(",", stream.Facts.Select(f => f.Reason)));
         Assert.Null(stream.Schedule);
-        Assert.Contains(stream.Facts, f => f.Reason == "SourceMoveCurrentDisposeAndEnumerationOwnerGraphUnavailable");
+        Assert.NotNull(stream.StreamSchedule);
         var valid = Graph(BindLists(GraphFixture(), "ZEN0037"));
         var owned = valid.Contract with { Stages = new(valid.Contract.Stages.Select((s, i) => i == 0 ? s with { ServiceOwnership = FusionOwnership.OwnedSession } : s)) };
         var rejected = CanonicalExecutionGraphNormalizer.Create(owned);

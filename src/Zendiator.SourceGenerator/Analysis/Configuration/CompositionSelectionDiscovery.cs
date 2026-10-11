@@ -170,7 +170,7 @@ internal static class CompositionSelectionDiscovery
                         var graph = execution.Compositions[index].FirstOrDefault(g => g.Contract.Anchor == fact.Anchor);
                         if (graph != null)
                             message = graph.IsValid
-                                ? "The Send execution graph satisfies its structural contract. Canonical runtime generation and equivalence are pending; emission remains blocked."
+                                ? "The " + (graph.Contract.Family == BoundDispatchFamily.Stream ? "Stream" : "Send") + " execution graph satisfies its structural contract. Canonical runtime generation and equivalence are pending; emission remains blocked."
                                 : "The execution graph is incomplete: " + string.Join(", ", graph.Facts.Select(f => f.Reason)) + ". Canonical emission remains blocked.";
                     }
                     context.ReportDiagnostic(Diagnostic.Create(Descriptor(fact.Key), primary, additional, null, message));
