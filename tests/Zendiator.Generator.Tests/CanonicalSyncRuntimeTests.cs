@@ -62,7 +62,7 @@ public sealed class CanonicalSyncRuntimeProbe
 public sealed partial class GeneratorTests
 {
     private sealed record SyncFixture(Assembly Assembly, Type Mediator, Type Interface, Type Service, Type Request,
-        MethodInfo Register, MethodInfo Dispatch, string Source);
+        MethodInfo Register, MethodInfo Dispatch, MethodInfo ResolveService, string Source);
     private static readonly ConcurrentDictionary<(string Receiver, bool Void), SyncFixture> SyncFixtures = new();
     private static readonly CSharpParseOptions SyncParseOptions = new CSharpParseOptions(LanguageVersion.Preview)
         .WithFeatures(new[] { new KeyValuePair<string, string>("InterceptorsNamespaces", "Zendiator.Generated.Interceptors") });
@@ -109,6 +109,13 @@ public sealed partial class GeneratorTests
                 [ZendiatorComposition("reads")] public sealed class Reads;
                 public static class Bridge {
                     public static IServiceCollection Register(IServiceCollection services)=>{{call}};
+                    public static object? ResolveService(IServiceProvider provider) {
+                        var probe=provider.GetRequiredService<Probe>();
+                        probe.Trace.Add("{{(receiver=="direct"?"resolve-handler":"resolve-factory")}}");
+                        if (probe.DiError!=null) throw probe.DiError;
+                        if (probe.NullService) return null;
+                        return new {{(receiver=="direct"?"Handler<string>":"Factory<string>")}}(probe);
+                    }
                     {{(dispatch ? "public static object? Dispatch(object mediator,object? request,CancellationToken token) { " + (isVoid ? "" : "return ") + send + (isVoid ? "return null;" : "") + " }" : "")}}
                 }
             }
@@ -127,8 +134,7 @@ public sealed partial class GeneratorTests
     {
         var source = sourceOverride ?? SyncRuntimeSource(receiver,isVoid,named,extension,emptyPipeline);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"CanonicalSync_"+Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
-        Assert.Contains("candidate", diagnostics[0].GetMessage());
+        Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         using var bytes = new MemoryStream();
         var emitted = output.Emit(bytes);
@@ -144,7 +150,7 @@ public sealed partial class GeneratorTests
             foreach (var generated in sources) File.WriteAllText(Path.Combine(folder,generated.HintName),generated.SourceText.ToString());
             File.WriteAllBytes(Path.Combine(folder,"generated.dll"),bytes.ToArray());
             File.WriteAllText(Path.Combine(folder,"compile.json"),JsonSerializer.Serialize(new { assemblyName=output.AssemblyName,
-                generatedSources=sources.Select(s=>s.HintName),emitted.Success,warnings=0,errors=0,productionBlocked="ZEN0037" }));
+                generatedSources=sources.Select(s=>s.HintName),emitted.Success,warnings=0,errors=0,generatorErrors=0,productionEnabled=true }));
         }
         bytes.Position=0;
         var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
@@ -152,7 +158,7 @@ public sealed partial class GeneratorTests
         var bridge=assembly.GetType(applicationNamespace+".Bridge")!;
         return new(assembly,assembly.GetType(ns+".Zendiator")!,assembly.GetType(ns+".IZendiator")!,
             assembly.GetType(applicationNamespace+(receiver=="direct"?".Handler`1":".Factory`1"))!.MakeGenericType(typeof(string)),
-            assembly.GetType(applicationNamespace+".Ping")!,bridge.GetMethod("Register")!,bridge.GetMethod("Dispatch")!,source);
+            assembly.GetType(applicationNamespace+".Ping")!,bridge.GetMethod("Register")!,bridge.GetMethod("Dispatch")!,bridge.GetMethod("ResolveService")!,source);
     }
     private static SyncFixture SyncRuntimeFixture(string receiver,bool isVoid) => SyncFixtures.GetOrAdd((receiver,isVoid),key=>CompileSyncFixture(key.Receiver,key.Void));
 
@@ -168,7 +174,8 @@ public sealed partial class GeneratorTests
     private static ServiceProvider SyncProvider(SyncFixture f,CanonicalSyncRuntimeProbe probe,bool recording=true,ServiceLifetime? lifetime=null)
     {
         IServiceCollection services=new ServiceCollection(); services.AddSingleton(probe);
-        if (recording) services.AddScoped(f.Mediator,p=>Activator.CreateInstance(f.Mediator,new RecordingSyncProvider(p,probe,f.Service))!);
+        // Observe resolution through a real Microsoft DI registration, not through the old candidate-only provider decorator.
+        if (recording) services.AddScoped(f.Service,f.ResolveService.CreateDelegate<Func<IServiceProvider,object>>());
         if (lifetime!=null) services.Add(ServiceDescriptor.Describe(f.Service,f.Service,lifetime.Value));
         Assert.Same(services,f.Register.Invoke(null,[services]));
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes=true,ValidateOnBuild=true });
@@ -307,7 +314,7 @@ public sealed partial class GeneratorTests
             probe.DuringHandler=()=> { probe.DuringHandler=null; var actual=InvokeSync(f,mediator,inner,default); Assert.Null(actual.Error); Assert.Equal(73,actual.Result); };
             var result=InvokeSync(f,mediator,outer,default); Assert.Null(result.Error); Assert.Equal(73,result.Result);
             Assert.Equal(new[] { "resolve-factory","factory.ctor","factory","handler.ctor","handler",
-                "resolve-factory","factory","handler.ctor","handler","handler.dispose","handler.dispose" },probe.Trace);
+                "factory","handler.ctor","handler","handler.dispose","handler.dispose" },probe.Trace);
             Assert.NotSame(probe.Created[0],probe.Created[1]); Assert.Equal(new[] { probe.Created[1],probe.Created[0] },probe.Released);
             Assert.Equal(new[] { outer,outer,inner,inner },probe.Calls.Select(c=>c.Request));
         }
@@ -371,6 +378,7 @@ public sealed partial class GeneratorTests
     [InlineData("stage")] [InlineData("async-family")] [InlineData("array-result")] [InlineData("namespace-collision")]
     [InlineData("nested-marker")] [InlineData("struct-factory")] [InlineData("multiple-routes")]
     [InlineData("ancestor-generated-type")] [InlineData("ancestor-marker-type")] [InlineData("default-namespace-type")]
+    [InlineData("all-sync-family")] [InlineData("all-async-family")]
     public void Unsupported_SendSync_candidate_shapes_keep_ZEN0037_and_emit_no_runtime_or_interceptor(string shape)
     {
         var source=SyncRuntimeSource(shape=="struct-factory"?"borrowed":"direct",false,named:shape!="default-namespace-type",dispatch:false);
@@ -381,6 +389,10 @@ public sealed partial class GeneratorTests
             "stage"=>source.Replace("c => c.Handlers<Ping>(DispatchFamily.SendSync,typeof(Handler<string>))",
                 "c => { c.Handlers<Ping>(DispatchFamily.SendSync,typeof(Handler<string>)); c.Pipeline<Ping>(DispatchFamily.SendSync,Stage.Hook<Hook>()); }")+"namespace App { public sealed class Hook : ISendFinallyObserver<Ping> { public void Finally(Ping r,SendExitInfo e,CancellationToken c){} } }",
             "async-family"=>source.Replace("DispatchFamily.SendSync","DispatchFamily.SendAsync").Replace("ISyncRequest", "IRequest")
+                .Replace("int IRequestHandler<Ping,int>.Handle(","System.Threading.Tasks.ValueTask<int> IRequestHandler<Ping,int>.HandleAsync(")
+                .Replace("return _probe.Handle(this,request,token);","return new(_probe.Handle(this,request,token));"),
+            "all-sync-family"=>source.Replace("DispatchFamily.SendSync","DispatchFamily.SendAllSync"),
+            "all-async-family"=>source.Replace("DispatchFamily.SendSync","DispatchFamily.SendAllAsync").Replace("ISyncRequest","IRequest")
                 .Replace("int IRequestHandler<Ping,int>.Handle(","System.Threading.Tasks.ValueTask<int> IRequestHandler<Ping,int>.HandleAsync(")
                 .Replace("return _probe.Handle(this,request,token);","return new(_probe.Handle(this,request,token));"),
             "array-result"=>source.Replace("ISyncRequest<int>","ISyncRequest<int[]>").Replace("ISyncRequestHandler<Ping,int>","ISyncRequestHandler<Ping,int[]>")
@@ -398,6 +410,70 @@ public sealed partial class GeneratorTests
                 "namespace App { public sealed record Other : ISyncRequest<int>; [ZendiatorHandler] public sealed class OtherHandler : ISyncRequestHandler<Other,int> { public int Handle(Other r,CancellationToken c)=>1; } }",_=>source };
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"CanonicalSyncUnsupported_"+shape),out var output,out var diagnostics);
         Assert.Equal(shape=="multiple-routes"?2:1,diagnostics.Length); Assert.All(diagnostics,d=>Assert.Equal("ZEN0037",d.Id));
+        Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));
+        Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.StartsWith("Zendiator.Canonical",StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("direct","service")] [InlineData("borrowed","service")] [InlineData("owned","service")]
+    [InlineData("direct","mediator")] [InlineData("borrowed","mediator")] [InlineData("owned","mediator")]
+    [InlineData("direct","interface")] [InlineData("borrowed","interface")] [InlineData("owned","interface")]
+    public void Enabled_SendSync_public_registration_rejects_unaccepted_Singleton_before_mutating_services(string receiver,string role)
+    {
+        var f=SyncRuntimeFixture(receiver,false); var probe=new CanonicalSyncRuntimeProbe();
+        IServiceCollection services=new ServiceCollection(); services.AddSingleton(probe);
+        var type=role=="service"?f.Service:role=="mediator"?f.Mediator:f.Interface;
+        services.Add(ServiceDescriptor.Singleton(type,role=="interface"?f.Mediator:type));
+        var before=services.ToArray();
+        var error=Assert.Throws<TargetInvocationException>(()=>f.Register.Invoke(null,[services]));
+        Assert.IsType<NotSupportedException>(error.InnerException);
+        Assert.Equal(before,services); Assert.Empty(probe.Trace); probe.Cancellation.Dispose();
+    }
+
+    private sealed class CustomSyncCollection : System.Collections.ObjectModel.Collection<ServiceDescriptor>,IServiceCollection;
+
+    [Theory]
+    [InlineData("collection")] [InlineData("provider")]
+    public void Enabled_SendSync_rejects_custom_container_or_candidate_only_provider_decorator(string boundary)
+    {
+        var f=SyncRuntimeFixture("owned",false); var probe=new CanonicalSyncRuntimeProbe();
+        if (boundary=="collection")
+        {
+            var collection=new CustomSyncCollection();
+            var error=Assert.Throws<TargetInvocationException>(()=>f.Register.Invoke(null,[collection]));
+            Assert.IsType<NotSupportedException>(error.InnerException); Assert.Empty(collection);
+        }
+        else
+        {
+            using var provider=new ServiceCollection().BuildServiceProvider();
+            var error=Assert.Throws<TargetInvocationException>(()=>Activator.CreateInstance(f.Mediator,new RecordingSyncProvider(provider,probe,f.Service)));
+            Assert.IsType<NotSupportedException>(error.InnerException);
+        }
+        Assert.Empty(probe.Trace); probe.Cancellation.Dispose();
+    }
+
+    [Fact]
+    public void Enabled_SendSync_does_not_accept_explicit_Singleton_configuration_as_a_scoped_composition()
+    {
+        var source=SyncRuntimeSource("direct",false,dispatch:false).Replace(
+            "c => c.Handlers<Ping>(DispatchFamily.SendSync,typeof(Handler<string>))",
+            "c => { c.ServiceLifetime=ServiceLifetime.Singleton; c.Handlers<Ping>(DispatchFamily.SendSync,typeof(Handler<string>)); }");
+        var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"UnsupportedSingletonConfig"),out var output,out var diagnostics);
+        Assert.Equal("ZEN0035",Assert.Single(diagnostics).Id);
+        Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));
+        Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.StartsWith("Zendiator.Canonical",StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void Enabled_SendSync_missing_or_source_homonym_Microsoft_DI_implementation_keeps_ZEN0037(bool homonym)
+    {
+        var source=SyncRuntimeSource("direct",false,dispatch:false);
+        if (homonym) source+="namespace Microsoft.Extensions.DependencyInjection { public sealed class ServiceProvider {} }";
+        var compilation=SyncCompilation(source,"UnsupportedProviderReference");
+        if (!homonym) compilation=compilation.WithReferences(compilation.References.Where(r=>!string.Equals(Path.GetFileName(r.Display),"Microsoft.Extensions.DependencyInjection.dll",StringComparison.OrdinalIgnoreCase)));
+        var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(compilation,out var output,out var diagnostics);
+        Assert.Equal("ZEN0037",Assert.Single(diagnostics).Id);
         Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));
         Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.StartsWith("Zendiator.Canonical",StringComparison.Ordinal));
     }

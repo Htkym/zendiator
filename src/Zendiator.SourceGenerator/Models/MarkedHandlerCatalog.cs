@@ -18,5 +18,6 @@ internal sealed record CompositionSelectionModel(string Identity, string Key,
     public string? MarkerName { get; init; }
     public bool UseLocalHandlers { get; init; }
     public bool HasExplicitSelection { get; init; }
+    public string? MicrosoftDiProviderName { get; init; }
 }
 internal sealed record CompositionSelectionCatalog(EquatableArray<CompositionSelectionModel> Compositions);

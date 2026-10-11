@@ -2,7 +2,7 @@ using System.Text;
 
 namespace Zendiator.SourceGenerator;
 
-/// <summary>Generates a gated SendSync candidate; ZEN0037 remains until runtime review accepts the shape.</summary>
+/// <summary>Emits only the limited SendSync runtime matrix accepted by review.</summary>
 internal static class CanonicalSyncSourceEmitter
 {
     internal static string Emit(CanonicalSyncEmissionModel model)
@@ -26,6 +26,10 @@ internal static class CanonicalSyncSourceEmitter
                         public Zendiator(global::System.IServiceProvider provider)
                         {
                             global::System.ArgumentNullException.ThrowIfNull(provider);
+                            if (provider is not {{c.MicrosoftDiProviderName}} &&
+                                (provider.GetType().Assembly != typeof({{c.MicrosoftDiProviderName}}).Assembly ||
+                                 provider.GetType().FullName != "Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceProviderEngineScope"))
+                                throw new global::System.NotSupportedException("This generated composition currently supports Microsoft Dependency Injection providers only.");
                             _provider = provider;
                         }
                         public {{result}} Send({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default)
@@ -73,6 +77,8 @@ internal static class CanonicalSyncSourceEmitter
                     {
                         global::System.ArgumentNullException.ThrowIfNull(services);
                         global::System.ArgumentNullException.ThrowIfNull(snapshot);
+                        if (services.GetType() != typeof(global::Microsoft.Extensions.DependencyInjection.ServiceCollection))
+                            throw new global::System.NotSupportedException("This generated composition currently supports Microsoft Dependency Injection service collections only.");
                         var expected = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
             """);
         if (c.UseLocalHandlers) b.AppendLine("            expected.UseLocalHandlers();");
@@ -86,6 +92,13 @@ internal static class CanonicalSyncSourceEmitter
                             throw new global::System.InvalidOperationException("AddZendiator configuration does not match this generated composition.");
             """);
         var service = c.Factory?.FactoryName ?? h.HandlerName;
+        b.AppendLine($$"""
+                        foreach (var descriptor in services)
+                            if (!descriptor.IsKeyedService && descriptor.Lifetime == global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton &&
+                                (descriptor.ServiceType == typeof({{service}}) || descriptor.ServiceType == typeof(global::{{c.Namespace}}.Zendiator) ||
+                                 descriptor.ServiceType == typeof(global::{{c.Namespace}}.IZendiator)))
+                                throw new global::System.NotSupportedException("Singleton dispatch services are not supported by this generated composition yet. Use Scoped or Transient dependencies with its scoped mediator.");
+            """);
         foreach (var type in new[] { service, "global::" + c.Namespace + ".Zendiator" })
             b.AppendLine($$"""
                         global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services,

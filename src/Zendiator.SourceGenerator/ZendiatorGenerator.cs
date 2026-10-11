@@ -52,8 +52,8 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         {
             if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.SendSync.Interceptors.g.cs", SourceText.From(text, Encoding.UTF8));
         });
-        context.RegisterSourceOutput(compositionModel.Combine(executionModel).Combine(compositions).Combine(canonicalSync), static (ctx, input) =>
-            CompositionSelectionDiscovery.Report(ctx, input.Left.Left.Left, input.Left.Right, input.Left.Left.Right, input.Right));
+        context.RegisterSourceOutput(compositionModel.Combine(executionModel).Combine(compositions).Combine(canonicalSync).Combine(canonicalSyncSites), static (ctx, input) =>
+            CompositionSelectionDiscovery.Report(ctx, input.Left.Left.Left.Left, input.Left.Left.Right, input.Left.Left.Left.Right, input.Left.Right, input.Right));
         var legacyInvocations = invocations.Combine(compositions)
             .Select(static (input, _) => CompositionSelectionDiscovery.LegacyInvocations(input.Left, input.Right));
         // Discovery metadata alone never gates unrelated legacy generation.

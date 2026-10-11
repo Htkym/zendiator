@@ -129,6 +129,8 @@ internal static class CompositionSelectionDiscovery
             var model = new CompositionSelectionModel(identity, key,
                 new(selected.Values.OrderBy(h => h.Identity, StringComparer.Ordinal)), new(errors), compilerOwned,
                 pipelines, new(lists.Facts)) { GeneratedNamespace = generatedNamespace, MarkerName = markerName,
+                    MicrosoftDiProviderName = compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.ServiceProvider") is { TypeKind: TypeKind.Class } provider &&
+                        provider.ContainingAssembly.Identity.Name == "Microsoft.Extensions.DependencyInjection" && provider.Locations.All(l => !l.IsInSource) ? Name(provider) : null,
                     UseLocalHandlers = useLocalHandlers, HasExplicitSelection = hasExplicitSelection };
             result.Add(new(model, invocation, lists.Sources.ToImmutableDictionary(StringComparer.Ordinal)));
 
@@ -168,7 +170,7 @@ internal static class CompositionSelectionDiscovery
         ImmutableArray<Binding> compositions) => invocations.Where(i => !compositions.Any(c => c.Invocation == i)).ToImmutableArray();
 
     internal static void Report(SourceProductionContext context, CompositionSelectionCatalog catalog, ImmutableArray<Binding> current,
-        CanonicalExecutionGraphCatalog execution, CanonicalSyncEmissionModel canonicalSync)
+        CanonicalExecutionGraphCatalog execution, CanonicalSyncEmissionModel canonicalSync, CanonicalSyncInterceptorModel syncCallSites)
     {
         for (var index = 0; index < catalog.Compositions.Count; index++)
         {
@@ -193,11 +195,12 @@ internal static class CompositionSelectionDiscovery
                     var message = fact.Message;
                     if (fact.Key == "IncompleteExecutionContract")
                     {
+                        var enabled = canonicalSync.Compositions.FirstOrDefault(c => c.Index == index);
+                        if (enabled != null && syncCallSites.CallSites.Any(s => s.Namespace == enabled.Namespace && s.MarkerName == enabled.MarkerName))
+                            continue; // Only the runtime matrix accepted by review and its actual registration call site are enabled.
                         var graph = execution.Compositions[index].FirstOrDefault(g => g.Contract.Anchor == fact.Anchor);
                         if (graph != null)
-                            message = canonicalSync.Compositions.Any(c => c.Index == index)
-                                ? "A limited stage-free SendSync C# candidate is emitted for compilation and execution validation. ZEN0037 remains until its runtime review accepts this shape."
-                                : graph.IsValid
+                            message = graph.IsValid
                                 ? "The " + (graph.Contract.Family == BoundDispatchFamily.Stream ? "Stream" : "Send") + " execution graph satisfies its structural contract. Canonical runtime generation and equivalence are pending; emission remains blocked."
                                 : "The execution graph is incomplete: " + string.Join(", ", graph.Facts.Select(f => f.Reason)) + ". Canonical emission remains blocked.";
                     }
