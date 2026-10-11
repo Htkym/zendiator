@@ -13,13 +13,26 @@ internal static class CanonicalSendSessionBuilder
         var orders = schedule.Orders.ToList(); var awaits = schedule.Awaits.ToList();
         var flows = schedule.ControlFlows.ToList(); var transfers = new List<SendSessionTransfer>();
         var calls = new List<SendSessionCall>();
+        var resolutions = new List<SendServiceResolution>(); var receivers = new List<SendCallbackReceiver>();
         for (var b = 0; b < route.Handlers.Count; b++)
             for (var s = 0; s <= route.Stages.Count; s++)
             {
                 var sessions = Sessions(route, b, s); if (sessions.Count == 0) continue;
                 var owner = Scope(b, s); var anchor = s == route.Stages.Count ? route.Handlers[b].Anchor : route.Stages[s].Anchor;
                 var scopeOwner = owners.Single(o => o.Id == owner);
-                var retained = Enumerable.Range(0, sessions.Count).SelectMany(i => new[] { Session(b, s, i) + "/live", Session(b, s, i) + "/detached" }).ToArray();
+                var callbackSession = sessions.Count == 1 && sessions[0].SuppliesCallbackReceiver;
+                var state = schedule.States.Single(st => st.Owner == owner);
+                var retained = Enumerable.Range(0, sessions.Count).SelectMany(i => new[] { Session(b, s, i) + "/live", Session(b, s, i) + "/detached" })
+                    .Concat(callbackSession ? new[] { Service(b, s) + "/resolved" } : new string[0]).ToArray();
+                if (callbackSession)
+                {
+                    resolutions.Add(new(Site(b, s, SendExecutionPhase.Resolve), sessions[0].FactoryServiceType, Service(b, s) + "/resolved"));
+                    foreach (var site in sites.Where(st => st.Owner == owner && st.Producer != null && st.Id.Phase is
+                        SendExecutionPhase.Before or SendExecutionPhase.Success or SendExecutionPhase.Exception or SendExecutionPhase.Finally or SendExecutionPhase.InvokeHandler or SendExecutionPhase.InvokeWrapper))
+                        receivers.Add(new(site.Id, Session(b, s, 0) + "/live",
+                            site.Id.Phase == SendExecutionPhase.Before || state.EffectiveRequestSlot == null ? state.InputRequestSlot : state.EffectiveRequestSlot,
+                            state.StartTokenSlot));
+                }
                 for (var a = 0; a < awaits.Count; a++)
                     if (awaits[a].Owner == owner) awaits[a] = awaits[a] with { RetainedSlots = new(awaits[a].RetainedSlots.Concat(retained)) };
                 SendExecutionSiteId Id(int i, SendExecutionPhase phase) => SessionSite(b, s, i, phase);
@@ -43,16 +56,21 @@ internal static class CanonicalSendSessionBuilder
                 for (var i = 0; i < sessions.Count; i++)
                 {
                     var binding = sessions[i]; var resource = Session(b, s, i);
-                    owners.Add(new(resource + "/factory", "provider", SendOwnerKind.Service, SendOwnerLifetime.Caller,
+                    if (!callbackSession) owners.Add(new(resource + "/factory", "provider", SendOwnerKind.Service, SendOwnerLifetime.Caller,
                         scopeOwner.Multiplicity, true, FusionCleanupKind.None, false));
                     owners.Add(new(resource, owner, SendOwnerKind.Session, SendOwnerLifetime.Stage, scopeOwner.Multiplicity,
                         binding.Ownership == FusionOwnership.BorrowedResource,
                         binding.Cleanup == null ? FusionCleanupKind.None : binding.Cleanup.Completion == BoundCompletionKind.ValueTask ? FusionCleanupKind.Async : FusionCleanupKind.Sync, false));
-                    Add(i, SendExecutionPhase.SessionGuard); Add(i, SendExecutionPhase.ResolveSessionFactory, producer: binding.FactoryServiceType);
+                    Add(i, SendExecutionPhase.SessionGuard);
+                    if (!callbackSession) Add(i, SendExecutionPhase.ResolveSessionFactory, producer: binding.FactoryServiceType);
                     Add(i, SendExecutionPhase.AcquireSession, binding.Acquire, SendFailureDisposition.UnwindAcquiredSessionsThenOuter);
-                    calls.Add(new(Id(i, SendExecutionPhase.AcquireSession), resource + "/factory/resolved", resource + "/factory-result", true, true, false));
+                    calls.Add(new(Id(i, SendExecutionPhase.AcquireSession), callbackSession ? Service(b, s) + "/resolved" : resource + "/factory/resolved", resource + "/factory-result", true, true, false)
+                        { RequestSlot = state.InputRequestSlot, TokenSlot = state.StartTokenSlot });
+                    if (callbackSession) Add(i, SendExecutionPhase.ValidateSessionResult);
                     Add(i, SendExecutionPhase.CommitSession); Add(i, SendExecutionPhase.DetachSession);
-                    var phases = new[] { SendExecutionPhase.SessionGuard, SendExecutionPhase.ResolveSessionFactory, SendExecutionPhase.AcquireSession, SendExecutionPhase.CommitSession };
+                    var phases = callbackSession
+                        ? new[] { SendExecutionPhase.SessionGuard, SendExecutionPhase.AcquireSession, SendExecutionPhase.ValidateSessionResult, SendExecutionPhase.CommitSession }
+                        : new[] { SendExecutionPhase.SessionGuard, SendExecutionPhase.ResolveSessionFactory, SendExecutionPhase.AcquireSession, SendExecutionPhase.CommitSession };
                     for (var p = 0; p < phases.Length; p++)
                     {
                         var next = p + 1 < phases.Length ? Id(i, phases[p + 1]) : i + 1 < sessions.Count ? Id(i + 1, phases[0]) : entered;
@@ -62,6 +80,7 @@ internal static class CanonicalSendSessionBuilder
                         if (!pure) edges.Add(new(Node(i, phases[p]), cleanupStart, SendControlOutcome.Failure, SendControlPredicate.Any));
                     }
                     transfers.Add(new(resource + "/factory-result", resource + "/live", Id(i, SendExecutionPhase.CommitSession)));
+                    if (callbackSession) transfers.Add(new("null", resource + "/factory-result", Id(i, SendExecutionPhase.CommitSession)));
                     transfers.Add(new(resource + "/live", resource + "/detached", Id(i, SendExecutionPhase.DetachSession)));
                     transfers.Add(new("null", resource + "/live", Id(i, SendExecutionPhase.DetachSession)));
                     if (binding.Ownership == FusionOwnership.OwnedSession)
@@ -96,7 +115,6 @@ internal static class CanonicalSendSessionBuilder
                         callback?.Completion ?? BoundCompletionKind.Synchronous, callback?.Implementation ?? producer, callback?.ReturnType, failure));
                     if (callback?.Completion == BoundCompletionKind.ValueTask)
                     {
-                        var state = schedule.States.Single(st => st.Owner == owner);
                         awaits.Add(new(Id(i, phase), owner, phase == SendExecutionPhase.AcquireSession ? sessions[i].ResourceType : "void", true, true,
                             phase == SendExecutionPhase.AcquireSession ? SendAwaitContinuation.TransferSession : SendAwaitContinuation.ContinueSessionCleanup,
                             SendFailureTarget.CurrentScope, SendFailureTarget.CurrentScope,
@@ -106,6 +124,7 @@ internal static class CanonicalSendSessionBuilder
                 }
             }
         return schedule with { Sites = new(sites), Orders = new(orders), Owners = new(owners), Awaits = new(awaits),
-            ControlFlows = new(flows), SessionTransfers = new(transfers), SessionCalls = new(calls) };
+            ControlFlows = new(flows), SessionTransfers = new(transfers), SessionCalls = new(calls),
+            ServiceResolutions = new(resolutions), CallbackReceivers = new(receivers) };
     }
 }

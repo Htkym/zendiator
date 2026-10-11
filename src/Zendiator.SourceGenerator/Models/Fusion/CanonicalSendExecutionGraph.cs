@@ -4,7 +4,7 @@ namespace Zendiator.SourceGenerator;
 internal enum SendExecutionPhase
 {
     ArgumentGuard, OperationBoundary, DestinationGuard, BranchStart, CancellationGuard,
-    Resolve, SessionGuard, ResolveSessionFactory, AcquireSession, CommitSession,
+    Resolve, SessionGuard, ResolveSessionFactory, AcquireSession, ValidateSessionResult, CommitSession,
     DetachSession, SessionPresent, CleanupSession, SessionResult,
     Entered, Before, InvokeInner, InvokeWrapper, NextCall, InvokeHandler,
     Success, Exception, Finally, ScopeExit, DestinationCommit, OperationReturn
@@ -49,7 +49,13 @@ internal sealed record SendControlEdge(SendControlPoint From, SendControlPoint T
 internal sealed record SendControlFlow(string Owner, EquatableArray<SendControlEdge> Edges);
 internal sealed record SendSessionTransfer(string Source, string Destination, SendExecutionSiteId At);
 internal sealed record SendSessionCall(SendExecutionSiteId At, string Receiver, string? Result,
-    bool PreserveIdentityAndToken, bool ReplacePreviousError, bool Aggregate);
+    bool PreserveIdentityAndToken, bool ReplacePreviousError, bool Aggregate)
+{
+    public string? RequestSlot { get; init; }
+    public string? TokenSlot { get; init; }
+}
+internal sealed record SendServiceResolution(SendExecutionSiteId At, string ServiceType, string ResultSlot);
+internal sealed record SendCallbackReceiver(SendExecutionSiteId At, string Receiver, string RequestSlot, string TokenSlot);
 
 /// <summary>Symbol-free schedule templates. EachNext instantiates fresh state on every opaque next call.</summary>
 internal sealed record CanonicalSendExecutionSchedule(
@@ -62,6 +68,8 @@ internal sealed record CanonicalSendExecutionSchedule(
     public EquatableArray<SendControlFlow> ControlFlows { get; init; }
     public EquatableArray<SendSessionTransfer> SessionTransfers { get; init; }
     public EquatableArray<SendSessionCall> SessionCalls { get; init; }
+    public EquatableArray<SendServiceResolution> ServiceResolutions { get; init; }
+    public EquatableArray<SendCallbackReceiver> CallbackReceivers { get; init; }
 }
 internal sealed record CanonicalExecutionGraphFact(string Reason, string Anchor);
 internal sealed record CanonicalExecutionGraphModel(BoundPipelineModel Contract, CanonicalSendExecutionSchedule? Schedule,

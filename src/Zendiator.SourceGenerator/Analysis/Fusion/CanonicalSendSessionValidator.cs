@@ -26,6 +26,7 @@ internal static class CanonicalSendSessionValidator
         public ImmutableHashSet<SendExecutionPhase> SuccessfulCallbacks { get; init; } = ImmutableHashSet<SendExecutionPhase>.Empty;
         public SendExecutionSiteId? FirstFailure { get; init; }
         public bool CleanupStarted { get; init; }
+        public ImmutableHashSet<int> ValidatedSessions { get; init; } = ImmutableHashSet<int>.Empty;
     }
 
     internal static EquatableArray<CanonicalExecutionGraphFact> Validate(BoundPipelineModel route, CanonicalSendExecutionSchedule schedule) => Inspect(route, schedule).Facts;
@@ -42,6 +43,8 @@ internal static class CanonicalSendSessionValidator
             {
                 var declared = Sessions(route, branch, stage); if (declared.Count == 0) continue;
                 var owner = Scope(branch, stage);
+                var callbackSession = declared.Count == 1 && declared[0].SuppliesCallbackReceiver;
+                var invocationState = schedule.States.SingleOrDefault(st => st.Owner == owner);
                 var matches = schedule.ControlFlows.Where(f => f.Owner == owner).ToArray();
                 if (matches.Length != 1) { Reject("SessionControlFlowRequired"); continue; }
                 var edges = matches[0].Edges.ToLookup(e => e.From);
@@ -74,12 +77,24 @@ internal static class CanonicalSendSessionValidator
                             state = state with { Visited = state.Visited.Add(id) };
                             var index = id.Session;
                             var sessionPhase = id.Phase is SendExecutionPhase.SessionGuard or SendExecutionPhase.ResolveSessionFactory or SendExecutionPhase.AcquireSession or
-                                SendExecutionPhase.CommitSession or SendExecutionPhase.DetachSession or SendExecutionPhase.SessionPresent or SendExecutionPhase.CleanupSession;
+                                SendExecutionPhase.ValidateSessionResult or SendExecutionPhase.CommitSession or SendExecutionPhase.DetachSession or SendExecutionPhase.SessionPresent or SendExecutionPhase.CleanupSession;
                             if (sessionPhase && (index < 0 || index >= declared.Count)) { Reject("UnknownSessionIndex"); continue; }
                             if (IsBodyCallback(id.Phase))
                             {
                                 if (!state.Entered) Reject("CallbackReachedBeforeSessionScopeEntered");
                                 if (state.CleanupStarted) Reject("SessionBodyCallbackAfterDetach");
+                                if (callbackSession && id.Phase != SendExecutionPhase.InvokeInner)
+                                {
+                                    var receiver = schedule.CallbackReceivers.Where(c => c.At == id).ToArray();
+                                    if (receiver.Length != 1 || receiver[0].Receiver != Resource(0) + "/live" ||
+                                        Read(state, receiver[0].Receiver) != Resource(0) + "/instance") Reject("BodyReceiverIsNotLiveTransferredSession");
+                                    else if (invocationState == null || receiver[0].TokenSlot != invocationState.StartTokenSlot ||
+                                        receiver[0].RequestSlot != (id.Phase == SendExecutionPhase.Before || invocationState.EffectiveRequestSlot == null
+                                            ? invocationState.InputRequestSlot : invocationState.EffectiveRequestSlot)) Reject("BodySessionRequestOrTokenSlotMismatch");
+                                    if (schedule.Awaits.Where(a => a.Producer == id).Any(a =>
+                                        !a.RetainedSlots.Contains(Resource(0) + "/live") || !a.RetainedSlots.Contains(Resource(0) + "/detached")))
+                                        Reject("SessionLeaseLostAcrossPendingAwait");
+                                }
                             }
                             if (id.Phase is SendExecutionPhase.DetachSession or SendExecutionPhase.SessionPresent or SendExecutionPhase.CleanupSession)
                             {
@@ -95,13 +110,24 @@ internal static class CanonicalSendSessionValidator
                                     if (!state.Guarded.Contains(index) || state.Error != null) Reject("FactoryResolutionBeforeSessionGuard");
                                     break;
                                 case SendExecutionPhase.AcquireSession:
-                                    if (Read(state, Resource(index) + "/factory/resolved") == null || state.Error != null) Reject("SessionAcquiredBeforeFactoryResolutionOrAfterFailure");
+                                    if (Read(state, callbackSession ? Service(branch, stage) + "/resolved" : Resource(index) + "/factory/resolved") == null || state.Error != null) Reject("SessionAcquiredBeforeFactoryResolutionOrAfterFailure");
+                                    if (!state.Guarded.Contains(index)) Reject("SessionAcquiredBeforeCancellationGuard");
                                     CheckCall(id, declared[index].Acquire, false);
+                                    var acquisition = Call(id);
+                                    if (invocationState == null || acquisition == null || acquisition.RequestSlot != invocationState.InputRequestSlot || acquisition.TokenSlot != invocationState.StartTokenSlot)
+                                        Reject("SessionFactoryRequestOrTokenSlotMismatch");
                                     break;
                                 case SendExecutionPhase.CommitSession:
-                                    if (!state.Acquired.Contains(index) || state.Error != null) Reject("OwnershipTransferredBeforeSuccessfulFactoryCompletion");
+                                    if (callbackSession)
+                                    {
+                                        if (!state.ValidatedSessions.Contains(index) || Read(state, Resource(index) + "/factory-result") != Resource(index) + "/instance" || state.Error != null)
+                                            Reject("OwnershipTransferredBeforeNonNullSessionValidation");
+                                        else state = state with { Acquired = state.Acquired.Add(index) };
+                                    }
+                                    else if (!state.Acquired.Contains(index) || state.Error != null) Reject("OwnershipTransferredBeforeSuccessfulFactoryCompletion");
                                     state = Transfer(state, id);
                                     if (Read(state, Resource(index) + "/live") != Resource(index) + "/instance") Reject("SessionTransferLostOrAliasedResource");
+                                    if (callbackSession && Read(state, Resource(index) + "/factory-result") != null) Reject("FactoryResultAliasRetainedAfterTransfer");
                                     break;
                                 case SendExecutionPhase.Entered:
                                     if (state.Acquired.Count != declared.Count || Enumerable.Range(0, declared.Count).Any(i => Read(state, Resource(i) + "/live") != Resource(i) + "/instance")) Reject("EnteredBeforeSessionTransfer");
@@ -128,7 +154,9 @@ internal static class CanonicalSendSessionValidator
                         }
                         var pure = id == null || id.Phase is SendExecutionPhase.Entered or SendExecutionPhase.CommitSession or SendExecutionPhase.DetachSession or
                             SendExecutionPhase.SessionPresent or SendExecutionPhase.SessionResult;
-                        foreach (var completion in pure ? new[] { (Outcome: SendControlOutcome.Always, Canceled: false) } :
+                        foreach (var completion in id?.Phase == SendExecutionPhase.ValidateSessionResult
+                            ? new[] { (Outcome: Read(state, Resource(id.Session) + "/factory-result") == null ? SendControlOutcome.Failure : SendControlOutcome.Success, Canceled: false) }
+                            : pure ? new[] { (Outcome: SendControlOutcome.Always, Canceled: false) } :
                             new[] { (Outcome: SendControlOutcome.Success, Canceled: false), (Outcome: SendControlOutcome.Failure, Canceled: false), (Outcome: SendControlOutcome.Failure, Canceled: true) })
                         {
                             var outcome = completion.Outcome;
@@ -141,15 +169,23 @@ internal static class CanonicalSendSessionValidator
                             if (id != null && outcome == SendControlOutcome.Success)
                             {
                                 var resource = Resource(id.Session);
+                                if (id.Phase == SendExecutionPhase.Resolve && callbackSession)
+                                {
+                                    var resolution = schedule.ServiceResolutions.Where(r => r.At == id).ToArray();
+                                    if (resolution.Length != 1 || resolution[0].ServiceType != declared[0].FactoryServiceType || resolution[0].ResultSlot != Service(branch, stage) + "/resolved")
+                                        Reject("SessionFactoryDIResolutionTypeOrSlotMismatch");
+                                    else next = next with { Values = next.Values.SetItem(resolution[0].ResultSlot, "borrowed-factory:" + Resource(0)) };
+                                }
                                 if (id.Phase == SendExecutionPhase.SessionGuard) next = next with { Guarded = next.Guarded.Add(id.Session) };
                                 if (id.Phase == SendExecutionPhase.ResolveSessionFactory) next = next with { Values = next.Values.SetItem(resource + "/factory/resolved", "borrowed-factory:" + resource) };
                                 if (id.Phase == SendExecutionPhase.AcquireSession)
                                 {
                                     var call = Call(id);
-                                    if (call?.Result == null || Read(next, call.Receiver) != "borrowed-factory:" + resource) Reject("FactoryCallReceiverOrResultMismatch");
+                                    if (call == null || call.Result != resource + "/factory-result" || Read(next, call.Receiver) != "borrowed-factory:" + resource) Reject("FactoryCallReceiverOrResultMismatch");
                                     else next = next with { Values = next.Values.SetItem(call.Result, resource + "/instance") };
-                                    next = next with { Acquired = next.Acquired.Add(id.Session) };
+                                    if (!callbackSession) next = next with { Acquired = next.Acquired.Add(id.Session) };
                                 }
+                                if (id.Phase == SendExecutionPhase.ValidateSessionResult) next = next with { ValidatedSessions = next.ValidatedSessions.Add(id.Session) };
                             }
                             if (outcome == SendControlOutcome.Failure)
                             {
@@ -170,7 +206,13 @@ internal static class CanonicalSendSessionValidator
                                 _ => false
                             })).ToArray();
                             if (selected.Length != 1) Reject("SessionPathMissingOrAmbiguousOutcome");
-                            else work.Push(next with { Point = selected[0].To });
+                            else
+                            {
+                                work.Push(next with { Point = selected[0].To });
+                                // A violating factory may return null despite its public nonnullable contract.
+                                if (callbackSession && id?.Phase == SendExecutionPhase.AcquireSession && outcome == SendControlOutcome.Success && Call(id)?.Result is string resultSlot)
+                                    work.Push(next with { Point = selected[0].To, Values = next.Values.SetItem(resultSlot, null) });
+                            }
                         }
                     }
                 bool ReadyForCleanup(State state)
@@ -178,7 +220,7 @@ internal static class CanonicalSendSessionValidator
                     // A startup failure may release partial acquisitions without entering this body.
                     if (!state.Entered) return state.Error != null && state.FirstFailure?.Phase is
                         SendExecutionPhase.ArgumentGuard or SendExecutionPhase.CancellationGuard or SendExecutionPhase.Resolve or
-                        SendExecutionPhase.SessionGuard or SendExecutionPhase.ResolveSessionFactory or SendExecutionPhase.AcquireSession;
+                        SendExecutionPhase.SessionGuard or SendExecutionPhase.ResolveSessionFactory or SendExecutionPhase.AcquireSession or SendExecutionPhase.ValidateSessionResult;
                     if (stage == route.Stages.Count) return state.CompletedCallbacks.Contains(SendExecutionPhase.InvokeHandler);
                     if (route.Stages[stage].Kind == FusionStageKind.Wrapper) return state.CompletedCallbacks.Contains(SendExecutionPhase.InvokeWrapper);
                     var callbacks = route.Stages[stage].Callbacks;
@@ -214,6 +256,7 @@ internal static class CanonicalSendSessionValidator
                             (cleanup ? SendAwaitContinuation.ContinueSessionCleanup : SendAwaitContinuation.TransferSession)) Reject("SessionAwaitConsumptionOrContinuationMismatch");
                         else if (awaits[0].ResultType != (cleanup ? "void" : declared[id.Session].ResourceType)) Reject("SessionAwaitResultMismatch");
                         else if (Enumerable.Range(0, declared.Count).Any(i => !awaits[0].RetainedSlots.Contains(Resource(i) + "/live") || !awaits[0].RetainedSlots.Contains(Resource(i) + "/detached"))) Reject("SessionLeaseLostAcrossPendingAwait");
+                        else if (callbackSession && !awaits[0].RetainedSlots.Contains(Service(branch, stage) + "/resolved")) Reject("SessionFactoryLostAcrossPendingAwait");
                     }
                     else if (awaits.Length != 0) Reject("SynchronousSessionCallbackAwaited");
                 }

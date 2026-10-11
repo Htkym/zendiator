@@ -19,6 +19,8 @@ internal sealed class RequiredSendExecutionContract
     internal readonly List<SendValueTransfer> Transfers = new();
     internal readonly List<SendSessionTransfer> SessionTransfers = new();
     internal readonly List<SendSessionCall> SessionCalls = new();
+    internal readonly List<SendServiceResolution> ServiceResolutions = new();
+    internal readonly List<SendCallbackReceiver> CallbackReceivers = new();
     internal bool Async { get; private set; }
 
     internal static RequiredSendExecutionContract Derive(BoundPipelineModel route)

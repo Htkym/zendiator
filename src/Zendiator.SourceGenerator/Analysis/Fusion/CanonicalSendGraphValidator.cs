@@ -22,7 +22,7 @@ internal static class CanonicalSendGraphValidator
         foreach (var handler in route.Handlers)
         {
             CheckSessions(handler.Sessions, handler.Anchor);
-            if (handler.ServiceOwnership != FusionOwnership.BorrowedService) Reject("OwnedHandlerAcquisitionAndCleanupUnavailable", handler.Anchor);
+            CheckReceiver(handler.Type, handler.ServiceOwnership, handler.Sessions, handler.Anchor, "Handler");
             if (handler.CompilerOwnsError || handler.Callback == null) { Reject("HandlerImplementationUnavailable", handler.Anchor); continue; }
             if (handler.Callback.Phase != BoundCallbackPhase.Handler || handler.Callback.Completion !=
                 (async ? BoundCompletionKind.ValueTask : BoundCompletionKind.Synchronous)) Reject("HandlerCompletionMismatch", handler.Anchor);
@@ -31,7 +31,7 @@ internal static class CanonicalSendGraphValidator
         foreach (var stage in route.Stages)
         {
             CheckSessions(stage.Sessions, stage.Anchor);
-            if (stage.ServiceOwnership != FusionOwnership.BorrowedService) Reject("OwnedStageAcquisitionAndCleanupUnavailable", stage.Anchor);
+            CheckReceiver(stage.Type, stage.ServiceOwnership, stage.Sessions, stage.Anchor, "Stage");
             if (stage.CompilerOwnsError || stage.Callbacks.Count == 0) Reject("StageImplementationUnavailable", stage.Anchor);
             if (stage.Callbacks.GroupBy(c => c.Phase).Any(g => g.Count() != 1)) Reject("DuplicateCallbackPhase", stage.Anchor);
             if (stage.Kind == FusionStageKind.Wrapper)
@@ -51,7 +51,6 @@ internal static class CanonicalSendGraphValidator
         {
             foreach (var session in sessions)
             {
-                if (session.SuppliesCallbackReceiver) Reject("SessionCallbackReceiverGraphUnavailable", anchor);
                 if (string.IsNullOrEmpty(session.FactoryServiceType) || string.IsNullOrEmpty(session.ResourceType)) Reject("ExplicitSessionFactoryRequired", anchor);
                 if (session.Acquire.Phase != BoundCallbackPhase.SessionAcquire) Reject("SessionAcquisitionPhaseRequired", anchor);
                 CheckCallback(session.Acquire, anchor);
@@ -68,6 +67,18 @@ internal static class CanonicalSendGraphValidator
                         (async ? BoundCompletionKind.ValueTask : BoundCompletionKind.Synchronous)) Reject("SessionCleanupModeMismatch", anchor);
                 }
             }
+        }
+
+        void CheckReceiver(string type, FusionOwnership ownership, EquatableArray<BoundSessionModel> sessions, string anchor, string role)
+        {
+            var receiver = sessions.Where(s => s.SuppliesCallbackReceiver).ToArray();
+            if (receiver.Length == 0)
+            {
+                if (ownership != FusionOwnership.BorrowedService) Reject("Owned" + role + "AcquisitionAndCleanupUnavailable", anchor);
+                return;
+            }
+            if (receiver.Length != 1 || sessions.Count != 1) Reject("SingleFactoryCallbackReceiverRequired", anchor);
+            if (receiver.Any(s => s.ResourceType != type || s.Ownership != ownership)) Reject("SessionReceiverTypeOrOwnershipMismatch", anchor);
         }
 
         void CheckCallback(BoundCallbackModel callback, string anchor)
@@ -104,6 +115,8 @@ internal static class CanonicalSendGraphValidator
         Compare(required.Transfers, candidate.Transfers, "ValueTransfer");
         Compare(required.SessionTransfers, candidate.SessionTransfers, "SessionTransfer");
         Compare(required.SessionCalls, candidate.SessionCalls, "SessionCall");
+        Compare(required.ServiceResolutions, candidate.ServiceResolutions, "ServiceResolution");
+        Compare(required.CallbackReceivers, candidate.CallbackReceivers, "CallbackReceiver");
         facts.AddRange(CanonicalSendControlValidator.Validate(route, candidate));
         facts.AddRange(CanonicalSendSessionValidator.Validate(route, candidate));
         if (candidate.ContextModelId != "operation-callback-v1") Reject("ContextBoundaryMismatch");

@@ -28,6 +28,7 @@ internal static class CanonicalSendControlValidator
         public bool Returned { get; init; }
         public ImmutableHashSet<int> CommittedSessions { get; init; } = ImmutableHashSet<int>.Empty;
         public ImmutableHashSet<int> DetachedSessions { get; init; } = ImmutableHashSet<int>.Empty;
+        public ImmutableHashSet<int> ValidatedSessions { get; init; } = ImmutableHashSet<int>.Empty;
     }
 
     internal static EquatableArray<CanonicalExecutionGraphFact> Validate(BoundPipelineModel route, CanonicalSendExecutionSchedule schedule)
@@ -110,6 +111,8 @@ internal static class CanonicalSendControlValidator
                         if (phase == SendExecutionPhase.Success) next = next with { SuccessCompleted = true };
                         if (phase == SendExecutionPhase.Exception) next = next with { ObserverCompleted = true };
                         if (phase == SendExecutionPhase.Finally) next = next with { FinallyCompleted = true };
+                        if (phase == SendExecutionPhase.ValidateSessionResult && outcome == SendControlOutcome.Success)
+                            next = next with { ValidatedSessions = next.ValidatedSessions.Add(state.Point.Site!.Session) };
                         if (outcome == SendControlOutcome.Success)
                         {
                             var bit = phase switch { SendExecutionPhase.ArgumentGuard => 1, SendExecutionPhase.CancellationGuard => 2,
@@ -168,7 +171,12 @@ internal static class CanonicalSendControlValidator
                 return state with { Entered = true };
             }
             if (phase == SendExecutionPhase.CommitSession)
+            {
+                var session = state.Point.Site!.Session;
+                if (Sessions(route, contract.Branch, contract.Stage)[session].SuppliesCallbackReceiver &&
+                    (!state.ValidatedSessions.Contains(session) || state.Failed)) Reject("OwnershipTransferredBeforeNonNullSessionValidation");
                 return state with { CommittedSessions = state.CommittedSessions.Add(state.Point.Site!.Session) };
+            }
             if (phase is SendExecutionPhase.DetachSession or SendExecutionPhase.SessionPresent or SendExecutionPhase.CleanupSession)
             {
                 if (!state.SessionCleanupStarted && !ReadyForSessionCleanup(contract, state)) Reject("SessionCleanupStartedBeforeBodyOutcome");
@@ -222,7 +230,7 @@ internal static class CanonicalSendControlValidator
         {
             if (!state.Entered) return state.Failed && state.FirstFailure is
                 SendExecutionPhase.ArgumentGuard or SendExecutionPhase.CancellationGuard or SendExecutionPhase.Resolve or
-                SendExecutionPhase.SessionGuard or SendExecutionPhase.ResolveSessionFactory or SendExecutionPhase.AcquireSession;
+                SendExecutionPhase.SessionGuard or SendExecutionPhase.ResolveSessionFactory or SendExecutionPhase.AcquireSession or SendExecutionPhase.ValidateSessionResult;
             var hook = contract.Stage < route.Stages.Count && route.Stages[contract.Stage].Kind == FusionStageKind.Hook;
             if (!hook) return state.InvocationCompleted;
             var failedBefore = state.FirstFailure == SendExecutionPhase.Before && !state.BeforeSucceeded;
@@ -310,6 +318,11 @@ internal static class CanonicalSendControlValidator
                 {
                     var sessionPhases = new List<SendExecutionPhase> { SendExecutionPhase.SessionGuard, SendExecutionPhase.ResolveSessionFactory,
                         SendExecutionPhase.AcquireSession, SendExecutionPhase.CommitSession, SendExecutionPhase.DetachSession };
+                    if (sessions[i].SuppliesCallbackReceiver)
+                    {
+                        sessionPhases.Remove(SendExecutionPhase.ResolveSessionFactory);
+                        sessionPhases.Add(SendExecutionPhase.ValidateSessionResult);
+                    }
                     if (sessions[i].Ownership == FusionOwnership.OwnedSession) sessionPhases.AddRange(new[] { SendExecutionPhase.SessionPresent, SendExecutionPhase.CleanupSession });
                     sessionSites.AddRange(sessionPhases.Select(p => SessionSite(b, s, i, p)));
                 }

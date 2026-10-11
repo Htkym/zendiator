@@ -70,9 +70,12 @@ public sealed partial class GeneratorTests
         }
         else Assert.Null(session.Cleanup); // Disposable capability never grants ownership.
         var graph = Graph(driver);
-        Assert.False(graph.IsValid);
-        Assert.Contains(graph.Facts, f => f.Reason == (family == "Stream"
-            ? "StreamSessionAcquisitionAndCleanupUnavailable" : "SessionCallbackReceiverGraphUnavailable"));
+        if (family == "Stream")
+        {
+            Assert.False(graph.IsValid);
+            Assert.Contains(graph.Facts, f => f.Reason == "StreamSessionAcquisitionAndCleanupUnavailable");
+        }
+        else Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.Contains("Reads"));
     }
 
@@ -140,7 +143,7 @@ public sealed partial class GeneratorTests
         var forged = route with { Stages = new(route.Stages.Select(s => s with { ServiceOwnership = FusionOwnership.BorrowedService })) };
         var old = Graph(BindLists(SessionFactoryFixture().Replace("Stage.Hook<OperationSession,Factory<string>>()", "Stage.Hook<OperationSession>()"), "ZEN0037"));
         Assert.True(old.IsValid);
-        Assert.Contains(CanonicalSendGraphValidator.Validate(forged, old.Schedule!), f => f.Reason == "SessionCallbackReceiverGraphUnavailable");
+        Assert.Contains(CanonicalSendGraphValidator.Validate(forged, old.Schedule!), f => f.Reason == "SessionReceiverTypeOrOwnershipMismatch");
     }
 
     [Fact]

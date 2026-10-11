@@ -6,8 +6,8 @@ namespace Zendiator.Generator.Tests;
 
 public sealed partial class GeneratorTests
 {
-    // The current public frontend has no session-factory API. Start from its real bound route,
-    // then supply explicit symbol-free factory facts; this is an IR test, not frontend binding proof.
+    // Multiple auxiliary resources still use synthetic symbol-free facts. Public factory callback
+    // receivers are covered separately by real frontend fixtures in SendSessionReceiverTests.
     private static BoundSessionModel SessionBinding(bool sync, bool borrowed = false)
     {
         var completion = sync ? BoundCompletionKind.Synchronous : BoundCompletionKind.ValueTask;
