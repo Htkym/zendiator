@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Zendiator.SourceGenerator;
 using Xunit;
 
@@ -160,5 +161,59 @@ public sealed partial class GeneratorTests
         Assert.Empty(diagnostics);
         Assert.Equal("CS0535", Assert.Single(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error)).Id);
         Assert.True(Assert.Single(Assert.Single(Selection(driver).Pipelines).Stages).CompilerOwnsError);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Owned_cleanup_binds_framework_implicit_and_explicit_Dispose_signatures(bool sync, bool explicitCleanup)
+    {
+        var source = SessionFactoryFixture(sync ? "SendSync" : "SendAsync");
+        if (explicitCleanup) source = sync
+            ? source.Replace("public void Dispose(){}", "void IDisposable.Dispose(){}")
+            : source.Replace("public ValueTask DisposeAsync()=>default;", "ValueTask IAsyncDisposable.DisposeAsync()=>default;");
+        var driver = BindLists(source, "ZEN0037");
+        var session = Assert.Single(Assert.Single(Assert.Single(Selection(driver).Pipelines).Stages).Sessions);
+        var input = Compilation(source);
+        var contract = sync ? input.GetSpecialType(SpecialType.System_IDisposable) :
+            input.GetSpecialType(SpecialType.System_Object).ContainingAssembly.GetTypeByMetadataName("System.IAsyncDisposable")!;
+        var method = Assert.Single(contract.GetMembers().OfType<IMethodSymbol>());
+        Assert.Equal(Zendiator.SourceGenerator.MarkedHandlerDiscovery.Identity(contract), session.Cleanup!.Interface);
+        Assert.Equal(Zendiator.SourceGenerator.MarkedHandlerDiscovery.Identity(method.ReturnType), session.Cleanup.ReturnType);
+        Assert.Equal(sync ? "Dispose" : "DisposeAsync", method.Name);
+        Assert.Empty(session.Cleanup.Parameters);
+        Assert.Contains("/explicit=" + explicitCleanup, session.Cleanup.Implementation);
+        Assert.Equal(!sync, session.Cleanup.RequiresSingleConsumption);
+    }
+
+    [Theory]
+    [InlineData(false, "wrong-method")]
+    [InlineData(false, "wrong-return")]
+    [InlineData(false, "multiple-methods")]
+    [InlineData(true, "wrong-method")]
+    [InlineData(true, "wrong-return")]
+    [InlineData(true, "multiple-methods")]
+    public void Source_cleanup_homonyms_cannot_grant_Owned_cleanup_or_crash_generator(bool sync, string shape)
+    {
+        var name = sync ? "IDisposable" : "IAsyncDisposable";
+        var method = sync ? "Dispose" : "DisposeAsync";
+        var members = shape == "wrong-return" ? "int " + method + "();" :
+            "int Other();" + (shape == "multiple-methods" ? "int Another();" : "");
+        var source = SessionFactoryFixture(sync ? "SendSync" : "SendAsync");
+        if (shape == "wrong-return") source = sync
+            ? source.Replace("public void Dispose(){}", "public int Dispose()=>1;")
+            : source.Replace("public ValueTask DisposeAsync()=>default;", "public int DisposeAsync()=>1;");
+        else source = source.Replace("public void Dispose(){}", "public int Other()=>1; public int Another()=>2; public void Dispose(){}");
+        var input = Compilation(source);
+        input = input.AddSyntaxTrees(CSharpSyntaxTree.ParseText("namespace System { public interface " + name + " {" + members + "} }",
+            (CSharpParseOptions)input.SyntaxTrees.First().Options));
+        Assert.NotEmpty(input.GetTypeByMetadataName("System." + name)!.DeclaringSyntaxReferences);
+        var driver = Driver().RunGeneratorsAndUpdateCompilation(input, out var output, out var diagnostics);
+        Assert.Null(Assert.Single(driver.GetRunResult().Results).Exception);
+        Assert.Equal("ZEN0025", Assert.Single(diagnostics).Id);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error && !d.Id.StartsWith("ZEN", StringComparison.Ordinal)));
+        Assert.Empty(Assert.Single(Assert.Single(Selection(driver).Pipelines).Stages).Sessions);
     }
 }

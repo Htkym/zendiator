@@ -53,7 +53,20 @@ internal static class SessionFactoryContractBinding
         BoundCallbackModel? cleanup = null;
         if (selected.Ownership == FusionOwnership.OwnedSession)
         {
-            var disposable = compilation.GetTypeByMetadataName(sync ? "System.IDisposable" : "System.IAsyncDisposable");
+            // Compilation-wide lookup prefers source homonyms. Anchor cleanup to the compiler's Cor Library.
+            var framework = compilation.GetSpecialType(SpecialType.System_Object).ContainingAssembly;
+            var disposable = sync ? compilation.GetSpecialType(SpecialType.System_IDisposable) :
+                framework?.GetTypeByMetadataName("System.IAsyncDisposable");
+            var returnType = sync ? compilation.GetSpecialType(SpecialType.System_Void) :
+                framework?.GetTypeByMetadataName("System.Threading.Tasks.ValueTask");
+            var members = disposable?.GetMembers().OfType<IMethodSymbol>().ToArray();
+            var member = members?.Length == 1 ? members[0] : null;
+            if (disposable == null || disposable.TypeKind != TypeKind.Interface || disposable.Arity != 0 ||
+                member == null || member.Name != (sync ? "Dispose" : "DisposeAsync") || member.IsStatic ||
+                member.MethodKind != MethodKind.Ordinary || member.Arity != 0 || !member.Parameters.IsEmpty ||
+                member.ReturnsByRef || member.ReturnsByRefReadonly || returnType == null || returnType.TypeKind == TypeKind.Error ||
+                !Same(member.ReturnType, returnType))
+            { Reject("StageContractMismatch", "Owned cleanup requires the framework's parameterless Dispose/DisposeAsync contract and its exact void/ValueTask return type."); return (null, false); }
             var contract = session.AllInterfaces.FirstOrDefault(i => Same(i, disposable));
             if (contract == null)
             { Reject("StageContractMismatch", "An Owned session requires " + (sync ? "IDisposable" : "IAsyncDisposable") + " on this route."); return (null, false); }
@@ -68,9 +81,16 @@ internal static class SessionFactoryContractBinding
     private static BoundCallbackModel? Callback(INamedTypeSymbol type, INamedTypeSymbol contract,
         BoundCallbackPhase phase, BoundCompletionKind completion)
     {
-        var member = contract.GetMembers().OfType<IMethodSymbol>().SingleOrDefault();
-        var implementation = member == null ? null : type.FindImplementationForInterfaceMember(member) as IMethodSymbol;
-        if (implementation == null) return null;
+        var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
+        var member = members.Length == 1 ? members[0] : null;
+        if (member == null) return null;
+        var implementation = type.FindImplementationForInterfaceMember(member) as IMethodSymbol;
+        if (implementation == null || implementation.IsStatic ||
+            implementation.MethodKind is not (MethodKind.Ordinary or MethodKind.ExplicitInterfaceImplementation) ||
+            implementation.Arity != member.Arity || implementation.Parameters.Length != member.Parameters.Length ||
+            implementation.ReturnsByRef != member.ReturnsByRef || implementation.ReturnsByRefReadonly != member.ReturnsByRefReadonly ||
+            !Same(implementation.ReturnType, member.ReturnType) || implementation.Parameters.Zip(member.Parameters,
+                (actual, expected) => actual.RefKind == expected.RefKind && Same(actual.Type, expected.Type)).Any(matches => !matches)) return null;
         return new(phase, completion, Identity(contract),
             implementation.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) + "/" + implementation.DeclaredAccessibility +
             "/explicit=" + !implementation.ExplicitInterfaceImplementations.IsEmpty + "/virtual=" + implementation.IsVirtual +
