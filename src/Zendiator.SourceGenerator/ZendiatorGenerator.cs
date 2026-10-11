@@ -12,6 +12,14 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        var marked = context.SyntaxProvider.ForAttributeWithMetadataName(
+            MarkedHandlerDiscovery.MarkerName,
+            static (node, _) => node is TypeDeclarationSyntax,
+            static (ctx, ct) => MarkedHandlerDiscovery.Bind(ctx, ct))
+            .Where(static candidate => candidate != null).Select(static (candidate, _) => candidate!).Collect();
+        var markedValue = marked.Select(static (candidates, _) => MarkedHandlerDiscovery.Normalize(candidates));
+        // Equality keeps the value cached while the current binding stream refreshes Locations.
+        var markedModel = markedValue.Select(static (model, _) => model).WithTrackingName("MarkedHandlerModel");
         var declarations = context.SyntaxProvider.ForAttributeWithMetadataName(
             "Zendiator.GenerateZendiatorAttribute",
             static (node, _) => node is TypeDeclarationSyntax,
@@ -19,11 +27,22 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         var invocations = context.SyntaxProvider.CreateSyntaxProvider(
             static (node, _) => node is InvocationExpressionSyntax
             {
-                Expression: MemberAccessExpressionSyntax { Name: IdentifierNameSyntax { Identifier.Text: "AddZendiator" } }
+                Expression: MemberAccessExpressionSyntax { Name.Identifier.Text: "AddZendiator" }
             },
             static (ctx, _) => (InvocationExpressionSyntax)ctx.Node).Collect();
-        var result = declarations.Combine(invocations).Combine(context.CompilationProvider)
-            .Select(static (input, ct) => new GenerationAnalysis(input.Left.Left, input.Left.Right, input.Right, ct).Generate()).WithTrackingName("Analysis");
+        var compositions = invocations.Combine(context.CompilationProvider).Combine(marked).Combine(markedModel)
+            .Select(static (input, ct) => CompositionSelectionDiscovery.Bind(input.Left.Left.Left, input.Left.Left.Right,
+                input.Left.Right, input.Right, ct));
+        var compositionValue = compositions.Select(static (current, _) => CompositionSelectionDiscovery.Normalize(current));
+        var compositionModel = compositionValue.Select(static (model, _) => model).WithTrackingName("CompositionSelectionModel");
+        context.RegisterSourceOutput(compositionModel.Combine(compositions), static (ctx, input) =>
+            CompositionSelectionDiscovery.Report(ctx, input.Left, input.Right));
+        var legacyInvocations = invocations.Combine(compositions)
+            .Select(static (input, _) => CompositionSelectionDiscovery.LegacyInvocations(input.Left, input.Right));
+        // Discovery metadata alone never gates unrelated legacy generation.
+        var result = declarations.Combine(legacyInvocations).Combine(context.CompilationProvider)
+            .Select(static (input, ct) => new GenerationAnalysis(input.Left.Left, input.Left.Right, input.Right, ct).Generate())
+            .WithTrackingName("Analysis");
 
         // Structural equality stops template expansion before allocating generated text.
         var model = result.Select(static (r, _) => r.Model).WithTrackingName("EmissionModel");

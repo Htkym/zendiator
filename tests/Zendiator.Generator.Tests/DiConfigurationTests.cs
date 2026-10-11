@@ -64,6 +64,53 @@ public sealed class DiConfigurationTests
         return driver.GetRunResult();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Legacy_di_keeps_its_routes_beside_unselected_or_separately_selected_marked_handlers(bool selected)
+    {
+        var source = Head + Fixtures + """
+            public sealed record Ping : IRequest<int>;
+            public sealed class PingHandler : IRequestHandler<Ping,int> {
+                public ValueTask<int> HandleAsync(Ping request, CancellationToken ct) => new(1);
+            }
+            public sealed record NewPing : IRequest<int>;
+            public sealed record NewVoid : IRequest;
+            public sealed record NewSync : ISyncRequest<int>;
+            public sealed record NewSyncVoid : ISyncRequest;
+            public sealed record NewStream : IStreamRequest<int>;
+            [ZendiatorHandler] public sealed class Marked : IRequestHandler<NewPing,int>, IRequestHandler<NewVoid>,
+                ISyncRequestHandler<NewSync,int>, ISyncRequestHandler<NewSyncVoid>, IStreamRequestHandler<NewStream,int>, INotificationHandler<UserCreated> {
+                public ValueTask<int> HandleAsync(NewPing request, CancellationToken ct) => new(2);
+                public ValueTask HandleAsync(NewVoid request, CancellationToken ct) => default;
+                public int Handle(NewSync request, CancellationToken ct) => 3;
+                public void Handle(NewSyncVoid request, CancellationToken ct) {}
+                public System.Collections.Generic.IAsyncEnumerable<int> HandleAsync(NewStream request, CancellationToken ct) => throw new NotImplementedException();
+                public ValueTask HandleAsync(UserCreated request, CancellationToken ct) => default;
+            }
+            [ZendiatorComposition("reads")] public sealed class Reads;
+            public static class Startup {
+                public static void Legacy(IServiceCollection services) => services.AddZendiator(c => {
+                    c.Namespace = "Legacy.Generated";
+                    c.AddNotification<UserCreated>();
+                });
+            }
+            """;
+        if (selected) source += "public static class NewStartup { public static void Register(IServiceCollection services) => services.AddZendiator<Reads>(c => c.UseLocalHandlers()); }";
+        var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source), out var output, out var diagnostics);
+        if (selected) Assert.Equal("ZEN0035", Assert.Single(diagnostics).Id);
+        else Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error && d.Id != "ZEN0035"));
+        var generated = driver.GetRunResult().GeneratedTrees.Single(t => t.ToString().Contains("namespace Legacy.Generated;")).ToString();
+        Assert.Contains("global::App.PingHandler", generated);
+        Assert.Contains("global::App.AuditHandler", generated);
+        Assert.Contains("global::App.EmailHandler", generated);
+        Assert.DoesNotContain("global::App.Marked", generated);
+        Assert.DoesNotContain("global::App.NewPing", generated);
+        Assert.DoesNotContain("global::App.NewSync", generated);
+        Assert.DoesNotContain("global::App.NewStream", generated);
+    }
+
 
     private const string ValidatorFixtures = """
         public sealed record Items : IStreamRequest<int>;

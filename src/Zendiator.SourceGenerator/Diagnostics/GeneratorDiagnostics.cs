@@ -5,6 +5,7 @@ namespace Zendiator.SourceGenerator;
 internal static class GeneratorDiagnostics
 {
     internal static readonly DiagnosticDescriptor StreamValidator = Rule("ZEN0024", "Invalid stream validator");
+    internal static readonly DiagnosticDescriptor UnsupportedGenerationShape = Rule("ZEN0035", "Unsupported generation shape");
 
     internal static readonly DiagnosticDescriptor[] Rules =
     {

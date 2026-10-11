@@ -18,7 +18,9 @@ public sealed class ZendiatorConfigurationSnapshot
         List<(string BehaviorType, int Order)> behaviors,
         List<string> notifications,
         List<(string HandlerType, int Order)> handlerOrders,
-        List<(string ValidatorType, int Order)>? streamValidators = null)
+        List<(string ValidatorType, int Order)>? streamValidators = null,
+        bool useLocalHandlers = false,
+        List<string>? handlers = null)
     {
         Namespace = @namespace;
         ServiceLifetime = serviceLifetime;
@@ -28,6 +30,8 @@ public sealed class ZendiatorConfigurationSnapshot
         Behaviors = streamValidators == null ? behaviors : new StreamValidatorRegistrations(behaviors, streamValidators);
         Notifications = notifications;
         HandlerOrders = handlerOrders;
+        UseLocalHandlers = useLocalHandlers;
+        Handlers = handlers ?? new();
     }
 
     /// <summary>Gets the generation namespace, or null for the default.</summary>
@@ -59,6 +63,12 @@ public sealed class ZendiatorConfigurationSnapshot
     /// <summary>Gets handler orders sorted by handler type.</summary>
     public IReadOnlyList<(string HandlerType, int Order)> HandlerOrders { get; }
 
+    /// <summary>Gets whether marked local handlers were selected for a 0.5 composition.</summary>
+    public bool UseLocalHandlers { get; }
+
+    /// <summary>Gets explicitly selected handler identities, sorted by identity.</summary>
+    public IReadOnlyList<string> Handlers { get; }
+
     /// <summary>Returns the normalized structural fingerprint. Equal configurations share one generated unit.</summary>
     public string GetFingerprint()
     {
@@ -77,6 +87,8 @@ public sealed class ZendiatorConfigurationSnapshot
         if (Behaviors is StreamValidatorRegistrations validators)
             parts.Add("streamValidators=" + string.Join(",", validators.Validators.Select(static entry =>
                 entry.Order.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + entry.ValidatorType)));
+        if (UseLocalHandlers || Handlers.Count != 0)
+            parts.Add("localHandlers=" + UseLocalHandlers + ";handlers=" + string.Join(",", Handlers));
         return string.Join(";", parts);
     }
 }

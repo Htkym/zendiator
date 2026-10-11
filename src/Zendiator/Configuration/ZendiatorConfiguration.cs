@@ -20,6 +20,28 @@ public sealed class ZendiatorConfiguration
     private List<(string BehaviorType, int Order)> _behaviors = new();
     private readonly List<string> _notifications = new();
     private readonly List<(string HandlerType, int Order)> _handlerOrders = new();
+    private bool _useLocalHandlers;
+    private readonly List<Type> _handlers = new();
+
+    /// <summary>Selects marked handlers from the calling compilation for a 0.5 composition.</summary>
+    public void UseLocalHandlers()
+    {
+        ThrowIfFrozen();
+        _useLocalHandlers = true;
+    }
+
+    /// <summary>Selects a known handler type for a 0.5 composition.</summary>
+    public void AddHandler<THandler>() => AddHandler(typeof(THandler));
+
+    /// <summary>Selects a known closed handler or an open generic handler definition for a 0.5 composition.</summary>
+    public void AddHandler(Type handlerType)
+    {
+        ThrowIfFrozen();
+        ArgumentNullException.ThrowIfNull(handlerType);
+        if (_handlers.Contains(handlerType))
+            throw new InvalidOperationException($"Handler {TypeName(handlerType)} is selected more than once.");
+        _handlers.Add(handlerType);
+    }
 
     /// <summary>Gets or sets the generation namespace. Null selects the default.</summary>
     public string? Namespace
@@ -141,7 +163,9 @@ public sealed class ZendiatorConfiguration
             _handlerOrders.OrderBy(static entry => entry.HandlerType, StringComparer.Ordinal).ToList(),
             _behaviors is StreamValidatorRegistrations validators
                 ? validators.Validators.OrderBy(static entry => entry.Order).ThenBy(static entry => entry.ValidatorType, StringComparer.Ordinal).ToList()
-                : null);
+                : null,
+            _useLocalHandlers,
+            _handlers.Select(static type => type.AssemblyQualifiedName ?? TypeName(type)).OrderBy(static name => name, StringComparer.Ordinal).ToList());
     }
 
     private static string TypeName(Type type) => type.IsGenericTypeDefinition ? type.FullName ?? type.Name : type.ToString();
