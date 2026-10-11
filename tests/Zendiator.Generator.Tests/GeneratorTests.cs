@@ -1238,36 +1238,57 @@ public sealed class GeneratorTests
     public void Separate_selected_compositions_keep_membership_and_legacy_emission_isolated()
     {
         var source = Head + Request + Handler + """
-            [ZendiatorHandler] public sealed class Marked : IRequestHandler<Ping,int> {
+            [ZendiatorHandler] public sealed class A : IRequestHandler<Ping,int> {
                 public ValueTask<int> HandleAsync(Ping request, CancellationToken ct) => new(3);
             }
-            """ + SelectedComposition.Replace("c.AddHandler<Handler>()", "c.AddHandler<Marked>()") + """
+            public sealed record WriteRequest : IRequest<int>;
+            [ZendiatorHandler] public sealed class B : IRequestHandler<WriteRequest,int> {
+                public ValueTask<int> HandleAsync(WriteRequest request, CancellationToken ct) => new(4);
+            }
+            public sealed record UnselectedRequest : IRequest<int>;
+            [ZendiatorHandler] public sealed class C : IRequestHandler<UnselectedRequest,int> {
+                public ValueTask<int> HandleAsync(UnselectedRequest request, CancellationToken ct) => new(5);
+            }
+            """ + SelectedComposition.Replace("c.AddHandler<Handler>()", "c.AddHandler<A>()") + """
             [ZendiatorComposition("writes")] public sealed class Writes;
             public static class OtherStartup {
                 public static void Configure(Microsoft.Extensions.DependencyInjection.IServiceCollection services) =>
-                    global::Zendiator.DependencyInjection.ZendiatorServiceCollectionExtensions.AddZendiator<Writes>(services, c => {});
+                    global::Zendiator.DependencyInjection.ZendiatorServiceCollectionExtensions.AddZendiator<Writes>(services, c => c.AddHandler(typeof(B)));
+            }
+            [ZendiatorComposition("empty")] public sealed class Empty;
+            public static class EmptyStartup {
+                public static void Configure(Microsoft.Extensions.DependencyInjection.IServiceCollection services) =>
+                    global::Zendiator.DependencyInjection.ZendiatorServiceCollectionExtensions.AddZendiator<Empty>(services, c => {});
             }
             """;
         var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source), out var output, out var diagnostics);
-        Assert.Equal(2, diagnostics.Length);
+        Assert.Equal(3, diagnostics.Length);
         Assert.All(diagnostics, d => Assert.Equal("ZEN0035", d.Id));
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error && d.Id != "ZEN0035"));
         var generated = Assert.Single(driver.GetRunResult().GeneratedTrees).ToString();
         Assert.Contains("global::App.Handler", generated);
-        Assert.DoesNotContain("global::App.Marked", generated);
-        var selections = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single()
-            .TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
-        Assert.Equal("global::App.Marked", Assert.Single(selections.Compositions[0].Handlers).Definition.Name);
-        Assert.Empty(selections.Compositions[1].Handlers);
+        foreach (var name in new[] { "A", "B", "C" }) Assert.DoesNotContain("global::App." + name, generated);
+        var selections = Selections(driver);
+        Assert.Equal(3, selections.Compositions.Count);
+        Assert.Equal("global::App.A", Assert.Single(selections.Compositions.Single(c => c.Key == "reads").Handlers).Definition.Name);
+        Assert.Equal("global::App.B", Assert.Single(selections.Compositions.Single(c => c.Key == "writes").Handlers).Definition.Name);
+        Assert.Empty(selections.Compositions.Single(c => c.Key == "empty").Handlers);
 
-        driver = driver.RunGenerators(Compilation(source.Replace("c => {}", "c => c.UseLocalHandlers()")));
-        var updated = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single()
-            .TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
-        Assert.Equal(selections.Compositions[0], updated.Compositions[0]);
-        Assert.Equal("global::App.Marked", Assert.Single(updated.Compositions[1].Handlers).Definition.Name);
+        driver = driver.RunGenerators(Compilation(source.Replace("new(5)", "new(6)")));
+        Assert.Equal(selections, Selections(driver));
+
+        driver = driver.RunGenerators(Compilation(source.Replace("c => c.AddHandler(typeof(B))", "c => c.UseLocalHandlers()")));
+        var updated = Selections(driver);
+        Assert.Equal(selections.Compositions.Single(c => c.Key == "reads"), updated.Compositions.Single(c => c.Key == "reads"));
+        Assert.Equal(new[] { "global::App.A", "global::App.B", "global::App.C" },
+            updated.Compositions.Single(c => c.Key == "writes").Handlers.Select(h => h.Definition.Name).OrderBy(n => n, StringComparer.Ordinal));
+        Assert.Empty(updated.Compositions.Single(c => c.Key == "empty").Handlers);
         var duplicateKey = Run(Compilation(source.Replace("ZendiatorComposition(\"writes\")", "ZendiatorComposition(\"reads\")")), false);
-        Assert.Equal(2, duplicateKey.Diagnostics.Length);
-        Assert.Single(duplicateKey.Diagnostics[1].AdditionalLocations);
+        Assert.Equal(3, duplicateKey.Diagnostics.Length);
+        Assert.Single(duplicateKey.Diagnostics.Single(d => d.AdditionalLocations.Count != 0).AdditionalLocations);
+
+        static CompositionSelectionCatalog Selections(GeneratorDriver value) => Assert.IsType<CompositionSelectionCatalog>(
+            Assert.Single(value.GetRunResult().Results.Single().TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
     }
 
     [Fact]
@@ -1288,14 +1309,23 @@ public sealed class GeneratorTests
     [Fact]
     public void Explicit_default_membership_is_retained_and_control_flow_is_diagnosed_at_selection()
     {
-        var source = Head + Request + Handler.Replace("public sealed class Handler", "[ZendiatorHandler] public sealed class Handler") +
+        var source = Head + Request + Handler.Replace("public sealed class Handler", "[ZendiatorHandler] public sealed class Handler") + """
+            public sealed record OtherRequest : IRequest<int>;
+            [ZendiatorHandler] public sealed class Other : IRequestHandler<OtherRequest,int> {
+                public ValueTask<int> HandleAsync(OtherRequest request, CancellationToken ct) => new(2);
+            }
+            """ +
             SelectedComposition.Replace("AddZendiator<Reads>", "AddZendiator").Replace("c.AddHandler<Handler>()", "c.UseLocalHandlers()");
-        var driver = Driver().RunGenerators(Compilation(source));
-        var catalog = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single()
-            .TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
-        Assert.Equal("default", Assert.Single(catalog.Compositions).Key);
-        Assert.Single(catalog.Compositions[0].Handlers);
-        Assert.Equal("ZEN0035", Assert.Single(driver.GetRunResult().Diagnostics).Id);
+        foreach (var selection in new[] { "c.UseLocalHandlers()", "c.AddHandler<Handler>()" })
+        {
+            var driver = Driver().RunGenerators(Compilation(source.Replace("c.UseLocalHandlers()", selection)));
+            var catalog = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single()
+                .TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
+            Assert.Equal("default", Assert.Single(catalog.Compositions).Key);
+            Assert.Equal(new[] { "global::App.Handler", "global::App.Other" },
+                catalog.Compositions[0].Handlers.Select(h => h.Definition.Name).OrderBy(n => n, StringComparer.Ordinal));
+            Assert.Equal("ZEN0035", Assert.Single(driver.GetRunResult().Diagnostics).Id);
+        }
         var conditional = source.Replace("c.UseLocalHandlers()", "{ if (DateTime.UtcNow.Ticks > 0) c.UseLocalHandlers(); }");
         var rejected = Run(Compilation(conditional), false);
         Assert.Contains("control flow", Assert.Single(rejected.Diagnostics).GetMessage());

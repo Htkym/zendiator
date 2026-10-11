@@ -31,7 +31,7 @@ internal static class CompositionSelectionDiscovery
             var lambda = invocation.ArgumentList.Arguments.Select(a => a.Expression).OfType<LambdaExpressionSyntax>().SingleOrDefault();
             // During migration, old nongeneric configuration remains the legacy adapter.
             // An explicit new selection operation identifies a new default composition.
-            var explicitDefault = lambda != null && lambda.DescendantNodes().OfType<InvocationExpressionSyntax>().Any(call =>
+            var explicitDefault = method.Arity == 0 && lambda != null && lambda.DescendantNodes().OfType<InvocationExpressionSyntax>().Any(call =>
                 semantic.GetSymbolInfo(call, ct).Symbol is IMethodSymbol operation && Same(operation.ContainingType, configuration) &&
                 operation.Name is "UseLocalHandlers" or "AddHandler");
             if (method.Arity == 0 && !explicitDefault) continue;
