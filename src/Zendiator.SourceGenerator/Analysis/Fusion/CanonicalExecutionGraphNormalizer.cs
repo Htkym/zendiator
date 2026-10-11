@@ -16,6 +16,11 @@ internal static class CanonicalExecutionGraphNormalizer
         {
             var streamFacts = CanonicalStreamGraphValidator.CheckContract(route);
             if (streamFacts.Count != 0) return new(route, null, streamFacts);
+            if (route.Stages.Any(s => s.Kind == FusionStageKind.Wrapper))
+            {
+                var wrappers = CanonicalStreamWrapperBuilder.Build(route);
+                return new(route, null, CanonicalStreamWrapperValidator.Validate(route, wrappers)) { StreamWrapperSchedule = wrappers };
+            }
             var stream = CanonicalStreamScheduleBuilder.Build(route);
             return new(route, null, CanonicalStreamGraphValidator.Validate(route, stream)) { StreamSchedule = stream };
         }

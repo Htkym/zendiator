@@ -23,12 +23,14 @@ internal static class CanonicalStreamGraphValidator
         foreach (var stage in route.Stages)
         {
             if (stage.ServiceOwnership != FusionOwnership.BorrowedService) Reject("OwnedStageAcquisitionAndCleanupUnavailable", stage.Anchor);
-            if (stage.Kind == FusionStageKind.Wrapper) Reject("OpaqueWrapperOpenDelegationAndCursorLifecycleUnavailable", stage.Anchor);
-            else if (stage.Kind != FusionStageKind.Hook || stage.CompilerOwnsError || stage.Callbacks.Count != 1) Reject("SingleRoleStreamHookRequired", stage.Anchor);
+            if (stage.CompilerOwnsError || stage.Callbacks.Count != 1) Reject("SingleRoleStreamStageRequired", stage.Anchor);
+            if (stage.Kind is not (FusionStageKind.Hook or FusionStageKind.Wrapper)) Reject("SingleRoleStreamStageRequired", stage.Anchor);
             foreach (var callback in stage.Callbacks)
             {
                 if (stage.Kind == FusionStageKind.Hook && (callback.Phase is not (BoundCallbackPhase.Filter or BoundCallbackPhase.Map) ||
                     callback.Completion != BoundCompletionKind.Synchronous || callback.RequiresSingleConsumption)) Reject("SynchronousSameItemHookRequired", stage.Anchor);
+                if (stage.Kind == FusionStageKind.Wrapper && (callback.Phase != BoundCallbackPhase.Wrapper ||
+                    callback.Completion != BoundCompletionKind.Enumerable || callback.RequiresSingleConsumption)) Reject("StreamWrapperCompletionMismatch", stage.Anchor);
                 CheckParameters(callback, stage.Anchor);
             }
         }
@@ -43,9 +45,16 @@ internal static class CanonicalStreamGraphValidator
     {
         var initial = CheckContract(route);
         if (initial.Count != 0) return initial;
+        if (route.Stages.Any(s => s.Kind == FusionStageKind.Wrapper)) return new(new[] { new CanonicalExecutionGraphFact("WrapperRequiresSegmentGraph", route.Anchor) });
+        return ValidateSegment(new(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages), candidate);
+    }
+
+    internal static EquatableArray<CanonicalExecutionGraphFact> ValidateSegment(StreamSegmentContract contract, CanonicalStreamExecutionSchedule candidate)
+    {
         var facts = new List<CanonicalExecutionGraphFact>();
-        void Reject(string reason) => facts.Add(new(reason, route.Anchor));
-        var required = RequiredStreamExecutionContract.Derive(route);
+        void Reject(string reason) => facts.Add(new(reason, contract.Anchor));
+        if (contract.SourceKind is not (StreamSourceKind.Handler or StreamSourceKind.Wrapper)) Reject("UnknownStreamSourceKind");
+        var required = RequiredStreamExecutionContract.Derive(contract);
         Compare(required.Sites, candidate.Sites, "Site");
         Compare(required.Owners, candidate.Owners, "Owner");
         Compare(required.Tokens, candidate.Tokens, "TokenRule");
@@ -58,7 +67,7 @@ internal static class CanonicalStreamGraphValidator
         if (candidate.Awaits.Any(a => !a.ConsumeOnce || !a.ConfigureAwaitFalse)) Reject("AwaitConsumptionMismatch");
         if (candidate.Awaits.GroupBy(a => a.Producer).Any(g => g.Count() != 1)) Reject("DuplicateAwaitConsumer");
         if (candidate.Failures.Any(f => !f.PreserveIdentityAndToken || !f.EscapingOceIsCanceled || !f.ReplacesPreviousError || f.Aggregate)) Reject("ExceptionReplacementMismatch");
-        facts.AddRange(CanonicalStreamControlValidator.Validate(route, candidate));
+        facts.AddRange(CanonicalStreamControlValidator.Validate(contract, candidate));
         return new(facts.Distinct());
 
         void Compare<T>(IEnumerable<T> expected, IEnumerable<T> actual, string kind)

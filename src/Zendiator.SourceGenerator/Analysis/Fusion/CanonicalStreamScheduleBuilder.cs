@@ -6,8 +6,13 @@ namespace Zendiator.SourceGenerator;
 
 internal static class CanonicalStreamScheduleBuilder
 {
-    internal static CanonicalStreamExecutionSchedule Build(BoundPipelineModel route)
+    internal static CanonicalStreamExecutionSchedule Build(BoundPipelineModel route) => Build(new StreamSegmentContract(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages));
+
+    internal static CanonicalStreamExecutionSchedule Build(StreamSegmentContract contract)
     {
+        var resolve = contract.SourceKind == StreamSourceKind.Handler ? StreamPhase.ResolveHandler : StreamPhase.ResolveWrapper;
+        var factory = contract.SourceKind == StreamSourceKind.Handler ? StreamPhase.SourceFactory : StreamPhase.WrapperFactory;
+        var sourceName = contract.SourceKind == StreamSourceKind.Handler ? "handler" : "wrapper";
         var sites = new Dictionary<StreamSiteId, StreamExecutionSite>();
         var edges = new Dictionary<StreamProgram, List<StreamControlEdge>>();
         var entries = new Dictionary<StreamProgram, StreamSiteId>();
@@ -43,17 +48,17 @@ internal static class CanonicalStreamScheduleBuilder
         Edge(move, StreamPhase.Stopped, StreamPhase.Started, StreamOutcome.False);
         Edge(move, StreamPhase.Started, StreamPhase.SourceGuard, StreamOutcome.True);
         Edge(move, StreamPhase.Started, StreamPhase.MergeTokens, StreamOutcome.False);
-        var startup = new[] { StreamPhase.MergeTokens, StreamPhase.PreCancel, StreamPhase.ResolveHandler,
-            StreamPhase.SourceFactory, StreamPhase.AcquireSource };
+        var startup = new[] { StreamPhase.MergeTokens, StreamPhase.PreCancel, resolve,
+            factory, StreamPhase.AcquireSource };
         for (var i = 0; i < startup.Length; i++)
         {
             Edge(move, startup[i], i + 1 < startup.Length ? startup[i + 1] : StreamPhase.MarkStarted, StreamOutcome.Success);
             Fault(move, startup[i], StreamPhase.StartupDetachLink);
         }
         Transfer(move, StreamPhase.MergeTokens, "token-selection/result", "cursor/start-token", StreamOutcome.Success);
-        Transfer(move, StreamPhase.SourceFactory, "cursor/request", "handler/request", StreamOutcome.Success);
-        Transfer(move, StreamPhase.SourceFactory, "cursor/start-token", "handler/token", StreamOutcome.Success);
-        Transfer(move, StreamPhase.AcquireSource, "handler/enumerable", "cursor/source", StreamOutcome.Success);
+        Transfer(move, factory, "cursor/request", sourceName + "/request", StreamOutcome.Success);
+        Transfer(move, factory, "cursor/start-token", sourceName + "/token", StreamOutcome.Success);
+        Transfer(move, StreamPhase.AcquireSource, sourceName + "/enumerable", "cursor/source", StreamOutcome.Success);
         Transfer(move, StreamPhase.AcquireSource, "cursor/start-token", "source/token", StreamOutcome.Success);
         Edge(move, StreamPhase.MarkStarted, StreamPhase.SourceGuard);
         Edge(move, StreamPhase.StartupDetachLink, StreamPhase.StartupLinkPresent);
@@ -73,9 +78,9 @@ internal static class CanonicalStreamScheduleBuilder
 
         // Insert declaration-ordered, lazy item stages between Current and the cache publication.
         var previous = Id(move, StreamPhase.SourceCurrent);
-        for (var i = 0; i < route.Stages.Count; i++)
+        for (var i = 0; i < contract.Hooks.Count; i++)
         {
-            var stage = route.Stages[i];
+            var stage = contract.Hooks[i];
             owners.Add(new(Service(i), "provider", StreamOwnerKind.Service, StreamOwnerLifetime.Caller, true, StreamCleanup.None));
             var guard = Id(move, StreamPhase.HookGuard, i);
             var callback = Id(move, stage.Callbacks[0].Phase == BoundCallbackPhase.Filter ? StreamPhase.Filter : StreamPhase.Map, i);
@@ -152,11 +157,11 @@ internal static class CanonicalStreamScheduleBuilder
             var completion = id.Phase is StreamPhase.SourceMove or StreamPhase.DisposeSource ? BoundCompletionKind.ValueTask : BoundCompletionKind.Synchronous;
             var owner = id.Program == StreamProgram.Create ? "envelope" : id.Phase is StreamPhase.SourceMove or StreamPhase.SourceCurrent or StreamPhase.DisposeSource ? "source" :
                 id.Phase is StreamPhase.StartupDisposeLink or StreamPhase.DisposeLink ? "linked-token" : "cursor";
-            var producer = id.Phase == StreamPhase.SourceFactory ? route.Handlers[0].Callback!.Implementation :
-                id.Phase is StreamPhase.Filter or StreamPhase.Map ? route.Stages[id.Stage].Callbacks[0].Implementation :
+            var producer = id.Phase is StreamPhase.SourceFactory or StreamPhase.WrapperFactory ? contract.Callback.Implementation :
+                id.Phase is StreamPhase.Filter or StreamPhase.Map ? contract.Hooks[id.Stage].Callbacks[0].Implementation :
                 id.Phase == StreamPhase.SourceMove ? "IAsyncEnumerator.MoveNextAsync" : id.Phase == StreamPhase.SourceCurrent ? "IAsyncEnumerator.Current" :
                 id.Phase == StreamPhase.DisposeSource ? "IAsyncDisposable.DisposeAsync" : null;
-            sites.Add(id, new(id, id.Stage >= 0 ? route.Stages[id.Stage].Anchor : route.Anchor, owner, completion, producer));
+            sites.Add(id, new(id, id.Stage >= 0 ? contract.Hooks[id.Stage].Anchor : contract.Anchor, owner, completion, producer));
         }
         void Fault(StreamProgram program, StreamPhase phase, StreamPhase next, int stage = -1)
         {

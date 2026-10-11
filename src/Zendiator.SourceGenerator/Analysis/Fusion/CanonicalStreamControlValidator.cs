@@ -24,11 +24,14 @@ internal static class CanonicalStreamControlValidator
     private sealed record Visit(StreamSiteId Site, Path State);
     private sealed record Work(Visit Visit, EquatableArray<Visit> Trail);
 
-    internal static EquatableArray<CanonicalExecutionGraphFact> Validate(BoundPipelineModel route, CanonicalStreamExecutionSchedule candidate)
+    internal static EquatableArray<CanonicalExecutionGraphFact> Validate(BoundPipelineModel route, CanonicalStreamExecutionSchedule candidate) =>
+        Validate(new StreamSegmentContract(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages), candidate);
+
+    internal static EquatableArray<CanonicalExecutionGraphFact> Validate(StreamSegmentContract contract, CanonicalStreamExecutionSchedule candidate)
     {
         var facts = new HashSet<CanonicalExecutionGraphFact>();
-        void Reject(string reason) => facts.Add(new(reason, route.Anchor));
-        var required = new HashSet<StreamSiteId>(RequiredStreamExecutionContract.Derive(route).Sites.Select(s => s.Id));
+        void Reject(string reason) => facts.Add(new(reason, contract.Anchor));
+        var required = new HashSet<StreamSiteId>(RequiredStreamExecutionContract.Derive(contract).Sites.Select(s => s.Id));
         var programs = candidate.Flows.GroupBy(f => f.Program).ToDictionary(g => g.Key, g => g.ToArray());
         foreach (StreamProgram program in Enum.GetValues(typeof(StreamProgram)))
             if (!programs.TryGetValue(program, out var group) || group.Length != 1) Reject("MissingOrDuplicateStreamProgram");
@@ -162,8 +165,10 @@ internal static class CanonicalStreamControlValidator
                 case StreamPhase.PreCancel:
                     Need(s.TokenMerged, "PreCancelBeforeTokenMerge"); return s with { PreCancel = !failed, Failure = failed };
                 case StreamPhase.ResolveHandler:
+                case StreamPhase.ResolveWrapper:
                     Need(s.PreCancel && !s.Handler && !s.Failure, "HandlerResolveWithoutPreCancel"); return s with { Handler = !failed, Failure = failed };
                 case StreamPhase.SourceFactory:
+                case StreamPhase.WrapperFactory:
                     Need(s.Handler && !s.Enumerable && !s.Failure, "SourceFactoryBeforeResolveOrRepeated"); return s with { Enumerable = !failed, Failure = failed };
                 case StreamPhase.AcquireSource:
                     Need(s.Enumerable && !life.Source && !s.Failure, "SourceAcquireWithoutEnumerableOrRepeated");
@@ -195,7 +200,7 @@ internal static class CanonicalStreamControlValidator
                     if (outcome == StreamOutcome.False) return s with { CurrentRead = false, SourceCompleted = false, SourceSuccess = false, NextStage = 0, GuardedStage = -1 };
                     return s with { NextStage = failed ? s.NextStage : id.Stage + 1, GuardedStage = -1, Failure = failed };
                 case StreamPhase.CacheCurrent:
-                    Need(s.CurrentRead && s.NextStage == route.Stages.Count && !s.Cached && !s.Failure, "CacheBeforeCompleteItemPipelineOrRepeated");
+                    Need(s.CurrentRead && s.NextStage == contract.Hooks.Count && !s.Cached && !s.Failure, "CacheBeforeCompleteItemPipelineOrRepeated");
                     return s with { Cached = true, Life = life with { Cache = true } };
                 case StreamPhase.StartupDetachLink:
                     Need(s.Failure && !life.Started && !life.Source && !s.StartupDetached, "StartupCleanupAfterStartedSourceOrWithoutFailure");
@@ -280,7 +285,7 @@ internal static class CanonicalStreamControlValidator
         StreamPhase.Stopped or StreamPhase.Started or StreamPhase.HookCached or StreamPhase.StartupLinkPresent or StreamPhase.CurrentGuard or
             StreamPhase.AlreadyDisposed or StreamPhase.SourcePresent or StreamPhase.LinkPresent or StreamPhase.DisposeResult => new[] { StreamOutcome.True, StreamOutcome.False },
         StreamPhase.SourceMove or StreamPhase.Filter => new[] { StreamOutcome.True, StreamOutcome.False, StreamOutcome.Failure },
-        StreamPhase.NullGuard or StreamPhase.MoveGuard or StreamPhase.MergeTokens or StreamPhase.PreCancel or StreamPhase.ResolveHandler or StreamPhase.SourceFactory or
+        StreamPhase.NullGuard or StreamPhase.MoveGuard or StreamPhase.MergeTokens or StreamPhase.PreCancel or StreamPhase.ResolveHandler or StreamPhase.ResolveWrapper or StreamPhase.SourceFactory or StreamPhase.WrapperFactory or
             StreamPhase.AcquireSource or StreamPhase.SourceGuard or StreamPhase.SourceCurrent or StreamPhase.HookGuard or StreamPhase.ResolveHook or StreamPhase.Map or
             StreamPhase.StartupDisposeLink or StreamPhase.DisposeGuard or StreamPhase.DisposeSource or StreamPhase.DisposeLink => new[] { StreamOutcome.Success, StreamOutcome.Failure },
         _ => new[] { StreamOutcome.Always }

@@ -1,11 +1,12 @@
 namespace Zendiator.SourceGenerator;
 
 internal enum StreamProgram { Create, GetEnumerator, Move, Current, Dispose }
+internal enum StreamSourceKind { Handler, Wrapper }
 internal enum StreamPhase
 {
     NullGuard, NullFailure, CreateEnvelope, EnvelopeReturn, CreateCursor, CursorReturn,
     MoveGuard, ClearCurrent, Stopped, Started, MergeTokens, PreCancel, ResolveHandler,
-    SourceFactory, AcquireSource, MarkStarted, SourceGuard, SourceMove, SourceCurrent,
+    SourceFactory, ResolveWrapper, WrapperFactory, AcquireSource, MarkStarted, SourceGuard, SourceMove, SourceCurrent,
     HookGuard, HookCached, ResolveHook, Filter, Map, CacheCurrent,
     StartupDetachLink, StartupLinkPresent, StartupDisposeLink, EndFailure, EndFalse,
     ReleaseTrue, ReleaseFalse, ReleaseFailure, MoveTrue, MoveFalse, MoveFailure, BusyFailure,
@@ -37,6 +38,8 @@ internal sealed record CanonicalStreamExecutionSchedule(EquatableArray<StreamExe
     EquatableArray<StreamTokenRule> Tokens, EquatableArray<StreamExecutionAwait> Awaits,
     EquatableArray<StreamValueTransfer> Transfers, EquatableArray<StreamFailurePolicy> Failures,
     string ContextModelId, bool FreshCursorPerEnumeration, bool RequestSnapshot, bool ReLendPublicCursor);
+internal sealed record StreamSegmentContract(string Anchor, StreamSourceKind SourceKind, BoundCallbackModel Callback,
+    EquatableArray<BoundStageModel> Hooks);
 
 // Names only: contract derivation and construction do not share lifecycle policy.
 internal static class StreamExecutionNames

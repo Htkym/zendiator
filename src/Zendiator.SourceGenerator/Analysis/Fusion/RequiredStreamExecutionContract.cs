@@ -13,15 +13,20 @@ internal sealed class RequiredStreamExecutionContract
     internal readonly List<StreamValueTransfer> Transfers = new();
     internal readonly List<StreamFailurePolicy> Failures = new();
 
-    internal static RequiredStreamExecutionContract Derive(BoundPipelineModel route)
+    internal static RequiredStreamExecutionContract Derive(BoundPipelineModel route) => Derive(new StreamSegmentContract(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages));
+
+    internal static RequiredStreamExecutionContract Derive(StreamSegmentContract contract)
     {
+        var resolve = contract.SourceKind == StreamSourceKind.Handler ? StreamPhase.ResolveHandler : StreamPhase.ResolveWrapper;
+        var factory = contract.SourceKind == StreamSourceKind.Handler ? StreamPhase.SourceFactory : StreamPhase.WrapperFactory;
+        var sourceName = contract.SourceKind == StreamSourceKind.Handler ? "handler" : "wrapper";
         var required = new RequiredStreamExecutionContract();
         required.Owners.Add(new("provider", null, StreamOwnerKind.Provider, StreamOwnerLifetime.Caller, true, StreamCleanup.None));
         required.Owners.Add(new("envelope", "provider", StreamOwnerKind.Envelope, StreamOwnerLifetime.Envelope, false, StreamCleanup.None));
         required.Owners.Add(new("cursor", "envelope", StreamOwnerKind.Cursor, StreamOwnerLifetime.EachEnumeration, false, StreamCleanup.None));
         required.Owners.Add(new("source", "cursor", StreamOwnerKind.SourceCursor, StreamOwnerLifetime.EachEnumeration, false, StreamCleanup.AsyncDispose));
         required.Owners.Add(new("linked-token", "cursor", StreamOwnerKind.LinkedToken, StreamOwnerLifetime.EachEnumeration, false, StreamCleanup.Dispose));
-        for (var i = -1; i < route.Stages.Count; i++)
+        for (var i = -1; i < contract.Hooks.Count; i++)
             required.Owners.Add(new(Service(i), "provider", StreamOwnerKind.Service, StreamOwnerLifetime.Caller, true, StreamCleanup.None));
         required.Tokens.Add(new(StreamTokenCase.ApiNotCancelable, StreamTokenSource.Enumerator, false));
         required.Tokens.Add(new(StreamTokenCase.EnumeratorNotCancelable, StreamTokenSource.Api, false));
@@ -31,7 +36,7 @@ internal sealed class RequiredStreamExecutionContract
         Group(StreamProgram.Create, new[] { StreamPhase.NullGuard, StreamPhase.NullFailure, StreamPhase.CreateEnvelope, StreamPhase.EnvelopeReturn });
         Group(StreamProgram.GetEnumerator, new[] { StreamPhase.CreateCursor, StreamPhase.CursorReturn });
         Group(StreamProgram.Move, new[] { StreamPhase.MoveGuard, StreamPhase.ClearCurrent, StreamPhase.Stopped, StreamPhase.Started,
-            StreamPhase.MergeTokens, StreamPhase.PreCancel, StreamPhase.ResolveHandler, StreamPhase.SourceFactory, StreamPhase.AcquireSource,
+            StreamPhase.MergeTokens, StreamPhase.PreCancel, resolve, factory, StreamPhase.AcquireSource,
             StreamPhase.MarkStarted, StreamPhase.SourceGuard, StreamPhase.SourceMove, StreamPhase.SourceCurrent, StreamPhase.CacheCurrent,
             StreamPhase.StartupDetachLink, StreamPhase.StartupLinkPresent, StreamPhase.StartupDisposeLink, StreamPhase.EndFailure,
             StreamPhase.EndFalse, StreamPhase.ReleaseTrue, StreamPhase.ReleaseFalse, StreamPhase.ReleaseFailure,
@@ -41,9 +46,9 @@ internal sealed class RequiredStreamExecutionContract
             StreamPhase.DetachSource, StreamPhase.DetachLink, StreamPhase.SourcePresent, StreamPhase.DisposeSource,
             StreamPhase.LinkPresent, StreamPhase.DisposeLink, StreamPhase.ReleaseDispose, StreamPhase.DisposeResult,
             StreamPhase.DisposeSuccess, StreamPhase.DisposeFailure, StreamPhase.BusyFailure });
-        for (var i = 0; i < route.Stages.Count; i++)
+        for (var i = 0; i < contract.Hooks.Count; i++)
             Group(StreamProgram.Move, new[] { StreamPhase.HookGuard, StreamPhase.HookCached, StreamPhase.ResolveHook,
-                route.Stages[i].Callbacks[0].Phase == BoundCallbackPhase.Filter ? StreamPhase.Filter : StreamPhase.Map }, i);
+                contract.Hooks[i].Callbacks[0].Phase == BoundCallbackPhase.Filter ? StreamPhase.Filter : StreamPhase.Map }, i);
 
         AddTransfer(StreamProgram.Create, StreamPhase.CreateEnvelope, "api/request", "envelope/request");
         AddTransfer(StreamProgram.Create, StreamPhase.CreateEnvelope, "api/token", "envelope/api-token");
@@ -51,14 +56,14 @@ internal sealed class RequiredStreamExecutionContract
         AddTransfer(StreamProgram.GetEnumerator, StreamPhase.CreateCursor, "envelope/api-token", "cursor/api-token");
         AddTransfer(StreamProgram.GetEnumerator, StreamPhase.CreateCursor, "enumerator/token", "cursor/enumerator-token");
         AddTransfer(StreamProgram.Move, StreamPhase.MergeTokens, "token-selection/result", "cursor/start-token", StreamOutcome.Success);
-        AddTransfer(StreamProgram.Move, StreamPhase.SourceFactory, "cursor/request", "handler/request", StreamOutcome.Success);
-        AddTransfer(StreamProgram.Move, StreamPhase.SourceFactory, "cursor/start-token", "handler/token", StreamOutcome.Success);
-        AddTransfer(StreamProgram.Move, StreamPhase.AcquireSource, "handler/enumerable", "cursor/source", StreamOutcome.Success);
+        AddTransfer(StreamProgram.Move, factory, "cursor/request", sourceName + "/request", StreamOutcome.Success);
+        AddTransfer(StreamProgram.Move, factory, "cursor/start-token", sourceName + "/token", StreamOutcome.Success);
+        AddTransfer(StreamProgram.Move, StreamPhase.AcquireSource, sourceName + "/enumerable", "cursor/source", StreamOutcome.Success);
         AddTransfer(StreamProgram.Move, StreamPhase.AcquireSource, "cursor/start-token", "source/token", StreamOutcome.Success);
         AddTransfer(StreamProgram.Move, StreamPhase.SourceCurrent, "source/Current", "cursor/item", StreamOutcome.Success);
-        for (var i = 0; i < route.Stages.Count; i++)
+        for (var i = 0; i < contract.Hooks.Count; i++)
         {
-            var phase = route.Stages[i].Callbacks[0].Phase == BoundCallbackPhase.Filter ? StreamPhase.Filter : StreamPhase.Map;
+            var phase = contract.Hooks[i].Callbacks[0].Phase == BoundCallbackPhase.Filter ? StreamPhase.Filter : StreamPhase.Map;
             AddTransfer(StreamProgram.Move, phase, "cursor/item", HookItem(i), StreamOutcome.Always, i);
             AddTransfer(StreamProgram.Move, phase, "cursor/request", "hook:" + i + "/request", StreamOutcome.Always, i);
             AddTransfer(StreamProgram.Move, phase, "cursor/start-token", "hook:" + i + "/token", StreamOutcome.Always, i);
@@ -83,15 +88,15 @@ internal sealed class RequiredStreamExecutionContract
                 var owner = program == StreamProgram.Create ? "envelope" : phase is StreamPhase.SourceMove or StreamPhase.SourceCurrent or StreamPhase.DisposeSource ? "source" :
                     phase is StreamPhase.StartupDisposeLink or StreamPhase.DisposeLink ? "linked-token" : "cursor";
                 string? producer = phase switch {
-                    StreamPhase.SourceFactory => route.Handlers[0].Callback!.Implementation,
-                    StreamPhase.Filter or StreamPhase.Map => route.Stages[stage].Callbacks[0].Implementation,
+                    StreamPhase.SourceFactory or StreamPhase.WrapperFactory => contract.Callback.Implementation,
+                    StreamPhase.Filter or StreamPhase.Map => contract.Hooks[stage].Callbacks[0].Implementation,
                     StreamPhase.SourceMove => "IAsyncEnumerator.MoveNextAsync",
                     StreamPhase.SourceCurrent => "IAsyncEnumerator.Current",
                     StreamPhase.DisposeSource => "IAsyncDisposable.DisposeAsync", _ => null
                 };
-                required.Sites.Add(new(id, stage < 0 ? route.Anchor : route.Stages[stage].Anchor, owner,
+                required.Sites.Add(new(id, stage < 0 ? contract.Anchor : contract.Hooks[stage].Anchor, owner,
                     phase is StreamPhase.SourceMove or StreamPhase.DisposeSource ? BoundCompletionKind.ValueTask : BoundCompletionKind.Synchronous, producer));
-                if (phase is StreamPhase.MergeTokens or StreamPhase.PreCancel or StreamPhase.ResolveHandler or StreamPhase.SourceFactory or
+                if (phase is StreamPhase.MergeTokens or StreamPhase.PreCancel or StreamPhase.ResolveHandler or StreamPhase.ResolveWrapper or StreamPhase.SourceFactory or StreamPhase.WrapperFactory or
                     StreamPhase.AcquireSource or StreamPhase.StartupDisposeLink or StreamPhase.SourceGuard or StreamPhase.SourceMove or StreamPhase.SourceCurrent or
                     StreamPhase.HookGuard or StreamPhase.ResolveHook or StreamPhase.Filter or StreamPhase.Map or StreamPhase.DisposeSource or StreamPhase.DisposeLink)
                 {
