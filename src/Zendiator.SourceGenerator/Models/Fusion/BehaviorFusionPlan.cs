@@ -36,7 +36,10 @@ internal sealed record FusionResolutionSite(
 internal sealed record FusionDiagnosticFact(string Key, int StageIndex);
 internal sealed record FusionSegment(int Start, int Length);
 
-/// <summary>The normalized semantic input. Array position is the explicit pipeline order.</summary>
+/// <summary>
+/// The normalized semantic input: Send stages are outer-to-inner entry order;
+/// Stream stages are source-to-consumer item order (C01).
+/// </summary>
 internal sealed record FusionPlanInput(
     string RouteKey,
     FusionDispatchKind DispatchKind,

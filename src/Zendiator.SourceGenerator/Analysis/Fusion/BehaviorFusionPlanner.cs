@@ -42,8 +42,9 @@ internal static class BehaviorFusionPlanner
                     EnterAfterGuardAndResolution: true, InnerStatePerContinuationInvocation: true));
             return new(core, new(core, new(scopes), input.DeclaredStages.Count), null);
         }
-        var flow = segments.AsEnumerable().Reverse().Select(s => new StreamItemSegment(s,
-            new(Enumerable.Range(s.Start, s.Length).Reverse())));
+        // C01 defines the Stream list in source-to-consumer item order.
+        var flow = segments.Select(s => new StreamItemSegment(s,
+            new(Enumerable.Range(s.Start, s.Length))));
         var transitions = Enumerable.Range(0, input.DeclaredStages.Count)
             .Where(i => input.DeclaredStages[i].Kind == FusionStageKind.Hook)
             .Select(i => new StreamItemTransition(i, input.DeclaredStages[i].InputItem!, input.DeclaredStages[i].OutputItem!));
@@ -83,6 +84,8 @@ internal static class BehaviorFusionPlanner
             if (sync && (stage.Capabilities & FusionCapabilities.Async) != 0) Reject("AsyncOnSyncRoute", i);
             if (stream)
             {
+                if ((stage.Capabilities & (FusionCapabilities.Filter | FusionCapabilities.Map)) ==
+                    (FusionCapabilities.Filter | FusionCapabilities.Map)) Reject("AmbiguousStageContract", i);
                 if (stage.InputItem is null || stage.OutputItem is null) Reject("MissingItemTypes", i);
                 // Type-changing/async Stream is represented in the input, but awaits C10/C11 support.
                 else if (stage.InputItem != input.Result || stage.OutputItem != input.Result) Reject("UnsupportedItemTransition", i);
@@ -95,6 +98,7 @@ internal static class BehaviorFusionPlanner
             if (site.StageIndex < -1 || site.StageIndex > input.DeclaredStages.Count ||
                 !Enum.IsDefined(typeof(FusionSitePhase), site.Phase) || !Enum.IsDefined(typeof(FusionGuardKind), site.Kind))
                 Reject("InvalidGuardSite", site.StageIndex);
+            else if (!SupportsGuardSite(input, site)) Reject("UnsupportedGuardSiteCombination", site.StageIndex);
         }
         foreach (var site in input.ResolutionSites)
         {
@@ -102,10 +106,35 @@ internal static class BehaviorFusionPlanner
                 !Enum.IsDefined(typeof(FusionSitePhase), site.Phase) ||
                 !Enum.IsDefined(typeof(FusionOwnership), site.Ownership) || !Enum.IsDefined(typeof(FusionCleanupKind), site.Cleanup))
                 Reject("InvalidResolutionSite", site.StageIndex);
+            else if (!SupportsExecutionSite(input, site.StageIndex, site.Phase))
+                Reject("UnsupportedResolutionSiteCombination", site.StageIndex);
             if ((site.Ownership == FusionOwnership.OwnedSession) != (site.Cleanup != FusionCleanupKind.None))
                 Reject("OwnershipCleanupMismatch", site.StageIndex);
             if (sync && site.Cleanup == FusionCleanupKind.Async) Reject("AsyncCleanupOnSyncRoute", site.StageIndex);
         }
         return facts;
+    }
+
+    private static bool SupportsGuardSite(FusionPlanInput input, FusionGuardSite site)
+    {
+        if (site.Phase == FusionSitePhase.OperationEntry)
+            return site.StageIndex == -1 && (site.Kind == FusionGuardKind.Argument ||
+                (site.Kind == FusionGuardKind.DestinationCapacity && input.DispatchKind == FusionDispatchKind.SendAllSyncBranch &&
+                    input.ResultKind == FusionResultKind.Response));
+        if (site.Phase == FusionSitePhase.FirstMove)
+            return input.DispatchKind == FusionDispatchKind.Stream && site.StageIndex == -1 &&
+                site.Kind is FusionGuardKind.Cancellation or FusionGuardKind.TokenComposition;
+        return (site.Kind is FusionGuardKind.Argument or FusionGuardKind.Cancellation) &&
+            SupportsExecutionSite(input, site.StageIndex, site.Phase);
+    }
+
+    private static bool SupportsExecutionSite(FusionPlanInput input, int index, FusionSitePhase phase)
+    {
+        if (phase == FusionSitePhase.HandlerEntry) return index == input.DeclaredStages.Count;
+        if (index < 0 || index >= input.DeclaredStages.Count) return false;
+        if (input.DispatchKind == FusionDispatchKind.Stream)
+            return (phase == FusionSitePhase.Item && input.DeclaredStages[index].Kind == FusionStageKind.Hook) ||
+                (phase == FusionSitePhase.StageEntry && input.DeclaredStages[index].Kind == FusionStageKind.Wrapper);
+        return phase == FusionSitePhase.StageEntry;
     }
 }

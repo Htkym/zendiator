@@ -56,7 +56,7 @@ public sealed class BehaviorFusionPlannerTests
     }
 
     [Fact]
-    public void Stream_projects_inner_to_outer_item_flow_with_each_wrapper_still_a_boundary()
+    public void Stream_preserves_declared_source_to_consumer_order_with_each_wrapper_still_a_boundary()
     {
         var plan = BehaviorFusionPlanner.Create(Input(FusionDispatchKind.Stream,
             ItemHook("A", FusionCapabilities.Filter), ItemHook("B", FusionCapabilities.Map),
@@ -64,13 +64,33 @@ public sealed class BehaviorFusionPlannerTests
         Assert.Empty(plan.Core.DiagnosticFacts);
         Assert.Null(plan.Send);
         var stream = Assert.IsType<StreamFusionPlan>(plan.Stream);
-        Assert.Equal(new[] { 3 }, stream.ItemFlowSegments[0].ItemFlowOrder);
-        Assert.Equal(new[] { 1, 0 }, stream.ItemFlowSegments[1].ItemFlowOrder);
+        Assert.Equal(new[] { 0, 1 }, stream.ItemFlowSegments[0].ItemFlowOrder);
+        Assert.Equal(new[] { 3 }, stream.ItemFlowSegments[1].ItemFlowOrder);
         Assert.Equal(new[] { 2 }, plan.Core.AdvancedWrapperBoundaries);
         Assert.True(stream.Enumeration.ResolveOnFirstMove);
         Assert.Equal(1, stream.Enumeration.SourceCurrentReadsPerSuccessfulMove);
         Assert.True(stream.Enumeration.CacheMappedCurrent);
         Assert.True(stream.Enumeration.OwnedSessionLivesUntilDispose);
+    }
+
+    [Fact]
+    public void Dual_filter_map_stream_hook_retains_stage_and_wrapper_facts_without_a_projection()
+    {
+        var input = Input(FusionDispatchKind.Stream, Wrapper("W0"),
+            ItemHook("Dual", FusionCapabilities.Filter | FusionCapabilities.Map),
+            Wrapper("W2"), ItemHook("Filter", FusionCapabilities.Filter)) with
+        {
+            GuardSites = new(new[] { new FusionGuardSite(1, FusionSitePhase.Item, FusionGuardKind.Cancellation) }),
+            ResolutionSites = new(new[] {
+                new FusionResolutionSite(1, FusionSitePhase.Item, Type("Dual"), FusionOwnership.BorrowedService) })
+        };
+        var plan = BehaviorFusionPlanner.Create(input);
+        Assert.Equal(new FusionDiagnosticFact("AmbiguousStageContract", 1), Assert.Single(plan.Core.DiagnosticFacts));
+        Assert.Equal(input, plan.Core.Input);
+        Assert.Equal(new[] { 0, 2 }, plan.Core.AdvancedWrapperBoundaries);
+        Assert.Empty(plan.Core.Segments);
+        Assert.Null(plan.Send);
+        Assert.Null(plan.Stream);
     }
 
     [Fact]
@@ -127,6 +147,66 @@ public sealed class BehaviorFusionPlannerTests
         Assert.NotEqual(plan, BehaviorFusionPlanner.Create(input with { DeclaredStages = new(new[] { Hook("A", FusionCapabilities.Success) }) }));
         Assert.NotEqual(plan, BehaviorFusionPlanner.Create(input with { GenericConstraints = new(new[] { "where T : class" }) }));
         Assert.NotEqual(plan, BehaviorFusionPlanner.Create(input with { GuardSites = new(new[] { new FusionGuardSite(0, FusionSitePhase.StageEntry, FusionGuardKind.Cancellation) }) }));
+    }
+
+    [Fact]
+    public void Invalid_site_family_phase_and_index_combinations_cannot_receive_a_projection()
+    {
+        var send = Input(FusionDispatchKind.SendSync, Hook("A"));
+        var stream = Input(FusionDispatchKind.Stream, ItemHook("A", FusionCapabilities.Filter), Wrapper("W"));
+        var invalidGuards = new[] {
+            (send, new FusionGuardSite(0, FusionSitePhase.Item, FusionGuardKind.Cancellation)),
+            (send, new FusionGuardSite(-1, FusionSitePhase.FirstMove, FusionGuardKind.Cancellation)),
+            (send, new FusionGuardSite(0, FusionSitePhase.HandlerEntry, FusionGuardKind.Cancellation)),
+            (send, new FusionGuardSite(1, FusionSitePhase.StageEntry, FusionGuardKind.Cancellation)),
+            (send, new FusionGuardSite(0, FusionSitePhase.StageEntry, FusionGuardKind.TokenComposition)),
+            (send, new FusionGuardSite(-1, FusionSitePhase.OperationEntry, FusionGuardKind.DestinationCapacity)),
+            (stream, new FusionGuardSite(0, FusionSitePhase.FirstMove, FusionGuardKind.Cancellation)),
+            (stream, new FusionGuardSite(1, FusionSitePhase.Item, FusionGuardKind.Cancellation)),
+            (stream, new FusionGuardSite(0, FusionSitePhase.StageEntry, FusionGuardKind.Cancellation))
+        };
+        foreach (var (input, site) in invalidGuards)
+        {
+            var plan = BehaviorFusionPlanner.Create(input with { GuardSites = new(new[] { site }) });
+            Assert.Contains(plan.Core.DiagnosticFacts, fact => fact.Key == "UnsupportedGuardSiteCombination");
+            Assert.Null(plan.Send);
+            Assert.Null(plan.Stream);
+        }
+        foreach (var (input, index, phase) in new[] {
+            (send, 0, FusionSitePhase.Item), (send, 0, FusionSitePhase.FirstMove),
+            (send, 0, FusionSitePhase.HandlerEntry), (stream, 0, FusionSitePhase.StageEntry),
+            (stream, 1, FusionSitePhase.Item), (stream, 2, FusionSitePhase.FirstMove) })
+        {
+            var site = new FusionResolutionSite(index, phase, Type("Service"), FusionOwnership.BorrowedService);
+            var plan = BehaviorFusionPlanner.Create(input with { ResolutionSites = new(new[] { site }) });
+            Assert.Contains(plan.Core.DiagnosticFacts, fact => fact.Key == "UnsupportedResolutionSiteCombination");
+            Assert.Null(plan.Send);
+            Assert.Null(plan.Stream);
+        }
+    }
+
+    [Fact]
+    public void Supported_stream_hook_wrapper_and_handler_sites_keep_their_positions()
+    {
+        var input = Input(FusionDispatchKind.Stream, ItemHook("A", FusionCapabilities.Filter), Wrapper("W")) with
+        {
+            GuardSites = new(new[] {
+                new FusionGuardSite(-1, FusionSitePhase.OperationEntry, FusionGuardKind.Argument),
+                new FusionGuardSite(-1, FusionSitePhase.FirstMove, FusionGuardKind.TokenComposition),
+                new FusionGuardSite(-1, FusionSitePhase.FirstMove, FusionGuardKind.Cancellation),
+                new FusionGuardSite(0, FusionSitePhase.Item, FusionGuardKind.Cancellation),
+                new FusionGuardSite(1, FusionSitePhase.StageEntry, FusionGuardKind.Cancellation),
+                new FusionGuardSite(2, FusionSitePhase.HandlerEntry, FusionGuardKind.Cancellation) }),
+            ResolutionSites = new(new[] {
+                new FusionResolutionSite(0, FusionSitePhase.Item, Type("A"), FusionOwnership.BorrowedService),
+                new FusionResolutionSite(1, FusionSitePhase.StageEntry, Type("W"), FusionOwnership.BorrowedService),
+                new FusionResolutionSite(2, FusionSitePhase.HandlerEntry, Type("H"), FusionOwnership.BorrowedService) })
+        };
+        var plan = BehaviorFusionPlanner.Create(input);
+        Assert.Empty(plan.Core.DiagnosticFacts);
+        Assert.NotNull(plan.Stream);
+        Assert.Equal(input.GuardSites, plan.Core.Input.GuardSites);
+        Assert.Equal(input.ResolutionSites, plan.Core.Input.ResolutionSites);
     }
 
     [Fact]
