@@ -59,7 +59,9 @@ internal static class CanonicalStreamScheduleBuilder
         Transfer(move, factory, "cursor/request", sourceName + "/request", StreamOutcome.Success);
         Transfer(move, factory, "cursor/start-token", sourceName + "/token", StreamOutcome.Success);
         Transfer(move, StreamPhase.AcquireSource, sourceName + "/enumerable", "cursor/source", StreamOutcome.Success);
-        Transfer(move, StreamPhase.AcquireSource, "cursor/start-token", "source/token", StreamOutcome.Success);
+        // Handler sources consume the execution token. An opaque Wrapper has already received it
+        // in Wrap; forwarding it to a directly returned Open envelope would alter its selected token.
+        Transfer(move, StreamPhase.AcquireSource, contract.SourceKind == StreamSourceKind.Handler ? "cursor/start-token" : "CancellationToken.None", "source/token", StreamOutcome.Success);
         Edge(move, StreamPhase.MarkStarted, StreamPhase.SourceGuard);
         Edge(move, StreamPhase.StartupDetachLink, StreamPhase.StartupLinkPresent);
         Edge(move, StreamPhase.StartupLinkPresent, StreamPhase.StartupDisposeLink, StreamOutcome.True);

@@ -47,6 +47,10 @@ internal static class CanonicalStreamWrapperValidator
             ValidatePaths(expected, protocol);
         }
         if (candidate.Wrappers.Any(w => !required.Boundaries.Any(r => r.Position == w.Position))) Reject("UnexpectedWrapperProtocol");
+        facts.UnionWith(StreamWrapperTokenFlowValidator.Trace(route, candidate).Facts);
+        facts.UnionWith(StreamWrapperTokenFlowValidator.Trace(route, candidate, explicitOuterEnumeration: true).Facts);
+        facts.UnionWith(StreamWrapperTokenFlowValidator.Trace(route, candidate, explicitInnerEnumeration: true).Facts);
+        facts.UnionWith(StreamWrapperTokenFlowValidator.Trace(route, candidate, explicitInnerEnumeration: true, explicitConsumer: StreamCursorConsumer.Consumer).Facts);
         return new(facts.OrderBy(f => f.Reason, StringComparer.Ordinal));
 
         void Compare<T>(IEnumerable<T> expected, IEnumerable<T> actual, string kind)

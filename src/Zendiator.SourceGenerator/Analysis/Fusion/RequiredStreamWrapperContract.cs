@@ -59,6 +59,14 @@ internal sealed class RequiredStreamWrapperContract
             required.Awaits.Add(new(Site(release, StreamWrapperPhase.MoveUpstream), "bool", true, true, true, true, true, false));
             required.Awaits.Add(new(Site(release, StreamWrapperPhase.DisposeCursor), "void", true, true, true, true, true, true));
         }
+        // C01 direct-return delegation is framework acquisition, not an explicit user token.
+        var delegated = StreamWrapperProgram.AcquireDelegatedOutput;
+        Add(delegated, StreamWrapperPhase.AcquireCursor, StreamWrapperPhase.AssignOwner, StreamWrapperPhase.CursorReturn, StreamWrapperPhase.AcquireFailure);
+        Transfer(delegated, StreamWrapperPhase.AcquireCursor, input + "/envelope/request", input + "/cursor/request", StreamWrapperOutcome.Success);
+        Transfer(delegated, StreamWrapperPhase.AcquireCursor, input + "/envelope/api-token", input + "/cursor/api-token", StreamWrapperOutcome.Success);
+        Transfer(delegated, StreamWrapperPhase.AcquireCursor, output + "/source/token", input + "/cursor/enumerator-token", StreamWrapperOutcome.Success);
+        Transfer(delegated, StreamWrapperPhase.AssignOwner, "acquired/upstream-cursor", "Consumer/owned-cursor");
+        required.Calls.Add(new(Site(delegated, StreamWrapperPhase.AcquireCursor), null, input, StreamProgram.GetEnumerator, StreamMultiplicity.EachAcquiredCursor));
         return required;
         void Add(StreamWrapperProgram program, params StreamWrapperPhase[] phases)
         {

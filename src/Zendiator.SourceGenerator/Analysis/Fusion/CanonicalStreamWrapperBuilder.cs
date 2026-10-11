@@ -102,6 +102,19 @@ internal static class CanonicalStreamWrapperBuilder
             awaits.Add(new(Site(release, StreamWrapperPhase.MoveUpstream), "bool", true, true, true, true, true, false));
             awaits.Add(new(Site(release, StreamWrapperPhase.DisposeCursor), "void", true, true, true, true, true, true));
         }
+        // The framework's delegated output acquisition has no implicit cancellation argument.
+        // Keep explicit Wrapper/consumer GetEnumerator calls in their existing separate programs.
+        var delegated = StreamWrapperProgram.AcquireDelegatedOutput;
+        Flow(delegated, StreamWrapperPhase.AcquireCursor, new[] {
+            E(delegated, StreamWrapperPhase.AcquireCursor, StreamWrapperPhase.AssignOwner, StreamWrapperOutcome.Success),
+            E(delegated, StreamWrapperPhase.AcquireCursor, StreamWrapperPhase.AcquireFailure, StreamWrapperOutcome.Failure),
+            E(delegated, StreamWrapperPhase.AssignOwner, StreamWrapperPhase.CursorReturn)
+        });
+        Transfer(delegated, StreamWrapperPhase.AcquireCursor, input + "/envelope/request", input + "/cursor/request", StreamWrapperOutcome.Success);
+        Transfer(delegated, StreamWrapperPhase.AcquireCursor, input + "/envelope/api-token", input + "/cursor/api-token", StreamWrapperOutcome.Success);
+        Transfer(delegated, StreamWrapperPhase.AcquireCursor, output + "/source/token", input + "/cursor/enumerator-token", StreamWrapperOutcome.Success);
+        Transfer(delegated, StreamWrapperPhase.AssignOwner, "acquired/upstream-cursor", "Consumer/owned-cursor");
+        calls.Add(new(Site(delegated, StreamWrapperPhase.AcquireCursor), null, input, StreamProgram.GetEnumerator, StreamMultiplicity.EachAcquiredCursor));
         return new(position, input, output, StreamMultiplicity.ZeroOrMore, StreamMultiplicity.ZeroOrMore,
             true, true, true, true, false, false, new(flows), new(transfers), new(owners), new(awaits)) { Calls = new(calls) };
         void Flow(StreamWrapperProgram program, StreamWrapperPhase entry, IEnumerable<StreamWrapperEdge> edges) => flows.Add(new(program, Site(program, entry), new(edges)));

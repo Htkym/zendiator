@@ -1,6 +1,6 @@
 namespace Zendiator.SourceGenerator;
 
-internal enum StreamWrapperProgram { Invoke, Open, AcquireByWrapper, AcquireByConsumer, ReleaseByWrapper, ReleaseByConsumer }
+internal enum StreamWrapperProgram { Invoke, Open, AcquireByWrapper, AcquireByConsumer, ReleaseByWrapper, ReleaseByConsumer, AcquireDelegatedOutput }
 internal enum StreamWrapperPhase
 {
     Begin, OpenChoice, CallOpen, OutputChoice, DirectReturn, AlternativeReturn, WrapperFailure,

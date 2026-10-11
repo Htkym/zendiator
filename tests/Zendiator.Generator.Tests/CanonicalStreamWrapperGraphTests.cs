@@ -173,4 +173,63 @@ public sealed partial class GeneratorTests
             Assert.False(bad.IsValid); Assert.Null(bad.StreamWrapperSchedule); Assert.Contains(bad.Facts, f => f.Reason == "StreamWrapperCompletionMismatch");
         }
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Direct_return_whole_path_preserves_selected_open_token_and_outer_hook_values_even_with_explicit_outer_enumeration(bool explicitOuter)
+    {
+        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"), "ZEN0037"));
+        var result = StreamWrapperTokenFlowValidator.Trace(graph.Contract, graph.StreamWrapperSchedule!, explicitOuterEnumeration: explicitOuter);
+        Assert.Empty(result.Facts);
+        var trace = Assert.Single(result.Traces);
+        Assert.Equal("request:outer", trace.OuterRequest);
+        Assert.Equal(explicitOuter ? "link(token:outer;token:explicit-outer)" : "token:outer", trace.OuterToken);
+        Assert.Equal("request:open:1", trace.InputRequest);
+        Assert.Equal("token:open:1", trace.InputApiToken);
+        Assert.Equal("", trace.InputEnumeratorToken); // Framework output acquisition supplies no implicit outer token.
+        Assert.Equal(trace.SelectedToken, trace.InputStartToken);
+        Assert.NotEqual(trace.OuterToken, trace.InputStartToken);
+    }
+
+    [Theory]
+    [InlineData((int)StreamCursorConsumer.Wrapper)]
+    [InlineData((int)StreamCursorConsumer.Consumer)]
+    public void Explicit_upstream_enumerator_token_still_combines_with_selected_open_token_under_D02(int consumer)
+    {
+        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"), "ZEN0037"));
+        var result = StreamWrapperTokenFlowValidator.Trace(graph.Contract, graph.StreamWrapperSchedule!, explicitInnerEnumeration: true, explicitConsumer: (StreamCursorConsumer)consumer);
+        Assert.Empty(result.Facts); var trace = Assert.Single(result.Traces);
+        Assert.Equal("token:open:1", trace.InputApiToken);
+        Assert.Equal("token:explicit-inner", trace.InputEnumeratorToken);
+        Assert.Equal("link(token:open:1;token:explicit-inner)", trace.InputStartToken);
+        Assert.Equal("request:outer", trace.OuterRequest); Assert.Equal("token:outer", trace.OuterToken);
+    }
+
+    [Fact]
+    public void Original_implicit_outer_token_bug_is_rejected_by_cross_path_oracle_without_using_matching_required_tables()
+    {
+        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"), "ZEN0037")); var s = graph.StreamWrapperSchedule!;
+        var oldBug = s with { Segments = new(s.Segments.Select(segment => segment.Descriptor.Contract.SourceKind == StreamSourceKind.Wrapper ? segment with {
+            Cursor = segment.Cursor with { Transfers = new(segment.Cursor.Transfers.Select(t => t.At.Phase == StreamPhase.AcquireSource && t.Destination == "source/token"
+                ? t with { Source = "cursor/start-token" } : t)) }
+        } : segment)) };
+        // This check deliberately bypasses the Required matrices that copied the bug in cc811fe.
+        var result = StreamWrapperTokenFlowValidator.Trace(graph.Contract, oldBug);
+        Assert.Contains(result.Facts, f => f.Reason == "ImplicitWrapperTokenRecombinedWithOpenSelection");
+        Assert.Equal("link(token:open:1;token:outer)", Assert.Single(result.Traces).InputStartToken);
+        Assert.Equal(s.Wrappers, oldBug.Wrappers); Assert.Equal(s.Segments[1].Cursor.Flows, oldBug.Segments[1].Cursor.Flows);
+    }
+
+    [Fact]
+    public void Delegated_acquisition_and_outer_hook_token_writes_are_checked_across_actual_storage_slots()
+    {
+        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"), "ZEN0037")); var s = graph.StreamWrapperSchedule!;
+        var injected = ChangeWrapper(s, w => w with { Transfers = new(w.Transfers.Select(t => t.At.Program == StreamWrapperProgram.AcquireDelegatedOutput &&
+            t.Destination == w.InputSegment + "/cursor/enumerator-token" ? t with { Source = w.OutputSegment + "/cursor/start-token" } : t)) });
+        Assert.Contains(StreamWrapperTokenFlowValidator.Trace(graph.Contract, injected).Facts, f => f.Reason == "ImplicitWrapperTokenRecombinedWithOpenSelection");
+        var overwritten = ChangeWrapper(s, w => w with { Transfers = new(w.Transfers.Append(new StreamWrapperTransfer("Open/token-argument",
+            w.OutputSegment + "/cursor/start-token", StreamWrapperNames.Site(StreamWrapperProgram.Open, StreamWrapperPhase.SaveToken), StreamWrapperOutcome.Always))) });
+        Assert.Contains(StreamWrapperTokenFlowValidator.Trace(graph.Contract, overwritten).Facts, f => f.Reason == "OuterHookRequestOrTokenOverwritten");
+    }
 }
