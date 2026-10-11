@@ -51,6 +51,7 @@ internal static class SessionFactoryContractBinding
         var acquire = Callback(factory, selected.Contract, BoundCallbackPhase.SessionAcquire, selected.Completion);
         if (acquire == null) return (null, true);
         BoundCallbackModel? cleanup = null;
+        string? cleanupContractName = null;
         if (selected.Ownership == FusionOwnership.OwnedSession)
         {
             // Compilation-wide lookup prefers source homonyms. Anchor cleanup to the compiler's Cor Library.
@@ -73,9 +74,12 @@ internal static class SessionFactoryContractBinding
             cleanup = Callback(session, contract, BoundCallbackPhase.SessionCleanup,
                 sync ? BoundCompletionKind.Synchronous : BoundCompletionKind.ValueTask);
             if (cleanup == null) return (null, true);
+            cleanupContractName = Name(contract);
         }
         return (new(Identity(factory), Identity(session), acquire, selected.Ownership, cleanup)
-            { SuppliesCallbackReceiver = true, FactoryHierarchy = StageContractBinding.DescribeHierarchy(factory) }, false);
+            { SuppliesCallbackReceiver = true, FactoryHierarchy = StageContractBinding.DescribeHierarchy(factory),
+                SyncEmission = family == BoundDispatchFamily.SendSync && factory.TypeKind == TypeKind.Class && Public(factory)
+                    ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name, cleanupContractName) : null }, false);
     }
 
     private static BoundCallbackModel? Callback(INamedTypeSymbol type, INamedTypeSymbol contract,

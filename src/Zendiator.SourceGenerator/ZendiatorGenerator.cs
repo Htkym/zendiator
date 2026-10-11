@@ -37,8 +37,23 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         var compositionModel = compositionValue.Select(static (model, _) => model).WithTrackingName("CompositionSelectionModel");
         var executionValue = compositionModel.Select(static (catalog, _) => CanonicalExecutionGraphNormalizer.Create(catalog));
         var executionModel = executionValue.Select(static (model, _) => model).WithTrackingName("CanonicalExecutionGraphModel");
-        context.RegisterSourceOutput(compositionModel.Combine(executionModel).Combine(compositions), static (ctx, input) =>
-            CompositionSelectionDiscovery.Report(ctx, input.Left.Left, input.Right, input.Left.Right));
+        var canonicalSync = compositionModel.Combine(executionModel)
+            .Select(static (input, _) => CanonicalSyncEmissionNormalizer.Create(input.Left, input.Right)).WithTrackingName("CanonicalSyncEmissionModel");
+        var canonicalSyncSource = canonicalSync.Select(static (model, _) => CanonicalSyncSourceEmitter.Emit(model)).WithTrackingName("CanonicalSyncSourceEmission");
+        context.RegisterSourceOutput(canonicalSyncSource, static (ctx, text) =>
+        {
+            if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.SendSync.g.cs", SourceText.From(text, Encoding.UTF8));
+        });
+        var canonicalSyncSites = canonicalSync.Combine(compositions).Combine(context.CompilationProvider)
+            .Select(static (input, ct) => CanonicalSyncEmissionNormalizer.BindCallSites(input.Left.Left, input.Left.Right, input.Right, ct));
+        var canonicalSyncInterceptors = canonicalSyncSites.Select(static (model, _) => CanonicalSyncSourceEmitter.EmitInterceptors(model))
+            .WithTrackingName("CanonicalSyncInterceptorsEmission");
+        context.RegisterSourceOutput(canonicalSyncInterceptors, static (ctx, text) =>
+        {
+            if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.SendSync.Interceptors.g.cs", SourceText.From(text, Encoding.UTF8));
+        });
+        context.RegisterSourceOutput(compositionModel.Combine(executionModel).Combine(compositions).Combine(canonicalSync), static (ctx, input) =>
+            CompositionSelectionDiscovery.Report(ctx, input.Left.Left.Left, input.Left.Right, input.Left.Left.Right, input.Right));
         var legacyInvocations = invocations.Combine(compositions)
             .Select(static (input, _) => CompositionSelectionDiscovery.LegacyInvocations(input.Left, input.Right));
         // Discovery metadata alone never gates unrelated legacy generation.

@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using static Zendiator.SourceGenerator.SymbolUtilities;
 
@@ -40,10 +41,22 @@ internal static class CompositionSelectionDiscovery
             var errors = new List<string>();
             var key = "default";
             var identity = "default";
+            string? markerName = null;
+            string? generatedNamespace = "Zendiator.Generated.Default";
+            var useLocalHandlers = false;
+            var hasExplicitSelection = false;
             var compilerOwned = false;
             if (method.Arity == 1 && method.TypeArguments[0] is INamedTypeSymbol composition)
             {
                 identity = MarkedHandlerDiscovery.Identity(composition);
+                markerName = Name(composition);
+                var ns = composition.ContainingNamespace.ToDisplayString(new SymbolDisplayFormat(
+                    globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
+                    typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+                    miscellaneousOptions: SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers));
+                var identifier = SyntaxFacts.GetKeywordKind(composition.Name) != SyntaxKind.None ? "@" + composition.Name : composition.Name;
+                generatedNamespace = composition.ContainingType != null ? null :
+                    (composition.ContainingNamespace.IsGlobalNamespace ? "Zendiator" : ns) + ".Generated." + identifier;
                 var attributes = composition.GetAttributes().Where(a => Same(a.AttributeClass, compositionAttribute)).ToArray();
                 compilerOwned = attributes.Length > 1;
                 if (!compilerOwned && (attributes.Length != 1 || composition.TypeKind != TypeKind.Class ||
@@ -92,9 +105,10 @@ internal static class CompositionSelectionDiscovery
                     errors.Add("Composition selection must call supported methods directly on the configuration parameter.");
                     continue;
                 }
-                if (operation.Name == "UseLocalHandlers" && call.ArgumentList.Arguments.Count == 0) SelectLocal();
+                if (operation.Name == "UseLocalHandlers" && call.ArgumentList.Arguments.Count == 0) { useLocalHandlers = true; SelectLocal(); }
                 else if (operation.Name == "AddHandler")
                 {
+                    hasExplicitSelection = true;
                     var type = operation.Arity == 1 ? operation.TypeArguments[0] as INamedTypeSymbol :
                         call.ArgumentList.Arguments.Count == 1 && call.ArgumentList.Arguments[0].Expression is TypeOfExpressionSyntax typeOf
                             ? semantic.GetTypeInfo(typeOf.Type, ct).Type as INamedTypeSymbol : null;
@@ -111,9 +125,11 @@ internal static class CompositionSelectionDiscovery
                 else errors.Add($"Composition selection operation {operation.Name} is not connected yet.");
             }
             var pipelines = lists.Bind(selected.Keys);
+            if (generatedNamespace != null && GeneratedTypeConflict(compilation, generatedNamespace)) generatedNamespace = null;
             var model = new CompositionSelectionModel(identity, key,
                 new(selected.Values.OrderBy(h => h.Identity, StringComparer.Ordinal)), new(errors), compilerOwned,
-                pipelines, new(lists.Facts));
+                pipelines, new(lists.Facts)) { GeneratedNamespace = generatedNamespace, MarkerName = markerName,
+                    UseLocalHandlers = useLocalHandlers, HasExplicitSelection = hasExplicitSelection };
             result.Add(new(model, invocation, lists.Sources.ToImmutableDictionary(StringComparer.Ordinal)));
 
             void SelectLocal()
@@ -138,11 +154,21 @@ internal static class CompositionSelectionDiscovery
 
     internal static CompositionSelectionCatalog Normalize(ImmutableArray<Binding> bindings) => new(new(bindings.Select(b => b.Model)));
 
+    private static bool GeneratedTypeConflict(Compilation compilation, string generatedNamespace)
+    {
+        var parts = generatedNamespace.Replace("@", "").Split('.');
+        // A type at any namespace component, including the full namespace, conflicts with its declaration.
+        for (var length = 1; length <= parts.Length; length++)
+            if (compilation.GetTypeByMetadataName(string.Join(".", parts.Take(length))) != null) return true;
+        return new[] { "Zendiator", "IZendiator", "ZendiatorGeneratedRegistrar" }.Any(name =>
+            compilation.GetTypeByMetadataName(string.Join(".", parts) + "." + name) != null);
+    }
+
     internal static ImmutableArray<InvocationExpressionSyntax> LegacyInvocations(ImmutableArray<InvocationExpressionSyntax> invocations,
         ImmutableArray<Binding> compositions) => invocations.Where(i => !compositions.Any(c => c.Invocation == i)).ToImmutableArray();
 
     internal static void Report(SourceProductionContext context, CompositionSelectionCatalog catalog, ImmutableArray<Binding> current,
-        CanonicalExecutionGraphCatalog execution)
+        CanonicalExecutionGraphCatalog execution, CanonicalSyncEmissionModel canonicalSync)
     {
         for (var index = 0; index < catalog.Compositions.Count; index++)
         {
@@ -169,7 +195,9 @@ internal static class CompositionSelectionDiscovery
                     {
                         var graph = execution.Compositions[index].FirstOrDefault(g => g.Contract.Anchor == fact.Anchor);
                         if (graph != null)
-                            message = graph.IsValid
+                            message = canonicalSync.Compositions.Any(c => c.Index == index)
+                                ? "A limited stage-free SendSync C# candidate is emitted for compilation and execution validation. ZEN0037 remains until its runtime review accepts this shape."
+                                : graph.IsValid
                                 ? "The " + (graph.Contract.Family == BoundDispatchFamily.Stream ? "Stream" : "Send") + " execution graph satisfies its structural contract. Canonical runtime generation and equivalence are pending; emission remains blocked."
                                 : "The execution graph is incomplete: " + string.Join(", ", graph.Facts.Select(f => f.Reason)) + ". Canonical emission remains blocked.";
                     }

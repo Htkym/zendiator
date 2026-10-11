@@ -12,5 +12,11 @@ internal sealed record MarkedHandlerCatalog(
 internal sealed record SelectedHandlerModel(string Identity, MarkedHandlerModel Definition);
 internal sealed record CompositionSelectionModel(string Identity, string Key,
     EquatableArray<SelectedHandlerModel> Handlers, EquatableArray<string> Errors, bool CompilerOwnsHandlerError,
-    EquatableArray<BoundPipelineModel> Pipelines = default, EquatableArray<CompositionDiagnosticFact> Facts = default);
+    EquatableArray<BoundPipelineModel> Pipelines = default, EquatableArray<CompositionDiagnosticFact> Facts = default)
+{
+    public string? GeneratedNamespace { get; init; }
+    public string? MarkerName { get; init; }
+    public bool UseLocalHandlers { get; init; }
+    public bool HasExplicitSelection { get; init; }
+}
 internal sealed record CompositionSelectionCatalog(EquatableArray<CompositionSelectionModel> Compositions);

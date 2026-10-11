@@ -17,6 +17,7 @@ internal sealed record BoundHandlerModel(string Anchor, string Type, string Name
     string Implementation, FusionOwnership ServiceOwnership, bool CompilerOwnsError, BoundCallbackModel? Callback)
 {
     public EquatableArray<BoundSessionModel> Sessions { get; init; }
+    public BoundSyncHandlerEmission? SyncEmission { get; init; }
 }
 // Explicit factory facts for operation state. DI services remain borrowed; no callback body
 // or IDisposable interface on a service authorizes an ownership transfer.
@@ -26,9 +27,14 @@ internal sealed record BoundSessionModel(string FactoryServiceType, string Resou
     // A factory-produced callback receiver cannot be lowered as a separately resolved DI service.
     public bool SuppliesCallbackReceiver { get; init; }
     public EquatableArray<string> FactoryHierarchy { get; init; }
+    public BoundSyncFactoryEmission? SyncEmission { get; init; }
 }
 internal sealed record BoundPipelineModel(string Anchor, string Request, string RequestName,
     BoundDispatchFamily? Family, FusionResultKind? ResultKind, string? Result,
     EquatableArray<BoundHandlerModel> Handlers, EquatableArray<BoundStageModel> Stages,
-    bool ExplicitHandlerOrder, FusionContractOrigin ContractOrigin);
+    bool ExplicitHandlerOrder, FusionContractOrigin ContractOrigin)
+{
+    public bool HasEmptyPipeline { get; init; }
+    public BoundDispatchFamily? PipelineFamily { get; init; }
+}
 internal sealed record CompositionDiagnosticFact(string Key, string Anchor, string Message, string? AdditionalAnchor = null);
