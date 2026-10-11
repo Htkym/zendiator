@@ -14,8 +14,7 @@ internal static class CanonicalStreamGraphValidator
         if (route.Handlers.Count != 1) Reject("SingleStreamHandlerRequired");
         foreach (var handler in route.Handlers)
         {
-            if (handler.Sessions.Count != 0) Reject("StreamSessionAcquisitionAndCleanupUnavailable", handler.Anchor);
-            if (handler.ServiceOwnership != FusionOwnership.BorrowedService) Reject("OwnedHandlerAcquisitionAndCleanupUnavailable", handler.Anchor);
+            CheckSessions(handler.Type, handler.ServiceOwnership, handler.Sessions, handler.Anchor, "Handler");
             if (handler.CompilerOwnsError || handler.Callback == null) { Reject("HandlerImplementationUnavailable", handler.Anchor); continue; }
             if (handler.Callback.Phase != BoundCallbackPhase.Handler || handler.Callback.Completion != BoundCompletionKind.Enumerable || handler.Callback.RequiresSingleConsumption)
                 Reject("StreamHandlerCompletionMismatch", handler.Anchor);
@@ -23,8 +22,7 @@ internal static class CanonicalStreamGraphValidator
         }
         foreach (var stage in route.Stages)
         {
-            if (stage.Sessions.Count != 0) Reject("StreamSessionAcquisitionAndCleanupUnavailable", stage.Anchor);
-            if (stage.ServiceOwnership != FusionOwnership.BorrowedService) Reject("OwnedStageAcquisitionAndCleanupUnavailable", stage.Anchor);
+            CheckSessions(stage.Type, stage.ServiceOwnership, stage.Sessions, stage.Anchor, "Stage");
             if (stage.CompilerOwnsError || stage.Callbacks.Count != 1) Reject("SingleRoleStreamStageRequired", stage.Anchor);
             if (stage.Kind is not (FusionStageKind.Hook or FusionStageKind.Wrapper)) Reject("SingleRoleStreamStageRequired", stage.Anchor);
             foreach (var callback in stage.Callbacks)
@@ -37,6 +35,29 @@ internal static class CanonicalStreamGraphValidator
             }
         }
         return new(facts.Distinct());
+        void CheckSessions(string type, FusionOwnership ownership, EquatableArray<BoundSessionModel> sessions, string anchor, string role)
+        {
+            if (sessions.Count == 0)
+            {
+                if (ownership != FusionOwnership.BorrowedService) Reject("Owned" + role + "AcquisitionAndCleanupUnavailable", anchor);
+                return;
+            }
+            if (sessions.Count != 1 || !sessions[0].SuppliesCallbackReceiver) { Reject("StreamSessionAcquisitionAndCleanupUnavailable", anchor); return; }
+            var session = sessions[0];
+            if (session.ResourceType != type || session.Ownership != ownership) Reject("SessionReceiverTypeOrOwnershipMismatch", anchor);
+            if (string.IsNullOrEmpty(session.FactoryServiceType) || session.Acquire.Phase != BoundCallbackPhase.SessionAcquire ||
+                session.Acquire.Completion is not (BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask) ||
+                session.Acquire.RequiresSingleConsumption != (session.Acquire.Completion == BoundCompletionKind.ValueTask)) Reject("SessionAcquisitionContractMismatch", anchor);
+            CheckParameters(session.Acquire, anchor);
+            if (ownership == FusionOwnership.BorrowedResource)
+            {
+                if (session.Cleanup != null) Reject("BorrowedResourceHasCleanup", anchor);
+            }
+            else if (ownership != FusionOwnership.OwnedSession) Reject("ExplicitResourceOwnershipRequired", anchor);
+            else if (session.Cleanup == null || session.Cleanup.Phase != BoundCallbackPhase.SessionCleanup ||
+                session.Cleanup.Completion != BoundCompletionKind.ValueTask || !session.Cleanup.RequiresSingleConsumption) Reject("OwnedStreamSessionAsyncCleanupRequired", anchor);
+            else CheckParameters(session.Cleanup, anchor);
+        }
         void CheckParameters(BoundCallbackModel callback, string anchor)
         {
             if (callback.Parameters.Any(p => p.RefKind != "None" || p.ScopedKind != "None")) Reject("RetainedParameterRefSafetyUnavailable", anchor);
@@ -48,7 +69,8 @@ internal static class CanonicalStreamGraphValidator
         var initial = CheckContract(route);
         if (initial.Count != 0) return initial;
         if (route.Stages.Any(s => s.Kind == FusionStageKind.Wrapper)) return new(new[] { new CanonicalExecutionGraphFact("WrapperRequiresSegmentGraph", route.Anchor) });
-        return ValidateSegment(new(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages), candidate);
+        return ValidateSegment(new(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages)
+            { SourceSessions = route.Handlers[0].Sessions }, candidate);
     }
 
     internal static EquatableArray<CanonicalExecutionGraphFact> ValidateSegment(StreamSegmentContract contract, CanonicalStreamExecutionSchedule candidate)
@@ -63,6 +85,9 @@ internal static class CanonicalStreamGraphValidator
         Compare(required.Awaits, candidate.Awaits, "Await");
         Compare(required.Transfers, candidate.Transfers, "ValueTransfer");
         Compare(required.Failures, candidate.Failures, "FailurePolicy");
+        Compare(required.ServiceResolutions, candidate.ServiceResolutions, "ServiceResolution");
+        Compare(required.SessionCalls, candidate.SessionCalls, "SessionCall");
+        Compare(required.CallbackReceivers, candidate.CallbackReceivers, "CallbackReceiver");
         if (candidate.ContextModelId != "stream-call-caller-v1") Reject("FreshMoveDisposeCallerContextRequired");
         if (!candidate.FreshCursorPerEnumeration || candidate.RequestSnapshot || candidate.ReLendPublicCursor) Reject("ReplayCursorOwnershipMismatch");
         if (candidate.Owners.Any(o => o.Borrowed && o.Cleanup != StreamCleanup.None)) Reject("BorrowedOwnerHasCleanup");
@@ -70,6 +95,7 @@ internal static class CanonicalStreamGraphValidator
         if (candidate.Awaits.GroupBy(a => a.Producer).Any(g => g.Count() != 1)) Reject("DuplicateAwaitConsumer");
         if (candidate.Failures.Any(f => !f.PreserveIdentityAndToken || !f.EscapingOceIsCanceled || !f.ReplacesPreviousError || f.Aggregate)) Reject("ExceptionReplacementMismatch");
         facts.AddRange(CanonicalStreamControlValidator.Validate(contract, candidate));
+        facts.AddRange(CanonicalStreamSessionValidator.Inspect(contract, candidate).Facts);
         return new(facts.Distinct());
 
         void Compare<T>(IEnumerable<T> expected, IEnumerable<T> actual, string kind)

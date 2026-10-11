@@ -12,7 +12,7 @@ namespace Zendiator.SourceGenerator;
 internal static class CanonicalStreamControlValidator
 {
     private sealed record Lifecycle(bool Started = false, bool Ended = false, bool Disposed = false,
-        bool Source = false, bool Link = false, bool Cache = false, string Resolved = "");
+        bool Source = false, bool Link = false, bool Cache = false, string Resolved = "", string LiveSessions = "");
     private sealed record Path(Lifecycle Life, bool Busy = false, bool Prepared = false, bool StoppedChecked = false,
         bool StartChecked = false, bool TokenMerged = false, bool PreCancel = false, bool Handler = false,
         bool Enumerable = false, bool SourceGuard = false, bool SourceCompleted = false, bool SourceSuccess = false, bool CurrentRead = false,
@@ -20,17 +20,24 @@ internal static class CanonicalStreamControlValidator
         bool StartupDetached = false, bool SourceDetached = false, bool LinkDetached = false,
         bool DetachedSource = false, bool DetachedLink = false, bool SourceCleaned = false, bool LinkCleaned = false,
         bool DisposeBegan = false, bool EndMarked = false, bool EnvelopeCreated = false, bool CursorCreated = false,
-        bool NullChecked = false, bool CurrentChecked = false, bool DisposedChecked = false, bool MisuseFailure = false);
+        bool NullChecked = false, bool CurrentChecked = false, bool DisposedChecked = false, bool MisuseFailure = false,
+        string GuardedSessions = "", string Factories = "", string ReturnedSessions = "", string ValidatedSessions = "",
+        string DetachedSessions = "", string CleanedSessions = "");
     private sealed record Visit(StreamSiteId Site, Path State);
     private sealed record Work(Visit Visit, EquatableArray<Visit> Trail);
 
     internal static EquatableArray<CanonicalExecutionGraphFact> Validate(BoundPipelineModel route, CanonicalStreamExecutionSchedule candidate) =>
-        Validate(new StreamSegmentContract(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages), candidate);
+        Validate(new StreamSegmentContract(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages)
+            { SourceSessions = route.Handlers[0].Sessions }, candidate);
 
     internal static EquatableArray<CanonicalExecutionGraphFact> Validate(StreamSegmentContract contract, CanonicalStreamExecutionSchedule candidate)
     {
         var facts = new HashSet<CanonicalExecutionGraphFact>();
         void Reject(string reason) => facts.Add(new(reason, contract.Anchor));
+        var sessions = Enumerable.Range(-1, contract.Hooks.Count + 1).Where(i => Sessions(contract, i).Count != 0).ToArray();
+        bool Has(string value, int position) => value.Contains("|" + position + "|");
+        bool Cleaned(Path state) => sessions.All(i => Sessions(contract, i)[0].Ownership != FusionOwnership.OwnedSession ||
+            !Has(state.DetachedSessions, i) || Has(state.CleanedSessions, i));
         var required = new HashSet<StreamSiteId>(RequiredStreamExecutionContract.Derive(contract).Sites.Select(s => s.Id));
         var programs = candidate.Flows.GroupBy(f => f.Program).ToDictionary(g => g.Key, g => g.ToArray());
         foreach (StreamProgram program in Enum.GetValues(typeof(StreamProgram)))
@@ -127,6 +134,7 @@ internal static class CanonicalStreamControlValidator
                 StreamPhase.HookCached => HasService(s.Life, id.Stage),
                 StreamPhase.StartupLinkPresent or StreamPhase.LinkPresent => s.DetachedLink,
                 StreamPhase.SourcePresent => s.DetachedSource,
+                StreamPhase.SessionPresent => Has(s.DetachedSessions, id.Stage),
                 StreamPhase.CurrentGuard => s.Life.Cache && !s.Busy && !s.Life.Ended && !s.Life.Disposed,
                 StreamPhase.AlreadyDisposed => s.Life.Disposed,
                 StreamPhase.DisposeResult => s.Failure, _ => null
@@ -167,6 +175,23 @@ internal static class CanonicalStreamControlValidator
                 case StreamPhase.ResolveHandler:
                 case StreamPhase.ResolveWrapper:
                     Need(s.PreCancel && !s.Handler && !s.Failure, "HandlerResolveWithoutPreCancel"); return s with { Handler = !failed, Failure = failed };
+                case StreamPhase.SessionGuard:
+                    Need(s.PreCancel && !life.Started && !life.Ended && !life.Disposed && !s.Failure && !Has(s.GuardedSessions, id.Stage), "SessionAcquisitionOutsideLazyStartup");
+                    return s with { GuardedSessions = failed ? s.GuardedSessions : s.GuardedSessions + "|" + id.Stage + "|", Failure = failed };
+                case StreamPhase.ResolveSessionFactory:
+                    Need(Has(s.GuardedSessions, id.Stage) && !Has(s.Factories, id.Stage) && !s.Failure, "SessionFactoryResolveWithoutGuardOrRepeated");
+                    return s with { Factories = failed ? s.Factories : s.Factories + "|" + id.Stage + "|", Failure = failed };
+                case StreamPhase.AcquireSession:
+                    Need(Has(s.GuardedSessions, id.Stage) && (id.Stage < 0 ? s.Handler : Has(s.Factories, id.Stage)) &&
+                        !life.Started && !Has(life.LiveSessions, id.Stage) && !s.Failure, "SessionFactoryCallBeforeResolveOrRepeated");
+                    return s with { ReturnedSessions = failed ? s.ReturnedSessions : s.ReturnedSessions + "|" + id.Stage + "|", Failure = failed };
+                case StreamPhase.ValidateSessionResult:
+                    Need(Has(s.ReturnedSessions, id.Stage) && !s.Failure, "SessionValidationBeforeSuccessfulFactory");
+                    return s with { ValidatedSessions = failed ? s.ValidatedSessions : s.ValidatedSessions + "|" + id.Stage + "|", Failure = failed };
+                case StreamPhase.CommitSession:
+                    Need(Has(s.ValidatedSessions, id.Stage) && !s.Failure, "OwnershipTransferredBeforeNonNullSessionValidation");
+                    return s with { Life = life with { LiveSessions = life.LiveSessions + "|" + id.Stage + "|",
+                        Resolved = id.Stage < 0 ? life.Resolved : life.Resolved + "|" + id.Stage + "|" } };
                 case StreamPhase.SourceFactory:
                 case StreamPhase.WrapperFactory:
                     Need(s.Handler && !s.Enumerable && !s.Failure, "SourceFactoryBeforeResolveOrRepeated"); return s with { Enumerable = !failed, Failure = failed };
@@ -174,7 +199,8 @@ internal static class CanonicalStreamControlValidator
                     Need(s.Enumerable && !life.Source && !s.Failure, "SourceAcquireWithoutEnumerableOrRepeated");
                     return s with { Life = life with { Source = !failed }, Failure = failed };
                 case StreamPhase.MarkStarted:
-                    Need(life.Source && !life.Started && !s.Failure, "StartedWithoutSuccessfulSourceAcquire"); return s with { Life = life with { Started = true } };
+                    Need(life.Source && !life.Started && !s.Failure, "StartedWithoutSuccessfulSourceAcquire");
+                    Need(sessions.All(i => Has(life.LiveSessions, i)), "StartedBeforeSessionTransfers"); return s with { Life = life with { Started = true } };
                 case StreamPhase.SourceGuard:
                     Need(life.Started && life.Source && !life.Ended && !life.Disposed && !s.Failure && !s.SourceGuard, "SourceGuardLifecycleMismatch");
                     return s with { SourceGuard = !failed, Failure = failed };
@@ -205,7 +231,9 @@ internal static class CanonicalStreamControlValidator
                 case StreamPhase.StartupDetachLink:
                     Need(s.Failure && !life.Started && !life.Source && !s.StartupDetached, "StartupCleanupAfterStartedSourceOrWithoutFailure");
                     return s with { StartupDetached = true, DetachedLink = life.Link, Life = life with { Link = false } };
-                case StreamPhase.StartupLinkPresent: Need(s.StartupDetached, "StartupLinkCheckBeforeDetach"); return s;
+                case StreamPhase.StartupLinkPresent:
+                    Need(s.StartupDetached, "StartupLinkCheckBeforeDetach");
+                    Need(life.LiveSessions.Length == 0 && Cleaned(s), "LinkedTokenCleanupBeforeSessionsCompleted"); return s;
                 case StreamPhase.StartupDisposeLink:
                     Need(s.StartupDetached && s.DetachedLink && !s.LinkCleaned, "StartupLinkCleanupWithoutOwnedDetachedResource");
                     return s with { LinkCleaned = true, Failure = true };
@@ -214,6 +242,7 @@ internal static class CanonicalStreamControlValidator
                     return s with { EndMarked = true, Life = life with { Ended = true, Cache = false } };
                 case StreamPhase.EndFailure:
                     Need(s.Failure && (life.Started || s.StartupDetached) && (!s.DetachedLink || s.LinkCleaned), "FailureExitBeforeStartupCleanup");
+                    Need(life.Started || life.LiveSessions.Length == 0 && Cleaned(s), "StartupFailureLeakedSession");
                     return s with { EndMarked = true, Life = life with { Ended = true, Cache = false } };
                 case StreamPhase.ReleaseTrue:
                     Need(s.Busy && s.Cached && !s.Failure && !life.Ended && !life.Disposed, "TrueReleaseWithoutAcceptedItem"); return s with { Busy = false };
@@ -235,16 +264,34 @@ internal static class CanonicalStreamControlValidator
                     Need(s.SourceDetached && !s.LinkDetached, "LinkDetachBeforeSourceDetachOrRepeated");
                     return s with { LinkDetached = true, DetachedLink = life.Link, Life = life with { Link = false } };
                 case StreamPhase.SourcePresent: Need(s.SourceDetached && s.LinkDetached, "CleanupBeforeAllOwnersDetached"); return s;
+                case StreamPhase.DetachSession:
+                    Need(id.Program == StreamProgram.Move ? s.StartupDetached && !life.Started : s.SourceDetached && s.LinkDetached && s.DisposeBegan,
+                        "SessionDetachOutsideStartupFailureOrDispose");
+                    return s with { DetachedSessions = Has(life.LiveSessions, id.Stage) ? s.DetachedSessions + "|" + id.Stage + "|" : s.DetachedSessions,
+                        Life = life with { LiveSessions = life.LiveSessions.Replace("|" + id.Stage + "|", "") } };
+                case StreamPhase.SessionPresent:
+                    Need(life.LiveSessions.Length == 0, "SessionCleanupBeforeAllLeasesDetached"); return s;
+                case StreamPhase.CleanupSession:
+                    var next = sessions.Where(i => Sessions(contract, i)[0].Ownership == FusionOwnership.OwnedSession &&
+                        Has(s.DetachedSessions, i) && !Has(s.CleanedSessions, i)).DefaultIfEmpty(int.MinValue).First();
+                    Need(life.LiveSessions.Length == 0 && !life.Source && !life.Link && Has(s.DetachedSessions, id.Stage) && next == id.Stage &&
+                        Sessions(contract, id.Stage)[0].Ownership == FusionOwnership.OwnedSession, "SessionCleanupOwnershipOrderOrDetachMismatch");
+                    Need(id.Program == StreamProgram.Move || !s.DetachedSource || s.SourceCleaned, "SessionCleanupBeforeSourceDisposeCompleted");
+                    return s with { CleanedSessions = s.CleanedSessions + "|" + id.Stage + "|", Failure = s.Failure || failed };
                 case StreamPhase.DisposeSource:
                     Need(s.SourceDetached && s.LinkDetached && s.DetachedSource && !s.SourceCleaned && s.Busy, "SourceCleanupWithoutDetachedOwnerOrRepeated");
+                    Need(life.LiveSessions.Length == 0, "UserCleanupBeforeAllSessionLeasesDetached");
                     return s with { SourceCleaned = true, Failure = s.Failure || failed };
                 case StreamPhase.LinkPresent:
-                    Need(s.SourceDetached && s.LinkDetached && (!s.DetachedSource || s.SourceCleaned), "LinkCleanupBeforeSourceCompleted"); return s;
+                    Need(s.SourceDetached && s.LinkDetached && (!s.DetachedSource || s.SourceCleaned), "LinkCleanupBeforeSourceCompleted");
+                    Need(Cleaned(s), "LinkedTokenCleanupBeforeSessionsCompleted"); return s;
                 case StreamPhase.DisposeLink:
                     Need(s.LinkDetached && s.DetachedLink && (!s.DetachedSource || s.SourceCleaned) && !s.LinkCleaned && s.Busy, "LinkCleanupWithoutDetachedOwnerOrBeforeSource");
+                    Need(Cleaned(s), "LinkedTokenCleanupBeforeSessionsCompleted");
                     return s with { LinkCleaned = true, Failure = s.Failure || failed };
                 case StreamPhase.ReleaseDispose:
                     Need(s.DisposeBegan && s.Busy && (!s.DetachedSource || s.SourceCleaned) && (!s.DetachedLink || s.LinkCleaned), "DisposeReleasedBeforeAllCleanupCompleted");
+                    Need(life.LiveSessions.Length == 0 && Cleaned(s), "DisposeReleasedBeforeSessionCleanupCompleted");
                     return s with { Busy = false };
                 case StreamPhase.DisposeResult:
                     Need(!s.Busy && s.DisposeBegan, "DisposeResultBeforeCleanupRelease"); return s;
@@ -271,6 +318,8 @@ internal static class CanonicalStreamControlValidator
             if (!valid) Reject("InvalidStreamExit:" + id.Phase);
             if (id.Program == StreamProgram.Move && life.Started && !life.Disposed && (!life.Source || (s.DetachedLink && !life.Link))) Reject("StartedMoveReleasedCursorBeforeDispose");
             if (id.Program == StreamProgram.Move && !life.Started && (life.Source || life.Link)) Reject("StartupFailureLeakedPartialOwner");
+            if (id.Program == StreamProgram.Move && life.Started && !life.Disposed && sessions.Any(i => !Has(life.LiveSessions, i))) Reject("StartedMoveReleasedSessionBeforeDispose");
+            if (id.Program == StreamProgram.Move && !life.Started && (life.LiveSessions.Length != 0 || !Cleaned(s))) Reject("StartupFailureLeakedSession");
         }
     }
     private static bool HasService(Lifecycle life, int stage) => life.Resolved.Contains("|" + stage + "|");
@@ -284,10 +333,12 @@ internal static class CanonicalStreamControlValidator
             StreamPhase.DisposeSuccess or StreamPhase.DisposeFailure => Array.Empty<StreamOutcome>(),
         StreamPhase.Stopped or StreamPhase.Started or StreamPhase.HookCached or StreamPhase.StartupLinkPresent or StreamPhase.CurrentGuard or
             StreamPhase.AlreadyDisposed or StreamPhase.SourcePresent or StreamPhase.LinkPresent or StreamPhase.DisposeResult => new[] { StreamOutcome.True, StreamOutcome.False },
+        StreamPhase.SessionPresent => new[] { StreamOutcome.True, StreamOutcome.False },
         StreamPhase.SourceMove or StreamPhase.Filter => new[] { StreamOutcome.True, StreamOutcome.False, StreamOutcome.Failure },
         StreamPhase.NullGuard or StreamPhase.MoveGuard or StreamPhase.MergeTokens or StreamPhase.PreCancel or StreamPhase.ResolveHandler or StreamPhase.ResolveWrapper or StreamPhase.SourceFactory or StreamPhase.WrapperFactory or
             StreamPhase.AcquireSource or StreamPhase.SourceGuard or StreamPhase.SourceCurrent or StreamPhase.HookGuard or StreamPhase.ResolveHook or StreamPhase.Map or
-            StreamPhase.StartupDisposeLink or StreamPhase.DisposeGuard or StreamPhase.DisposeSource or StreamPhase.DisposeLink => new[] { StreamOutcome.Success, StreamOutcome.Failure },
+            StreamPhase.StartupDisposeLink or StreamPhase.DisposeGuard or StreamPhase.DisposeSource or StreamPhase.DisposeLink or
+            StreamPhase.SessionGuard or StreamPhase.ResolveSessionFactory or StreamPhase.AcquireSession or StreamPhase.ValidateSessionResult or StreamPhase.CleanupSession => new[] { StreamOutcome.Success, StreamOutcome.Failure },
         _ => new[] { StreamOutcome.Always }
     };
 }

@@ -12,8 +12,12 @@ internal sealed class RequiredStreamExecutionContract
     internal readonly List<StreamExecutionAwait> Awaits = new();
     internal readonly List<StreamValueTransfer> Transfers = new();
     internal readonly List<StreamFailurePolicy> Failures = new();
+    internal readonly List<StreamServiceResolution> ServiceResolutions = new();
+    internal readonly List<StreamSessionCall> SessionCalls = new();
+    internal readonly List<StreamCallbackReceiver> CallbackReceivers = new();
 
-    internal static RequiredStreamExecutionContract Derive(BoundPipelineModel route) => Derive(new StreamSegmentContract(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages));
+    internal static RequiredStreamExecutionContract Derive(BoundPipelineModel route) => Derive(new StreamSegmentContract(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages)
+        { SourceSessions = route.Handlers[0].Sessions });
 
     internal static RequiredStreamExecutionContract Derive(StreamSegmentContract contract)
     {
@@ -80,6 +84,7 @@ internal sealed class RequiredStreamExecutionContract
             new(new[] { "cursor/request", "cursor/start-token", "cursor/source", "cursor/hook-cache" })));
         required.Awaits.Add(new(Id(StreamProgram.Dispose, StreamPhase.DisposeSource), "void", true, true, "dispose-link", "replace-and-dispose-link",
             new(new[] { "dispose/source", "dispose/linked-token" })));
+        RequiredStreamSessionContract.Append(contract, required);
         return required;
 
         void Group(StreamProgram program, IEnumerable<StreamPhase> phases, int stage = -1)

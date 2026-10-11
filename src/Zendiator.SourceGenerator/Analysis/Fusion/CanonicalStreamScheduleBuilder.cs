@@ -6,7 +6,8 @@ namespace Zendiator.SourceGenerator;
 
 internal static class CanonicalStreamScheduleBuilder
 {
-    internal static CanonicalStreamExecutionSchedule Build(BoundPipelineModel route) => Build(new StreamSegmentContract(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages));
+    internal static CanonicalStreamExecutionSchedule Build(BoundPipelineModel route) => Build(new StreamSegmentContract(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages)
+        { SourceSessions = route.Handlers[0].Sessions });
 
     internal static CanonicalStreamExecutionSchedule Build(StreamSegmentContract contract)
     {
@@ -142,13 +143,14 @@ internal static class CanonicalStreamScheduleBuilder
         Transfer(dispose, StreamPhase.DetachLink, "cursor/linked-token", "dispose/linked-token");
         Transfer(move, StreamPhase.StartupDetachLink, "cursor/linked-token", "startup/linked-token");
         Await(dispose, StreamPhase.DisposeSource, "void", "dispose-link", "replace-and-dispose-link", new[] { "dispose/source", "dispose/linked-token" });
-        return new(new(sites.Values), new(entries.Select(e => new StreamControlFlow(e.Key, e.Value, new(edges[e.Key])))),
+        var schedule = new CanonicalStreamExecutionSchedule(new(sites.Values), new(entries.Select(e => new StreamControlFlow(e.Key, e.Value, new(edges[e.Key])))),
             new(owners), new(new[] {
                 new StreamTokenRule(StreamTokenCase.ApiNotCancelable, StreamTokenSource.Enumerator, false),
                 new StreamTokenRule(StreamTokenCase.EnumeratorNotCancelable, StreamTokenSource.Api, false),
                 new StreamTokenRule(StreamTokenCase.SameToken, StreamTokenSource.Api, false),
                 new StreamTokenRule(StreamTokenCase.DistinctCancelable, StreamTokenSource.Linked, true)
             }), new(awaits), new(transfers), new(failures), "stream-call-caller-v1", true, false, false);
+        return CanonicalStreamSessionBuilder.Attach(contract, schedule);
 
         void Begin(StreamProgram program, StreamPhase phase) { entries.Add(program, Id(program, phase)); edges.Add(program, new()); }
         void Edge(StreamProgram program, StreamPhase from, StreamPhase to, StreamOutcome outcome = StreamOutcome.Always) => Link(Id(program, from), Id(program, to), outcome);

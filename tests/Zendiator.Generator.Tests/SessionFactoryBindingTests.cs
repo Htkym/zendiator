@@ -70,12 +70,7 @@ public sealed partial class GeneratorTests
         }
         else Assert.Null(session.Cleanup); // Disposable capability never grants ownership.
         var graph = Graph(driver);
-        if (family == "Stream")
-        {
-            Assert.False(graph.IsValid);
-            Assert.Contains(graph.Facts, f => f.Reason == "StreamSessionAcquisitionAndCleanupUnavailable");
-        }
-        else Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
+        Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.Contains("Reads"));
     }
 

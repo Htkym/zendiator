@@ -28,7 +28,9 @@ internal static class CanonicalStreamWrapperBuilder
         {
             var source = sourcePosition < 0 ? route.Handlers[0].Callback! : route.Stages[sourcePosition].Callbacks[0];
             var contract = new StreamSegmentContract(route.Anchor, sourcePosition < 0 ? StreamSourceKind.Handler : StreamSourceKind.Wrapper,
-                source, new(hooks.Select(i => route.Stages[i])));
+                source, new(hooks.Select(i => route.Stages[i]))) {
+                    SourceSessions = sourcePosition < 0 ? route.Handlers[0].Sessions : route.Stages[sourcePosition].Sessions
+                };
             var descriptor = new StreamSegmentDescriptor(Segment(sourcePosition), sourcePosition, new(hooks), upstream, contract);
             segments.Add(new(descriptor, CanonicalStreamScheduleBuilder.Build(contract)));
         }

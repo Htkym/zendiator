@@ -17,7 +17,9 @@ internal sealed class RequiredStreamWrapperContract
             var source = sources[n]; var end = n + 1 < sources.Length ? sources[n + 1] : route.Stages.Count;
             var hooks = Enumerable.Range(source + 1, end - source - 1).ToArray();
             var contract = new StreamSegmentContract(route.Anchor, source < 0 ? StreamSourceKind.Handler : StreamSourceKind.Wrapper,
-                source < 0 ? route.Handlers[0].Callback! : route.Stages[source].Callbacks[0], new(hooks.Select(i => route.Stages[i])));
+                source < 0 ? route.Handlers[0].Callback! : route.Stages[source].Callbacks[0], new(hooks.Select(i => route.Stages[i]))) {
+                    SourceSessions = source < 0 ? route.Handlers[0].Sessions : route.Stages[source].Sessions
+                };
             required.Segments.Add(new(Segment(source), source, new(hooks), n == 0 ? null : Segment(sources[n - 1]), contract));
             if (n != 0) required.Boundaries.Add(DeriveBoundary(source, Segment(sources[n - 1]), Segment(source)));
         }
