@@ -33,11 +33,11 @@ internal static class CanonicalSyncEmissionNormalizer
             var hooks = new List<BoundSyncHookEmission>();
             if (route.Stages.Count != 0)
             {
-                if ((handler.Sessions.Count != 0 && (route.Stages.Count != 1 || route.Stages.Any(stage => stage.Sessions.Count != 0))) || route.Stages.Any(stage => stage.CompilerOwnsError ||
+                if ((handler.Sessions.Count != 0 && route.Stages.Count != 1) || route.Stages.Any(stage => stage.CompilerOwnsError ||
                     stage.Kind != FusionStageKind.Hook || stage.SyncEmission == null)) continue;
                 if (route.Stages.Any(stage => stage.Sessions.Count != 0))
                 {
-                    // A single session Hook and a directly borrowed DI Handler only. Multiple owners remain blocked.
+                    // One session Hook; a Handler session stays inside its observation and cleanup boundary.
                     var stage = route.Stages[0];
                     if (route.Stages.Count != 1 || stage.Sessions.Count != 1 ||
                         stage.ServiceOwnership != stage.Sessions[0].Ownership ||

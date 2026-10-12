@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Reflection;
+using System.Text.Json;
 using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -101,19 +102,29 @@ public sealed partial class GeneratorTests
         public void Finally(ReferenceVoidRequest request,SendExitInfo exit,CancellationToken token)=>_probe.Core.Finish(request,exit,token);
         public void Dispose()=>_probe.ReleaseHook(this,_request,_token);
     }
-    private static (Type Hook,Type Handler,Type HookFactory,Type HandlerFactory,Type Request) MixedSessionTypes(bool hookOwned,bool handlerOwned,bool isVoid)
+    private static (Type Hook,Type Handler,Type HookFactory,Type HandlerFactory,Type Request) MixedSessionTypes(bool hookOwned,bool handlerOwned,bool isVoid,SyncFixture? fixture=null)
     {
+        if(fixture is {} f)return(f.Assembly.GetType("App.Hook`1")!.MakeGenericType(typeof(string)),f.Assembly.GetType("App.Handler`1")!.MakeGenericType(typeof(string)),f.Assembly.GetType("App.HookFactory`1")!.MakeGenericType(typeof(string)),f.Service,f.Request);
         var request=isVoid?typeof(ReferenceVoidRequest):typeof(ReferenceResponseRequest);
         var hook=isVoid?typeof(MixedVoidHookSession):typeof(MixedResponseHookSession);var handler=isVoid?typeof(VoidHookHandlerSession):typeof(ResponseHookHandlerSession);
         return(hook,handler,(hookOwned?typeof(OwnedMixedHookFactory<,>):typeof(BorrowedMixedHookFactory<,>)).MakeGenericType(request,hook),
             (handlerOwned?typeof(OwnedHookHandlerFactory<,>):typeof(BorrowedHookHandlerFactory<,>)).MakeGenericType(request,handler),request);
     }
-    private static IServiceCollection MixedSessionServices(MixedSessionProbe mixed,bool hookOwned,bool handlerOwned,bool isVoid,ServiceLifetime lifetime)
+    private static IServiceCollection MixedSessionServices(MixedSessionProbe mixed,bool hookOwned,bool handlerOwned,bool isVoid,ServiceLifetime lifetime,SyncFixture? fixture=null)
     {
-        var probe=mixed.Handler;var types=MixedSessionTypes(hookOwned,handlerOwned,isVoid);IServiceCollection services=new ServiceCollection();
+        var probe=mixed.Handler;var types=MixedSessionTypes(hookOwned,handlerOwned,isVoid,fixture);IServiceCollection services=new ServiceCollection();
         services.AddSingleton(mixed);services.AddSingleton(probe);services.AddSingleton(mixed.Core);
         services.Add(ServiceDescriptor.Describe(typeof(MixedHookDependency),typeof(MixedHookDependency),lifetime));
         services.Add(ServiceDescriptor.Describe(typeof(HookHandlerFactoryDependency),typeof(HookHandlerFactoryDependency),lifetime));
+        if(fixture is {} f)
+        {
+            var hookResolver=f.Assembly.GetType("App.Bridge")!.GetMethod("ResolveHookFactory")!.CreateDelegate<Func<IServiceProvider,object?>>();
+            var handlerResolver=f.ResolveService.CreateDelegate<Func<IServiceProvider,object?>>();
+            services.Add(ServiceDescriptor.Describe(types.HookFactory,p=>hookResolver(p)!,lifetime));
+            services.Add(ServiceDescriptor.Describe(types.HandlerFactory,p=>handlerResolver(p)!,lifetime));
+            services.AddScoped(types.Hook,_=>throw new Exception("Hook session must come from its factory."));services.AddScoped(types.Handler,_=>throw new Exception("Handler session must come from its factory."));
+            f.Register.Invoke(null,[services]);return services;
+        }
         services.Add(ServiceDescriptor.Describe(types.HookFactory,provider=>{
             mixed.Core.Phases.Add("resolve-hook-factory");if(mixed.HookDiError is {} error)throw error;if(mixed.NullHookFactory)return null!;
             var dependency=provider.GetRequiredService<MixedHookDependency>();
@@ -132,9 +143,9 @@ public sealed partial class GeneratorTests
         },lifetime));
         services.AddScoped(types.Hook,_=>throw new Exception("Hook session must come from its factory."));services.AddScoped(types.Handler,_=>throw new Exception("Handler session must come from its factory."));return services;
     }
-    private static (object? Result,Exception? Error) InvokeMixedSessionReference(IServiceProvider provider,bool hookOwned,bool handlerOwned,bool isVoid,object? request,CancellationToken token)
+    private static (object? Result,Exception? Error) InvokeMixedSessionReference(IServiceProvider provider,bool hookOwned,bool handlerOwned,bool isVoid,object? request,CancellationToken token,SyncFixture? fixture=null)
     {
-        var types=MixedSessionTypes(hookOwned,handlerOwned,isVoid);
+        var types=MixedSessionTypes(hookOwned,handlerOwned,isVoid,fixture);
         var name="Send"+(hookOwned?"Owned":"Borrowed")+"Hook"+(handlerOwned?"Owned":"Borrowed")+"Handler"+(isVoid?"Void":"Response");
         var method=typeof(CanonicalSendSyncReference).GetMethod(name,BindingFlags.Static|BindingFlags.NonPublic)!
             .MakeGenericMethod(isVoid?[types.Request,types.Hook,types.Handler,types.HookFactory,types.HandlerFactory]:[types.Request,typeof(int),types.Hook,types.Handler,types.HookFactory,types.HandlerFactory]);
@@ -175,7 +186,10 @@ public sealed partial class GeneratorTests
     [Theory]
     [MemberData(nameof(MixedSessionReferenceCases))]
     public void Canonical_mixed_sessions_preserve_nested_cleanup_observation_and_last_error(bool hookOwned,bool owned,bool isVoid,string scenario,string phases)
+        =>_ = RunMixedSessionScenario(hookOwned,owned,isVoid,scenario,phases);
+    private static string RunMixedSessionScenario(bool hookOwned,bool owned,bool isVoid,string scenario,string phases,SyncFixture? fixture=null,bool generated=false)
     {
+        object? operation=null;
         var mixed=new MixedSessionProbe();var probe=mixed.Handler;var core=mixed.Core;
         var ambient=ReferenceSendProbe.Ambient.Value;var culture=CultureInfo.CurrentCulture;
         ReferenceSendProbe.Ambient.Value="caller";CultureInfo.CurrentCulture=CultureInfo.InvariantCulture;
@@ -184,7 +198,7 @@ public sealed partial class GeneratorTests
         var observer=new Exception("observer identity");Exception final=scenario is "finally-oce-over-body" or "finally-oce-over-cleanup"?new OperationCanceledException(otherToken.Token):new Exception("Finally identity");
         Exception cleanup=scenario.StartsWith("cleanup-oce",StringComparison.Ordinal)?new OperationCanceledException(otherToken.Token):new Exception("cleanup identity");
         Exception factory=scenario is "factory-oce" or "partial-oce"?new OperationCanceledException(otherToken.Token):new Exception("factory identity");
-        object? request=scenario=="null-request"?null:isVoid?new ReferenceVoidRequest():new ReferenceResponseRequest();object replacement=isVoid?new ReferenceVoidRequest():new ReferenceResponseRequest();
+        object? request=scenario=="null-request"?null:fixture!=null?Activator.CreateInstance(fixture.Request):isVoid?new ReferenceVoidRequest():new ReferenceResponseRequest();object replacement=fixture!=null?Activator.CreateInstance(fixture.Request)!:isVoid?new ReferenceVoidRequest():new ReferenceResponseRequest();
         core.TransformRequest=scenario is "replace-request" or "before-null" or "before-error";core.Replacement=scenario=="before-null"?null:replacement;
         core.BeforeError=scenario=="before-error"?body:null;core.StageConstructorError=scenario=="stage-ctor-error"?body:null;core.HandlerConstructorError=scenario=="handler-ctor-error"?body:null;
         core.HandlerError=scenario is "handler-error" or "handler-oce" or "observer-error-over-body" or "finally-error-over-body" or "finally-oce-over-body" or "finally-error-over-observer" or "cleanup-error-over-body" or "cleanup-oce-over-body" or "cleanup-error-over-oce" or "cleanup-oce-over-oce"?body:null;
@@ -222,11 +236,11 @@ public sealed partial class GeneratorTests
         var knownObserved=golden.Contains("onexception")?expectedInner??core.BeforeError??core.AfterError:null;
         try
         {
-            using(var provider=MixedSessionServices(mixed,hookOwned,owned,isVoid,ServiceLifetime.Scoped).BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true}))
+            using(var provider=MixedSessionServices(mixed,hookOwned,owned,isVoid,ServiceLifetime.Scoped,fixture).BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true}))
             {
                 using(var scope=provider.CreateScope())
                 {
-                    var actual=InvokeMixedSessionReference(scope.ServiceProvider,hookOwned,owned,isVoid,request,token);Assert.Equal(golden,core.Phases);
+                    var actual=fixture!=null&&generated?InvokeSync(fixture,scope.ServiceProvider.GetRequiredService(fixture.Interface),request,token):InvokeMixedSessionReference(scope.ServiceProvider,hookOwned,owned,isVoid,request,token,fixture);Assert.Equal(golden,core.Phases);
                     if(expectedEscaping!=null)Assert.Same(expectedEscaping,actual.Error);
                     else if(scenario is "null-request" or "before-null")Assert.Equal("request",Assert.IsType<ArgumentNullException>(actual.Error).ParamName);
                     else if(scenario is "pre-cancel" or "cancel-in-before" or "cancel-in-hook-factory")Assert.Equal(token,Assert.IsType<OperationCanceledException>(actual.Error).CancellationToken);
@@ -256,13 +270,14 @@ public sealed partial class GeneratorTests
                     Assert.All(mixed.CreatedPartials,p=>Assert.Single(mixed.ReleasedPartials,r=>ReferenceEquals(p,r)));
                     Assert.Equal(0,mixed.HookFactoryDisposals);Assert.Equal(0,mixed.HookDependencyDisposals);Assert.Equal(0,probe.FactoryDisposals);Assert.Equal(0,probe.DependencyDisposals);
                     Assert.Equal(scenario=="pre-cancel"||scenario.StartsWith("cancel-in-",StringComparison.Ordinal),token.IsCancellationRequested);
-                    WriteNestedHookEvidence("mixed-session-reference",hookOwned+"-"+owned+"-"+isVoid+"-"+scenario,new{hookOwned,handlerOwned=owned,isVoid,scenario,golden,trace=core.Phases.ToArray(),actual.Result,errorType=actual.Error?.GetType().FullName,
+                    operation=new{hookOwned,handlerOwned=owned,isVoid,scenario,golden,trace=core.Phases.ToArray(),actual.Result,errorType=actual.Error?.GetType().FullName,
                         escapingIdentityPreserved=expectedEscaping==null||ReferenceEquals(expectedEscaping,actual.Error),observerIdentityPreserved=ReferenceEquals(expectedObserved,core.ObservedError),exitErrorIdentityPreserved=ReferenceEquals(core.ObserverError??expectedObserved,core.Exit?.Error),
                         createdHooks=hooks,createdHandlers=handlers,operationHookReleases=mixed.ReleasedHooks.Count,operationHandlerReleases=probe.Released.Count,mixed.HookPartialDisposals,probe.PartialDisposals,createdPartialResources=mixed.CreatedPartials.Count,releasedPartialResources=mixed.ReleasedPartials.Count,
                         calls=core.Calls.Select(c=>new{c.Phase,c.Ambient,c.Culture,requestPreserved=ReferenceEquals(c.Phase=="before"?request:saved,c.Request),tokenPreserved=c.Token==token}).ToArray(),
                         handlerCalls=probe.Calls.Select(c=>new{c.Phase,c.Ambient,c.Culture,requestPreserved=ReferenceEquals(saved,c.Request),tokenPreserved=c.Token==token}).ToArray(),
                         hookCalls=mixed.HookCalls.Select(c=>new{c.Phase,c.Ambient,c.Culture,requestPreserved=ReferenceEquals(request,c.Request),tokenPreserved=c.Token==token}).ToArray(),
-                        partialCalls=mixed.PartialCalls.Select(c=>new{c.Phase,c.Ambient,c.Culture,requestPreserved=ReferenceEquals(c.Phase=="hook.partial.dispose"?request:saved,c.Request),tokenPreserved=c.Token==token}).ToArray()});
+                        partialCalls=mixed.PartialCalls.Select(c=>new{c.Phase,c.Ambient,c.Culture,requestPreserved=ReferenceEquals(c.Phase=="hook.partial.dispose"?request:saved,c.Request),tokenPreserved=c.Token==token}).ToArray()};
+                    if(fixture==null)WriteNestedHookEvidence("mixed-session-reference",hookOwned+"-"+owned+"-"+isVoid+"-"+scenario,operation);
                 }
                 Assert.Equal(mixed.HookDependencies,mixed.HookDependencyDisposals);Assert.Equal(probe.Dependencies,probe.DependencyDisposals);
                 Assert.Equal(golden.Contains("hook-factory.ctor")&&mixed.HookFactoryConstructorError==null?1:0,mixed.HookFactoryDisposals);
@@ -271,6 +286,7 @@ public sealed partial class GeneratorTests
             foreach(var session in probe.Borrowed)session.Dispose();foreach(var hook in mixed.BorrowedHooks)hook.Dispose();
             Assert.Equal(probe.Created.Count,probe.Released.Count);Assert.Equal(mixed.CreatedHooks.Count,mixed.ReleasedHooks.Count);
             Assert.All(probe.Created,h=>Assert.Single(probe.Released,r=>ReferenceEquals(h,r)));Assert.All(mixed.CreatedHooks,h=>Assert.Single(mixed.ReleasedHooks,r=>ReferenceEquals(h,r)));
+            return JsonSerializer.Serialize(new{operation,finalHookReleases=mixed.ReleasedHooks.Count,finalHandlerReleases=probe.Released.Count,mixed.HookFactoryDisposals,mixed.HookDependencyDisposals,probe.FactoryDisposals,probe.DependencyDisposals});
         }
         finally{core.Cancellation.Dispose();ReferenceSendProbe.Ambient.Value=ambient;CultureInfo.CurrentCulture=culture;}
     }
@@ -279,18 +295,20 @@ public sealed partial class GeneratorTests
     [Theory]
     [MemberData(nameof(MixedSessionLifetimeCases))]
     public void Canonical_mixed_sessions_keep_operation_and_DI_owners_distinct(bool hookOwned,bool handlerOwned,bool isVoid,ServiceLifetime lifetime)
+        =>_ = RunMixedSessionLifetimes(hookOwned,handlerOwned,isVoid,lifetime);
+    private static string RunMixedSessionLifetimes(bool hookOwned,bool handlerOwned,bool isVoid,ServiceLifetime lifetime,SyncFixture? fixture=null,bool generated=false)
     {
         var mixed=new MixedSessionProbe();var probe=mixed.Handler;var core=mixed.Core;var ambient=ReferenceSendProbe.Ambient.Value;var culture=CultureInfo.CurrentCulture;
         try
         {
-            using(var provider=MixedSessionServices(mixed,hookOwned,handlerOwned,isVoid,lifetime).BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true}))
+            using(var provider=MixedSessionServices(mixed,hookOwned,handlerOwned,isVoid,lifetime,fixture).BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true}))
             {
                 for(var s=0;s<2;s++)
                 {
                     using(var scope=provider.CreateScope())for(var i=0;i<2;i++)
                     {
-                        var request=Activator.CreateInstance(MixedSessionTypes(hookOwned,handlerOwned,isVoid).Request)!;
-                        var actual=InvokeMixedSessionReference(scope.ServiceProvider,hookOwned,handlerOwned,isVoid,request,default);
+                        var request=Activator.CreateInstance(MixedSessionTypes(hookOwned,handlerOwned,isVoid,fixture).Request)!;
+                        var actual=fixture!=null&&generated?InvokeSync(fixture,scope.ServiceProvider.GetRequiredService(fixture.Interface),request,default):InvokeMixedSessionReference(scope.ServiceProvider,hookOwned,handlerOwned,isVoid,request,default,fixture);
                         Assert.Null(actual.Error);Assert.Equal(isVoid?null:(object)42,actual.Result);
                         Assert.Equal(hookOwned?s*2+i+1:0,mixed.ReleasedHooks.Count);Assert.Equal(handlerOwned?s*2+i+1:0,probe.Released.Count);
                         var disposed=lifetime==ServiceLifetime.Singleton?0:s*(lifetime==ServiceLifetime.Scoped?1:2);
@@ -307,7 +325,9 @@ public sealed partial class GeneratorTests
             Assert.Equal(4,probe.Released.Count);Assert.Equal(4,mixed.ReleasedHooks.Count);
             Assert.Equal(4,probe.Created.Distinct(ReferenceEqualityComparer.Instance).Count());Assert.Equal(4,mixed.CreatedHooks.Distinct(ReferenceEqualityComparer.Instance).Count());
             Assert.All(probe.Created,h=>Assert.Single(probe.Released,r=>ReferenceEquals(h,r)));Assert.All(mixed.CreatedHooks,h=>Assert.Single(mixed.ReleasedHooks,r=>ReferenceEquals(h,r)));
-            WriteNestedHookEvidence("mixed-session-reference-lifetimes",hookOwned+"-"+handlerOwned+"-"+isVoid+"-"+lifetime,new{hookOwned,handlerOwned,isVoid,lifetime=lifetime.ToString(),owners,mixed.HookFactoryDisposals,mixed.HookDependencyDisposals,probe.FactoryDisposals,probe.DependencyDisposals,createdHooks=4,createdHandlers=4,operationHookReleases=hookOwned?4:0,operationHandlerReleases=handlerOwned?4:0,finalHookReleases=mixed.ReleasedHooks.Count,finalHandlerReleases=probe.Released.Count});
+            var result=new{hookOwned,handlerOwned,isVoid,lifetime=lifetime.ToString(),owners,mixed.HookFactoryDisposals,mixed.HookDependencyDisposals,probe.FactoryDisposals,probe.DependencyDisposals,createdHooks=4,createdHandlers=4,operationHookReleases=hookOwned?4:0,operationHandlerReleases=handlerOwned?4:0,finalHookReleases=mixed.ReleasedHooks.Count,finalHandlerReleases=probe.Released.Count};
+            if(fixture==null)WriteNestedHookEvidence("mixed-session-reference-lifetimes",hookOwned+"-"+handlerOwned+"-"+isVoid+"-"+lifetime,result);
+            return JsonSerializer.Serialize(result);
         }
         finally{core.Cancellation.Dispose();ReferenceSendProbe.Ambient.Value=ambient;CultureInfo.CurrentCulture=culture;}
     }
@@ -320,7 +340,7 @@ public sealed partial class GeneratorTests
             "namespace App { public sealed class HandlerFactory<T> : "+(handlerOwned?"IOwnedSessionFactory":"IBorrowedSessionFactory")+"<Ping,Handler<T>> where T:class { public Handler<T> Create(Ping request,CancellationToken token)=>throw new NotImplementedException(); } }";
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"MixedBoundary"+Guid.NewGuid()),out var output,out var diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.Equal("ZEN0037",Assert.Single(diagnostics).Id);
-        Assert.Empty(driver.GetRunResult().Results.Single().GeneratedSources);
-        WriteNestedHookEvidence("mixed-session-boundaries",hookOwned+"-"+handlerOwned+"-"+isVoid,new{hookOwned,handlerOwned,isVoid,source,diagnostics=diagnostics.Select(d=>new{d.Id,message=d.GetMessage()}),generatedSources=0});
+        Assert.Equal(2,driver.GetRunResult().Results.Single().GeneratedSources.Length);
+        WriteNestedHookEvidence("mixed-session-boundaries",hookOwned+"-"+handlerOwned+"-"+isVoid,new{hookOwned,handlerOwned,isVoid,source,diagnostics=diagnostics.Select(d=>new{d.Id,message=d.GetMessage()}),generatedSources=2});
     }
 }
