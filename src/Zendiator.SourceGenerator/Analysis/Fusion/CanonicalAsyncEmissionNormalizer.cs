@@ -28,8 +28,9 @@ internal static class CanonicalAsyncEmissionNormalizer
             var hooks = new List<BoundAsyncHookEmission>();
             if (route.Stages.Count != 0)
             {
-                // This unit has a borrowed DI Handler. Handler sessions remain behind their diagnostic gate.
-                if (h.Sessions.Count != 0 || h.ServiceOwnership != FusionOwnership.BorrowedService ||
+                // A Handler session is inside one Hook's observation and outer cleanup boundary.
+                if (h.Sessions.Count != 0 && route.Stages.Count != 1 ||
+                    h.Sessions.Count == 0 && h.ServiceOwnership != FusionOwnership.BorrowedService ||
                     route.Stages.Any(s => s.CompilerOwnsError || s.Kind != FusionStageKind.Hook || s.AsyncEmission == null)) continue;
                 if (route.Stages.Any(s => s.Sessions.Count != 0))
                 {

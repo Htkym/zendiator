@@ -101,10 +101,31 @@ internal static class CanonicalAsyncSourceEmitter
                 cancellationToken.ThrowIfCancellationRequested();
             """);
         if (index + 1 < c.Hooks.Count) EmitHookScope(b, c, index + 1, saved);
-        else b.AppendLine($$"""
+        else if (c.Factory == null) b.AppendLine($$"""
             var handler = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{h.HandlerName}}>(_provider);
             {{(h.ResultName == null ? "" : "response = ")}}await (({{h.ContractName}})handler).{{h.MethodName}}({{saved}}, cancellationToken).ConfigureAwait(false);
             """);
+        else
+        {
+            var handlerFactory = c.Factory;
+            b.AppendLine($$"""
+                var handlerFactory = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{handlerFactory.FactoryName}}>(_provider);
+                {{h.HandlerName}}? handler = {{(handlerFactory.AwaitAcquire ? "await " : "")}}(({{handlerFactory.ContractName}})handlerFactory).{{handlerFactory.MethodName}}({{saved}}, cancellationToken){{(handlerFactory.AwaitAcquire ? ".ConfigureAwait(false)" : "")}}
+                    ?? throw new global::System.InvalidOperationException("A session factory must return a nonnull Handler session.");
+                """);
+            var handlerOwned = handlerFactory.CleanupContractName != null;
+            if (handlerOwned) b.AppendLine("try\n{");
+            b.AppendLine($$"""{{(h.ResultName == null ? "" : "response = ")}}await (({{h.ContractName}})handler).{{h.MethodName}}({{saved}}, cancellationToken).ConfigureAwait(false);""");
+            if (handlerOwned) b.AppendLine($$"""
+                }
+                finally
+                {
+                    var detachedHandler = handler;
+                    handler = null;
+                    await (({{handlerFactory.CleanupContractName}})detachedHandler).DisposeAsync().ConfigureAwait(false);
+                }
+                """);
+        }
         b.AppendLine($$"""
                 {{(h.ResultName == null ? "" : "response = ")}}await (({{hook.Success.ContractName}}){{receiver}}).{{hook.Success.MethodName}}({{saved}}, {{(h.ResultName == null ? "" : "response, ")}}cancellationToken).ConfigureAwait(false);
                 {{success}} = true;
