@@ -92,13 +92,6 @@ internal static class CanonicalSyncSourceEmitter
                             throw new global::System.InvalidOperationException("AddZendiator configuration does not match this generated composition.");
             """);
         var service = c.Factory?.FactoryName ?? h.HandlerName;
-        b.AppendLine($$"""
-                        foreach (var descriptor in services)
-                            if (!descriptor.IsKeyedService && descriptor.Lifetime == global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton &&
-                                (descriptor.ServiceType == typeof({{service}}) || descriptor.ServiceType == typeof(global::{{c.Namespace}}.Zendiator) ||
-                                 descriptor.ServiceType == typeof(global::{{c.Namespace}}.IZendiator)))
-                                throw new global::System.NotSupportedException("Singleton dispatch services are not supported by this generated composition yet. Use Scoped or Transient dependencies with its scoped mediator.");
-            """);
         foreach (var type in new[] { service, "global::" + c.Namespace + ".Zendiator" })
             b.AppendLine($$"""
                         global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services,

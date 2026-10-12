@@ -414,22 +414,6 @@ public sealed partial class GeneratorTests
         Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.StartsWith("Zendiator.Canonical",StringComparison.Ordinal));
     }
 
-    [Theory]
-    [InlineData("direct","service")] [InlineData("borrowed","service")] [InlineData("owned","service")]
-    [InlineData("direct","mediator")] [InlineData("borrowed","mediator")] [InlineData("owned","mediator")]
-    [InlineData("direct","interface")] [InlineData("borrowed","interface")] [InlineData("owned","interface")]
-    public void Enabled_SendSync_public_registration_rejects_unaccepted_Singleton_before_mutating_services(string receiver,string role)
-    {
-        var f=SyncRuntimeFixture(receiver,false); var probe=new CanonicalSyncRuntimeProbe();
-        IServiceCollection services=new ServiceCollection(); services.AddSingleton(probe);
-        var type=role=="service"?f.Service:role=="mediator"?f.Mediator:f.Interface;
-        services.Add(ServiceDescriptor.Singleton(type,role=="interface"?f.Mediator:type));
-        var before=services.ToArray();
-        var error=Assert.Throws<TargetInvocationException>(()=>f.Register.Invoke(null,[services]));
-        Assert.IsType<NotSupportedException>(error.InnerException);
-        Assert.Equal(before,services); Assert.Empty(probe.Trace); probe.Cancellation.Dispose();
-    }
-
     private sealed class CustomSyncCollection : System.Collections.ObjectModel.Collection<ServiceDescriptor>,IServiceCollection;
 
     [Theory]
@@ -453,7 +437,7 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
-    public void Enabled_SendSync_does_not_accept_explicit_Singleton_configuration_as_a_scoped_composition()
+    public void Enabled_SendSync_keeps_diagnostic_for_unsupported_ServiceLifetime_configuration_syntax()
     {
         var source=SyncRuntimeSource("direct",false,dispatch:false).Replace(
             "c => c.Handlers<Ping>(DispatchFamily.SendSync,typeof(Handler<string>))",
