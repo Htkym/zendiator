@@ -12,6 +12,7 @@ internal sealed record BoundStageModel(string Anchor, string Type, string Name, 
     FusionOwnership ServiceOwnership, bool CompilerOwnsError)
 {
     public EquatableArray<BoundSessionModel> Sessions { get; init; }
+    public BoundSyncHookEmission? SyncEmission { get; init; }
 }
 internal sealed record BoundHandlerModel(string Anchor, string Type, string Name, string Contract, string? Result,
     string Implementation, FusionOwnership ServiceOwnership, bool CompilerOwnsError, BoundCallbackModel? Callback)

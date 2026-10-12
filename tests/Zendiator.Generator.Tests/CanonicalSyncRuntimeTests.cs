@@ -130,11 +130,12 @@ public sealed partial class GeneratorTests
         parseOptions: SyncParseOptions, driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, true));
 
     private static SyncFixture CompileSyncFixture(string receiver, bool isVoid, bool named = true, bool extension = true, bool emptyPipeline = false,
-        string? sourceOverride = null, string applicationNamespace = "App")
+        string? sourceOverride = null, string applicationNamespace = "App", bool candidateOnly = false)
     {
         var source = sourceOverride ?? SyncRuntimeSource(receiver,isVoid,named,extension,emptyPipeline);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"CanonicalSync_"+Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        Assert.Empty(diagnostics);
+        if (candidateOnly) Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
+        else Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         using var bytes = new MemoryStream();
         var emitted = output.Emit(bytes);
@@ -150,7 +151,9 @@ public sealed partial class GeneratorTests
             foreach (var generated in sources) File.WriteAllText(Path.Combine(folder,generated.HintName),generated.SourceText.ToString());
             File.WriteAllBytes(Path.Combine(folder,"generated.dll"),bytes.ToArray());
             File.WriteAllText(Path.Combine(folder,"compile.json"),JsonSerializer.Serialize(new { assemblyName=output.AssemblyName,
-                generatedSources=sources.Select(s=>s.HintName),emitted.Success,warnings=0,errors=0,generatorErrors=0,productionEnabled=true }));
+                generatedSources=sources.Select(s=>s.HintName),emitted.Success,warnings=0,errors=0,
+                generatorErrors=diagnostics.Count(d=>d.Severity==DiagnosticSeverity.Error),productionEnabled=!candidateOnly,
+                candidateOnly, generatorDiagnostics=diagnostics.Select(d=>new { d.Id,severity=d.Severity.ToString(),message=d.GetMessage() }) }));
         }
         bytes.Position=0;
         var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);

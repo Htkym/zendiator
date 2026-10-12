@@ -40,6 +40,7 @@ internal static class StageContractBinding
         var before = facts.Count;
         var hierarchy = DescribeHierarchy(type);
         var callbacks = new List<BoundCallbackModel>();
+        var syncCallbacks = new Dictionary<BoundCallbackPhase, BoundSyncHookCallbackEmission>();
         var compilerOwned = false;
         void Reject(string key, string message) => facts.Add(new(key, anchor, message));
         if (type.TypeKind == TypeKind.Error) { compilerOwned = true; return Value(); }
@@ -95,6 +96,8 @@ internal static class StageContractBinding
             var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
             var implementation = members.Length == 1 ? type.FindImplementationForInterfaceMember(members[0]) as IMethodSymbol : null;
             if (implementation == null) { compilerOwned = true; continue; }
+            if (role.Completion == BoundCompletionKind.Synchronous)
+                syncCallbacks[role.Phase] = new(Name(contract), members[0].Name);
             callbacks.Add(new(role.Phase, role.Completion, Identity(contract),
                 implementation.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) + "/" + implementation.DeclaredAccessibility +
                 "/explicit=" + !implementation.ExplicitInterfaceImplementations.IsEmpty + "/virtual=" + implementation.IsVirtual +
@@ -108,7 +111,17 @@ internal static class StageContractBinding
         return Value();
 
         BoundStageModel Value() => new(anchor, Identity(type), Name(type), kind, hierarchy,
-            new(callbacks.OrderBy(c => c.Phase).ThenBy(c => c.Interface, StringComparer.Ordinal)), FusionOwnership.BorrowedService, compilerOwned);
+            new(callbacks.OrderBy(c => c.Phase).ThenBy(c => c.Interface, StringComparer.Ordinal)), FusionOwnership.BorrowedService, compilerOwned)
+        {
+            SyncEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.SendSync &&
+                kind == FusionStageKind.Hook && type.TypeKind == TypeKind.Class && Public(type) && type.Locations.Any(l => l.IsInSource) &&
+                !compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && !r.Properties.Aliases.Contains("global")) &&
+                callbacks.Count == 4 && syncCallbacks.Count == 4 &&
+                syncCallbacks.ContainsKey(BoundCallbackPhase.Before) && syncCallbacks.ContainsKey(BoundCallbackPhase.Success) &&
+                syncCallbacks.ContainsKey(BoundCallbackPhase.Exception) && syncCallbacks.ContainsKey(BoundCallbackPhase.Finally)
+                    ? new(Name(type), syncCallbacks[BoundCallbackPhase.Before], syncCallbacks[BoundCallbackPhase.Success],
+                        syncCallbacks[BoundCallbackPhase.Exception], syncCallbacks[BoundCallbackPhase.Finally]) : null
+        };
     }
 
     internal static EquatableArray<string> DescribeHierarchy(INamedTypeSymbol type)

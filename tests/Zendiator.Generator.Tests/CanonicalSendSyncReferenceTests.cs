@@ -236,6 +236,7 @@ public sealed partial class GeneratorTests
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "SingleHookPending" + isVoid), out var output, out var diagnostics);
         Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.Canonical", StringComparison.Ordinal));
+        Assert.Equal(2, driver.GetRunResult().Results.Single().GeneratedSources.Count(s => s.HintName.StartsWith("Zendiator.Canonical", StringComparison.Ordinal)));
+        Assert.Contains("validation candidate", diagnostics[0].GetMessage());
     }
 }

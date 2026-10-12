@@ -196,13 +196,15 @@ internal static class CompositionSelectionDiscovery
                     if (fact.Key == "IncompleteExecutionContract")
                     {
                         var enabled = canonicalSync.Compositions.FirstOrDefault(c => c.Index == index);
-                        if (enabled != null && syncCallSites.CallSites.Any(s => s.Namespace == enabled.Namespace && s.MarkerName == enabled.MarkerName))
+                        if (enabled != null && enabled.Hook == null && syncCallSites.CallSites.Any(s => s.Namespace == enabled.Namespace && s.MarkerName == enabled.MarkerName))
                             continue; // Only the runtime matrix accepted by review and its actual registration call site are enabled.
                         var graph = execution.Compositions[index].FirstOrDefault(g => g.Contract.Anchor == fact.Anchor);
                         if (graph != null)
                             message = graph.IsValid
                                 ? "The " + (graph.Contract.Family == BoundDispatchFamily.Stream ? "Stream" : "Send") + " execution graph satisfies its structural contract. Canonical runtime generation and equivalence are pending; emission remains blocked."
                                 : "The execution graph is incomplete: " + string.Join(", ", graph.Facts.Select(f => f.Reason)) + ". Canonical emission remains blocked.";
+                        if (enabled?.Hook != null)
+                            message = "The single synchronous Hook backend is a validation candidate only. Production use remains blocked pending its runtime equivalence acceptance.";
                     }
                     context.ReportDiagnostic(Diagnostic.Create(Descriptor(fact.Key), primary, additional, null, message));
                 }

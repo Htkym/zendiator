@@ -24,12 +24,20 @@ internal static class CanonicalSyncEmissionNormalizer
             var route = composition.Pipelines[0];
             var graph = execution.Compositions[i].SingleOrDefault(g => g.Contract.Anchor == route.Anchor);
             if (graph?.IsValid != true || graph.Schedule == null || route.Family != BoundDispatchFamily.SendSync ||
-                route.Stages.Count != 0 || route.Handlers.Count != 1 || !route.ExplicitHandlerOrder ||
+                route.Stages.Count > 1 || route.Handlers.Count != 1 || !route.ExplicitHandlerOrder ||
                 route.ResultKind is not (FusionResultKind.Void or FusionResultKind.Response)) continue;
             var handler = route.Handlers[0];
             // Default membership may contain an open definition and its explicitly closed route.
             // Only the authoritative route participates in lowering or DI registration.
             if (handler.CompilerOwnsError || handler.SyncEmission == null || !composition.Handlers.Any(h => h.Identity == handler.Type)) continue;
+            BoundSyncHookEmission? hook = null;
+            if (route.Stages.Count == 1)
+            {
+                var stage = route.Stages[0];
+                if (stage.CompilerOwnsError || stage.Kind != FusionStageKind.Hook || stage.SyncEmission == null ||
+                    stage.ServiceOwnership != FusionOwnership.BorrowedService || stage.Sessions.Count != 0 || handler.Sessions.Count != 0) continue;
+                hook = stage.SyncEmission;
+            }
             BoundSyncFactoryEmission? factory = null;
             if (handler.Sessions.Count != 0)
             {
@@ -44,7 +52,7 @@ internal static class CanonicalSyncEmissionNormalizer
             }
             else if (handler.ServiceOwnership != FusionOwnership.BorrowedService) continue;
             output.Add(new(i, composition.GeneratedNamespace, composition.MarkerName, composition.UseLocalHandlers,
-                handler.SyncEmission, factory, route.HasEmptyPipeline, route.PipelineFamily, composition.MicrosoftDiProviderName));
+                handler.SyncEmission, factory, route.HasEmptyPipeline, route.PipelineFamily, composition.MicrosoftDiProviderName) { Hook = hook });
         }
         return new(new(output));
     }
