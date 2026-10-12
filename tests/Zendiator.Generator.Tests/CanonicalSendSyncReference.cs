@@ -140,4 +140,58 @@ internal static class CanonicalSendSyncReference
         token.ThrowIfCancellationRequested();
         provider.GetRequiredService<THandler>().Handle(request, token);
     }
+
+    internal static T SendOwnedResponseWithoutHook<R, T, THandler, TFactory>(IServiceProvider provider, R request, CancellationToken token)
+        where R : class, ISyncRequest<T>
+        where THandler : class, ISyncRequestHandler<R, T>, IDisposable
+        where TFactory : class, IOwnedSessionFactory<R, THandler>
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
+        var factory = provider.GetRequiredService<TFactory>();
+        THandler? session = factory.Create(request, token)
+            ?? throw new InvalidOperationException("A session factory must return a nonnull Handler session.");
+        try { return session.Handle(request, token); }
+        finally { var detached = session; session = null; detached.Dispose(); }
+    }
+
+    internal static void SendOwnedVoidWithoutHook<R, THandler, TFactory>(IServiceProvider provider, R request, CancellationToken token)
+        where R : class, ISyncRequest
+        where THandler : class, ISyncRequestHandler<R>, IDisposable
+        where TFactory : class, IOwnedSessionFactory<R, THandler>
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
+        var factory = provider.GetRequiredService<TFactory>();
+        THandler? session = factory.Create(request, token)
+            ?? throw new InvalidOperationException("A session factory must return a nonnull Handler session.");
+        try { session.Handle(request, token); }
+        finally { var detached = session; session = null; detached.Dispose(); }
+    }
+
+    internal static T SendBorrowedResponseWithoutHook<R, T, THandler, TFactory>(IServiceProvider provider, R request, CancellationToken token)
+        where R : class, ISyncRequest<T>
+        where THandler : class, ISyncRequestHandler<R, T>
+        where TFactory : class, IBorrowedSessionFactory<R, THandler>
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
+        var factory = provider.GetRequiredService<TFactory>();
+        var session = factory.Create(request, token)
+            ?? throw new InvalidOperationException("A session factory must return a nonnull Handler session.");
+        return session.Handle(request, token);
+    }
+
+    internal static void SendBorrowedVoidWithoutHook<R, THandler, TFactory>(IServiceProvider provider, R request, CancellationToken token)
+        where R : class, ISyncRequest
+        where THandler : class, ISyncRequestHandler<R>
+        where TFactory : class, IBorrowedSessionFactory<R, THandler>
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
+        var factory = provider.GetRequiredService<TFactory>();
+        var session = factory.Create(request, token)
+            ?? throw new InvalidOperationException("A session factory must return a nonnull Handler session.");
+        session.Handle(request, token);
+    }
 }
