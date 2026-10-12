@@ -67,12 +67,18 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         {
             if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.SendAsync.Interceptors.g.cs", SourceText.From(text, Encoding.UTF8));
         });
+        var canonicalWrapper=compositionModel.Combine(executionModel).Select(static(input,_)=>CanonicalWrapperEmissionNormalizer.Create(input.Left,input.Right)).WithTrackingName("CanonicalWrapperEmissionModel");
+        var wrapperSource=canonicalWrapper.Select(static(model,_)=>CanonicalWrapperSourceEmitter.Emit(model)).WithTrackingName("CanonicalWrapperSourceEmission");
+        context.RegisterSourceOutput(wrapperSource,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Wrappers.g.cs",SourceText.From(text,Encoding.UTF8));});
+        var wrapperSites=canonicalWrapper.Combine(compositions).Combine(context.CompilationProvider).Select(static(input,ct)=>CanonicalWrapperEmissionNormalizer.BindCallSites(input.Left.Left,input.Left.Right,input.Right,ct));
+        var wrapperInterceptors=wrapperSites.Select(static(model,_)=>CanonicalSyncSourceEmitter.EmitInterceptors(model,"CanonicalWrapperShims"));
+        context.RegisterSourceOutput(wrapperInterceptors,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Wrappers.Interceptors.g.cs",SourceText.From(text,Encoding.UTF8));});
         context.RegisterSourceOutput(compositionModel.Combine(executionModel).Combine(compositions).Combine(canonicalSync).Combine(canonicalSyncSites)
-            .Combine(canonicalAsync).Combine(canonicalAsyncSites), static (ctx, input) =>
+            .Combine(canonicalAsync).Combine(canonicalAsyncSites).Combine(canonicalWrapper).Combine(wrapperSites), static (ctx, input) =>
         {
-            var sync = input.Left.Left;
+            var original=input.Left.Left;var sync = original.Left.Left;
             CompositionSelectionDiscovery.Report(ctx, sync.Left.Left.Left.Left, sync.Left.Left.Right, sync.Left.Left.Left.Right, sync.Left.Right, sync.Right,
-                input.Left.Right, input.Right);
+                original.Left.Right, original.Right,input.Left.Right,input.Right);
         });
         var legacyInvocations = invocations.Combine(compositions)
             .Select(static (input, _) => CompositionSelectionDiscovery.LegacyInvocations(input.Left, input.Right));

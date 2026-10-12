@@ -326,8 +326,13 @@ public sealed partial class GeneratorTests
         =>AssertUnsupportedAsyncShape(shape);
 
     [Fact]
-    public void Canonical_SendAsync_valid_opaque_wrapper_keeps_ZEN0037_and_emits_no_execution()
-        =>AssertUnsupportedAsyncShape("wrapper");
+    public void Canonical_SendAsync_valid_opaque_wrapper_has_public_generated_entry()
+    {
+        var source=AsyncSource("direct",false);var start=source.IndexOf("public static object Dispatch",StringComparison.Ordinal);source=source.Remove(start,source.IndexOf(';',start)-start+1);
+        source=source.Replace("c=>c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(Handler<string>))","c=>{c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(Handler<string>));c.Pipeline<Ping>(DispatchFamily.SendAsync,Stage.Wrapper<Wrap>());}")+"namespace App {public sealed class Wrap:IAsyncSendWrapper<Ping,int>{public ValueTask<int> InvokeAsync<TNext>(Ping r,TNext next,CancellationToken t) where TNext:IAsyncSendContinuation<Ping,int> =>next.InvokeAsync(r,t);}}";
+        var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"ExistingOpaqueWrapper"),out var output,out var diagnostics);
+        Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));Assert.Equal(2,driver.GetRunResult().Results.Single().GeneratedSources.Length);
+    }
 
     private static void AssertUnsupportedAsyncShape(string shape)
     {

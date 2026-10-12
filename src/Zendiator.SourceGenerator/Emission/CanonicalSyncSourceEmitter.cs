@@ -226,7 +226,9 @@ internal static class CanonicalSyncSourceEmitter
         var entry = c.Factory == null ? $$"""typeof({{h.HandlerName}})""" :
             $$"""global::Zendiator.HandlerEntry.Session<{{h.HandlerName}}, {{c.Factory.FactoryName}}>()""";
         b.AppendLine($$"""            expected.Handlers<{{h.RequestName}}>(global::Zendiator.DispatchFamily.{{family}}, {{entry}});""");
-        if (c.Hooks.Count != 0)
+        if (c.RegistrationStages.Count != 0)
+            b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + family + ", ")}}{{string.Join(", ",c.RegistrationStages.Select(stage=>"global::Zendiator.Stage."+stage.Kind+"<"+stage.TypeName+(stage.FactoryName==null?"":", "+stage.FactoryName)+">()"))}});""");
+        else if (c.Hooks.Count != 0)
             b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + family + ", ")}}{{string.Join(", ", c.Hooks.Select(hook => hook.Factory == null ? "global::Zendiator.Stage.Hook<" + hook.HookName + ">()" : "global::Zendiator.Stage.Hook<" + hook.HookName + ", " + hook.Factory.FactoryName + ">()"))}});""");
         else if (c.HasEmptyPipeline)
             b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + family)}});""");
@@ -235,7 +237,8 @@ internal static class CanonicalSyncSourceEmitter
                             throw new global::System.InvalidOperationException("AddZendiator configuration does not match this generated composition.");
             """);
         var service = c.Factory?.FactoryName ?? h.HandlerName;
-        var types = c.Hooks.Select(hook => hook.Factory?.FactoryName ?? hook.HookName).Concat(new[] { service, "global::" + c.Namespace + ".Zendiator" });
+        var types = (c.RegistrationStages.Count == 0 ? c.Hooks.Select(hook => hook.Factory?.FactoryName ?? hook.HookName) :
+            c.RegistrationStages.Select(stage=>stage.FactoryName??stage.TypeName)).Concat(new[] { service, "global::" + c.Namespace + ".Zendiator" });
         foreach (var type in types)
             b.AppendLine($$"""
                         global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services,

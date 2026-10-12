@@ -42,6 +42,7 @@ internal static class StageContractBinding
         var callbacks = new List<BoundCallbackModel>();
         var syncCallbacks = new Dictionary<BoundCallbackPhase, BoundSyncHookCallbackEmission>();
         var asyncCallbacks = new Dictionary<BoundCallbackPhase, BoundAsyncHookCallbackEmission>();
+        BoundWrapperEmission? wrapperEmission = null;
         var compilerOwned = false;
         void Reject(string key, string message) => facts.Add(new(key, anchor, message));
         if (type.TypeKind == TypeKind.Error) { compilerOwned = true; return Value(); }
@@ -97,6 +98,7 @@ internal static class StageContractBinding
             var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
             var implementation = members.Length == 1 ? type.FindImplementationForInterfaceMember(members[0]) as IMethodSymbol : null;
             if (implementation == null) { compilerOwned = true; continue; }
+            if (role.Wrapper) wrapperEmission = new(Name(type),Name(contract),members[0].Name,role.Completion);
             if (role.Completion == BoundCompletionKind.Synchronous)
                 syncCallbacks[role.Phase] = new(Name(contract), members[0].Name);
             else if (role.Completion == BoundCompletionKind.ValueTask)
@@ -131,7 +133,12 @@ internal static class StageContractBinding
                 asyncCallbacks.ContainsKey(BoundCallbackPhase.Before) && asyncCallbacks.ContainsKey(BoundCallbackPhase.Success) &&
                 asyncCallbacks.ContainsKey(BoundCallbackPhase.Exception) && asyncCallbacks.ContainsKey(BoundCallbackPhase.Finally)
                     ? new(Name(type), asyncCallbacks[BoundCallbackPhase.Before], asyncCallbacks[BoundCallbackPhase.Success],
-                        asyncCallbacks[BoundCallbackPhase.Exception], asyncCallbacks[BoundCallbackPhase.Finally]) : null
+                        asyncCallbacks[BoundCallbackPhase.Exception], asyncCallbacks[BoundCallbackPhase.Finally]) : null,
+            WrapperEmission = facts.Count == before && !compilerOwned && kind == FusionStageKind.Wrapper &&
+                (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && type.TypeKind == TypeKind.Class && Public(type) &&
+                type.Locations.Any(l => l.IsInSource) && callbacks.Count == 1 &&
+                !compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && !r.Properties.Aliases.Contains("global"))
+                    ? wrapperEmission : null
         };
     }
 
