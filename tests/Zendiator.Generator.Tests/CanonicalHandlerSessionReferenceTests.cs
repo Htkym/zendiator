@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -15,6 +16,17 @@ public sealed partial class GeneratorTests
         public bool CancelCleanup;
         public int DependencyCreated, DependencyDisposed, PartialDisposed;
         public readonly List<IDisposable> Borrowed = new();
+        public void ConstructFactory()
+        { Core.Trace.Add("factory.ctor"); if (FactoryConstructorError != null) throw FactoryConstructorError; }
+        public H CreateSession<H>(object factory, object request, CancellationToken token, Func<H> create, bool borrowed) where H : class
+        {
+            Core.Factory(factory, request, token);
+            if (PartialError != null) { using var partial = new PartialSessionResource(this); throw PartialError; }
+            if (Core.NullSession) return null!;
+            var session = create();
+            if (borrowed && session is IDisposable disposable) Borrowed.Add(disposable);
+            return session;
+        }
     }
     public sealed class SessionFactoryDependency(HandlerSessionReferenceProbe probe) : IDisposable
     {
@@ -36,18 +48,10 @@ public sealed partial class GeneratorTests
         private readonly Func<H> _create;
         protected ReferenceSessionFactory(HandlerSessionReferenceProbe probe, SessionFactoryDependency dependency, Func<H> create)
         {
-            _probe = probe; _create = create; probe.Core.Trace.Add("factory.ctor");
-            if (probe.FactoryConstructorError != null) throw probe.FactoryConstructorError;
+            _probe = probe; _create = create; probe.ConstructFactory();
         }
         protected H CreateSession(R request, CancellationToken token, bool borrowed)
-        {
-            _probe.Core.Factory(this, request, token);
-            if (_probe.PartialError != null) { using var partial = new PartialSessionResource(_probe); throw _probe.PartialError; }
-            if (_probe.Core.NullSession) return null!;
-            var session = _create();
-            if (borrowed && session is IDisposable disposable) _probe.Borrowed.Add(disposable);
-            return session;
-        }
+            => _probe.CreateSession(this, request, token, _create, borrowed);
         public void Dispose() => _probe.Core.DisposeFactory();
     }
     public sealed class OwnedReferenceSessionFactory<R, H>(HandlerSessionReferenceProbe probe, SessionFactoryDependency dependency, Func<H> create)
@@ -71,13 +75,13 @@ public sealed partial class GeneratorTests
         public void Dispose() { if (_probe.CancelCleanup) _probe.Core.Cancellation.Cancel(); _probe.Core.Cleanup(this); }
     }
 
-    private static IServiceCollection HandlerSessionReferenceServices(HandlerSessionReferenceProbe probe, bool isVoid, bool owned, ServiceLifetime lifetime)
+    private static IServiceCollection HandlerSessionReferenceServices(HandlerSessionReferenceProbe probe, bool isVoid, bool owned, ServiceLifetime lifetime, SyncFixture? fixture = null)
     {
         IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe);
         services.Add(ServiceDescriptor.Describe(typeof(SessionFactoryDependency), typeof(SessionFactoryDependency), lifetime));
-        var factory = isVoid ? owned ? typeof(OwnedReferenceSessionFactory<SessionVoidRequest, ReferenceVoidSession>) : typeof(BorrowedReferenceSessionFactory<SessionVoidRequest, ReferenceVoidSession>) :
-            owned ? typeof(OwnedReferenceSessionFactory<SessionResponseRequest, ReferenceResponseSession>) : typeof(BorrowedReferenceSessionFactory<SessionResponseRequest, ReferenceResponseSession>);
-        services.Add(ServiceDescriptor.Describe(factory, provider => {
+        var factory = fixture?.Service ?? (isVoid ? owned ? typeof(OwnedReferenceSessionFactory<SessionVoidRequest, ReferenceVoidSession>) : typeof(BorrowedReferenceSessionFactory<SessionVoidRequest, ReferenceVoidSession>) :
+            owned ? typeof(OwnedReferenceSessionFactory<SessionResponseRequest, ReferenceResponseSession>) : typeof(BorrowedReferenceSessionFactory<SessionResponseRequest, ReferenceResponseSession>));
+        Func<IServiceProvider, object> resolve = fixture != null ? fixture.ResolveService.CreateDelegate<Func<IServiceProvider, object>>() : provider => {
             probe.Core.Trace.Add("resolve-factory");
             if (probe.Core.DiError != null) throw probe.Core.DiError;
             if (probe.Core.NullService) return null!;
@@ -86,9 +90,11 @@ public sealed partial class GeneratorTests
                 new BorrowedReferenceSessionFactory<SessionVoidRequest, ReferenceVoidSession>(probe, dependency, () => new(probe)) :
                 owned ? new OwnedReferenceSessionFactory<SessionResponseRequest, ReferenceResponseSession>(probe, dependency, () => new(probe)) :
                 new BorrowedReferenceSessionFactory<SessionResponseRequest, ReferenceResponseSession>(probe, dependency, () => new(probe));
-        }, lifetime));
+        };
+        services.Add(ServiceDescriptor.Describe(factory, resolve, lifetime));
         services.AddScoped<ReferenceResponseHook>(_ => throw new Exception("A zero-Hook session route must not resolve a Hook."));
         services.AddScoped<ReferenceVoidHook>(_ => throw new Exception("A zero-Hook session route must not resolve a Hook."));
+        if (fixture != null) Assert.Same(services, fixture.Register.Invoke(null, [services]));
         return services;
     }
 
@@ -122,6 +128,9 @@ public sealed partial class GeneratorTests
     [Theory]
     [MemberData(nameof(HandlerSessionReferenceCases))]
     public void Canonical_zero_Hook_Handler_session_preserves_transfer_failure_context_and_owner(bool owned, bool isVoid, string scenario)
+        => RunHandlerSessionScenario(owned, isVoid, scenario);
+
+    private static string RunHandlerSessionScenario(bool owned, bool isVoid, string scenario, SyncFixture? fixture = null, bool generated = false)
     {
         var probe = new HandlerSessionReferenceProbe(); var core = probe.Core;
         var ambient = CanonicalSyncRuntimeProbe.Ambient.Value; var culture = CultureInfo.CurrentCulture;
@@ -141,13 +150,16 @@ public sealed partial class GeneratorTests
         probe.PartialError = scenario == "partial-error" ? partialError : scenario == "partial-oce" ? partialOce : null;
         core.CancelInFactory = scenario == "cancel-in-factory"; core.CancelInHandler = scenario == "cancel-in-handler"; probe.CancelCleanup = scenario == "cancel-in-cleanup";
         if (scenario == "pre-cancel") core.Cancellation.Cancel();
-        object? request = scenario == "null-request" ? null : isVoid ? new SessionVoidRequest() : new SessionResponseRequest();
+        object? request = scenario == "null-request" ? null : fixture != null ? Activator.CreateInstance(fixture.Request) : isVoid ? new SessionVoidRequest() : new SessionResponseRequest();
         try
         {
-            using var provider = HandlerSessionReferenceServices(probe, isVoid, owned, ServiceLifetime.Scoped).BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+            using var provider = HandlerSessionReferenceServices(probe, isVoid, owned, ServiceLifetime.Scoped, fixture).BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+            string snapshot = "";
             using (var scope = provider.CreateScope())
             {
-                var actual = InvokeHandlerSessionReference(scope.ServiceProvider, isVoid, owned, request, core.Cancellation.Token);
+                var actual = fixture == null ? InvokeHandlerSessionReference(scope.ServiceProvider, isVoid, owned, request, core.Cancellation.Token) :
+                    generated ? InvokeSync(fixture, scope.ServiceProvider.GetRequiredService(fixture.Interface), request, core.Cancellation.Token) :
+                    InvokeCompiledHandlerSessionReference(fixture, scope.ServiceProvider, isVoid, owned, request, core.Cancellation.Token);
                 string[] golden = scenario switch {
                     "null-request" or "pre-cancel" => [], "di-error" or "di-null" => ["resolve-factory"],
                     "factory-ctor-error" => ["resolve-factory", "dependency.ctor", "factory.ctor"],
@@ -180,7 +192,7 @@ public sealed partial class GeneratorTests
                 Assert.Equal(ran ? owned ? "cleanup" : "handler" : acquired ? "factory" : "caller", CanonicalSyncRuntimeProbe.Ambient.Value);
                 Assert.Equal(ran ? owned ? "en-US" : "es-ES" : acquired ? "fr-FR" : "", CultureInfo.CurrentCulture.Name);
                 Assert.Equal(scenario is "pre-cancel" or "cancel-in-factory" or "cancel-in-handler" or "cancel-in-cleanup", core.Cancellation.IsCancellationRequested);
-                WriteNestedHookEvidence("handler-session-reference", owned + "-" + isVoid + "-" + scenario, new {
+                var observation = new {
                     owned, isVoid, scenario, golden, trace = core.Trace.ToArray(), actual.Result,
                     errorType = actual.Error?.GetType().FullName, originalExceptionPreserved = escaping == null || ReferenceEquals(escaping, actual.Error),
                     nullParameter = (actual.Error as ArgumentNullException)?.ParamName,
@@ -189,13 +201,17 @@ public sealed partial class GeneratorTests
                     core.FactoryDisposals, probe.DependencyCreated, probe.DependencyDisposed, probe.PartialDisposed,
                     ambient = CanonicalSyncRuntimeProbe.Ambient.Value, culture = CultureInfo.CurrentCulture.Name,
                     ambientObserved = core.AmbientObserved.ToArray(), cultureObserved = core.CultureObserved.ToArray(), core.Cancellation.IsCancellationRequested
-                });
+                };
+                snapshot = JsonSerializer.Serialize(observation);
+                if (fixture == null) WriteNestedHookEvidence("handler-session-reference", owned + "-" + isVoid + "-" + scenario, observation);
             }
             Assert.Equal(probe.DependencyCreated, probe.DependencyDisposed);
             Assert.Equal(core.Trace.Contains("factory.ctor") && scenario != "factory-ctor-error" ? 1 : 0, core.FactoryDisposals);
             Assert.Equal(owned ? core.Created.Count : 0, core.Released.Count);
             foreach (var borrowed in probe.Borrowed) borrowed.Dispose();
             Assert.Equal(core.Created.Count, core.Released.Count);
+            return JsonSerializer.Serialize(new { operation = JsonSerializer.Deserialize<JsonElement>(snapshot), finalTrace = core.Trace.ToArray(),
+                core.FactoryDisposals, probe.DependencyDisposed, finalOwnerReleasedSessions = core.Released.Count });
         }
         finally { core.Cancellation.Dispose(); CanonicalSyncRuntimeProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; }
     }
@@ -209,12 +225,15 @@ public sealed partial class GeneratorTests
     [Theory]
     [MemberData(nameof(HandlerSessionReferenceLifetimeCases))]
     public void Canonical_zero_Hook_Handler_session_keeps_factory_DI_owner_and_session_transfer_distinct(bool owned, bool isVoid, ServiceLifetime lifetime)
+        => RunHandlerSessionLifetimes(owned, isVoid, lifetime);
+
+    private static string RunHandlerSessionLifetimes(bool owned, bool isVoid, ServiceLifetime lifetime, SyncFixture? fixture = null, bool generated = false)
     {
         var probe = new HandlerSessionReferenceProbe(); var core = probe.Core;
         var ambient = CanonicalSyncRuntimeProbe.Ambient.Value; var culture = CultureInfo.CurrentCulture;
         try
         {
-            using (var provider = HandlerSessionReferenceServices(probe, isVoid, owned, lifetime).BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
+            using (var provider = HandlerSessionReferenceServices(probe, isVoid, owned, lifetime, fixture).BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
             {
                 for (var s = 0; s < 2; s++)
                 {
@@ -222,7 +241,10 @@ public sealed partial class GeneratorTests
                     {
                         for (var i = 0; i < 2; i++)
                         {
-                            var actual = InvokeHandlerSessionReference(scope.ServiceProvider, isVoid, owned, isVoid ? new SessionVoidRequest() : new SessionResponseRequest(), default);
+                            var request = fixture != null ? Activator.CreateInstance(fixture.Request) : isVoid ? new SessionVoidRequest() : new SessionResponseRequest();
+                            var actual = fixture == null ? InvokeHandlerSessionReference(scope.ServiceProvider, isVoid, owned, request, default) :
+                                generated ? InvokeSync(fixture, scope.ServiceProvider.GetRequiredService(fixture.Interface), request, default) :
+                                InvokeCompiledHandlerSessionReference(fixture, scope.ServiceProvider, isVoid, owned, request, default);
                             Assert.Null(actual.Error); Assert.Equal(isVoid ? null : (object)73, actual.Result);
                             Assert.Equal(owned ? s * 2 + i + 1 : 0, core.Released.Count);
                             Assert.Equal(lifetime == ServiceLifetime.Singleton ? 0 : s * (lifetime == ServiceLifetime.Scoped ? 1 : 2), core.FactoryDisposals);
@@ -240,11 +262,13 @@ public sealed partial class GeneratorTests
             Assert.Equal(4, core.Created.Distinct(ReferenceEqualityComparer.Instance).Count());
             foreach (var borrowed in probe.Borrowed) borrowed.Dispose();
             Assert.Equal(4, core.Released.Count); Assert.All(core.Created, session => Assert.Single(core.Released, item => ReferenceEquals(item, session)));
-            WriteNestedHookEvidence("handler-session-reference-lifetimes", owned + "-" + isVoid + "-" + lifetime, new {
+            var observation = new {
                 owned, isVoid, lifetime = lifetime.ToString(), trace = core.Trace.ToArray(), factories, core.FactoryDisposals,
                 probe.DependencyCreated, probe.DependencyDisposed, createdSessions = core.Created.Count,
                 operationReleasedSessions = owned ? 4 : 0, finalOwnerReleasedSessions = core.Released.Count
-            });
+            };
+            if (fixture == null) WriteNestedHookEvidence("handler-session-reference-lifetimes", owned + "-" + isVoid + "-" + lifetime, observation);
+            return JsonSerializer.Serialize(observation);
         }
         finally { core.Cancellation.Dispose(); CanonicalSyncRuntimeProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; }
     }
