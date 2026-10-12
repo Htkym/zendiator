@@ -74,6 +74,65 @@ internal static class CanonicalSendSyncReference
         return provider.GetRequiredService<THandler>().Handle(request, token);
     }
 
+    internal static T SendTwoHooksResponse<R, T, TOuter, TInner, THandler>(IServiceProvider provider, R request, CancellationToken token)
+        where R : class, ISyncRequest<T>
+        where TOuter : class, ISendRequestTransform<R>, ISendResponseTransform<R, T>, ISendExceptionObserver<R>, ISendFinallyObserver<R>
+        where TInner : class, ISendRequestTransform<R>, ISendResponseTransform<R, T>, ISendExceptionObserver<R>, ISendFinallyObserver<R>
+        where THandler : class, ISyncRequestHandler<R, T>
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
+        var outer = provider.GetRequiredService<TOuter>();
+        var saved = request;
+        var success = false;
+        Exception? error = null;
+        try
+        {
+            saved = outer.Before(saved, token);
+            var response = SendResponse<R, T, TInner, THandler>(provider, saved, token);
+            response = outer.After(saved, response, token);
+            success = true;
+            return response;
+        }
+        catch (Exception failure)
+        {
+            error = failure;
+            try { outer.OnException(saved, failure, token); }
+            catch (Exception replacement) { error = replacement; throw; }
+            throw;
+        }
+        finally { outer.Finally(saved, new SendExitInfo(success, error), token); }
+    }
+
+    internal static void SendTwoHooksVoid<R, TOuter, TInner, THandler>(IServiceProvider provider, R request, CancellationToken token)
+        where R : class, ISyncRequest
+        where TOuter : class, ISendRequestTransform<R>, ISendSuccessObserver<R>, ISendExceptionObserver<R>, ISendFinallyObserver<R>
+        where TInner : class, ISendRequestTransform<R>, ISendSuccessObserver<R>, ISendExceptionObserver<R>, ISendFinallyObserver<R>
+        where THandler : class, ISyncRequestHandler<R>
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
+        var outer = provider.GetRequiredService<TOuter>();
+        var saved = request;
+        var success = false;
+        Exception? error = null;
+        try
+        {
+            saved = outer.Before(saved, token);
+            SendVoid<R, TInner, THandler>(provider, saved, token);
+            outer.After(saved, token);
+            success = true;
+        }
+        catch (Exception failure)
+        {
+            error = failure;
+            try { outer.OnException(saved, failure, token); }
+            catch (Exception replacement) { error = replacement; throw; }
+            throw;
+        }
+        finally { outer.Finally(saved, new SendExitInfo(success, error), token); }
+    }
+
     internal static void SendVoidWithoutHook<R, THandler>(IServiceProvider provider, R request, CancellationToken token)
         where R : class, ISyncRequest where THandler : class, ISyncRequestHandler<R>
     {
