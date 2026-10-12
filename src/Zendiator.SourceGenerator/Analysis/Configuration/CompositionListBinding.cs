@@ -231,13 +231,19 @@ internal sealed class CompositionListBinding
                         new(implementation.Parameters.Select(p => new BoundParameterModel(Identity(p.Type), p.RefKind.ToString(), p.ScopedKind.ToString()))),
                         Identity(implementation.ReturnType), Constraints(implementation.TypeParameters),
                         family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync));
-                if (family == BoundDispatchFamily.SendSync && declaration.Request.TypeKind == TypeKind.Class &&
+                if ((family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && declaration.Request.TypeKind == TypeKind.Class &&
                     declaration.Request.Locations.Any(l => l.IsInSource) &&
                     !_compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && !r.Properties.Aliases.Contains("global")) &&
                     entry.Type.TypeKind == TypeKind.Class && Public(entry.Type) && implementation != null && member != null &&
                     (nextResult == null || nextResult is INamedTypeSymbol))
-                    handlerModel = handlerModel with { SyncEmission = new(Name(declaration.Request), Name(entry.Type),
-                        Name(contract), member.Name, nextResult == null ? null : Name(nextResult)) };
+                {
+                    if (family == BoundDispatchFamily.SendSync)
+                        handlerModel = handlerModel with { SyncEmission = new(Name(declaration.Request), Name(entry.Type),
+                            Name(contract), member.Name, nextResult == null ? null : Name(nextResult)) };
+                    else
+                        handlerModel = handlerModel with { AsyncEmission = new(Name(declaration.Request), Name(entry.Type),
+                            Name(contract), member.Name, nextResult == null ? null : Name(nextResult)) };
+                }
                 if (entry.Factory != null && !handlerModel.CompilerOwnsError)
                 {
                     var binding = SessionFactoryContractBinding.Bind(entry.Factory, entry.Type, declaration.Request, family.Value,

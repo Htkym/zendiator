@@ -170,7 +170,8 @@ internal static class CompositionSelectionDiscovery
         ImmutableArray<Binding> compositions) => invocations.Where(i => !compositions.Any(c => c.Invocation == i)).ToImmutableArray();
 
     internal static void Report(SourceProductionContext context, CompositionSelectionCatalog catalog, ImmutableArray<Binding> current,
-        CanonicalExecutionGraphCatalog execution, CanonicalSyncEmissionModel canonicalSync, CanonicalSyncInterceptorModel syncCallSites)
+        CanonicalExecutionGraphCatalog execution, CanonicalSyncEmissionModel canonicalSync, CanonicalSyncInterceptorModel syncCallSites,
+        CanonicalAsyncEmissionModel canonicalAsync, CanonicalSyncInterceptorModel asyncCallSites)
     {
         for (var index = 0; index < catalog.Compositions.Count; index++)
         {
@@ -199,6 +200,9 @@ internal static class CompositionSelectionDiscovery
                         if (enabled != null &&
                             syncCallSites.CallSites.Any(s => s.Namespace == enabled.Namespace && s.MarkerName == enabled.MarkerName))
                             continue; // Only the runtime matrix accepted by review and its actual registration call site are enabled.
+                        var asyncEnabled = canonicalAsync.Compositions.FirstOrDefault(c => c.Index == index);
+                        if (asyncEnabled != null && asyncCallSites.CallSites.Any(s => s.Namespace == asyncEnabled.Namespace && s.MarkerName == asyncEnabled.MarkerName))
+                            continue;
                         var graph = execution.Compositions[index].FirstOrDefault(g => g.Contract.Anchor == fact.Anchor);
                         if (graph != null)
                             message = graph.IsValid

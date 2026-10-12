@@ -206,7 +206,7 @@ internal static class CanonicalSyncSourceEmitter
             """);
     }
 
-    private static void EmitRegistrar(StringBuilder b, CanonicalSyncCompositionEmission c)
+    internal static void EmitRegistrar(StringBuilder b, CanonicalSyncCompositionEmission c, BoundDispatchFamily family = BoundDispatchFamily.SendSync)
     {
         var h = c.Handler;
         b.AppendLine("""
@@ -225,11 +225,11 @@ internal static class CanonicalSyncSourceEmitter
         if (c.UseLocalHandlers) b.AppendLine("            expected.UseLocalHandlers();");
         var entry = c.Factory == null ? $$"""typeof({{h.HandlerName}})""" :
             $$"""global::Zendiator.HandlerEntry.Session<{{h.HandlerName}}, {{c.Factory.FactoryName}}>()""";
-        b.AppendLine($$"""            expected.Handlers<{{h.RequestName}}>(global::Zendiator.DispatchFamily.SendSync, {{entry}});""");
+        b.AppendLine($$"""            expected.Handlers<{{h.RequestName}}>(global::Zendiator.DispatchFamily.{{family}}, {{entry}});""");
         if (c.Hooks.Count != 0)
-            b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily.SendSync, ")}}{{string.Join(", ", c.Hooks.Select(hook => hook.Factory == null ? "global::Zendiator.Stage.Hook<" + hook.HookName + ">()" : "global::Zendiator.Stage.Hook<" + hook.HookName + ", " + hook.Factory.FactoryName + ">()"))}});""");
+            b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + family + ", ")}}{{string.Join(", ", c.Hooks.Select(hook => hook.Factory == null ? "global::Zendiator.Stage.Hook<" + hook.HookName + ">()" : "global::Zendiator.Stage.Hook<" + hook.HookName + ", " + hook.Factory.FactoryName + ">()"))}});""");
         else if (c.HasEmptyPipeline)
-            b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily.SendSync")}});""");
+            b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + family)}});""");
         b.AppendLine("""
                         if (snapshot.GetFingerprint() != expected.Snapshot().GetFingerprint())
                             throw new global::System.InvalidOperationException("AddZendiator configuration does not match this generated composition.");
@@ -251,11 +251,11 @@ internal static class CanonicalSyncSourceEmitter
             """);
     }
 
-    internal static string EmitInterceptors(CanonicalSyncInterceptorModel model)
+    internal static string EmitInterceptors(CanonicalSyncInterceptorModel model, string shimName = "CanonicalSyncShims")
     {
         if (model.CallSites.Count == 0) return "";
         var b = Header();
-        b.AppendLine("""
+        b.AppendLine($$"""
             namespace System.Runtime.CompilerServices
             {
                 [global::System.AttributeUsage(global::System.AttributeTargets.Method, AllowMultiple = true)]
@@ -266,7 +266,7 @@ internal static class CanonicalSyncSourceEmitter
             }
             namespace Zendiator.Generated.Interceptors
             {
-                static class CanonicalSyncShims
+                static class {{shimName}}
                 {
             """);
         for (var i = 0; i < model.CallSites.Count; i++)

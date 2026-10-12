@@ -378,7 +378,7 @@ public sealed partial class GeneratorTests
 
     [Theory]
     [InlineData("struct-request")] [InlineData("struct-handler")] [InlineData("implicit-handler")]
-    [InlineData("stage")] [InlineData("async-family")] [InlineData("array-result")] [InlineData("namespace-collision")]
+    [InlineData("stage")] [InlineData("array-result")] [InlineData("namespace-collision")]
     [InlineData("nested-marker")] [InlineData("struct-factory")] [InlineData("multiple-routes")]
     [InlineData("ancestor-generated-type")] [InlineData("ancestor-marker-type")] [InlineData("default-namespace-type")]
     [InlineData("all-sync-family")] [InlineData("all-async-family")]
@@ -391,9 +391,6 @@ public sealed partial class GeneratorTests
             "implicit-handler"=>source.Replace("c => c.Handlers<Ping>(DispatchFamily.SendSync,typeof(Handler<string>))","c => { c.AddHandler<Handler<string>>(); c.Pipeline<Ping>(DispatchFamily.SendSync); }"),
             "stage"=>source.Replace("c => c.Handlers<Ping>(DispatchFamily.SendSync,typeof(Handler<string>))",
                 "c => { c.Handlers<Ping>(DispatchFamily.SendSync,typeof(Handler<string>)); c.Pipeline<Ping>(DispatchFamily.SendSync,Stage.Hook<Hook>()); }")+"namespace App { public sealed class Hook : ISendFinallyObserver<Ping> { public void Finally(Ping r,SendExitInfo e,CancellationToken c){} } }",
-            "async-family"=>source.Replace("DispatchFamily.SendSync","DispatchFamily.SendAsync").Replace("ISyncRequest", "IRequest")
-                .Replace("int IRequestHandler<Ping,int>.Handle(","System.Threading.Tasks.ValueTask<int> IRequestHandler<Ping,int>.HandleAsync(")
-                .Replace("return _probe.Handle(this,request,token);","return new(_probe.Handle(this,request,token));"),
             "all-sync-family"=>source.Replace("DispatchFamily.SendSync","DispatchFamily.SendAllSync"),
             "all-async-family"=>source.Replace("DispatchFamily.SendSync","DispatchFamily.SendAllAsync").Replace("ISyncRequest","IRequest")
                 .Replace("int IRequestHandler<Ping,int>.Handle(","System.Threading.Tasks.ValueTask<int> IRequestHandler<Ping,int>.HandleAsync(")

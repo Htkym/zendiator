@@ -52,8 +52,28 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         {
             if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.SendSync.Interceptors.g.cs", SourceText.From(text, Encoding.UTF8));
         });
-        context.RegisterSourceOutput(compositionModel.Combine(executionModel).Combine(compositions).Combine(canonicalSync).Combine(canonicalSyncSites), static (ctx, input) =>
-            CompositionSelectionDiscovery.Report(ctx, input.Left.Left.Left.Left, input.Left.Left.Right, input.Left.Left.Left.Right, input.Left.Right, input.Right));
+        var canonicalAsync = compositionModel.Combine(executionModel)
+            .Select(static (input, _) => CanonicalAsyncEmissionNormalizer.Create(input.Left, input.Right)).WithTrackingName("CanonicalAsyncEmissionModel");
+        var canonicalAsyncSource = canonicalAsync.Select(static (model, _) => CanonicalAsyncSourceEmitter.Emit(model)).WithTrackingName("CanonicalAsyncSourceEmission");
+        context.RegisterSourceOutput(canonicalAsyncSource, static (ctx, text) =>
+        {
+            if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.SendAsync.g.cs", SourceText.From(text, Encoding.UTF8));
+        });
+        var canonicalAsyncSites = canonicalAsync.Combine(compositions).Combine(context.CompilationProvider)
+            .Select(static (input, ct) => CanonicalAsyncEmissionNormalizer.BindCallSites(input.Left.Left, input.Left.Right, input.Right, ct));
+        var canonicalAsyncInterceptors = canonicalAsyncSites.Select(static (model, _) => CanonicalSyncSourceEmitter.EmitInterceptors(model, "CanonicalAsyncShims"))
+            .WithTrackingName("CanonicalAsyncInterceptorsEmission");
+        context.RegisterSourceOutput(canonicalAsyncInterceptors, static (ctx, text) =>
+        {
+            if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.SendAsync.Interceptors.g.cs", SourceText.From(text, Encoding.UTF8));
+        });
+        context.RegisterSourceOutput(compositionModel.Combine(executionModel).Combine(compositions).Combine(canonicalSync).Combine(canonicalSyncSites)
+            .Combine(canonicalAsync).Combine(canonicalAsyncSites), static (ctx, input) =>
+        {
+            var sync = input.Left.Left;
+            CompositionSelectionDiscovery.Report(ctx, sync.Left.Left.Left.Left, sync.Left.Left.Right, sync.Left.Left.Left.Right, sync.Left.Right, sync.Right,
+                input.Left.Right, input.Right);
+        });
         var legacyInvocations = invocations.Combine(compositions)
             .Select(static (input, _) => CompositionSelectionDiscovery.LegacyInvocations(input.Left, input.Right));
         // Discovery metadata alone never gates unrelated legacy generation.

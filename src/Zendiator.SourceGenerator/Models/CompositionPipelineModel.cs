@@ -19,6 +19,7 @@ internal sealed record BoundHandlerModel(string Anchor, string Type, string Name
 {
     public EquatableArray<BoundSessionModel> Sessions { get; init; }
     public BoundSyncHandlerEmission? SyncEmission { get; init; }
+    public BoundAsyncHandlerEmission? AsyncEmission { get; init; }
 }
 // Explicit factory facts for operation state. DI services remain borrowed; no callback body
 // or IDisposable interface on a service authorizes an ownership transfer.
@@ -29,6 +30,7 @@ internal sealed record BoundSessionModel(string FactoryServiceType, string Resou
     public bool SuppliesCallbackReceiver { get; init; }
     public EquatableArray<string> FactoryHierarchy { get; init; }
     public BoundSyncFactoryEmission? SyncEmission { get; init; }
+    public BoundAsyncFactoryEmission? AsyncEmission { get; init; }
 }
 internal sealed record BoundPipelineModel(string Anchor, string Request, string RequestName,
     BoundDispatchFamily? Family, FusionResultKind? ResultKind, string? Result,

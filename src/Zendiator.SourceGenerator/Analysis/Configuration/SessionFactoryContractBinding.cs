@@ -80,6 +80,10 @@ internal static class SessionFactoryContractBinding
             { SuppliesCallbackReceiver = true, FactoryHierarchy = StageContractBinding.DescribeHierarchy(factory),
                 SyncEmission = family == BoundDispatchFamily.SendSync && factory.TypeKind == TypeKind.Class && Public(factory)
                     ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name, cleanupContractName)
+                        { IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource) } : null,
+                AsyncEmission = family == BoundDispatchFamily.SendAsync && factory.TypeKind == TypeKind.Class && Public(factory)
+                    ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name,
+                        cleanupContractName, selected.Completion == BoundCompletionKind.ValueTask)
                         { IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource) } : null }, false);
     }
 
