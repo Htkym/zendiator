@@ -187,8 +187,8 @@ public sealed partial class GeneratorTests
                     Assert.Equal(core.Calls.Count==0?"caller":"finally",ReferenceSendProbe.Ambient.Value);
                     operation=new{owned,isVoid,scenario,golden,trace=core.Phases.ToArray(),actual.Result,errorType=actual.Error?.GetType().FullName,
                         escapingIdentityPreserved=escaping==null||ReferenceEquals(escaping,actual.Error),observerIdentityPreserved=ReferenceEquals(observedExpected,core.ObservedError),exitIdentityPreserved=ReferenceEquals(core.ObserverError??observedExpected,core.Exit?.Error),
-                        calls=core.Calls.Select(c=>new{c.Phase,c.Ambient,c.Culture,requestPreserved=ReferenceEquals(c.Phase=="before"?request:saved,c.Request),tokenPreserved=c.Token==token}),
-                        innerCalls=probe.Calls.Select(c=>new{c.Phase,c.Ambient,c.Culture,requestPreserved=ReferenceEquals(saved,c.Request),tokenPreserved=c.Token==token}),createdSessions=probe.Created.Count,operationReleasedSessions=probe.Released.Count,core.HookDisposals,probe.FactoryDisposals,probe.DependencyDisposals};
+                        calls=core.Calls.Select(c=>new{c.Phase,c.Ambient,c.Culture,requestPreserved=ReferenceEquals(c.Phase=="before"?request:saved,c.Request),tokenPreserved=c.Token==token}).ToArray(),
+                        innerCalls=probe.Calls.Select(c=>new{c.Phase,c.Ambient,c.Culture,requestPreserved=ReferenceEquals(saved,c.Request),tokenPreserved=c.Token==token}).ToArray(),createdSessions=probe.Created.Count,operationReleasedSessions=probe.Released.Count,core.HookDisposals,probe.FactoryDisposals,probe.DependencyDisposals};
                     if(fixture==null)WriteNestedHookEvidence("hook-handler-session-reference",owned+"-"+isVoid+"-"+scenario,operation);
                 }
                 Assert.Equal(core.HookConstructed?1:0,core.HookDisposals);Assert.Equal(probe.Dependencies,probe.DependencyDisposals);

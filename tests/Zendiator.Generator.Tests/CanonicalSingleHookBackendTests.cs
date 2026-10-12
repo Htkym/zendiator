@@ -233,7 +233,7 @@ public sealed partial class GeneratorTests
     {
         var source = SingleHookBackendSource(isVoid, shape);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "UnsupportedHook_" + shape + isVoid), out var output, out var diagnostics);
-        if (shape is "two-hooks" or "hook-owned") Assert.Empty(diagnostics);
+        if (shape is "two-hooks" or "hook-owned" or "handler-owned") Assert.Empty(diagnostics);
         else Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         var sources = driver.GetRunResult().Results.Single().GeneratedSources;

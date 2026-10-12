@@ -39,7 +39,7 @@ public sealed partial class GeneratorTests
         return source;
     }
     private static SyncFixture HookHandlerBackendFixture(bool owned,bool isVoid)=>HookHandlerBackendFixtures.GetOrAdd((owned,isVoid),key=>
-        CompileSyncFixture(key.Owned?"owned":"borrowed",key.Void,sourceOverride:HookHandlerBackendSource(key.Owned,key.Void),candidateOnly:true));
+        CompileSyncFixture(key.Owned?"owned":"borrowed",key.Void,sourceOverride:HookHandlerBackendSource(key.Owned,key.Void)));
 
     private static (object? Result,Exception? Error) InvokeCompiledHookHandlerReference(SyncFixture fixture,IServiceProvider provider,bool owned,bool isVoid,object? request,CancellationToken token)
     {
