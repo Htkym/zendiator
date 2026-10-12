@@ -33,14 +33,16 @@ public sealed partial class GeneratorTests
             else inner = "Stage.Hook<PartialHook>()";
         }
         if (shape == "third-hook") inner += ",Stage.Hook<Hook<Third>>()";
-        if (shape == "handler-owned")
+        if (shape is "handler-owned" or "handler-borrowed")
         {
-            extra = "public sealed class HandlerFactory : IOwnedSessionFactory<Ping,Handler<string>> { public Handler<string> Create(Ping request,CancellationToken token)=>throw new NotImplementedException(); }";
+            var ownership = shape == "handler-owned" ? "IOwnedSessionFactory" : "IBorrowedSessionFactory";
+            extra = "public sealed class HandlerFactory : " + ownership + "<Ping,Handler<string>> { public Handler<string> Create(Ping request,CancellationToken token)=>throw new NotImplementedException(); }";
             handler = "HandlerEntry.Session<Handler<string>,HandlerFactory>()";
         }
-        if (shape == "hook-owned")
+        if (shape is "hook-owned" or "hook-borrowed")
         {
-            extra = "public sealed class HookFactory : IOwnedSessionFactory<Ping,Hook<Inner>> { public Hook<Inner> Create(Ping request,CancellationToken token)=>throw new NotImplementedException(); }";
+            var ownership = shape == "hook-owned" ? "IOwnedSessionFactory" : "IBorrowedSessionFactory";
+            extra = "public sealed class HookFactory : " + ownership + "<Ping,Hook<Inner>> { public Hook<Inner> Create(Ping request,CancellationToken token)=>throw new NotImplementedException(); }";
             inner = "Stage.Hook<Hook<Inner>,HookFactory>()";
         }
         if (shape == "wrapper")
@@ -94,7 +96,7 @@ public sealed partial class GeneratorTests
     }
 
     private static SyncFixture NestedHookBackendFixture(bool isVoid) => NestedHookBackendFixtures.GetOrAdd(isVoid,
-        key => CompileSyncFixture("direct", key, sourceOverride: NestedHookBackendSource(key), candidateOnly: true));
+        key => CompileSyncFixture("direct", key, sourceOverride: NestedHookBackendSource(key)));
 
     private static Type[] NestedHookFixtureTypes(SyncFixture f)
     {
@@ -122,7 +124,7 @@ public sealed partial class GeneratorTests
 
     [Theory]
     [MemberData(nameof(NestedHookReferenceCases))]
-    public void Candidate_two_Hooks_SendSync_matches_accepted_reference_and_independent_goldens(bool isVoid, string scenario, string golden)
+    public void Enabled_two_Hooks_SendSync_matches_accepted_reference_and_independent_goldens(bool isVoid, string scenario, string golden)
     {
         var fixture = NestedHookBackendFixture(isVoid);
         var reference = RunNestedHookScenario(isVoid, scenario, golden, fixture);
@@ -141,7 +143,7 @@ public sealed partial class GeneratorTests
 
     [Theory]
     [MemberData(nameof(NestedHookLifetimeCases))]
-    public void Candidate_two_Hooks_SendSync_preserves_independent_DI_lifetimes(bool isVoid, ServiceLifetime outer,
+    public void Enabled_two_Hooks_SendSync_preserves_independent_DI_lifetimes(bool isVoid, ServiceLifetime outer,
         ServiceLifetime inner, ServiceLifetime handler)
     {
         var fixture = NestedHookBackendFixture(isVoid); var snapshots = new List<object>();
@@ -161,7 +163,9 @@ public sealed partial class GeneratorTests
     [InlineData(false, "inner-missing-finally")] [InlineData(true, "inner-missing-finally")]
     [InlineData(false, "third-hook")] [InlineData(true, "third-hook")]
     [InlineData(false, "handler-owned")] [InlineData(true, "handler-owned")]
+    [InlineData(false, "handler-borrowed")] [InlineData(true, "handler-borrowed")]
     [InlineData(false, "hook-owned")] [InlineData(true, "hook-owned")]
+    [InlineData(false, "hook-borrowed")] [InlineData(true, "hook-borrowed")]
     [InlineData(false, "wrapper")] [InlineData(true, "wrapper")]
     [InlineData(false, "external")] [InlineData(true, "external")]
     [InlineData(false, "struct")] [InlineData(true, "struct")]
@@ -177,20 +181,20 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
-    public void Candidate_two_Hook_body_edits_cache_source_but_order_and_capability_changes_invalidate_it()
+    public void Enabled_two_Hook_body_edits_cache_source_but_order_and_capability_changes_invalidate_it()
     {
         var source = NestedHookBackendSource(false); var before = SyncCompilation(source, "NestedHookIncremental");
         var driver = SyncDriver().RunGenerators(before);
-        Assert.Equal("ZEN0037", Assert.Single(driver.GetRunResult().Diagnostics).Id);
+        Assert.Empty(driver.GetRunResult().Diagnostics);
         var original = driver.GetRunResult().Results.Single().GeneratedSources.Single(s => s.HintName == "Zendiator.Canonical.SendSync.g.cs").SourceText.ToString();
         var body = before.ReplaceSyntaxTree(before.SyntaxTrees.Single(), CSharpSyntaxTree.ParseText(source.Replace("_probe.Before(_owner,request,token)!", "_probe.Before(_owner, request, token)!"), SyncParseOptions));
         driver = driver.RunGenerators(body);
-        Assert.Equal("ZEN0037", Assert.Single(driver.GetRunResult().Diagnostics).Id);
+        Assert.Empty(driver.GetRunResult().Diagnostics);
         Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalSyncSourceEmission"].SelectMany(s => s.Outputs),
             output => Assert.True(output.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
         var ordered = body.ReplaceSyntaxTree(body.SyntaxTrees.Single(), CSharpSyntaxTree.ParseText(source.Replace("Stage.Hook<Hook<Outer>>(),Stage.Hook<Hook<Inner>>()", "Stage.Hook<Hook<Inner>>(),Stage.Hook<Hook<Outer>>()"), SyncParseOptions));
         driver = driver.RunGenerators(ordered);
-        Assert.Equal("ZEN0037", Assert.Single(driver.GetRunResult().Diagnostics).Id);
+        Assert.Empty(driver.GetRunResult().Diagnostics);
         Assert.NotEqual(original, driver.GetRunResult().Results.Single().GeneratedSources.Single(s => s.HintName == "Zendiator.Canonical.SendSync.g.cs").SourceText.ToString());
         var capability = ordered.ReplaceSyntaxTree(ordered.SyntaxTrees.Single(), CSharpSyntaxTree.ParseText(NestedHookBackendSource(false, "inner-missing-finally"), SyncParseOptions));
         driver = driver.RunGenerators(capability);

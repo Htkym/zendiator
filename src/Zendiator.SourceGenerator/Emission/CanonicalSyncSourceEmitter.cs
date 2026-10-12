@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Zendiator.SourceGenerator;
 
-/// <summary>Emits accepted stage-free/single-Hook routes and the diagnostic-blocked two-Hook SendSync candidate.</summary>
+/// <summary>Emits the limited stage-free, single-Hook and two-Hook SendSync matrix.</summary>
 internal static class CanonicalSyncSourceEmitter
 {
     internal static string Emit(CanonicalSyncEmissionModel model)

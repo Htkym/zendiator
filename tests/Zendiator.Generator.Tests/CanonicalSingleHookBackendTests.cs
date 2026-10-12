@@ -229,14 +229,15 @@ public sealed partial class GeneratorTests
     [InlineData(false, "hook-owned")] [InlineData(true, "hook-owned")]
     [InlineData(false, "wrapper")] [InlineData(true, "wrapper")]
     [InlineData(false, "external")] [InlineData(true, "external")]
-    public void Unsupported_single_Hook_shapes_keep_ZEN0037(bool isVoid, string shape)
+    public void Single_Hook_shape_boundary_enables_accepted_two_Hooks_and_blocks_other_shapes(bool isVoid, string shape)
     {
         var source = SingleHookBackendSource(isVoid, shape);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "UnsupportedHook_" + shape + isVoid), out var output, out var diagnostics);
-        Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
+        if (shape == "two-hooks") Assert.Empty(diagnostics);
+        else Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         var sources = driver.GetRunResult().Results.Single().GeneratedSources;
-        if (shape == "two-hooks") Assert.Equal(2, sources.Length); // Candidate exists; production remains blocked.
+        if (shape == "two-hooks") Assert.Equal(2, sources.Length);
         else Assert.DoesNotContain(sources, s => s.HintName.StartsWith("Zendiator.Canonical", StringComparison.Ordinal));
     }
 
