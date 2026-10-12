@@ -334,12 +334,12 @@ public sealed partial class GeneratorTests
     [Theory]
     [InlineData(false,false,false)] [InlineData(false,false,true)] [InlineData(false,true,false)] [InlineData(false,true,true)]
     [InlineData(true,false,false)] [InlineData(true,false,true)] [InlineData(true,true,false)] [InlineData(true,true,true)]
-    public void Mixed_session_generation_remains_blocked_for_all_ownership_combinations(bool hookOwned,bool handlerOwned,bool isVoid)
+    public void Mixed_session_generation_is_enabled_for_accepted_ownership_combinations(bool hookOwned,bool handlerOwned,bool isVoid)
     {
         var source=HookSessionBackendSource(hookOwned,isVoid,dispatch:false).Replace("typeof(Handler<string>)","HandlerEntry.Session<Handler<string>,HandlerFactory<string>>()")+
             "namespace App { public sealed class HandlerFactory<T> : "+(handlerOwned?"IOwnedSessionFactory":"IBorrowedSessionFactory")+"<Ping,Handler<T>> where T:class { public Handler<T> Create(Ping request,CancellationToken token)=>throw new NotImplementedException(); } }";
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"MixedBoundary"+Guid.NewGuid()),out var output,out var diagnostics);
-        Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.Equal("ZEN0037",Assert.Single(diagnostics).Id);
+        Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.Empty(diagnostics);
         Assert.Equal(2,driver.GetRunResult().Results.Single().GeneratedSources.Length);
         WriteNestedHookEvidence("mixed-session-boundaries",hookOwned+"-"+handlerOwned+"-"+isVoid,new{hookOwned,handlerOwned,isVoid,source,diagnostics=diagnostics.Select(d=>new{d.Id,message=d.GetMessage()}),generatedSources=2});
     }

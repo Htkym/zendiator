@@ -157,7 +157,7 @@ public sealed partial class GeneratorTests
         }
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"HookSessionBoundary" + Guid.NewGuid()),out var output,out var diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        Assert.Equal("ZEN0037",Assert.Single(diagnostics).Id);
+        if(shape=="handler-session")Assert.Empty(diagnostics);else Assert.Equal("ZEN0037",Assert.Single(diagnostics).Id);
         var generatedCount=driver.GetRunResult().Results.Single().GeneratedSources.Length;
         Assert.Equal(shape=="handler-session"?2:0,generatedCount);
         WriteNestedHookEvidence("hook-session-boundaries",owned + "-" + isVoid + "-" + shape,new { owned,isVoid,shape,source,

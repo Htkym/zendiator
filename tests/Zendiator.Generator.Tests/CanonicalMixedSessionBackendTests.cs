@@ -70,7 +70,7 @@ public sealed partial class GeneratorTests
             """;
     }
     private static SyncFixture MixedBackendFixture(bool hookOwned,bool handlerOwned,bool isVoid)=>MixedBackendFixtures.GetOrAdd((hookOwned,handlerOwned,isVoid),key=>
-        CompileSyncFixture(key.HandlerOwned?"owned":"borrowed",key.Void,sourceOverride:MixedBackendSource(key.HookOwned,key.HandlerOwned,key.Void),candidateOnly:true));
+        CompileSyncFixture(key.HandlerOwned?"owned":"borrowed",key.Void,sourceOverride:MixedBackendSource(key.HookOwned,key.HandlerOwned,key.Void)));
     [Theory]
     [MemberData(nameof(MixedSessionReferenceCases))]
     public void Candidate_mixed_sessions_match_typed_reference_and_independent_goldens(bool hookOwned,bool owned,bool isVoid,string scenario,string golden)
