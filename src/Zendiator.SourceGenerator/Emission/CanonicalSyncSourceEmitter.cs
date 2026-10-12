@@ -79,8 +79,17 @@ internal static class CanonicalSyncSourceEmitter
     {
         var h = c.Handler;
         var hook = c.Hooks[0];
+        var owned = hook.Factory?.CleanupContractName != null;
+        if (hook.Factory is { } factory)
+            b.AppendLine($$"""
+                    var hookFactory = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{factory.FactoryName}}>(_provider);
+                    {{hook.HookName}}? hook = (({{factory.ContractName}})hookFactory).{{factory.MethodName}}(request, cancellationToken)
+                        ?? throw new global::System.InvalidOperationException("A session factory must return a nonnull Hook session.");
+                """);
+        else
+            b.AppendLine($$"""            var hook = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{hook.HookName}}>(_provider);""");
+        if (owned) b.AppendLine("            try\n            {");
         b.AppendLine($$"""
-                    var hook = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{hook.HookName}}>(_provider);
                     var saved = request;
                     var success = false;
                     global::System.Exception? error = null;
@@ -107,6 +116,16 @@ internal static class CanonicalSyncSourceEmitter
                         (({{hook.Finally.ContractName}})hook).{{hook.Finally.MethodName}}(saved, new global::Zendiator.SendExitInfo(success, error), cancellationToken);
                     }
             """);
+        if (owned)
+            b.AppendLine($$"""
+                        }
+                        finally
+                        {
+                            var detached = hook;
+                            hook = null;
+                            (({{hook.Factory!.CleanupContractName}})detached).Dispose();
+                        }
+                """);
     }
 
     private static void EmitNestedHookSend(StringBuilder b, CanonicalSyncCompositionEmission c)
@@ -188,7 +207,7 @@ internal static class CanonicalSyncSourceEmitter
             $$"""global::Zendiator.HandlerEntry.Session<{{h.HandlerName}}, {{c.Factory.FactoryName}}>()""";
         b.AppendLine($$"""            expected.Handlers<{{h.RequestName}}>(global::Zendiator.DispatchFamily.SendSync, {{entry}});""");
         if (c.Hooks.Count != 0)
-            b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily.SendSync, ")}}{{string.Join(", ", c.Hooks.Select(hook => "global::Zendiator.Stage.Hook<" + hook.HookName + ">()"))}});""");
+            b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily.SendSync, ")}}{{string.Join(", ", c.Hooks.Select(hook => hook.Factory == null ? "global::Zendiator.Stage.Hook<" + hook.HookName + ">()" : "global::Zendiator.Stage.Hook<" + hook.HookName + ", " + hook.Factory.FactoryName + ">()"))}});""");
         else if (c.HasEmptyPipeline)
             b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily.SendSync")}});""");
         b.AppendLine("""
@@ -196,7 +215,7 @@ internal static class CanonicalSyncSourceEmitter
                             throw new global::System.InvalidOperationException("AddZendiator configuration does not match this generated composition.");
             """);
         var service = c.Factory?.FactoryName ?? h.HandlerName;
-        var types = c.Hooks.Select(hook => hook.HookName).Concat(new[] { service, "global::" + c.Namespace + ".Zendiator" });
+        var types = c.Hooks.Select(hook => hook.Factory?.FactoryName ?? hook.HookName).Concat(new[] { service, "global::" + c.Namespace + ".Zendiator" });
         foreach (var type in types)
             b.AppendLine($$"""
                         global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services,

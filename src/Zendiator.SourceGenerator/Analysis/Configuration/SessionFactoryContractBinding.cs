@@ -79,7 +79,8 @@ internal static class SessionFactoryContractBinding
         return (new(Identity(factory), Identity(session), acquire, selected.Ownership, cleanup)
             { SuppliesCallbackReceiver = true, FactoryHierarchy = StageContractBinding.DescribeHierarchy(factory),
                 SyncEmission = family == BoundDispatchFamily.SendSync && factory.TypeKind == TypeKind.Class && Public(factory)
-                    ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name, cleanupContractName) : null }, false);
+                    ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name, cleanupContractName)
+                        { IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource) } : null }, false);
     }
 
     private static BoundCallbackModel? Callback(INamedTypeSymbol type, INamedTypeSymbol contract,

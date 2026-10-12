@@ -237,7 +237,7 @@ public sealed partial class GeneratorTests
         else Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         var sources = driver.GetRunResult().Results.Single().GeneratedSources;
-        if (shape == "two-hooks") Assert.Equal(2, sources.Length);
+        if (shape is "two-hooks" or "hook-owned") Assert.Equal(2, sources.Length);
         else Assert.DoesNotContain(sources, s => s.HintName.StartsWith("Zendiator.Canonical", StringComparison.Ordinal));
     }
 

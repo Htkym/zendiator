@@ -196,7 +196,7 @@ internal static class CompositionSelectionDiscovery
                     if (fact.Key == "IncompleteExecutionContract")
                     {
                         var enabled = canonicalSync.Compositions.FirstOrDefault(c => c.Index == index);
-                        if (enabled != null &&
+                        if (enabled != null && enabled.Hooks.All(hook => hook.Factory == null) &&
                             syncCallSites.CallSites.Any(s => s.Namespace == enabled.Namespace && s.MarkerName == enabled.MarkerName))
                             continue; // Only the runtime matrix accepted by review and its actual registration call site are enabled.
                         var graph = execution.Compositions[index].FirstOrDefault(g => g.Contract.Anchor == fact.Anchor);

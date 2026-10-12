@@ -34,27 +34,44 @@ internal static class CanonicalSyncEmissionNormalizer
             if (route.Stages.Count != 0)
             {
                 if (handler.Sessions.Count != 0 || route.Stages.Any(stage => stage.CompilerOwnsError ||
-                    stage.Kind != FusionStageKind.Hook || stage.SyncEmission == null ||
-                    stage.ServiceOwnership != FusionOwnership.BorrowedService || stage.Sessions.Count != 0)) continue;
-                hooks.AddRange(route.Stages.Select(stage => stage.SyncEmission!));
+                    stage.Kind != FusionStageKind.Hook || stage.SyncEmission == null)) continue;
+                if (route.Stages.Any(stage => stage.Sessions.Count != 0))
+                {
+                    // A single session Hook and a directly borrowed DI Handler only. Multiple owners remain blocked.
+                    var stage = route.Stages[0];
+                    if (route.Stages.Count != 1 || stage.Sessions.Count != 1 ||
+                        stage.ServiceOwnership != stage.Sessions[0].Ownership ||
+                        SyncFactory(stage.Sessions[0]) is not { IsSourceDeclaration: true } hookFactory) continue;
+                    hooks.Add(stage.SyncEmission! with { Factory = hookFactory });
+                }
+                else
+                {
+                    if (route.Stages.Any(stage => stage.ServiceOwnership != FusionOwnership.BorrowedService)) continue;
+                    hooks.AddRange(route.Stages.Select(stage => stage.SyncEmission!));
+                }
             }
             BoundSyncFactoryEmission? factory = null;
             if (handler.Sessions.Count != 0)
             {
                 if (handler.Sessions.Count != 1) continue;
-                var session = handler.Sessions[0];
-                if (!session.SuppliesCallbackReceiver || session.SyncEmission == null || session.Acquire.Completion != BoundCompletionKind.Synchronous ||
-                    session.Ownership is not (FusionOwnership.OwnedSession or FusionOwnership.BorrowedResource) ||
-                    session.Ownership == FusionOwnership.OwnedSession && (session.Cleanup?.Completion != BoundCompletionKind.Synchronous ||
-                        session.SyncEmission.CleanupContractName == null) ||
-                    session.Ownership == FusionOwnership.BorrowedResource && (session.Cleanup != null || session.SyncEmission.CleanupContractName != null)) continue;
-                factory = session.SyncEmission;
+                factory = SyncFactory(handler.Sessions[0]);
+                if (factory == null) continue;
             }
             else if (handler.ServiceOwnership != FusionOwnership.BorrowedService) continue;
             output.Add(new(i, composition.GeneratedNamespace, composition.MarkerName, composition.UseLocalHandlers,
                 handler.SyncEmission, factory, route.HasEmptyPipeline, route.PipelineFamily, composition.MicrosoftDiProviderName) { Hooks = new(hooks) });
         }
         return new(new(output));
+    }
+
+    private static BoundSyncFactoryEmission? SyncFactory(BoundSessionModel session)
+    {
+        if (!session.SuppliesCallbackReceiver || session.SyncEmission == null || session.Acquire.Completion != BoundCompletionKind.Synchronous ||
+            session.Ownership is not (FusionOwnership.OwnedSession or FusionOwnership.BorrowedResource) ||
+            session.Ownership == FusionOwnership.OwnedSession && (session.Cleanup?.Completion != BoundCompletionKind.Synchronous ||
+                session.SyncEmission.CleanupContractName == null) ||
+            session.Ownership == FusionOwnership.BorrowedResource && (session.Cleanup != null || session.SyncEmission.CleanupContractName != null)) return null;
+        return session.SyncEmission;
     }
 
     internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalSyncEmissionModel model,
