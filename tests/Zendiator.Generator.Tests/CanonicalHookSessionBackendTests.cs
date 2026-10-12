@@ -61,7 +61,7 @@ public sealed partial class GeneratorTests
             """;
     }
     private static SyncFixture HookSessionBackendFixture(bool owned, bool isVoid) => HookSessionBackendFixtures.GetOrAdd((owned, isVoid), key =>
-        CompileSyncFixture(key.Owned ? "owned" : "borrowed", key.Void, sourceOverride: HookSessionBackendSource(key.Owned, key.Void), candidateOnly: true));
+        CompileSyncFixture(key.Owned ? "owned" : "borrowed", key.Void, sourceOverride: HookSessionBackendSource(key.Owned, key.Void)));
 
     private static (object? Result, Exception? Error) InvokeCompiledHookSessionReference(SyncFixture fixture, IServiceProvider provider,
         bool owned, bool isVoid, object? request, CancellationToken token)
