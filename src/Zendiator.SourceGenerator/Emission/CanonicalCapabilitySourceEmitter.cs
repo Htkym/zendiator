@@ -27,9 +27,9 @@ internal static class CanonicalCapabilitySourceEmitter
     }
     internal static string Await(string call,bool async)=>async?"await "+call+".ConfigureAwait(false)":call;
     internal static string Call(CapabilityCallbackEmission cb,string receiver,string arguments)=>Await("(("+cb.ContractName+")"+receiver+")."+cb.MethodName+"("+arguments+")",cb.Completion==BoundCompletionKind.ValueTask);
-    private static void Acquire(StringBuilder b,BoundAsyncFactoryEmission? f,string type,string receiver,string request)
+    internal static void Acquire(StringBuilder b,BoundAsyncFactoryEmission? f,string type,string receiver,string request)
     {if(f==null)b.AppendLine($"var {receiver}=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{type}>(_provider);");else b.AppendLine($"var {receiver}Factory=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{f.FactoryName}>(_provider);{type}? {receiver}={Await("(("+f.ContractName+")"+receiver+"Factory)."+f.MethodName+"("+request+",cancellationToken)",f.AwaitAcquire)}??throw new global::System.InvalidOperationException(\"A session factory must return a nonnull callback receiver.\");");}
-    private static void Cleanup(StringBuilder b,BoundAsyncFactoryEmission? f,string receiver,bool async)
+    internal static void Cleanup(StringBuilder b,BoundAsyncFactoryEmission? f,string receiver,bool async)
     {if(f?.CleanupContractName!=null)b.AppendLine($"}}finally{{var detached{receiver}={receiver};{receiver}=null;{Await("(("+f.CleanupContractName+")detached"+receiver+")."+(async?"DisposeAsync":"Dispose")+"()",async)};}}");}
     private static void Scope(StringBuilder b,CanonicalCapabilityCompositionEmission c,int index,string input)
     {

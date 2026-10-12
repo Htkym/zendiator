@@ -24,9 +24,10 @@ internal static class CanonicalWrapperSourceEmitter
                         }
                         public {{result}} {{send}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken=default) {
                             global::System.ArgumentNullException.ThrowIfNull(request);
-                            {{(async||h.ResultName!=null?"return ":"")}}ExecuteOuter(request,cancellationToken);
+                            {{(async||h.ResultName!=null?"return ":"")}}{{(c.Regions.Count==0?"ExecuteOuter":"ExecuteRegion0")}}(request,cancellationToken);
                         }
                 """);
+            if(c.Regions.Count!=0){for(var index=0;index<c.Regions.Count;index++)GeneralRegion(b,c,index);b.AppendLine("}");CanonicalSyncSourceEmitter.EmitRegistrar(b,r,c.Family);b.AppendLine("}");continue;}
             Region(b,c,true);Region(b,c,false);
             var continuation="global::Zendiator."+(async?"IAsyncSendContinuation":"ISendContinuation")+"<"+h.RequestName+(h.ResultName==null?"":", "+h.ResultName)+">";
             b.AppendLine($$"""
@@ -47,6 +48,28 @@ internal static class CanonicalWrapperSourceEmitter
     private static string Result(BoundSyncHandlerEmission h,bool async)=>async?
         (h.ResultName==null?"global::System.Threading.Tasks.ValueTask":"global::System.Threading.Tasks.ValueTask<"+h.ResultName+">"):h.ResultName??"void";
     private static string Call(string expression,bool async)=>async?"await "+expression+".ConfigureAwait(false)":expression;
+    private static void GeneralRegion(StringBuilder b,CanonicalWrapperCompositionEmission c,int index)
+    {
+        var h=c.Registration.Handler;var async=c.Family==BoundDispatchFamily.SendAsync;var region=c.Regions[index];var hook=region.Hook;var input=hook==null?"request":"saved";
+        b.AppendLine($"private {(async?"async ":"")}{Result(h,async)} ExecuteRegion{index}({h.RequestName} request,global::System.Threading.CancellationToken cancellationToken){{cancellationToken.ThrowIfCancellationRequested();");
+        if(hook!=null){CanonicalCapabilitySourceEmitter.Acquire(b,null,hook.HookName,"hook","request");b.AppendLine("var saved=request;"+(hook.Finally==null?"":"var success=false;global::System.Exception? error=null;")+"try{");if(hook.Before!=null)b.AppendLine("saved="+CanonicalCapabilitySourceEmitter.Call(hook.Before,"hook","saved,cancellationToken")+";");b.AppendLine("global::System.ArgumentNullException.ThrowIfNull(saved,\"request\");cancellationToken.ThrowIfCancellationRequested();");}
+        if(h.ResultName!=null)b.AppendLine(h.ResultName+" response;");
+        var factory=region.Wrapper!=null?region.Factory:(async?c.AsyncFactory:c.Registration.Factory is {} sf?new BoundAsyncFactoryEmission(sf.FactoryName,sf.ContractName,sf.MethodName,sf.CleanupContractName,false):null);
+        var receiver=region.Wrapper==null?"handler":"wrapper";var type=region.Wrapper?.WrapperName??h.HandlerName;
+        CanonicalCapabilitySourceEmitter.Acquire(b,factory,type,receiver,input);if(factory?.CleanupContractName!=null)b.AppendLine("try{");
+        var call=region.Wrapper is {} w?"(("+w.ContractName+")wrapper)."+w.MethodName+"("+input+",new WrapperNext"+index+"(this),cancellationToken)":"(("+h.ContractName+")handler)."+h.MethodName+"("+input+",cancellationToken)";
+        b.AppendLine((h.ResultName==null?"":"response=")+Call(call,async)+";");CanonicalCapabilitySourceEmitter.Cleanup(b,factory,receiver,async);
+        if(hook?.Success!=null)b.AppendLine((h.ResultName==null?"":"response=")+CanonicalCapabilitySourceEmitter.Call(hook.Success,"hook",input+","+(h.ResultName==null?"":"response,")+"cancellationToken")+";");
+        if(hook?.Finally!=null)b.AppendLine("success=true;");if(h.ResultName!=null)b.AppendLine("return response;");
+        if(hook!=null){if(hook.Exception!=null||hook.Finally!=null){b.AppendLine("}catch(global::System.Exception failure){"+(hook.Finally==null?"":"error=failure;"));if(hook.Exception!=null){var observed=CanonicalCapabilitySourceEmitter.Call(hook.Exception,"hook","saved,failure,cancellationToken")+";";b.AppendLine(hook.Finally==null?observed:"try{"+observed+"}catch(global::System.Exception replacement){error=replacement;throw;}");}b.AppendLine("throw;");}b.AppendLine("}finally{");if(hook.Finally!=null)b.AppendLine(CanonicalCapabilitySourceEmitter.Call(hook.Finally,"hook","saved,new global::Zendiator.SendExitInfo(success,error),cancellationToken")+";");b.AppendLine("}");}
+        b.AppendLine("}");
+        if(region.Wrapper!=null)b.AppendLine($$"""
+            private readonly struct WrapperNext{{index}}:global::Zendiator.{{(async?"IAsyncSendContinuation":"ISendContinuation")}}<{{h.RequestName}}{{(h.ResultName==null?"":", "+h.ResultName)}}>{
+                private readonly Zendiator _owner;public WrapperNext{{index}}(Zendiator owner){_owner=owner;}
+                public {{Result(h,async)}} {{(async?"InvokeAsync":"Invoke")}}({{h.RequestName}} request,global::System.Threading.CancellationToken token){global::System.ArgumentNullException.ThrowIfNull(request);{{(async||h.ResultName!=null?"return ":"")}}_owner.ExecuteRegion{{index+1}}(request,token);}
+            }
+            """);
+    }
     private static void Region(StringBuilder b,CanonicalWrapperCompositionEmission c,bool outer)
     {
         var h=c.Registration.Handler;var async=c.Family==BoundDispatchFamily.SendAsync;var sh=outer?c.SyncOuter:c.SyncInner;var ah=outer?c.AsyncOuter:c.AsyncInner;

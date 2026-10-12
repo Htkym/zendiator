@@ -333,7 +333,7 @@ public sealed partial class GeneratorTests
     [InlineData("metadata")][InlineData("wrapper-session")][InlineData("stream")]
     public void Async_hook_unsupported_routes_remain_diagnosed_without_execution(string shape)
     {
-        var source=AsyncHookSource(shape=="two-factories"?"owned":"direct",false);
+        var source=AsyncHookSource(shape is "two-factories" or "wrapper-session"?"owned":"direct",false);
         var start=source.IndexOf("public static object Dispatch",StringComparison.Ordinal);source=source.Remove(start,source.IndexOf(';',start)-start+1);
         source=shape switch
         {
@@ -342,7 +342,7 @@ public sealed partial class GeneratorTests
             "three"=>source.Replace("Stage.Hook<Hook<OuterTag>>()","Stage.Hook<Hook<OuterTag>>(),Stage.Hook<Hook<InnerTag>>(),Stage.Hook<Hook<ThirdTag>>()")+"namespace App {public sealed class ThirdTag;}",
             "two-factories"=>source.Replace("Stage.Hook<Hook<OuterTag>,Factory<OuterTag>>()","Stage.Hook<Hook<OuterTag>,Factory<OuterTag>>(),Stage.Hook<Hook<InnerTag>,Factory<InnerTag>>()"),
             "metadata"=>source.Replace("Stage.Hook<Hook<OuterTag>>()","Stage.Hook<global::Zendiator.Generator.Tests.MetadataAsyncHook<Ping>>()"),
-            "wrapper-session"=>source.Replace("Stage.Hook<Hook<OuterTag>>()","Stage.Wrapper<Wrap,WFactory>()")+"namespace App {public sealed class Wrap:IAsyncSendWrapper<Ping,int>,IAsyncDisposable{public ValueTask<int> InvokeAsync<TNext>(Ping r,TNext next,CancellationToken t) where TNext:IAsyncSendContinuation<Ping,int> =>next.InvokeAsync(r,t);public ValueTask DisposeAsync()=>default;} public sealed class WFactory:IOwnedSessionFactory<Ping,Wrap>{public Wrap Create(Ping r,CancellationToken t)=>new();}}",
+            "wrapper-session"=>source.Replace("Stage.Hook<Hook<OuterTag>,Factory<OuterTag>>()","Stage.Hook<Hook<OuterTag>,Factory<OuterTag>>(),Stage.Wrapper<Wrap,WFactory>()")+"namespace App {public sealed class Wrap:IAsyncSendWrapper<Ping,int>,IAsyncDisposable{public ValueTask<int> InvokeAsync<TNext>(Ping r,TNext next,CancellationToken t) where TNext:IAsyncSendContinuation<Ping,int> =>next.InvokeAsync(r,t);public ValueTask DisposeAsync()=>default;} public sealed class WFactory:IOwnedSessionFactory<Ping,Wrap>{public Wrap Create(Ping r,CancellationToken t)=>new();}}",
             _=>"using System.Collections.Generic;using System.Threading;using System.Threading.Tasks;using System.Runtime.CompilerServices;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;namespace App {public sealed record Ping:IStreamRequest<int>;[ZendiatorHandler]public sealed class Handler:IStreamRequestHandler<Ping,int>{public async IAsyncEnumerable<int> HandleAsync(Ping r,[EnumeratorCancellation]CancellationToken t){await Task.CompletedTask;yield return 1;}}[ZendiatorComposition(\"stream\")]public sealed class Reads;public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<Reads>(c=>c.Handlers<Ping>(DispatchFamily.Stream,typeof(Handler)));}}"
         };
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"HookUnsupported"+shape),out var output,out var diagnostics);

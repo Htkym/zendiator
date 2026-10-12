@@ -232,7 +232,7 @@ public sealed partial class GeneratorTests
     {
         var source=WrapperSource(true,false,"direct","none");var start=source.IndexOf("public static object? Dispatch",StringComparison.Ordinal);var end=source.IndexOf('}',start);source=source.Remove(start,end-start+1);
         source=shape switch{
-            "two-wrappers"=>source.Replace("Stage.Wrapper<Wrap>()","Stage.Wrapper<Wrap>(),Stage.Wrapper<Wrap2>()")+"namespace App{public sealed class Wrap2:IAsyncSendWrapper<Ping,int>{public ValueTask<int> InvokeAsync<TNext>(Ping r,TNext next,CancellationToken t) where TNext:IAsyncSendContinuation<Ping,int> =>next.InvokeAsync(r,t);}}",
+            "wrapper-hook-session"=>source.Replace("Stage.Wrapper<Wrap>()","Stage.Hook<Hook<OuterTag>,KF>(),Stage.Wrapper<Wrap>()")+"namespace App{public sealed class KF:IAsyncOwnedSessionFactory<Ping,Hook<OuterTag>>{private readonly Probe _p;public KF(Probe p){_p=p;}public ValueTask<Hook<OuterTag>> CreateAsync(Ping r,CancellationToken t)=>new(new Hook<OuterTag>(_p));}}",
             "metadata"=>source.Replace("Stage.Wrapper<Wrap>()","Stage.Wrapper<global::Zendiator.Generator.Tests.MetadataWrapper<Ping>>()"),
             _=>source.Replace("Stage.Wrapper<Wrap>()","Stage.Hook<Partial>(),Stage.Hook<Partial2>(),Stage.Wrapper<Wrap>()")+"namespace App{public sealed class Partial:IAsyncSendFinallyObserver<Ping>{public ValueTask FinallyAsync(Ping r,SendExitInfo e,CancellationToken t)=>default;}public sealed class Partial2:IAsyncSendFinallyObserver<Ping>{public ValueTask FinallyAsync(Ping r,SendExitInfo e,CancellationToken t)=>default;}}"};
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"WrapperUnsupported"+shape),out var output,out var diagnostics);
@@ -246,7 +246,7 @@ public sealed partial class GeneratorTests
     public async Task Opaque_wrapper_corrected_void_overlap_checks_ownership_per_inner_request()
     {var f=WrapperRuntimeFixture(true,true,"async-owned","both");foreach(var generated in new[]{false,true})await RunWrapperCase(f,true,true,"async-owned","both",generated,"overlap");}
     [Fact]
-    public void Opaque_wrapper_corrected_distinct_wrappers_are_diagnosed()=>AssertWrapperUnsupported("two-wrappers");
+    public void Opaque_wrapper_Hook_session_region_remains_diagnosed()=>AssertWrapperUnsupported("wrapper-hook-session");
     [Fact]
     public void Opaque_wrapper_body_edit_preserves_emission_cache_and_region_structure()
     {
