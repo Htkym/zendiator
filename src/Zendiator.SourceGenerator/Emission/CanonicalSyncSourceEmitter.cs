@@ -223,6 +223,7 @@ internal static class CanonicalSyncSourceEmitter
                         var expected = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
             """);
         if (c.UseLocalHandlers) b.AppendLine("            expected.UseLocalHandlers();");
+        foreach(var marker in c.CatalogMarkerTypes)b.AppendLine("            expected.UseCatalogFrom<"+marker+">();");
         foreach(var type in c.ExplicitHandlerTypes)b.AppendLine("            expected.AddHandler<"+type+">();");
         var entry = c.Factory == null ? $$"""typeof({{h.HandlerName}})""" :
             $$"""global::Zendiator.HandlerEntry.Session<{{h.HandlerName}}, {{c.Factory.FactoryName}}>()""";

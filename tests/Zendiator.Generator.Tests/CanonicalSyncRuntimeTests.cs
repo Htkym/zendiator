@@ -141,7 +141,7 @@ public sealed partial class GeneratorTests
         var emitted = output.Emit(bytes);
         Assert.True(emitted.Success,string.Join("\n",emitted.Diagnostics));
         var sources = driver.GetRunResult().Results.Single().GeneratedSources;
-        Assert.Equal(2,sources.Length);
+        Assert.Equal(2,sources.Count(s=>s.HintName!="Zendiator.GeneratedCatalog.g.cs"));
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence))
         {

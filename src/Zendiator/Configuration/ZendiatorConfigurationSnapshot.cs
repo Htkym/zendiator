@@ -22,7 +22,8 @@ public sealed class ZendiatorConfigurationSnapshot
         bool useLocalHandlers = false,
         List<string>? handlers = null,
         List<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)>? pipelines = null,
-        List<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)>? routeHandlers = null)
+        List<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)>? routeHandlers = null,
+        List<Type>? catalogMarkers = null)
     {
         Namespace = @namespace;
         ServiceLifetime = serviceLifetime;
@@ -33,6 +34,7 @@ public sealed class ZendiatorConfigurationSnapshot
         Notifications = notifications;
         HandlerOrders = handlerOrders;
         UseLocalHandlers = useLocalHandlers;
+        CatalogMarkers = (catalogMarkers ?? new()).AsReadOnly();
         Handlers = handlers ?? new();
         Pipelines = (pipelines ?? new()).AsReadOnly();
         RouteHandlers = (routeHandlers ?? new()).AsReadOnly();
@@ -70,6 +72,9 @@ public sealed class ZendiatorConfigurationSnapshot
     /// <summary>Gets whether marked local handlers were selected for a 0.5 composition.</summary>
     public bool UseLocalHandlers { get; }
 
+    /// <summary>Gets marker types selecting generated catalogs. Runtime records assembly identity without reading attributes.</summary>
+    public IReadOnlyList<Type> CatalogMarkers { get; }
+
     /// <summary>Gets explicitly selected handler identities, sorted by identity.</summary>
     public IReadOnlyList<string> Handlers { get; }
 
@@ -96,6 +101,7 @@ public sealed class ZendiatorConfigurationSnapshot
         if (Behaviors is StreamValidatorRegistrations validators)
             parts.Add("streamValidators=" + string.Join(",", validators.Validators.Select(static entry =>
                 entry.Order.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + entry.ValidatorType)));
+        if (CatalogMarkers.Count != 0)parts.Add("catalogs="+string.Join(",",CatalogMarkers.Select(static type=>type.Assembly.FullName).OrderBy(static identity=>identity,StringComparer.Ordinal)));
         if (UseLocalHandlers || Handlers.Count != 0)
             parts.Add("localHandlers=" + UseLocalHandlers + ";handlers=" + string.Join(",", Handlers));
         if (Pipelines.Count != 0)

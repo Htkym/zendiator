@@ -35,7 +35,7 @@ internal static class CompositionSelectionDiscovery
             // An explicit new selection operation identifies a new default composition.
             var explicitDefault = method.Arity == 0 && lambda != null && lambda.DescendantNodes().OfType<InvocationExpressionSyntax>().Any(call =>
                 semantic.GetSymbolInfo(call, ct).Symbol is IMethodSymbol operation && Same(operation.ContainingType, configuration) &&
-                operation.Name is "UseLocalHandlers" or "AddHandler" or "Pipeline" or "Handlers");
+                operation.Name is "UseLocalHandlers" or "UseCatalogFrom" or "AddHandler" or "Pipeline" or "Handlers");
             if (method.Arity == 0 && !explicitDefault) continue;
 
             var errors = new List<string>();
@@ -76,6 +76,8 @@ internal static class CompositionSelectionDiscovery
             var selected = new Dictionary<INamedTypeSymbol, SelectedHandlerModel>(SymbolEqualityComparer.Default);
             var explicitTypes = new HashSet<string>(StringComparer.Ordinal);
             var explicitHandlerNames = new List<string>();
+            var catalogMarkerNames=new List<string>();
+            var catalogAssemblies=new Dictionary<IAssemblySymbol,string>(SymbolEqualityComparer.Default);
             var lists = new CompositionListBinding(compilation, semantic, marked, Select, ct);
             if (explicitDefault) SelectLocal(); // The new default composition has implicit local membership.
             var parameter = lambda switch
@@ -107,6 +109,17 @@ internal static class CompositionSelectionDiscovery
                     continue;
                 }
                 if (operation.Name == "UseLocalHandlers" && call.ArgumentList.Arguments.Count == 0) { useLocalHandlers = true; SelectLocal(); }
+                else if(operation.Name=="UseCatalogFrom"&&operation.Arity==1&&call.ArgumentList.Arguments.Count==0&&operation.TypeArguments[0] is INamedTypeSymbol catalogMarker)
+                {
+                    var anchor="catalog:"+ordinal;lists.Sources.Add(anchor,call.GetLocation());var assembly=catalogMarker.ContainingAssembly;
+                    if(catalogAssemblies.TryGetValue(assembly,out var original))lists.Facts.Add(new("DuplicateCatalogSelection",anchor,"DuplicateCatalogSelection: "+assembly.Identity,original));
+                    else
+                    {
+                        catalogAssemblies.Add(assembly,anchor);catalogMarkerNames.Add(Name(catalogMarker));
+                        foreach(var candidate in GeneratedHandlerCatalog.Read(compilation,assembly,ct,message=>lists.Facts.Add(new("CatalogError",anchor,assembly.Identity+": "+message))))
+                            selected[candidate.Symbol]=new(MarkedHandlerDiscovery.Identity(candidate.Symbol),candidate.Model);
+                    }
+                }
                 else if (operation.Name == "AddHandler")
                 {
                     hasExplicitSelection = true;
@@ -127,13 +140,14 @@ internal static class CompositionSelectionDiscovery
                 else errors.Add($"Composition selection operation {operation.Name} is not connected yet.");
             }
             var pipelines = lists.Bind(selected.Keys);
+            if(lists.Facts.Any(f=>f.Anchor.StartsWith("catalog:",StringComparison.Ordinal)))lists.Facts.RemoveAll(f=>f.Key=="IncompleteExecutionContract");
             if (generatedNamespace != null && GeneratedTypeConflict(compilation, generatedNamespace)) generatedNamespace = null;
             var model = new CompositionSelectionModel(identity, key,
                 new(selected.Values.OrderBy(h => h.Identity, StringComparer.Ordinal)), new(errors), compilerOwned,
                 pipelines, new(lists.Facts)) { GeneratedNamespace = generatedNamespace, MarkerName = markerName,
                     MicrosoftDiProviderName = compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.ServiceProvider") is { TypeKind: TypeKind.Class } provider &&
                         provider.ContainingAssembly.Identity.Name == "Microsoft.Extensions.DependencyInjection" && provider.Locations.All(l => !l.IsInSource) ? Name(provider) : null,
-                    UseLocalHandlers = useLocalHandlers, HasExplicitSelection = hasExplicitSelection, ExplicitHandlerTypes = new(explicitHandlerNames) };
+                    UseLocalHandlers = useLocalHandlers, HasExplicitSelection = hasExplicitSelection, ExplicitHandlerTypes = new(explicitHandlerNames), CatalogMarkerTypes = new(catalogMarkerNames) };
             result.Add(new(model, invocation, lists.Sources.ToImmutableDictionary(StringComparer.Ordinal)));
 
             void SelectLocal()

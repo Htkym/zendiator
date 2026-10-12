@@ -233,7 +233,7 @@ internal sealed class CompositionListBinding
                         family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync));
                 if ((family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && declaration.Request.TypeKind is TypeKind.Class or TypeKind.Struct &&
                     !_compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && !r.Properties.Aliases.Contains("global")) &&
-                    entry.Type.TypeKind == TypeKind.Class && Public(entry.Type) && implementation != null && member != null &&
+                    entry.Type.TypeKind == TypeKind.Class && _compilation.IsSymbolAccessibleWithin(entry.Type,_compilation.Assembly) && implementation != null && member != null &&
                     (nextResult == null || nextResult is INamedTypeSymbol or IArrayTypeSymbol))
                 {
                     if (family == BoundDispatchFamily.SendSync)

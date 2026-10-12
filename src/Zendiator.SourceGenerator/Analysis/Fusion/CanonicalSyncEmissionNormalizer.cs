@@ -59,7 +59,7 @@ internal static class CanonicalSyncEmissionNormalizer
             }
             else if (handler.ServiceOwnership != FusionOwnership.BorrowedService) continue;
             output.Add(new(i, composition.GeneratedNamespace, composition.MarkerName, composition.UseLocalHandlers,
-                handler.SyncEmission, factory, route.HasEmptyPipeline, route.PipelineFamily, composition.MicrosoftDiProviderName) { Hooks = new(hooks), ExplicitHandlerTypes = composition.ExplicitHandlerTypes });
+                handler.SyncEmission, factory, route.HasEmptyPipeline, route.PipelineFamily, composition.MicrosoftDiProviderName) { Hooks = new(hooks), ExplicitHandlerTypes = composition.ExplicitHandlerTypes, CatalogMarkerTypes = composition.CatalogMarkerTypes });
         }
         return new(new(output));
     }

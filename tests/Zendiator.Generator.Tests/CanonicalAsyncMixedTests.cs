@@ -74,7 +74,7 @@ public sealed partial class GeneratorTests
     {
         var source=AsyncMixedSource(key.Hook,key.Handler,key.Void);var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"AsyncMixed_"+Guid.NewGuid().ToString("N")),out var output,out var diagnostics);
         Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        using var bytes=new MemoryStream();var emitted=output.Emit(bytes);Assert.True(emitted.Success,string.Join("\n",emitted.Diagnostics));var sources=driver.GetRunResult().Results.Single().GeneratedSources;Assert.Equal(2,sources.Length);
+        using var bytes=new MemoryStream();var emitted=output.Emit(bytes);Assert.True(emitted.Success,string.Join("\n",emitted.Diagnostics));var sources=driver.GetRunResult().Results.Single().GeneratedSources;Assert.Equal(2,sources.Count(s=>s.HintName!="Zendiator.GeneratedCatalog.g.cs"));
         var evidence=Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");if(!string.IsNullOrEmpty(evidence))
         {
             var folder=Path.Combine(evidence,"async-mixed-"+key.Hook+"-"+key.Handler+"-"+key.Void);Directory.CreateDirectory(folder);File.WriteAllText(Path.Combine(folder,"input.cs"),source);

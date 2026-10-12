@@ -78,10 +78,10 @@ internal static class SessionFactoryContractBinding
         }
         return (new(Identity(factory), Identity(session), acquire, selected.Ownership, cleanup)
             { SuppliesCallbackReceiver = true, FactoryHierarchy = StageContractBinding.DescribeHierarchy(factory),
-                SyncEmission = family == BoundDispatchFamily.SendSync && factory.TypeKind == TypeKind.Class && Public(factory)
+                SyncEmission = family == BoundDispatchFamily.SendSync && factory.TypeKind == TypeKind.Class && compilation.IsSymbolAccessibleWithin(factory,compilation.Assembly)
                     ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name, cleanupContractName)
                         { IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource) } : null,
-                AsyncEmission = family == BoundDispatchFamily.SendAsync && factory.TypeKind == TypeKind.Class && Public(factory)
+                AsyncEmission = family == BoundDispatchFamily.SendAsync && factory.TypeKind == TypeKind.Class && compilation.IsSymbolAccessibleWithin(factory,compilation.Assembly)
                     ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name,
                         cleanupContractName, selected.Completion == BoundCompletionKind.ValueTask)
                         { IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource) } : null }, false);

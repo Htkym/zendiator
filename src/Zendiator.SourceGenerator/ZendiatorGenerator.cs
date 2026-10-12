@@ -17,6 +17,10 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
             static (node, _) => node is TypeDeclarationSyntax,
             static (ctx, ct) => MarkedHandlerDiscovery.Bind(ctx, ct))
             .Where(static candidate => candidate != null).Select(static (candidate, _) => candidate!).Collect();
+        var producerCatalog=marked.Combine(context.CompilationProvider).Select(static(input,ct)=>GeneratedHandlerCatalog.Produce(input.Right,input.Left,ct));
+        var producerCatalogSource=producerCatalog.Select(static(result,_)=>result.Source).WithTrackingName("GeneratedHandlerCatalogSource");
+        context.RegisterSourceOutput(producerCatalogSource,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource(GeneratedHandlerCatalog.HintName,SourceText.From(text,Encoding.UTF8));});
+        context.RegisterSourceOutput(producerCatalog,static(ctx,result)=>{foreach(var diagnostic in result.Diagnostics)ctx.ReportDiagnostic(diagnostic);});
         var markedValue = marked.Select(static (candidates, _) => MarkedHandlerDiscovery.Normalize(candidates));
         // Equality keeps the value cached while the current binding stream refreshes Locations.
         var markedModel = markedValue.Select(static (model, _) => model).WithTrackingName("MarkedHandlerModel");

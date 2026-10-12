@@ -22,6 +22,7 @@ public sealed class ZendiatorConfiguration
     private readonly List<(string HandlerType, int Order)> _handlerOrders = new();
     private bool _useLocalHandlers;
     private readonly List<Type> _handlers = new();
+    private readonly List<Type> _catalogMarkers = new();
     private readonly List<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)> _pipelines = new();
     private readonly List<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)> _routeHandlers = new();
 
@@ -67,6 +68,15 @@ public sealed class ZendiatorConfiguration
     {
         ThrowIfFrozen();
         _useLocalHandlers = true;
+    }
+
+    /// <summary>Selects the generated compile-time Handler catalog of the marker type\'s assembly.</summary>
+    public void UseCatalogFrom<TMarker>()
+    {
+        ThrowIfFrozen();
+        var marker=typeof(TMarker);
+        if(_catalogMarkers.Any(type=>type.Assembly==marker.Assembly))throw new InvalidOperationException("The same catalog is selected more than once.");
+        _catalogMarkers.Add(marker);
     }
 
     /// <summary>Selects a known handler type for a 0.5 composition.</summary>
@@ -205,7 +215,7 @@ public sealed class ZendiatorConfiguration
                 : null,
             _useLocalHandlers,
             _handlers.Select(static type => type.AssemblyQualifiedName ?? TypeName(type)).OrderBy(static name => name, StringComparer.Ordinal).ToList(),
-            _pipelines.ToList(), _routeHandlers.ToList());
+            _pipelines.ToList(), _routeHandlers.ToList(), _catalogMarkers.ToList());
     }
 
     private static string TypeName(Type type) => type.IsGenericTypeDefinition ? type.FullName ?? type.Name : type.ToString();

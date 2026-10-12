@@ -17,6 +17,7 @@ internal sealed record CanonicalSyncCompositionEmission(int Index, string Namesp
     BoundSyncHandlerEmission Handler, BoundSyncFactoryEmission? Factory, bool HasEmptyPipeline, BoundDispatchFamily? PipelineFamily, string MicrosoftDiProviderName)
 {
     public EquatableArray<string> ExplicitHandlerTypes { get; init; }
+    public EquatableArray<string> CatalogMarkerTypes { get; init; }
     public EquatableArray<BoundSyncHookEmission> Hooks { get; init; } = new(System.Array.Empty<BoundSyncHookEmission>());
     public EquatableArray<RegistrationStageEmission> RegistrationStages { get; init; } = new(System.Array.Empty<RegistrationStageEmission>());
 }
