@@ -54,7 +54,7 @@ internal static class CanonicalAsyncEmissionNormalizer
             }
             else if (h.ServiceOwnership != FusionOwnership.BorrowedService) continue;
             output.Add(new(i, c.GeneratedNamespace, c.MarkerName, c.UseLocalHandlers, h.AsyncEmission, factory,
-                route.HasEmptyPipeline, route.PipelineFamily, c.MicrosoftDiProviderName??"") { Hooks = new(hooks), ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes });
+                route.HasEmptyPipeline, route.PipelineFamily, c.MicrosoftDiProviderName??"") { Hooks = new(hooks), ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes, ExternAliases=c.ExternAliases });
         }
         return new(new(output));
     }
@@ -75,7 +75,7 @@ internal static class CanonicalAsyncEmissionNormalizer
         c.Factory == null ? null : new(c.Factory.FactoryName, c.Factory.ContractName, c.Factory.MethodName, c.Factory.CleanupContractName){FactoryIsValueType=c.Factory.FactoryIsValueType},
         c.HasEmptyPipeline, c.PipelineFamily, c.MicrosoftDiProviderName??"")
     {
-        ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes,
+        ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes, ExternAliases=c.ExternAliases,
         Hooks = new(c.Hooks.Select(h => new BoundSyncHookEmission(h.HookName,
             new(h.Before.ContractName, h.Before.MethodName), new(h.Success.ContractName, h.Success.MethodName),
             new(h.Exception.ContractName, h.Exception.MethodName), new(h.Finally.ContractName, h.Finally.MethodName))

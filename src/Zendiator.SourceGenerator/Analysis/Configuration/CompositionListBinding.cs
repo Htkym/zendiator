@@ -30,6 +30,7 @@ internal sealed class CompositionListBinding
         (_compilation, _semantic, _marked, _select, _ct) = (compilation, semantic, marked, select, ct);
 
     private void Reject(string key, string anchor, string message, string? additional = null) => Facts.Add(new(key, anchor, message, additional));
+    private string Name(ITypeSymbol type) => CanonicalSymbolName.Display(type, _compilation);
     private string Key(ITypeSymbol type) => RegistrationIdentity(type, _compilation);
 
     internal void Parse(InvocationExpressionSyntax call, IMethodSymbol method, int ordinal)
@@ -232,7 +233,6 @@ internal sealed class CompositionListBinding
                         Identity(implementation.ReturnType), Constraints(implementation.TypeParameters),
                         family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync));
                 if ((family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && declaration.Request.TypeKind is TypeKind.Class or TypeKind.Struct &&
-                    !_compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && !r.Properties.Aliases.Contains("global")) &&
                     entry.Type.TypeKind is (TypeKind.Class or TypeKind.Struct) && _compilation.IsSymbolAccessibleWithin(entry.Type,_compilation.Assembly) && implementation != null && member != null &&
                     (nextResult == null || nextResult is INamedTypeSymbol or IArrayTypeSymbol))
                 {

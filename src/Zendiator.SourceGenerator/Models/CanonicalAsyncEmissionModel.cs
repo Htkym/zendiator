@@ -10,6 +10,7 @@ internal sealed record BoundAsyncFactoryEmission(string FactoryName, string Cont
 internal sealed record CanonicalAsyncCompositionEmission(int Index, string Namespace, string? MarkerName, bool UseLocalHandlers,
     BoundAsyncHandlerEmission Handler, BoundAsyncFactoryEmission? Factory, bool HasEmptyPipeline, BoundDispatchFamily? PipelineFamily, string MicrosoftDiProviderName)
 {
+    public EquatableArray<string> ExternAliases { get; init; }
     public EquatableArray<string> ExplicitHandlerTypes { get; init; }
     public EquatableArray<string> CatalogMarkerTypes { get; init; }
     public EquatableArray<BoundAsyncHookEmission> Hooks { get; init; } = new(System.Array.Empty<BoundAsyncHookEmission>());

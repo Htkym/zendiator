@@ -10,6 +10,7 @@ internal static class CanonicalSyncSourceEmitter
     {
         if (model.Compositions.Count == 0) return "";
         var b = Header();
+        b.Append(CanonicalSymbolName.Declarations(model.Compositions.SelectMany(c=>c.ExternAliases)));
         foreach (var c in model.Compositions)
         {
             var h = c.Handler;
@@ -254,6 +255,7 @@ internal static class CanonicalSyncSourceEmitter
     {
         if (model.CallSites.Count == 0) return "";
         var b = Header();
+        b.Append(CanonicalSymbolName.Declarations(model.CallSites.SelectMany(c=>c.ExternAliases)));
         b.AppendLine($$"""
             namespace System.Runtime.CompilerServices
             {

@@ -22,6 +22,7 @@ internal static class SessionFactoryContractBinding
         INamedTypeSymbol session, INamedTypeSymbol request, BoundDispatchFamily family, string anchor,
         Compilation compilation, List<CompositionDiagnosticFact> facts)
     {
+        string Name(ITypeSymbol symbol) => CanonicalSymbolName.Display(symbol, compilation);
         void Reject(string key, string message) => facts.Add(new(key, anchor, message));
         if (factory.TypeKind == TypeKind.Error) return (null, true);
         if (factory.IsRefLikeType) { Reject("RefLikeCapture", "A session factory cannot be captured as a DI service."); return (null, false); }

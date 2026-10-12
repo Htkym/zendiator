@@ -19,6 +19,7 @@ internal static class CompositionSelectionDiscovery
     internal static ImmutableArray<Binding> Bind(ImmutableArray<InvocationExpressionSyntax> invocations,
         Compilation compilation, ImmutableArray<MarkedHandlerDiscovery.Candidate> marked, MarkedHandlerCatalog catalog, CancellationToken ct)
     {
+        string Name(ITypeSymbol type) => CanonicalSymbolName.Display(type, compilation);
         var configuration = compilation.GetTypeByMetadataName("Zendiator.DependencyInjection.ZendiatorConfiguration");
         var entryType = configuration?.ContainingAssembly.GetTypeByMetadataName("Zendiator.DependencyInjection.ZendiatorServiceCollectionExtensions");
         var compositionAttribute = compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly
@@ -27,6 +28,7 @@ internal static class CompositionSelectionDiscovery
         foreach (var invocation in invocations)
         {
             ct.ThrowIfCancellationRequested();
+            if (invocation.ContainsDiagnostics) continue; // Incomplete call syntax belongs to the compiler.
             var semantic = compilation.GetSemanticModel(invocation.SyntaxTree);
             if (semantic.GetSymbolInfo(invocation, ct).Symbol is not IMethodSymbol method ||
                 !Same(method.ContainingType, entryType)) continue;
@@ -147,7 +149,7 @@ internal static class CompositionSelectionDiscovery
                 pipelines, new(lists.Facts)) { GeneratedNamespace = generatedNamespace, MarkerName = markerName,
                     MicrosoftDiProviderName = compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.ServiceProvider") is { TypeKind: TypeKind.Class } provider &&
                         provider.ContainingAssembly.Identity.Name == "Microsoft.Extensions.DependencyInjection" && provider.Locations.All(l => !l.IsInSource) ? Name(provider) : null,
-                    UseLocalHandlers = useLocalHandlers, HasExplicitSelection = hasExplicitSelection, ExplicitHandlerTypes = new(explicitHandlerNames), CatalogMarkerTypes = new(catalogMarkerNames) };
+                    UseLocalHandlers = useLocalHandlers, HasExplicitSelection = hasExplicitSelection, ExplicitHandlerTypes = new(explicitHandlerNames), CatalogMarkerTypes = new(catalogMarkerNames), ExternAliases = CanonicalSymbolName.Aliases(compilation) };
             result.Add(new(model, invocation, lists.Sources.ToImmutableDictionary(StringComparer.Ordinal)));
 
             void SelectLocal()

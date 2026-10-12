@@ -55,6 +55,9 @@ internal static class CatalogSignatureV1
         foreach(var iface in type.AllInterfaces)foreach(var (name,family) in definitions)
             if(Same(iface.OriginalDefinition,assembly?.GetTypeByMetadataName(name)))contracts.Add(new(family,iface.TypeArguments[0],iface.TypeArguments.Length==2?iface.TypeArguments[1]:null));
         if(contracts.Count==0)errors.Add("MissingHandlerContract");
+        if(!SupportedSignature(type)||Parameters(type).SelectMany(p=>p.ConstraintTypes).Any(t=>!SupportedSignature(t))||
+            contracts.Any(c=>!SupportedSignature(c.Request)||c.Response!=null&&!SupportedSignature(c.Response)))
+            errors.Add("UnsupportedCatalogSignature");
         foreach(var contract in contracts)
         {
             if(Parameters(type).Any(p=>!Contains(contract.Request,p)))errors.Add("UninferableHandlerParameter");
@@ -62,6 +65,17 @@ internal static class CatalogSignatureV1
         }
         return new(type,contracts.ToArray(),errors.Distinct().ToArray());
     }
+    // An incomplete/invalid source contract may carry error, pointer or function-pointer symbols.
+    // The compiler owns those errors; never send an unencodable shape to the fingerprint writer.
+    private static bool SupportedSignature(ITypeSymbol type)=>type switch
+    {
+        IDynamicTypeSymbol=>true,
+        ITypeParameterSymbol p=>p.ContainingSymbol is INamedTypeSymbol,
+        IArrayTypeSymbol a=>SupportedSignature(a.ElementType),
+        INamedTypeSymbol n=>n.TypeKind!=TypeKind.Error&&n.TypeArguments.All(SupportedSignature)&&
+            (n.ContainingType==null||SupportedSignature(n.ContainingType)),
+        _=>false
+    };
     internal static string Fingerprint(CatalogHandlerFact fact)
     {
         var rows=new List<string>{Algorithm,TypeId(fact.Type),fact.Type.DeclaredAccessibility.ToString(),fact.Type.TypeKind.ToString(),

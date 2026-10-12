@@ -85,6 +85,7 @@ internal static class GeneratedHandlerCatalog
             if(!seen.Add(type)){reject("DuplicateCatalogExport: "+Name(type));continue;}
             var fact=CatalogSignatureV1.Inspect(compilation,type);
             foreach(var error in fact.Errors)reject(error+": "+Name(type));
+            if(fact.Errors.Contains("UnsupportedCatalogSignature"))continue;
             if(values[1].Value is not string fingerprint||fingerprint.Length!=64||fingerprint.Any(c=>!Uri.IsHexDigit(c)))
             {reject("MalformedFingerprint: "+Name(type));continue;}
             if(fingerprint!=CatalogSignatureV1.Fingerprint(fact)){reject("StaleCatalogContract: "+Name(type));continue;}

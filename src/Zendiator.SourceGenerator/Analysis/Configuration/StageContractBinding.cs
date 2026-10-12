@@ -38,6 +38,7 @@ internal static class StageContractBinding
         Compilation compilation, List<CompositionDiagnosticFact> facts)
     {
         var before = facts.Count;
+        string Name(ITypeSymbol symbol) => CanonicalSymbolName.Display(symbol, compilation);
         var hierarchy = DescribeHierarchy(type);
         var callbacks = new List<BoundCallbackModel>();
         var syncCallbacks = new Dictionary<BoundCallbackPhase, BoundSyncHookCallbackEmission>();
@@ -123,7 +124,6 @@ internal static class StageContractBinding
         {
             SyncEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.SendSync &&
                 kind == FusionStageKind.Hook && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type,compilation.Assembly) &&
-                !compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && !r.Properties.Aliases.Contains("global")) &&
                 callbacks.Count == 4 && syncCallbacks.Count == 4 &&
                 syncCallbacks.ContainsKey(BoundCallbackPhase.Before) && syncCallbacks.ContainsKey(BoundCallbackPhase.Success) &&
                 syncCallbacks.ContainsKey(BoundCallbackPhase.Exception) && syncCallbacks.ContainsKey(BoundCallbackPhase.Finally)
@@ -131,7 +131,6 @@ internal static class StageContractBinding
                         syncCallbacks[BoundCallbackPhase.Exception], syncCallbacks[BoundCallbackPhase.Finally]) { HookIsValueType=type.IsValueType } : null,
             AsyncEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.SendAsync &&
                 kind == FusionStageKind.Hook && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type,compilation.Assembly) &&
-                !compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && !r.Properties.Aliases.Contains("global")) &&
                 callbacks.Count == 4 && asyncCallbacks.Count == 4 &&
                 asyncCallbacks.ContainsKey(BoundCallbackPhase.Before) && asyncCallbacks.ContainsKey(BoundCallbackPhase.Success) &&
                 asyncCallbacks.ContainsKey(BoundCallbackPhase.Exception) && asyncCallbacks.ContainsKey(BoundCallbackPhase.Finally)
@@ -139,12 +138,11 @@ internal static class StageContractBinding
                         asyncCallbacks[BoundCallbackPhase.Exception], asyncCallbacks[BoundCallbackPhase.Finally]) { HookIsValueType=type.IsValueType } : null,
             WrapperEmission = facts.Count == before && !compilerOwned && kind == FusionStageKind.Wrapper &&
                 (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type,compilation.Assembly) &&
-                callbacks.Count == 1 &&
-                !compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && !r.Properties.Aliases.Contains("global"))
+                callbacks.Count == 1
                     ? wrapperEmission! with { WrapperIsValueType=type.IsValueType } : null,
             Capabilities = facts.Count==before&&!compilerOwned&&kind==FusionStageKind.Hook&&
                 (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync)&&type.TypeKind is (TypeKind.Class or TypeKind.Struct)&&compilation.IsSymbolAccessibleWithin(type,compilation.Assembly)&&
-                !compilation.References.Any(r=>!r.Properties.Aliases.IsDefaultOrEmpty&&!r.Properties.Aliases.Contains("global"))&&capabilityCalls.Count>0&&capabilityCalls.Count<=4
+                capabilityCalls.Count>0&&capabilityCalls.Count<=4
                     ?new(Name(type),Capability(BoundCallbackPhase.Before),Capability(BoundCallbackPhase.Success),Capability(BoundCallbackPhase.Exception),Capability(BoundCallbackPhase.Finally)){HookIsValueType=type.IsValueType}:null
         };
     }
