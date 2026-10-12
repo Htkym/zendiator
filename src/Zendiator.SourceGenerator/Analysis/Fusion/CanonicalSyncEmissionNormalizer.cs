@@ -33,7 +33,7 @@ internal static class CanonicalSyncEmissionNormalizer
             var hooks = new List<BoundSyncHookEmission>();
             if (route.Stages.Count != 0)
             {
-                if (handler.Sessions.Count != 0 || route.Stages.Any(stage => stage.CompilerOwnsError ||
+                if ((handler.Sessions.Count != 0 && (route.Stages.Count != 1 || route.Stages.Any(stage => stage.Sessions.Count != 0))) || route.Stages.Any(stage => stage.CompilerOwnsError ||
                     stage.Kind != FusionStageKind.Hook || stage.SyncEmission == null)) continue;
                 if (route.Stages.Any(stage => stage.Sessions.Count != 0))
                 {
@@ -55,7 +55,7 @@ internal static class CanonicalSyncEmissionNormalizer
             {
                 if (handler.Sessions.Count != 1) continue;
                 factory = SyncFactory(handler.Sessions[0]);
-                if (factory == null) continue;
+                if (factory == null || route.Stages.Count != 0 && !factory.IsSourceDeclaration) continue;
             }
             else if (handler.ServiceOwnership != FusionOwnership.BorrowedService) continue;
             output.Add(new(i, composition.GeneratedNamespace, composition.MarkerName, composition.UseLocalHandlers,

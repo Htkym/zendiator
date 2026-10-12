@@ -89,6 +89,7 @@ internal static class CanonicalSyncSourceEmitter
         else
             b.AppendLine($$"""            var hook = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{hook.HookName}}>(_provider);""");
         if (owned) b.AppendLine("            try\n            {");
+        var handlerCall = HookHandlerCall(c);
         b.AppendLine($$"""
                     var saved = request;
                     var success = false;
@@ -96,10 +97,9 @@ internal static class CanonicalSyncSourceEmitter
                     try
                     {
                         saved = (({{hook.Before.ContractName}})hook).{{hook.Before.MethodName}}(saved, cancellationToken);
-                        global::System.ArgumentNullException.ThrowIfNull(saved);
+                        global::System.ArgumentNullException.ThrowIfNull(saved{{(c.Factory == null ? "" : ", \"request\"")}});
                         cancellationToken.ThrowIfCancellationRequested();
-                        var handler = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{h.HandlerName}}>(_provider);
-                        {{(h.ResultName == null ? "" : "var response = ")}}(({{h.ContractName}})handler).{{h.MethodName}}(saved, cancellationToken);
+                        {{handlerCall}}
                         {{(h.ResultName == null ? "" : "response = ")}}(({{hook.Success.ContractName}})hook).{{hook.Success.MethodName}}(saved, {{(h.ResultName == null ? "" : "response, ")}}cancellationToken);
                         success = true;
                         {{(h.ResultName == null ? "" : "return response;")}}
@@ -126,6 +126,26 @@ internal static class CanonicalSyncSourceEmitter
                             (({{hook.Factory!.CleanupContractName}})detached).Dispose();
                         }
                 """);
+    }
+
+    private static string HookHandlerCall(CanonicalSyncCompositionEmission c)
+    {
+        var h = c.Handler;
+        if (c.Factory is not { } factory)
+            return $$"""
+                var handler = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{h.HandlerName}}>(_provider);
+                        {{(h.ResultName == null ? "" : "var response = ")}}(({{h.ContractName}})handler).{{h.MethodName}}(saved, cancellationToken);
+                """;
+        var owned = factory.CleanupContractName != null;
+        return $$"""
+                var handlerFactory = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{factory.FactoryName}}>(_provider);
+                        {{h.HandlerName}}? handler = (({{factory.ContractName}})handlerFactory).{{factory.MethodName}}(saved, cancellationToken)
+                            ?? throw new global::System.InvalidOperationException("A session factory must return a nonnull Handler session.");
+                        {{(h.ResultName == null ? "" : h.ResultName + " response;")}}
+                        {{(owned ? "try\n                    {" : "")}}
+                        {{(h.ResultName == null ? "" : "response = ")}}(({{h.ContractName}})handler).{{h.MethodName}}(saved, cancellationToken);
+                        {{(owned ? "}\n                    finally\n                    {\n                        var detached = handler;\n                        handler = null;\n                        ((" + factory.CleanupContractName + ")detached).Dispose();\n                    }" : "")}}
+                """;
     }
 
     private static void EmitNestedHookSend(StringBuilder b, CanonicalSyncCompositionEmission c)
