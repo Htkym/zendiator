@@ -43,6 +43,8 @@ internal static class StageContractBinding
         var syncCallbacks = new Dictionary<BoundCallbackPhase, BoundSyncHookCallbackEmission>();
         var asyncCallbacks = new Dictionary<BoundCallbackPhase, BoundAsyncHookCallbackEmission>();
         BoundWrapperEmission? wrapperEmission = null;
+        var capabilityCalls = new Dictionary<BoundCallbackPhase,CapabilityCallbackEmission>();
+        CapabilityCallbackEmission? Capability(BoundCallbackPhase phase)=>capabilityCalls.TryGetValue(phase,out var value)?value:null;
         var compilerOwned = false;
         void Reject(string key, string message) => facts.Add(new(key, anchor, message));
         if (type.TypeKind == TypeKind.Error) { compilerOwned = true; return Value(); }
@@ -99,6 +101,7 @@ internal static class StageContractBinding
             var implementation = members.Length == 1 ? type.FindImplementationForInterfaceMember(members[0]) as IMethodSymbol : null;
             if (implementation == null) { compilerOwned = true; continue; }
             if (role.Wrapper) wrapperEmission = new(Name(type),Name(contract),members[0].Name,role.Completion);
+            if(!role.Wrapper&&!role.Stream)capabilityCalls[role.Phase]=new(Name(contract),members[0].Name,role.Completion);
             if (role.Completion == BoundCompletionKind.Synchronous)
                 syncCallbacks[role.Phase] = new(Name(contract), members[0].Name);
             else if (role.Completion == BoundCompletionKind.ValueTask)
@@ -138,7 +141,11 @@ internal static class StageContractBinding
                 (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && type.TypeKind == TypeKind.Class && Public(type) &&
                 type.Locations.Any(l => l.IsInSource) && callbacks.Count == 1 &&
                 !compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && !r.Properties.Aliases.Contains("global"))
-                    ? wrapperEmission : null
+                    ? wrapperEmission : null,
+            Capabilities = facts.Count==before&&!compilerOwned&&kind==FusionStageKind.Hook&&
+                (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync)&&type.TypeKind==TypeKind.Class&&Public(type)&&type.Locations.Any(l=>l.IsInSource)&&
+                !compilation.References.Any(r=>!r.Properties.Aliases.IsDefaultOrEmpty&&!r.Properties.Aliases.Contains("global"))&&capabilityCalls.Count>0&&capabilityCalls.Count<=4
+                    ?new(Name(type),Capability(BoundCallbackPhase.Before),Capability(BoundCallbackPhase.Success),Capability(BoundCallbackPhase.Exception),Capability(BoundCallbackPhase.Finally)):null
         };
     }
 

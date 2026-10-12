@@ -329,7 +329,7 @@ public sealed partial class GeneratorTests
         }
     }
 
-    [Theory][InlineData("partial")][InlineData("sync-mixed")][InlineData("three")][InlineData("two-factories")]
+    [Theory][InlineData("partial-wrapper")][InlineData("sync-mixed-wrapper")][InlineData("three")][InlineData("two-factories")]
     [InlineData("metadata")][InlineData("wrapper-session")][InlineData("stream")]
     public void Async_hook_unsupported_routes_remain_diagnosed_without_execution(string shape)
     {
@@ -337,8 +337,8 @@ public sealed partial class GeneratorTests
         var start=source.IndexOf("public static object Dispatch",StringComparison.Ordinal);source=source.Remove(start,source.IndexOf(';',start)-start+1);
         source=shape switch
         {
-            "partial"=>source.Replace("IAsyncSendFinallyObserver<Ping>,","").Replace("ValueTask IAsyncSendFinallyObserver<Ping>.FinallyAsync(Ping r,SendExitInfo e,CancellationToken t){_probe.CheckToken(t);return _probe.Finally(_id,r,e);}",""),
-            "sync-mixed"=>source.Replace("IAsyncSendFinallyObserver<Ping>","ISendFinallyObserver<Ping>").Replace("ValueTask ISendFinallyObserver<Ping>.FinallyAsync(","void ISendFinallyObserver<Ping>.Finally(").Replace("return _probe.Finally(_id,r,e);","_ = _probe.Finally(_id,r,e);"),
+            "partial-wrapper"=>source.Replace("IAsyncSendFinallyObserver<Ping>,","").Replace("ValueTask IAsyncSendFinallyObserver<Ping>.FinallyAsync(Ping r,SendExitInfo e,CancellationToken t){_probe.CheckToken(t);return _probe.Finally(_id,r,e);}","").Replace("Stage.Hook<Hook<OuterTag>>()","Stage.Hook<Hook<OuterTag>>(),Stage.Wrapper<W>()")+"namespace App{public sealed class W:IAsyncSendWrapper<Ping,int>{public ValueTask<int> InvokeAsync<TNext>(Ping r,TNext n,CancellationToken t)where TNext:IAsyncSendContinuation<Ping,int> =>n.InvokeAsync(r,t);}}",
+            "sync-mixed-wrapper"=>source.Replace("IAsyncSendFinallyObserver<Ping>","ISendFinallyObserver<Ping>").Replace("ValueTask ISendFinallyObserver<Ping>.FinallyAsync(","void ISendFinallyObserver<Ping>.Finally(").Replace("return _probe.Finally(_id,r,e);","_ = _probe.Finally(_id,r,e);").Replace("Stage.Hook<Hook<OuterTag>>()","Stage.Hook<Hook<OuterTag>>(),Stage.Wrapper<W>()")+"namespace App{public sealed class W:IAsyncSendWrapper<Ping,int>{public ValueTask<int> InvokeAsync<TNext>(Ping r,TNext n,CancellationToken t)where TNext:IAsyncSendContinuation<Ping,int> =>n.InvokeAsync(r,t);}}",
             "three"=>source.Replace("Stage.Hook<Hook<OuterTag>>()","Stage.Hook<Hook<OuterTag>>(),Stage.Hook<Hook<InnerTag>>(),Stage.Hook<Hook<ThirdTag>>()")+"namespace App {public sealed class ThirdTag;}",
             "two-factories"=>source.Replace("Stage.Hook<Hook<OuterTag>,Factory<OuterTag>>()","Stage.Hook<Hook<OuterTag>,Factory<OuterTag>>(),Stage.Hook<Hook<InnerTag>,Factory<InnerTag>>()"),
             "metadata"=>source.Replace("Stage.Hook<Hook<OuterTag>>()","Stage.Hook<global::Zendiator.Generator.Tests.MetadataAsyncHook<Ping>>()"),

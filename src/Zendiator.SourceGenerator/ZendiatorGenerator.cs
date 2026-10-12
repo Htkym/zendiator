@@ -73,12 +73,19 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         var wrapperSites=canonicalWrapper.Combine(compositions).Combine(context.CompilationProvider).Select(static(input,ct)=>CanonicalWrapperEmissionNormalizer.BindCallSites(input.Left.Left,input.Left.Right,input.Right,ct));
         var wrapperInterceptors=wrapperSites.Select(static(model,_)=>CanonicalSyncSourceEmitter.EmitInterceptors(model,"CanonicalWrapperShims"));
         context.RegisterSourceOutput(wrapperInterceptors,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Wrappers.Interceptors.g.cs",SourceText.From(text,Encoding.UTF8));});
+        var capabilities=compositionModel.Combine(executionModel).Combine(canonicalSync).Combine(canonicalAsync).Combine(canonicalWrapper)
+            .Select(static(input,_)=>CanonicalCapabilityEmissionNormalizer.Create(input.Left.Left.Left.Left,input.Left.Left.Left.Right,input.Left.Left.Right,input.Left.Right,input.Right)).WithTrackingName("CanonicalCapabilityEmissionModel");
+        var capabilitySource=capabilities.Select(static(model,_)=>CanonicalCapabilitySourceEmitter.Emit(model)).WithTrackingName("CanonicalCapabilitySourceEmission");
+        context.RegisterSourceOutput(capabilitySource,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Capabilities.g.cs",SourceText.From(text,Encoding.UTF8));});
+        var capabilitySites=capabilities.Combine(compositions).Combine(context.CompilationProvider).Select(static(input,ct)=>CanonicalCapabilityEmissionNormalizer.BindCallSites(input.Left.Left,input.Left.Right,input.Right,ct));
+        var capabilityInterceptors=capabilitySites.Select(static(model,_)=>CanonicalSyncSourceEmitter.EmitInterceptors(model,"CanonicalCapabilityShims"));
+        context.RegisterSourceOutput(capabilityInterceptors,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Capabilities.Interceptors.g.cs",SourceText.From(text,Encoding.UTF8));});
         context.RegisterSourceOutput(compositionModel.Combine(executionModel).Combine(compositions).Combine(canonicalSync).Combine(canonicalSyncSites)
-            .Combine(canonicalAsync).Combine(canonicalAsyncSites).Combine(canonicalWrapper).Combine(wrapperSites), static (ctx, input) =>
+            .Combine(canonicalAsync).Combine(canonicalAsyncSites).Combine(canonicalWrapper).Combine(wrapperSites).Combine(capabilities).Combine(capabilitySites), static (ctx, input) =>
         {
-            var original=input.Left.Left;var sync = original.Left.Left;
+            var wrapperInput=input.Left.Left;var original=wrapperInput.Left.Left;var sync = original.Left.Left;
             CompositionSelectionDiscovery.Report(ctx, sync.Left.Left.Left.Left, sync.Left.Left.Right, sync.Left.Left.Left.Right, sync.Left.Right, sync.Right,
-                original.Left.Right, original.Right,input.Left.Right,input.Right);
+                original.Left.Right, original.Right,wrapperInput.Left.Right,wrapperInput.Right,input.Left.Right,input.Right);
         });
         var legacyInvocations = invocations.Combine(compositions)
             .Select(static (input, _) => CompositionSelectionDiscovery.LegacyInvocations(input.Left, input.Right));

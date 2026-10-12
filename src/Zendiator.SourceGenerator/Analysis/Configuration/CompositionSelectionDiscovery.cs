@@ -172,7 +172,8 @@ internal static class CompositionSelectionDiscovery
     internal static void Report(SourceProductionContext context, CompositionSelectionCatalog catalog, ImmutableArray<Binding> current,
         CanonicalExecutionGraphCatalog execution, CanonicalSyncEmissionModel canonicalSync, CanonicalSyncInterceptorModel syncCallSites,
         CanonicalAsyncEmissionModel canonicalAsync, CanonicalSyncInterceptorModel asyncCallSites,
-        CanonicalWrapperEmissionModel wrappers,CanonicalSyncInterceptorModel wrapperCallSites)
+        CanonicalWrapperEmissionModel wrappers,CanonicalSyncInterceptorModel wrapperCallSites,
+        CanonicalCapabilityEmissionModel capabilities,CanonicalSyncInterceptorModel capabilityCallSites)
     {
         for (var index = 0; index < catalog.Compositions.Count; index++)
         {
@@ -206,6 +207,8 @@ internal static class CompositionSelectionDiscovery
                             continue;
                         var wrapperEnabled=wrappers.Compositions.FirstOrDefault(c=>c.Registration.Index==index);
                         if(wrapperEnabled!=null&&wrapperCallSites.CallSites.Any(s=>s.Namespace==wrapperEnabled.Registration.Namespace&&s.MarkerName==wrapperEnabled.Registration.MarkerName))continue;
+                        var capabilityEnabled=capabilities.Compositions.FirstOrDefault(c=>c.Registration.Index==index);
+                        if(capabilityEnabled!=null&&capabilityCallSites.CallSites.Any(s=>s.Namespace==capabilityEnabled.Registration.Namespace&&s.MarkerName==capabilityEnabled.Registration.MarkerName))continue;
                         var graph = execution.Compositions[index].FirstOrDefault(g => g.Contract.Anchor == fact.Anchor);
                         if (graph != null)
                             message = graph.IsValid

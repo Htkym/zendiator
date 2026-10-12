@@ -321,7 +321,7 @@ public sealed partial class GeneratorTests
             p.Cancellation.Dispose();
         }
     }
-    [Theory] [InlineData("hook")] [InlineData("all")] [InlineData("struct")] [InlineData("implicit")]
+    [Theory] [InlineData("all")] [InlineData("struct")] [InlineData("implicit")]
     public void Canonical_SendAsync_unsupported_routes_keep_diagnostics_and_emit_no_execution(string shape)
         =>AssertUnsupportedAsyncShape(shape);
 
