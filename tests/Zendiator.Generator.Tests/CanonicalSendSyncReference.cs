@@ -341,6 +341,207 @@ internal static class CanonicalSendSyncReference
         finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
     }
 
+    // Hook ownership encloses its callbacks; Handler ownership ends before the Hook observes or transforms the result.
+    internal static T SendOwnedHookOwnedHandlerResponse<R, T, THook, THandler, THookFactory, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token)
+        where R : class, ISyncRequest<T>
+        where THook : class, ISendRequestTransform<R>, ISendResponseTransform<R, T>, ISendExceptionObserver<R>, ISendFinallyObserver<R>, IDisposable
+        where THandler : class, ISyncRequestHandler<R, T>, IDisposable
+        where THookFactory : class, IOwnedSessionFactory<R, THook>
+        where THandlerFactory : class, IOwnedSessionFactory<R, THandler>
+    {
+        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        THook? hook = provider.GetRequiredService<THookFactory>().Create(request, token)
+            ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
+        try { return InvokeOwnedHandlerResponseWithSessionHook<R, T, THook, THandler, THandlerFactory>(provider, request, token, hook); }
+        finally { var detached = hook; hook = null; detached.Dispose(); }
+    }
+
+    internal static void SendOwnedHookOwnedHandlerVoid<R, THook, THandler, THookFactory, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token)
+        where R : class, ISyncRequest
+        where THook : class, ISendRequestTransform<R>, ISendSuccessObserver<R>, ISendExceptionObserver<R>, ISendFinallyObserver<R>, IDisposable
+        where THandler : class, ISyncRequestHandler<R>, IDisposable
+        where THookFactory : class, IOwnedSessionFactory<R, THook>
+        where THandlerFactory : class, IOwnedSessionFactory<R, THandler>
+    {
+        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        THook? hook = provider.GetRequiredService<THookFactory>().Create(request, token)
+            ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
+        try { InvokeOwnedHandlerVoidWithSessionHook<R, THook, THandler, THandlerFactory>(provider, request, token, hook); }
+        finally { var detached = hook; hook = null; detached.Dispose(); }
+    }
+
+    internal static T SendOwnedHookBorrowedHandlerResponse<R, T, THook, THandler, THookFactory, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token)
+        where R : class, ISyncRequest<T>
+        where THook : class, ISendRequestTransform<R>, ISendResponseTransform<R, T>, ISendExceptionObserver<R>, ISendFinallyObserver<R>, IDisposable
+        where THandler : class, ISyncRequestHandler<R, T>
+        where THookFactory : class, IOwnedSessionFactory<R, THook>
+        where THandlerFactory : class, IBorrowedSessionFactory<R, THandler>
+    {
+        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        THook? hook = provider.GetRequiredService<THookFactory>().Create(request, token)
+            ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
+        try { return InvokeBorrowedHandlerResponseWithSessionHook<R, T, THook, THandler, THandlerFactory>(provider, request, token, hook); }
+        finally { var detached = hook; hook = null; detached.Dispose(); }
+    }
+
+    internal static void SendOwnedHookBorrowedHandlerVoid<R, THook, THandler, THookFactory, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token)
+        where R : class, ISyncRequest
+        where THook : class, ISendRequestTransform<R>, ISendSuccessObserver<R>, ISendExceptionObserver<R>, ISendFinallyObserver<R>, IDisposable
+        where THandler : class, ISyncRequestHandler<R>
+        where THookFactory : class, IOwnedSessionFactory<R, THook>
+        where THandlerFactory : class, IBorrowedSessionFactory<R, THandler>
+    {
+        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        THook? hook = provider.GetRequiredService<THookFactory>().Create(request, token)
+            ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
+        try { InvokeBorrowedHandlerVoidWithSessionHook<R, THook, THandler, THandlerFactory>(provider, request, token, hook); }
+        finally { var detached = hook; hook = null; detached.Dispose(); }
+    }
+
+    internal static T SendBorrowedHookOwnedHandlerResponse<R, T, THook, THandler, THookFactory, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token)
+        where R : class, ISyncRequest<T>
+        where THook : class, ISendRequestTransform<R>, ISendResponseTransform<R, T>, ISendExceptionObserver<R>, ISendFinallyObserver<R>
+        where THandler : class, ISyncRequestHandler<R, T>, IDisposable
+        where THookFactory : class, IBorrowedSessionFactory<R, THook>
+        where THandlerFactory : class, IOwnedSessionFactory<R, THandler>
+    {
+        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        var hook = provider.GetRequiredService<THookFactory>().Create(request, token)
+            ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
+        return InvokeOwnedHandlerResponseWithSessionHook<R, T, THook, THandler, THandlerFactory>(provider, request, token, hook);
+    }
+
+    internal static void SendBorrowedHookOwnedHandlerVoid<R, THook, THandler, THookFactory, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token)
+        where R : class, ISyncRequest
+        where THook : class, ISendRequestTransform<R>, ISendSuccessObserver<R>, ISendExceptionObserver<R>, ISendFinallyObserver<R>
+        where THandler : class, ISyncRequestHandler<R>, IDisposable
+        where THookFactory : class, IBorrowedSessionFactory<R, THook>
+        where THandlerFactory : class, IOwnedSessionFactory<R, THandler>
+    {
+        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        var hook = provider.GetRequiredService<THookFactory>().Create(request, token)
+            ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
+        InvokeOwnedHandlerVoidWithSessionHook<R, THook, THandler, THandlerFactory>(provider, request, token, hook);
+    }
+
+    internal static T SendBorrowedHookBorrowedHandlerResponse<R, T, THook, THandler, THookFactory, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token)
+        where R : class, ISyncRequest<T>
+        where THook : class, ISendRequestTransform<R>, ISendResponseTransform<R, T>, ISendExceptionObserver<R>, ISendFinallyObserver<R>
+        where THandler : class, ISyncRequestHandler<R, T>
+        where THookFactory : class, IBorrowedSessionFactory<R, THook>
+        where THandlerFactory : class, IBorrowedSessionFactory<R, THandler>
+    {
+        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        var hook = provider.GetRequiredService<THookFactory>().Create(request, token)
+            ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
+        return InvokeBorrowedHandlerResponseWithSessionHook<R, T, THook, THandler, THandlerFactory>(provider, request, token, hook);
+    }
+
+    internal static void SendBorrowedHookBorrowedHandlerVoid<R, THook, THandler, THookFactory, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token)
+        where R : class, ISyncRequest
+        where THook : class, ISendRequestTransform<R>, ISendSuccessObserver<R>, ISendExceptionObserver<R>, ISendFinallyObserver<R>
+        where THandler : class, ISyncRequestHandler<R>
+        where THookFactory : class, IBorrowedSessionFactory<R, THook>
+        where THandlerFactory : class, IBorrowedSessionFactory<R, THandler>
+    {
+        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        var hook = provider.GetRequiredService<THookFactory>().Create(request, token)
+            ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
+        InvokeBorrowedHandlerVoidWithSessionHook<R, THook, THandler, THandlerFactory>(provider, request, token, hook);
+    }
+
+    private static T InvokeOwnedHandlerResponseWithSessionHook<R, T, THook, THandler, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token, THook hook)
+        where R : class, ISyncRequest<T>
+        where THook : class, ISendRequestTransform<R>, ISendResponseTransform<R, T>, ISendExceptionObserver<R>, ISendFinallyObserver<R>
+        where THandler : class, ISyncRequestHandler<R, T>, IDisposable
+        where THandlerFactory : class, IOwnedSessionFactory<R, THandler>
+    {
+        var saved = request; var success = false; Exception? error = null;
+        try
+        {
+            saved = hook.Before(saved, token);
+            var response = SendOwnedResponseWithoutHook<R, T, THandler, THandlerFactory>(provider, saved, token);
+            response = hook.After(saved, response, token); success = true; return response;
+        }
+        catch (Exception failure)
+        {
+            error = failure;
+            try { hook.OnException(saved, failure, token); }
+            catch (Exception replacement) { error = replacement; throw; }
+            throw;
+        }
+        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+    }
+
+    private static void InvokeOwnedHandlerVoidWithSessionHook<R, THook, THandler, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token, THook hook)
+        where R : class, ISyncRequest
+        where THook : class, ISendRequestTransform<R>, ISendSuccessObserver<R>, ISendExceptionObserver<R>, ISendFinallyObserver<R>
+        where THandler : class, ISyncRequestHandler<R>, IDisposable
+        where THandlerFactory : class, IOwnedSessionFactory<R, THandler>
+    {
+        var saved = request; var success = false; Exception? error = null;
+        try
+        {
+            saved = hook.Before(saved, token);
+            SendOwnedVoidWithoutHook<R, THandler, THandlerFactory>(provider, saved, token);
+            hook.After(saved, token); success = true;
+        }
+        catch (Exception failure)
+        {
+            error = failure;
+            try { hook.OnException(saved, failure, token); }
+            catch (Exception replacement) { error = replacement; throw; }
+            throw;
+        }
+        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+    }
+
+    private static T InvokeBorrowedHandlerResponseWithSessionHook<R, T, THook, THandler, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token, THook hook)
+        where R : class, ISyncRequest<T>
+        where THook : class, ISendRequestTransform<R>, ISendResponseTransform<R, T>, ISendExceptionObserver<R>, ISendFinallyObserver<R>
+        where THandler : class, ISyncRequestHandler<R, T>
+        where THandlerFactory : class, IBorrowedSessionFactory<R, THandler>
+    {
+        var saved = request; var success = false; Exception? error = null;
+        try
+        {
+            saved = hook.Before(saved, token);
+            var response = SendBorrowedResponseWithoutHook<R, T, THandler, THandlerFactory>(provider, saved, token);
+            response = hook.After(saved, response, token); success = true; return response;
+        }
+        catch (Exception failure)
+        {
+            error = failure;
+            try { hook.OnException(saved, failure, token); }
+            catch (Exception replacement) { error = replacement; throw; }
+            throw;
+        }
+        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+    }
+
+    private static void InvokeBorrowedHandlerVoidWithSessionHook<R, THook, THandler, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token, THook hook)
+        where R : class, ISyncRequest
+        where THook : class, ISendRequestTransform<R>, ISendSuccessObserver<R>, ISendExceptionObserver<R>, ISendFinallyObserver<R>
+        where THandler : class, ISyncRequestHandler<R>
+        where THandlerFactory : class, IBorrowedSessionFactory<R, THandler>
+    {
+        var saved = request; var success = false; Exception? error = null;
+        try
+        {
+            saved = hook.Before(saved, token);
+            SendBorrowedVoidWithoutHook<R, THandler, THandlerFactory>(provider, saved, token);
+            hook.After(saved, token); success = true;
+        }
+        catch (Exception failure)
+        {
+            error = failure;
+            try { hook.OnException(saved, failure, token); }
+            catch (Exception replacement) { error = replacement; throw; }
+            throw;
+        }
+        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+    }
+
     // The stage guard precedes acquisition. Successful factory return does not insert another entry guard.
     private static T InvokeResponseWithSessionHook<R, T, THook, THandler>(IServiceProvider provider, R request, CancellationToken token, THook hook)
         where R : class, ISyncRequest<T>
