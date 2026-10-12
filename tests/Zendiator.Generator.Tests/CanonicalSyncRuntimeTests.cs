@@ -382,7 +382,7 @@ public sealed partial class GeneratorTests
     [InlineData("nested-marker")] [InlineData("struct-factory")] [InlineData("multiple-routes")]
     [InlineData("ancestor-generated-type")] [InlineData("ancestor-marker-type")] [InlineData("default-namespace-type")]
     [InlineData("all-sync-family")] [InlineData("all-async-family")]
-    public void Unsupported_SendSync_candidate_shapes_keep_ZEN0037_and_emit_no_runtime_or_interceptor(string shape)
+    public void SendSync_shape_boundary_candidates_preserve_eligibility_and_contracts(string shape)
     {
         var source=SyncRuntimeSource(shape=="struct-factory"?"borrowed":"direct",false,named:shape!="default-namespace-type",dispatch:false);
         source=shape switch {
@@ -409,6 +409,9 @@ public sealed partial class GeneratorTests
                 "c => { c.Handlers<Ping>(DispatchFamily.SendSync,typeof(Handler<string>)); c.Handlers<Other>(DispatchFamily.SendSync,typeof(OtherHandler)); }")+
                 "namespace App { public sealed record Other : ISyncRequest<int>; [ZendiatorHandler] public sealed class OtherHandler : ISyncRequestHandler<Other,int> { public int Handle(Other r,CancellationToken c)=>1; } }",_=>source };
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"CanonicalSyncUnsupported_"+shape),out var output,out var diagnostics);
+        if(shape is "struct-request" or "array-result"){
+            Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.Contains(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName=="Zendiator.Canonical.SendSync.g.cs");return;
+        }
         Assert.Equal(shape=="multiple-routes"?2:1,diagnostics.Length); Assert.All(diagnostics,d=>Assert.Equal("ZEN0037",d.Id));
         Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));
         Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.StartsWith("Zendiator.Canonical",StringComparison.Ordinal));

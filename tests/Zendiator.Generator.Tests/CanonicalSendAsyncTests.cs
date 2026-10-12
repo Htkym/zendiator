@@ -346,6 +346,9 @@ public sealed partial class GeneratorTests
             "hook"=>source.Replace("c=>c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(Handler<string>))","c=>{c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(Handler<string>));c.Pipeline<Ping>(DispatchFamily.SendAsync,Stage.Hook<Hook>());}")+"namespace App {public sealed class Hook:ISendFinallyObserver<Ping>{public void Finally(Ping r,SendExitInfo e,CancellationToken t){}}}",
             _=>source.Replace("c=>c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(Handler<string>))","c=>{c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(Handler<string>));c.Pipeline<Ping>(DispatchFamily.SendAsync,Stage.Wrapper<Wrap>());}")+"namespace App {public sealed class Wrap:IAsyncSendWrapper<Ping,int>{public ValueTask<int> InvokeAsync<TNext>(Ping r,TNext next,CancellationToken t) where TNext:IAsyncSendContinuation<Ping,int> =>next.InvokeAsync(r,t);}}"};
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"AsyncUnsupported"+shape),out var output,out var diagnostics);
+        if(shape=="struct"){
+            Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.Contains(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName=="Zendiator.Canonical.SendAsync.g.cs");return;
+        }
         Assert.Equal("ZEN0037",Assert.Single(diagnostics).Id);Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.StartsWith("Zendiator.Canonical",StringComparison.Ordinal));
         Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));
     }

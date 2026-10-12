@@ -33,7 +33,7 @@ internal static class CanonicalAsyncSourceEmitter
                         }
                         public {{result}} SendAsync({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default)
                         {
-                            global::System.ArgumentNullException.ThrowIfNull(request);
+                            {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull(request);")}}
                             return ExecuteAsync(request, cancellationToken);
                         }
                         private async {{result}} ExecuteAsync({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken)
@@ -97,7 +97,7 @@ internal static class CanonicalAsyncSourceEmitter
             try
             {
                 {{saved}} = await (({{hook.Before.ContractName}}){{receiver}}).{{hook.Before.MethodName}}({{saved}}, cancellationToken).ConfigureAwait(false);
-                global::System.ArgumentNullException.ThrowIfNull({{saved}}, "request");
+                {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull("+saved+", \"request\");")}}
                 cancellationToken.ThrowIfCancellationRequested();
             """);
         if (index + 1 < c.Hooks.Count) EmitHookScope(b, c, index + 1, saved);

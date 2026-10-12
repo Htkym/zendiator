@@ -5,7 +5,8 @@ internal sealed record BoundSyncFactoryEmission(string FactoryName, string Contr
 {
     public bool IsSourceDeclaration { get; init; }
 }
-internal sealed record BoundSyncHandlerEmission(string RequestName, string HandlerName, string ContractName, string MethodName, string? ResultName);
+internal sealed record BoundSyncHandlerEmission(string RequestName, string HandlerName, string ContractName, string MethodName, string? ResultName)
+{public bool RequestIsValueType{get;init;}}
 internal sealed record BoundSyncHookCallbackEmission(string ContractName, string MethodName);
 internal sealed record BoundSyncHookEmission(string HookName, BoundSyncHookCallbackEmission Before,
     BoundSyncHookCallbackEmission Success, BoundSyncHookCallbackEmission Exception, BoundSyncHookCallbackEmission Finally)

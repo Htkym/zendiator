@@ -25,7 +25,7 @@ internal static class CanonicalCapabilityEmissionNormalizer
             var hooks=new List<HookCapabilityEmission>();var invalid=false;
             foreach(var s in route.Stages){if(s.Sessions.Count==0){if(s.ServiceOwnership!=FusionOwnership.BorrowedService){invalid=true;break;}hooks.Add(s.Capabilities!);}else{var f=Factory(s.Sessions[0],sync);if(f==null||s.ServiceOwnership!=s.Sessions[0].Ownership){invalid=true;break;}hooks.Add(s.Capabilities! with{Factory=f});}}
             var hf=h.Sessions.Count==0?null:Factory(h.Sessions[0],sync);if(invalid||h.Sessions.Count!=0&&hf==null||h.Sessions.Count==0&&h.ServiceOwnership!=FusionOwnership.BorrowedService)continue;
-            var handler=sync?h.SyncEmission!:new BoundSyncHandlerEmission(h.AsyncEmission!.RequestName,h.AsyncEmission.HandlerName,h.AsyncEmission.ContractName,h.AsyncEmission.MethodName,h.AsyncEmission.ResultName);
+            var handler=sync?h.SyncEmission!:new BoundSyncHandlerEmission(h.AsyncEmission!.RequestName,h.AsyncEmission.HandlerName,h.AsyncEmission.ContractName,h.AsyncEmission.MethodName,h.AsyncEmission.ResultName){RequestIsValueType=h.AsyncEmission.RequestIsValueType};
             var registration=new CanonicalSyncCompositionEmission(i,c.GeneratedNamespace,c.MarkerName,c.UseLocalHandlers,handler,
                 hf==null?null:new(hf.FactoryName,hf.ContractName,hf.MethodName,hf.CleanupContractName),false,route.PipelineFamily,c.MicrosoftDiProviderName)
             {RegistrationStages=new(hooks.Select(s=>new RegistrationStageEmission(s.HookName,"Hook",s.Factory?.FactoryName)))};

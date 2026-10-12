@@ -35,7 +35,7 @@ internal static class CanonicalSyncSourceEmitter
                         }
                         public {{result}} Send({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default)
                         {
-                            global::System.ArgumentNullException.ThrowIfNull(request);
+                            {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull(request);")}}
                             cancellationToken.ThrowIfCancellationRequested();
                 """);
             if (c.Hooks.Count != 0)
@@ -97,7 +97,7 @@ internal static class CanonicalSyncSourceEmitter
                     try
                     {
                         saved = (({{hook.Before.ContractName}})hook).{{hook.Before.MethodName}}(saved, cancellationToken);
-                        global::System.ArgumentNullException.ThrowIfNull(saved{{(c.Factory == null ? "" : ", \"request\"")}});
+                        {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull(saved"+(c.Factory==null?"":", \"request\"")+");")}}
                         cancellationToken.ThrowIfCancellationRequested();
                         {{handlerCall}}
                         {{(h.ResultName == null ? "" : "response = ")}}(({{hook.Success.ContractName}})hook).{{hook.Success.MethodName}}(saved, {{(h.ResultName == null ? "" : "response, ")}}cancellationToken);
@@ -160,7 +160,7 @@ internal static class CanonicalSyncSourceEmitter
                     try
                     {
                         savedOuter = (({{outer.Before.ContractName}})outer).{{outer.Before.MethodName}}(savedOuter, cancellationToken);
-                        global::System.ArgumentNullException.ThrowIfNull(savedOuter, "request");
+                        {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull(savedOuter, \"request\");")}}
                         cancellationToken.ThrowIfCancellationRequested();
                         var inner = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{inner.HookName}}>(_provider);
                         var savedInner = savedOuter;
@@ -170,7 +170,7 @@ internal static class CanonicalSyncSourceEmitter
                         try
                         {
                             savedInner = (({{inner.Before.ContractName}})inner).{{inner.Before.MethodName}}(savedInner, cancellationToken);
-                            global::System.ArgumentNullException.ThrowIfNull(savedInner, "saved");
+                            {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull(savedInner, \"saved\");")}}
                             cancellationToken.ThrowIfCancellationRequested();
                             var handler = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{h.HandlerName}}>(_provider);
                             {{(h.ResultName == null ? "" : "response = ")}}(({{h.ContractName}})handler).{{h.MethodName}}(savedInner, cancellationToken);
