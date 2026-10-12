@@ -82,7 +82,7 @@ public sealed partial class GeneratorTests
     }
 
     private static SyncFixture SingleHookBackendFixture(bool isVoid) => SingleHookBackendFixtures.GetOrAdd(isVoid,
-        key => CompileSyncFixture("direct", key, sourceOverride: SingleHookBackendSource(key), candidateOnly: true));
+        key => CompileSyncFixture("direct", key, sourceOverride: SingleHookBackendSource(key)));
 
     private static (object? Result, Exception? Error) InvokeSingleHookReference(SyncFixture f, IServiceProvider provider, object? request, CancellationToken token, bool isVoid)
     {
@@ -151,7 +151,7 @@ public sealed partial class GeneratorTests
 
     [Theory]
     [MemberData(nameof(SingleHookReferenceCases))]
-    public void Candidate_single_Hook_SendSync_matches_accepted_reference_and_golden(bool isVoid, string scenario, string golden)
+    public void Enabled_single_Hook_SendSync_matches_accepted_reference_and_golden(bool isVoid, string scenario, string golden)
     {
         var f = SingleHookBackendFixture(isVoid);
         var reference = RunSingleHookEngine(f, isVoid, scenario, golden, false);
@@ -212,7 +212,7 @@ public sealed partial class GeneratorTests
 
     [Theory]
     [MemberData(nameof(SingleHookLifetimeCases))]
-    public void Candidate_single_Hook_SendSync_preserves_DI_lifetimes_against_reference(bool isVoid, ServiceLifetime hookLifetime, ServiceLifetime handlerLifetime)
+    public void Enabled_single_Hook_SendSync_preserves_DI_lifetimes_against_reference(bool isVoid, ServiceLifetime hookLifetime, ServiceLifetime handlerLifetime)
     {
         var f = SingleHookBackendFixture(isVoid);
         Assert.Equal(RunSingleHookLifetimes(f, isVoid, hookLifetime, handlerLifetime, false), RunSingleHookLifetimes(f, isVoid, hookLifetime, handlerLifetime, true));
@@ -229,7 +229,7 @@ public sealed partial class GeneratorTests
     [InlineData(false, "hook-owned")] [InlineData(true, "hook-owned")]
     [InlineData(false, "wrapper")] [InlineData(true, "wrapper")]
     [InlineData(false, "external")] [InlineData(true, "external")]
-    public void Unsupported_single_Hook_candidate_shapes_keep_ZEN0037_and_emit_no_backend(bool isVoid, string shape)
+    public void Unsupported_single_Hook_shapes_keep_ZEN0037_and_emit_no_backend(bool isVoid, string shape)
     {
         var source = SingleHookBackendSource(isVoid, shape);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "UnsupportedHook_" + shape + isVoid), out var output, out var diagnostics);
@@ -239,12 +239,14 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
-    public void Candidate_single_Hook_body_edits_cache_callable_source_but_capability_changes_remove_backend()
+    public void Enabled_single_Hook_body_edits_cache_callable_source_but_capability_changes_remove_backend()
     {
         var source = SingleHookBackendSource(false);
         var before = SyncCompilation(source, "HookIncremental"); var driver = SyncDriver().RunGenerators(before);
+        Assert.Empty(driver.GetRunResult().Diagnostics);
         var body = before.ReplaceSyntaxTree(before.SyntaxTrees.Single(), CSharpSyntaxTree.ParseText(source.Replace("_probe.Before(request,token)!", "_probe.Before(request, token)!"), SyncParseOptions));
         driver = driver.RunGenerators(body);
+        Assert.Empty(driver.GetRunResult().Diagnostics);
         Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalSyncSourceEmission"].SelectMany(s => s.Outputs),
             output => Assert.True(output.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
         var capability = body.ReplaceSyntaxTree(body.SyntaxTrees.Single(), CSharpSyntaxTree.ParseText(SingleHookBackendSource(false, "missing-before"), SyncParseOptions));

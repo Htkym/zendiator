@@ -1,5 +1,4 @@
 using System.Globalization;
-using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -221,7 +220,7 @@ public sealed partial class GeneratorTests
 
     [Theory]
     [InlineData(false)] [InlineData(true)]
-    public void Unproven_single_Hook_SendSync_production_keeps_ZEN0037(bool isVoid)
+    public void Enabled_single_Hook_SendSync_public_API_compiles_and_executes_without_generator_diagnostics(bool isVoid)
     {
         var afterContract = isVoid ? "ISendSuccessObserver<Ping>" : "ISendResponseTransform<Ping,int>";
         var after = isVoid ? "void ISendSuccessObserver<Ping>.After(Ping request,CancellationToken token){}" :
@@ -230,13 +229,18 @@ public sealed partial class GeneratorTests
             "Ping ISendRequestTransform<Ping>.Before(Ping request,CancellationToken token)=>request; " + after +
             " void ISendExceptionObserver<Ping>.OnException(Ping request,Exception error,CancellationToken token){} " +
             "void ISendFinallyObserver<Ping>.Finally(Ping request,SendExitInfo exit,CancellationToken token){} } ";
-        var source = SyncRuntimeSource("direct", isVoid, emptyPipeline: true, dispatch: false)
+        var source = SyncRuntimeSource("direct", isVoid, emptyPipeline: true)
             .Replace("c.Pipeline<Ping>(DispatchFamily.SendSync);", "c.Pipeline<Ping>(DispatchFamily.SendSync,Stage.Hook<Hook>());")
             .Replace("[ZendiatorComposition", hook + "[ZendiatorComposition");
-        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "SingleHookPending" + isVoid), out var output, out var diagnostics);
-        Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
-        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        Assert.Equal(2, driver.GetRunResult().Results.Single().GeneratedSources.Count(s => s.HintName.StartsWith("Zendiator.Canonical", StringComparison.Ordinal)));
-        Assert.Contains("validation candidate", diagnostics[0].GetMessage());
+        var f = CompileSyncFixture("direct", isVoid, emptyPipeline: true, sourceOverride: source);
+        var probe = new CanonicalSyncRuntimeProbe(); var ambient = CanonicalSyncRuntimeProbe.Ambient.Value; var culture = CultureInfo.CurrentCulture;
+        try
+        {
+            using var provider = SyncProvider(f, probe, recording: false); using var scope = provider.CreateScope();
+            var actual = InvokeSync(f, scope.ServiceProvider.GetRequiredService(f.Interface), Activator.CreateInstance(f.Request), default);
+            Assert.Null(actual.Error); Assert.Equal(isVoid ? null : (object)73, actual.Result);
+            Assert.Single(probe.Calls, c => c.Phase == "handler");
+        }
+        finally { probe.Cancellation.Dispose(); CanonicalSyncRuntimeProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; }
     }
 }
