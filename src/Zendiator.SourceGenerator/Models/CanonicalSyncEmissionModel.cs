@@ -3,14 +3,16 @@ namespace Zendiator.SourceGenerator;
 // Callable names come from bound symbols, never from parsing assembly identities or method displays.
 internal sealed record BoundSyncFactoryEmission(string FactoryName, string ContractName, string MethodName, string? CleanupContractName)
 {
+    public bool FactoryIsValueType { get; init; }
     public bool IsSourceDeclaration { get; init; }
 }
 internal sealed record BoundSyncHandlerEmission(string RequestName, string HandlerName, string ContractName, string MethodName, string? ResultName)
-{public bool RequestIsValueType{get;init;}}
+{public bool RequestIsValueType{get;init;} public bool HandlerIsValueType{get;init;}}
 internal sealed record BoundSyncHookCallbackEmission(string ContractName, string MethodName);
 internal sealed record BoundSyncHookEmission(string HookName, BoundSyncHookCallbackEmission Before,
     BoundSyncHookCallbackEmission Success, BoundSyncHookCallbackEmission Exception, BoundSyncHookCallbackEmission Finally)
 {
+    public bool HookIsValueType { get; init; }
     public BoundSyncFactoryEmission? Factory { get; init; }
 }
 internal sealed record CanonicalSyncCompositionEmission(int Index, string Namespace, string? MarkerName, bool UseLocalHandlers,

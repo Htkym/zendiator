@@ -46,12 +46,12 @@ internal static class CanonicalSyncSourceEmitter
             var owned = c.Factory?.CleanupContractName != null;
             if (c.Factory is { } f)
                 b.AppendLine($$"""
-                            var factory = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{f.FactoryName}}>(_provider);
+                            var factory = {{CanonicalServiceResolution.Emit(f.FactoryName, f.FactoryIsValueType)}};
                             {{h.HandlerName}}? handler = (({{f.ContractName}})factory).{{f.MethodName}}(request, cancellationToken)
                                 ?? throw new global::System.InvalidOperationException("A session factory must return a nonnull Handler session.");
                 """);
             else
-                b.AppendLine($$"""            var handler = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{h.HandlerName}}>(_provider);""");
+                b.AppendLine($$"""            var handler = {{CanonicalServiceResolution.Emit(h.HandlerName, h.HandlerIsValueType)}};""");
             if (owned) b.AppendLine("            try\n            {");
             b.AppendLine($$"""            {{(h.ResultName == null ? "" : "return ")}}(({{h.ContractName}})handler).{{h.MethodName}}(request, cancellationToken);""");
             if (owned)
@@ -78,12 +78,12 @@ internal static class CanonicalSyncSourceEmitter
         var owned = hook.Factory?.CleanupContractName != null;
         if (hook.Factory is { } factory)
             b.AppendLine($$"""
-                    var hookFactory = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{factory.FactoryName}}>(_provider);
+                    var hookFactory = {{CanonicalServiceResolution.Emit(factory.FactoryName, factory.FactoryIsValueType)}};
                     {{hook.HookName}}? hook = (({{factory.ContractName}})hookFactory).{{factory.MethodName}}(request, cancellationToken)
                         ?? throw new global::System.InvalidOperationException("A session factory must return a nonnull Hook session.");
                 """);
         else
-            b.AppendLine($$"""            var hook = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{hook.HookName}}>(_provider);""");
+            b.AppendLine($$"""            var hook = {{CanonicalServiceResolution.Emit(hook.HookName, hook.HookIsValueType)}};""");
         if (owned) b.AppendLine("            try\n            {");
         var handlerCall = HookHandlerCall(c);
         b.AppendLine($$"""
@@ -129,12 +129,12 @@ internal static class CanonicalSyncSourceEmitter
         var h = c.Handler;
         if (c.Factory is not { } factory)
             return $$"""
-                var handler = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{h.HandlerName}}>(_provider);
+                var handler = {{CanonicalServiceResolution.Emit(h.HandlerName, h.HandlerIsValueType)}};
                         {{(h.ResultName == null ? "" : "var response = ")}}(({{h.ContractName}})handler).{{h.MethodName}}(saved, cancellationToken);
                 """;
         var owned = factory.CleanupContractName != null;
         return $$"""
-                var handlerFactory = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{factory.FactoryName}}>(_provider);
+                var handlerFactory = {{CanonicalServiceResolution.Emit(factory.FactoryName, factory.FactoryIsValueType)}};
                         {{h.HandlerName}}? handler = (({{factory.ContractName}})handlerFactory).{{factory.MethodName}}(saved, cancellationToken)
                             ?? throw new global::System.InvalidOperationException("A session factory must return a nonnull Handler session.");
                         {{(h.ResultName == null ? "" : h.ResultName + " response;")}}
@@ -149,7 +149,7 @@ internal static class CanonicalSyncSourceEmitter
         var h = c.Handler;
         var outer = c.Hooks[0]; var inner = c.Hooks[1];
         b.AppendLine($$"""
-                    var outer = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{outer.HookName}}>(_provider);
+                    var outer = {{CanonicalServiceResolution.Emit(outer.HookName, outer.HookIsValueType)}};
                     var savedOuter = request;
                     var successOuter = false;
                     global::System.Exception? errorOuter = null;
@@ -158,7 +158,7 @@ internal static class CanonicalSyncSourceEmitter
                         savedOuter = (({{outer.Before.ContractName}})outer).{{outer.Before.MethodName}}(savedOuter, cancellationToken);
                         {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull(savedOuter, \"request\");")}}
                         cancellationToken.ThrowIfCancellationRequested();
-                        var inner = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{inner.HookName}}>(_provider);
+                        var inner = {{CanonicalServiceResolution.Emit(inner.HookName, inner.HookIsValueType)}};
                         var savedInner = savedOuter;
                         var successInner = false;
                         global::System.Exception? errorInner = null;
@@ -168,7 +168,7 @@ internal static class CanonicalSyncSourceEmitter
                             savedInner = (({{inner.Before.ContractName}})inner).{{inner.Before.MethodName}}(savedInner, cancellationToken);
                             {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull(savedInner, \"saved\");")}}
                             cancellationToken.ThrowIfCancellationRequested();
-                            var handler = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{h.HandlerName}}>(_provider);
+                            var handler = {{CanonicalServiceResolution.Emit(h.HandlerName, h.HandlerIsValueType)}};
                             {{(h.ResultName == null ? "" : "response = ")}}(({{h.ContractName}})handler).{{h.MethodName}}(savedInner, cancellationToken);
                             {{(h.ResultName == null ? "" : "response = ")}}(({{inner.Success.ContractName}})inner).{{inner.Success.MethodName}}(savedInner, {{(h.ResultName == null ? "" : "response, ")}}cancellationToken);
                             successInner = true;

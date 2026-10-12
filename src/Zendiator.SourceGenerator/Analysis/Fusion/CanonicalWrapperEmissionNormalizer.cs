@@ -54,11 +54,11 @@ internal static class CanonicalWrapperEmissionNormalizer
                     if(af is null||s.Acquire.Completion is not (BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask)||
                         s.Ownership==FusionOwnership.OwnedSession&&(af.CleanupContractName==null||s.Cleanup?.Completion!=BoundCompletionKind.ValueTask)||
                         s.Ownership==FusionOwnership.BorrowedResource&&(af.CleanupContractName!=null||s.Cleanup!=null))continue;
-                    sf=new(af.FactoryName,af.ContractName,af.MethodName,af.CleanupContractName);
+                    sf=new(af.FactoryName,af.ContractName,af.MethodName,af.CleanupContractName){FactoryIsValueType=af.FactoryIsValueType};
                 }
             }
             else if(h.ServiceOwnership!=FusionOwnership.BorrowedService)continue;
-            var handler=sync?h.SyncEmission!:new BoundSyncHandlerEmission(h.AsyncEmission!.RequestName,h.AsyncEmission.HandlerName,h.AsyncEmission.ContractName,h.AsyncEmission.MethodName,h.AsyncEmission.ResultName){RequestIsValueType=h.AsyncEmission.RequestIsValueType};
+            var handler=sync?h.SyncEmission!:new BoundSyncHandlerEmission(h.AsyncEmission!.RequestName,h.AsyncEmission.HandlerName,h.AsyncEmission.ContractName,h.AsyncEmission.MethodName,h.AsyncEmission.ResultName){RequestIsValueType=h.AsyncEmission.RequestIsValueType,HandlerIsValueType=h.AsyncEmission.HandlerIsValueType};
             var registration=new CanonicalSyncCompositionEmission(i,c.GeneratedNamespace,c.MarkerName,c.UseLocalHandlers,handler,sf,false,route.PipelineFamily,c.MicrosoftDiProviderName??"")
             {ExplicitHandlerTypes=c.ExplicitHandlerTypes,CatalogMarkerTypes=c.CatalogMarkerTypes,RegistrationStages=new(route.Stages.Select(s=>new RegistrationStageEmission(s.Name,s.Kind==FusionStageKind.Wrapper?"Wrapper":"Hook",s.Sessions.Count==0?null:CanonicalCapabilityEmissionNormalizer.Factory(s.Sessions[0],sync)!.FactoryName)))};
             output.Add(new(registration,route.Family.Value,w.Stage.WrapperEmission!,outer?.SyncEmission,inner?.SyncEmission,outer?.AsyncEmission,inner?.AsyncEmission,af)

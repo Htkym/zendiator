@@ -51,11 +51,11 @@ internal static class CanonicalWrapperSourceEmitter
         if(c.Regions[index].Hooks.Count!=0){HookRegion(b,c,index);return;}
         var h=c.Registration.Handler;var async=c.Family==BoundDispatchFamily.SendAsync;var region=c.Regions[index];var hook=region.Hook;var input=hook==null?"request":"saved";
         b.AppendLine($"private {(async?"async ":"")}{Result(h,async)} ExecuteRegion{index}({h.RequestName} request,global::System.Threading.CancellationToken cancellationToken){{cancellationToken.ThrowIfCancellationRequested();");
-        if(hook!=null){CanonicalCapabilitySourceEmitter.Acquire(b,null,hook.HookName,"hook","request");b.AppendLine("var saved=request;"+(hook.Finally==null?"":"var success=false;global::System.Exception? error=null;")+"try{");if(hook.Before!=null)b.AppendLine("saved="+CanonicalCapabilitySourceEmitter.Call(hook.Before,"hook","saved,cancellationToken")+";");b.AppendLine(CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull(saved,\"request\");")+"cancellationToken.ThrowIfCancellationRequested();");}
+        if(hook!=null){CanonicalCapabilitySourceEmitter.Acquire(b,null,hook.HookName,"hook","request",hook.HookIsValueType);b.AppendLine("var saved=request;"+(hook.Finally==null?"":"var success=false;global::System.Exception? error=null;")+"try{");if(hook.Before!=null)b.AppendLine("saved="+CanonicalCapabilitySourceEmitter.Call(hook.Before,"hook","saved,cancellationToken")+";");b.AppendLine(CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull(saved,\"request\");")+"cancellationToken.ThrowIfCancellationRequested();");}
         if(h.ResultName!=null)b.AppendLine(h.ResultName+" response;");
-        var factory=region.Wrapper!=null?region.Factory:(async?c.AsyncFactory:c.Registration.Factory is {} sf?new BoundAsyncFactoryEmission(sf.FactoryName,sf.ContractName,sf.MethodName,sf.CleanupContractName,false):null);
+        var factory=region.Wrapper!=null?region.Factory:(async?c.AsyncFactory:c.Registration.Factory is {} sf?new BoundAsyncFactoryEmission(sf.FactoryName,sf.ContractName,sf.MethodName,sf.CleanupContractName,false){FactoryIsValueType=sf.FactoryIsValueType}:null);
         var receiver=region.Wrapper==null?"handler":"wrapper";var type=region.Wrapper?.WrapperName??h.HandlerName;
-        CanonicalCapabilitySourceEmitter.Acquire(b,factory,type,receiver,input);if(factory?.CleanupContractName!=null)b.AppendLine("try{");
+        CanonicalCapabilitySourceEmitter.Acquire(b,factory,type,receiver,input,region.Wrapper?.WrapperIsValueType??h.HandlerIsValueType);if(factory?.CleanupContractName!=null)b.AppendLine("try{");
         var call=region.Wrapper is {} w?"(("+w.ContractName+")wrapper)."+w.MethodName+"("+input+",new WrapperNext"+index+"(this),cancellationToken)":"(("+h.ContractName+")handler)."+h.MethodName+"("+input+",cancellationToken)";
         b.AppendLine((h.ResultName==null?"":"response=")+Call(call,async)+";");CanonicalCapabilitySourceEmitter.Cleanup(b,factory,receiver,async);
         if(hook?.Success!=null)b.AppendLine((h.ResultName==null?"":"response=")+CanonicalCapabilitySourceEmitter.Call(hook.Success,"hook",input+","+(h.ResultName==null?"":"response,")+"cancellationToken")+";");
@@ -85,13 +85,13 @@ internal static class CanonicalWrapperSourceEmitter
     {
         var region=c.Regions[regionIndex];var h=c.Registration.Handler;var async=c.Family==BoundDispatchFamily.SendAsync;
         if(index==region.Hooks.Count){
-            var f=region.Wrapper!=null?region.Factory:(async?c.AsyncFactory:c.Registration.Factory is {} sf?new BoundAsyncFactoryEmission(sf.FactoryName,sf.ContractName,sf.MethodName,sf.CleanupContractName,false):null);var receiver=region.Wrapper==null?"handler":"wrapper";
-            CanonicalCapabilitySourceEmitter.Acquire(b,f,region.Wrapper?.WrapperName??h.HandlerName,receiver,input);if(f?.CleanupContractName!=null)b.AppendLine("try{");
+            var f=region.Wrapper!=null?region.Factory:(async?c.AsyncFactory:c.Registration.Factory is {} sf?new BoundAsyncFactoryEmission(sf.FactoryName,sf.ContractName,sf.MethodName,sf.CleanupContractName,false){FactoryIsValueType=sf.FactoryIsValueType}:null);var receiver=region.Wrapper==null?"handler":"wrapper";
+            CanonicalCapabilitySourceEmitter.Acquire(b,f,region.Wrapper?.WrapperName??h.HandlerName,receiver,input,region.Wrapper?.WrapperIsValueType??h.HandlerIsValueType);if(f?.CleanupContractName!=null)b.AppendLine("try{");
             var call=region.Wrapper is {} w?"(("+w.ContractName+")wrapper)."+w.MethodName+"("+input+",new WrapperNext"+regionIndex+"(this),cancellationToken)":"(("+h.ContractName+")handler)."+h.MethodName+"("+input+",cancellationToken)";
             b.AppendLine((h.ResultName==null?"":"response=")+Call(call,async)+";");CanonicalCapabilitySourceEmitter.Cleanup(b,f,receiver,async);return;
         }
         var hook=region.Hooks[index];var receiverName="hook"+index;var saved="saved"+index;var error="error"+index;var success="success"+index;
-        CanonicalCapabilitySourceEmitter.Acquire(b,hook.Factory,hook.HookName,receiverName,input);if(hook.Factory?.CleanupContractName!=null)b.AppendLine("try{");b.AppendLine($"var {saved}={input};"+(hook.Finally==null?"":$"var {success}=false;global::System.Exception? {error}=null;")+"try{");
+        CanonicalCapabilitySourceEmitter.Acquire(b,hook.Factory,hook.HookName,receiverName,input,hook.HookIsValueType);if(hook.Factory?.CleanupContractName!=null)b.AppendLine("try{");b.AppendLine($"var {saved}={input};"+(hook.Finally==null?"":$"var {success}=false;global::System.Exception? {error}=null;")+"try{");
         if(hook.Before!=null)b.AppendLine(saved+"="+CanonicalCapabilitySourceEmitter.Call(hook.Before,receiverName,saved+",cancellationToken")+";");b.AppendLine(CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,$"global::System.ArgumentNullException.ThrowIfNull({saved},\"request\");")+"cancellationToken.ThrowIfCancellationRequested();");
         HookScope(b,c,regionIndex,index+1,saved);
         if(hook.Success!=null)b.AppendLine((h.ResultName==null?"":"response=")+CanonicalCapabilitySourceEmitter.Call(hook.Success,receiverName,saved+","+(h.ResultName==null?"":"response,")+"cancellationToken")+";");if(hook.Finally!=null)b.AppendLine(success+"=true;");
@@ -111,7 +111,7 @@ internal static class CanonicalWrapperSourceEmitter
         if(hookName!=null)
         {
             b.AppendLine($$"""
-                var hook=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{hookName}}>(_provider);
+                var hook={{CanonicalServiceResolution.Emit(hookName, async?ah!.HookIsValueType:sh!.HookIsValueType)}};
                 var saved=request;var success=false;global::System.Exception? error=null;
                 try {
                     saved={{Call("(("+(async?ah!.Before.ContractName:sh!.Before.ContractName)+")hook)."+(async?ah!.Before.MethodName:sh!.Before.MethodName)+"(saved,cancellationToken)",async)}};
@@ -122,15 +122,15 @@ internal static class CanonicalWrapperSourceEmitter
         if(h.ResultName!=null)b.AppendLine(h.ResultName+" response;");
         if(outer)
         {
-            b.AppendLine($$"""var wrapper=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{c.Wrapper.WrapperName}}>(_provider);""");
+            b.AppendLine($$"""var wrapper={{CanonicalServiceResolution.Emit(c.Wrapper.WrapperName, c.Wrapper.WrapperIsValueType)}};""");
             b.AppendLine((h.ResultName==null?"":"response=")+Call("(("+c.Wrapper.ContractName+")wrapper)."+c.Wrapper.MethodName+"("+request+",new WrapperNext(this),cancellationToken)",async)+";");
         }
         else
         {
             var factory=c.Registration.Factory;var af=c.AsyncFactory;
-            if(factory==null)b.AppendLine($$"""var handler=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{h.HandlerName}}>(_provider);""");
+            if(factory==null)b.AppendLine($$"""var handler={{CanonicalServiceResolution.Emit(h.HandlerName, h.HandlerIsValueType)}};""");
             else b.AppendLine($$"""
-                var factory=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{factory.FactoryName}}>(_provider);
+                var factory={{CanonicalServiceResolution.Emit(factory.FactoryName, factory.FactoryIsValueType)}};
                 {{h.HandlerName}}? handler={{Call("(("+factory.ContractName+")factory)."+factory.MethodName+"("+request+",cancellationToken)",async&&af!.AwaitAcquire)}}??throw new global::System.InvalidOperationException("A session factory must return a nonnull Handler session.");
                 """);
             var owned=factory?.CleanupContractName!=null;if(owned)b.AppendLine("try {");
@@ -158,13 +158,13 @@ internal static class CanonicalWrapperSourceEmitter
     {
         var h=c.Registration.Handler;var async=c.Family==BoundDispatchFamily.SendAsync;var hf=c.Registration.Factory;var af=c.AsyncFactory;
         b.AppendLine($"private {(async?"async ":"")}{Result(h,async)} Execute{(outer?"Outer":"Inner")}({h.RequestName} request,global::System.Threading.CancellationToken cancellationToken){{cancellationToken.ThrowIfCancellationRequested();");
-        b.AppendLine($"var hook=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{hook.HookName}>(_provider);var saved=request;"+(hook.Finally==null?"":"var success=false;global::System.Exception? error=null;")+"try{");
+        b.AppendLine($"var hook={CanonicalServiceResolution.Emit(hook.HookName, hook.HookIsValueType)};var saved=request;"+(hook.Finally==null?"":"var success=false;global::System.Exception? error=null;")+"try{");
         if(hook.Before!=null)b.AppendLine("saved="+CanonicalCapabilitySourceEmitter.Call(hook.Before,"hook","saved,cancellationToken")+";");
         b.AppendLine(CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull(saved,\"request\");")+"cancellationToken.ThrowIfCancellationRequested();");if(h.ResultName!=null)b.AppendLine(h.ResultName+" response;");
-        if(outer){b.AppendLine($"var wrapper=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{c.Wrapper.WrapperName}>(_provider);");b.AppendLine((h.ResultName==null?"":"response=")+Call("(("+c.Wrapper.ContractName+")wrapper)."+c.Wrapper.MethodName+"(saved,new WrapperNext(this),cancellationToken)",async)+";");}
+        if(outer){b.AppendLine($"var wrapper={CanonicalServiceResolution.Emit(c.Wrapper.WrapperName, c.Wrapper.WrapperIsValueType)};");b.AppendLine((h.ResultName==null?"":"response=")+Call("(("+c.Wrapper.ContractName+")wrapper)."+c.Wrapper.MethodName+"(saved,new WrapperNext(this),cancellationToken)",async)+";");}
         else{
-            if(hf==null)b.AppendLine($"var handler=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{h.HandlerName}>(_provider);");
-            else b.AppendLine($"var factory=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{hf.FactoryName}>(_provider);{h.HandlerName}? handler={Call("(("+hf.ContractName+")factory)."+hf.MethodName+"(saved,cancellationToken)",async&&af!.AwaitAcquire)}??throw new global::System.InvalidOperationException(\"A session factory must return a nonnull Handler session.\");");
+            if(hf==null)b.AppendLine($"var handler={CanonicalServiceResolution.Emit(h.HandlerName, h.HandlerIsValueType)};");
+            else b.AppendLine($"var factory={CanonicalServiceResolution.Emit(hf.FactoryName, hf.FactoryIsValueType)};{h.HandlerName}? handler={Call("(("+hf.ContractName+")factory)."+hf.MethodName+"(saved,cancellationToken)",async&&af!.AwaitAcquire)}??throw new global::System.InvalidOperationException(\"A session factory must return a nonnull Handler session.\");");
             if(hf?.CleanupContractName!=null)b.AppendLine("try{");b.AppendLine((h.ResultName==null?"":"response=")+Call("(("+h.ContractName+")handler)."+h.MethodName+"(saved,cancellationToken)",async)+";");
             if(hf?.CleanupContractName!=null)b.AppendLine($"}}finally{{var detached=handler;handler=null;{Call("(("+hf.CleanupContractName+")detached)."+(async?"DisposeAsync":"Dispose")+"()",async)};}}");
         }

@@ -1,6 +1,7 @@
 namespace Zendiator.SourceGenerator;
 
-internal sealed record BoundWrapperEmission(string WrapperName,string ContractName,string MethodName,BoundCompletionKind Completion);
+internal sealed record BoundWrapperEmission(string WrapperName,string ContractName,string MethodName,BoundCompletionKind Completion)
+{public bool WrapperIsValueType{get;init;}}
 internal sealed record RegistrationStageEmission(string TypeName,string Kind,string? FactoryName = null);
 internal sealed record CanonicalWrapperRegionEmission(HookCapabilityEmission? Hook,BoundWrapperEmission? Wrapper,BoundAsyncFactoryEmission? Factory)
 {public EquatableArray<HookCapabilityEmission> Hooks{get;init;}}

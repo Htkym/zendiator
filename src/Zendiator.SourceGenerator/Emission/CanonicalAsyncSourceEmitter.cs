@@ -45,10 +45,10 @@ internal static class CanonicalAsyncSourceEmitter
             else
             {
             if (c.Factory is not { } factory)
-                b.AppendLine($$"""            var handler = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{h.HandlerName}}>(_provider);""");
+                b.AppendLine($$"""            var handler = {{CanonicalServiceResolution.Emit(h.HandlerName, h.HandlerIsValueType)}};""");
             else
                 b.AppendLine($$"""
-                            var factory = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{factory.FactoryName}}>(_provider);
+                            var factory = {{CanonicalServiceResolution.Emit(factory.FactoryName, factory.FactoryIsValueType)}};
                             {{h.HandlerName}}? handler = {{(factory.AwaitAcquire ? "await " : "")}}(({{factory.ContractName}})factory).{{factory.MethodName}}(request, cancellationToken){{(factory.AwaitAcquire ? ".ConfigureAwait(false)" : "")}}
                                 ?? throw new global::System.InvalidOperationException("A session factory must return a nonnull Handler session.");
                     """);
@@ -79,11 +79,11 @@ internal static class CanonicalAsyncSourceEmitter
         var receiver = "hook" + index; var saved = "saved" + index; var error = "error" + index; var success = "success" + index;
         if (hook.Factory is { } factory)
             b.AppendLine($$"""
-                var hookFactory{{index}} = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{factory.FactoryName}}>(_provider);
+                var hookFactory{{index}} = {{CanonicalServiceResolution.Emit(factory.FactoryName, factory.FactoryIsValueType)}};
                 {{hook.HookName}}? {{receiver}} = {{(factory.AwaitAcquire ? "await " : "")}}(({{factory.ContractName}})hookFactory{{index}}).{{factory.MethodName}}({{input}}, cancellationToken){{(factory.AwaitAcquire ? ".ConfigureAwait(false)" : "")}}
                     ?? throw new global::System.InvalidOperationException("A session factory must return a nonnull Hook session.");
                 """);
-        else b.AppendLine($$"""var {{receiver}} = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{hook.HookName}}>(_provider);""");
+        else b.AppendLine($$"""var {{receiver}} = {{CanonicalServiceResolution.Emit(hook.HookName, hook.HookIsValueType)}};""");
         var owned = hook.Factory?.CleanupContractName != null;
         if (owned) b.AppendLine("try\n{");
         b.AppendLine($$"""
@@ -98,14 +98,14 @@ internal static class CanonicalAsyncSourceEmitter
             """);
         if (index + 1 < c.Hooks.Count) EmitHookScope(b, c, index + 1, saved);
         else if (c.Factory == null) b.AppendLine($$"""
-            var handler = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{h.HandlerName}}>(_provider);
+            var handler = {{CanonicalServiceResolution.Emit(h.HandlerName, h.HandlerIsValueType)}};
             {{(h.ResultName == null ? "" : "response = ")}}await (({{h.ContractName}})handler).{{h.MethodName}}({{saved}}, cancellationToken).ConfigureAwait(false);
             """);
         else
         {
             var handlerFactory = c.Factory;
             b.AppendLine($$"""
-                var handlerFactory = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{handlerFactory.FactoryName}}>(_provider);
+                var handlerFactory = {{CanonicalServiceResolution.Emit(handlerFactory.FactoryName, handlerFactory.FactoryIsValueType)}};
                 {{h.HandlerName}}? handler = {{(handlerFactory.AwaitAcquire ? "await " : "")}}(({{handlerFactory.ContractName}})handlerFactory).{{handlerFactory.MethodName}}({{saved}}, cancellationToken){{(handlerFactory.AwaitAcquire ? ".ConfigureAwait(false)" : "")}}
                     ?? throw new global::System.InvalidOperationException("A session factory must return a nonnull Handler session.");
                 """);

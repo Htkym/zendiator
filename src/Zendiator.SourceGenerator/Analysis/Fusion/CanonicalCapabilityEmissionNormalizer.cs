@@ -25,9 +25,9 @@ internal static class CanonicalCapabilityEmissionNormalizer
             var hooks=new List<HookCapabilityEmission>();var invalid=false;
             foreach(var s in route.Stages){if(s.Sessions.Count==0){if(s.ServiceOwnership!=FusionOwnership.BorrowedService){invalid=true;break;}hooks.Add(s.Capabilities!);}else{var f=Factory(s.Sessions[0],sync);if(f==null||s.ServiceOwnership!=s.Sessions[0].Ownership){invalid=true;break;}hooks.Add(s.Capabilities! with{Factory=f});}}
             var hf=h.Sessions.Count==0?null:Factory(h.Sessions[0],sync);if(invalid||h.Sessions.Count!=0&&hf==null||h.Sessions.Count==0&&h.ServiceOwnership!=FusionOwnership.BorrowedService)continue;
-            var handler=sync?h.SyncEmission!:new BoundSyncHandlerEmission(h.AsyncEmission!.RequestName,h.AsyncEmission.HandlerName,h.AsyncEmission.ContractName,h.AsyncEmission.MethodName,h.AsyncEmission.ResultName){RequestIsValueType=h.AsyncEmission.RequestIsValueType};
+            var handler=sync?h.SyncEmission!:new BoundSyncHandlerEmission(h.AsyncEmission!.RequestName,h.AsyncEmission.HandlerName,h.AsyncEmission.ContractName,h.AsyncEmission.MethodName,h.AsyncEmission.ResultName){RequestIsValueType=h.AsyncEmission.RequestIsValueType,HandlerIsValueType=h.AsyncEmission.HandlerIsValueType};
             var registration=new CanonicalSyncCompositionEmission(i,c.GeneratedNamespace,c.MarkerName,c.UseLocalHandlers,handler,
-                hf==null?null:new(hf.FactoryName,hf.ContractName,hf.MethodName,hf.CleanupContractName),false,route.PipelineFamily,c.MicrosoftDiProviderName??"")
+                hf==null?null:new(hf.FactoryName,hf.ContractName,hf.MethodName,hf.CleanupContractName){FactoryIsValueType=hf.FactoryIsValueType},false,route.PipelineFamily,c.MicrosoftDiProviderName??"")
             {ExplicitHandlerTypes=c.ExplicitHandlerTypes,CatalogMarkerTypes=c.CatalogMarkerTypes,RegistrationStages=new(hooks.Select(s=>new RegistrationStageEmission(s.HookName,"Hook",s.Factory?.FactoryName)))};
             output.Add(new(registration,route.Family.Value,new(hooks),hf));
         }
@@ -36,7 +36,7 @@ internal static class CanonicalCapabilityEmissionNormalizer
     internal static BoundAsyncFactoryEmission? Factory(BoundSessionModel s,bool sync)
     {
         if(!s.SuppliesCallbackReceiver||s.Ownership is not (FusionOwnership.OwnedSession or FusionOwnership.BorrowedResource))return null;
-        var f=sync?(s.SyncEmission is {} sf?new BoundAsyncFactoryEmission(sf.FactoryName,sf.ContractName,sf.MethodName,sf.CleanupContractName,false){IsSourceDeclaration=sf.IsSourceDeclaration}:null):s.AsyncEmission;
+        var f=sync?(s.SyncEmission is {} sf?new BoundAsyncFactoryEmission(sf.FactoryName,sf.ContractName,sf.MethodName,sf.CleanupContractName,false){IsSourceDeclaration=sf.IsSourceDeclaration,FactoryIsValueType=sf.FactoryIsValueType}:null):s.AsyncEmission;
         if(f is null||sync&&s.Acquire.Completion!=BoundCompletionKind.Synchronous||!sync&&s.Acquire.Completion is not (BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask)||
             s.Ownership==FusionOwnership.OwnedSession&&(f.CleanupContractName==null||s.Cleanup?.Completion!=(sync?BoundCompletionKind.Synchronous:BoundCompletionKind.ValueTask))||s.Ownership==FusionOwnership.BorrowedResource&&(f.CleanupContractName!=null||s.Cleanup!=null))return null;
         return f;

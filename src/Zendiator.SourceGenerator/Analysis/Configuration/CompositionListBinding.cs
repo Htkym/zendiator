@@ -233,15 +233,15 @@ internal sealed class CompositionListBinding
                         family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync));
                 if ((family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && declaration.Request.TypeKind is TypeKind.Class or TypeKind.Struct &&
                     !_compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && !r.Properties.Aliases.Contains("global")) &&
-                    entry.Type.TypeKind == TypeKind.Class && _compilation.IsSymbolAccessibleWithin(entry.Type,_compilation.Assembly) && implementation != null && member != null &&
+                    entry.Type.TypeKind is (TypeKind.Class or TypeKind.Struct) && _compilation.IsSymbolAccessibleWithin(entry.Type,_compilation.Assembly) && implementation != null && member != null &&
                     (nextResult == null || nextResult is INamedTypeSymbol or IArrayTypeSymbol))
                 {
                     if (family == BoundDispatchFamily.SendSync)
                         handlerModel = handlerModel with { SyncEmission = new(Name(declaration.Request), Name(entry.Type),
-                            Name(contract), member.Name, nextResult == null ? null : Name(nextResult)){RequestIsValueType=declaration.Request.IsValueType} };
+                            Name(contract), member.Name, nextResult == null ? null : Name(nextResult)){RequestIsValueType=declaration.Request.IsValueType,HandlerIsValueType=entry.Type.IsValueType} };
                     else
                         handlerModel = handlerModel with { AsyncEmission = new(Name(declaration.Request), Name(entry.Type),
-                            Name(contract), member.Name, nextResult == null ? null : Name(nextResult)){RequestIsValueType=declaration.Request.IsValueType} };
+                            Name(contract), member.Name, nextResult == null ? null : Name(nextResult)){RequestIsValueType=declaration.Request.IsValueType,HandlerIsValueType=entry.Type.IsValueType} };
                 }
                 if (entry.Factory != null && !handlerModel.CompilerOwnsError)
                 {
