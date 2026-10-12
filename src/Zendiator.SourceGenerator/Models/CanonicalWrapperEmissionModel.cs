@@ -4,5 +4,6 @@ internal sealed record BoundWrapperEmission(string WrapperName,string ContractNa
 internal sealed record RegistrationStageEmission(string TypeName,string Kind,string? FactoryName = null);
 internal sealed record CanonicalWrapperCompositionEmission(CanonicalSyncCompositionEmission Registration,
     BoundDispatchFamily Family,BoundWrapperEmission Wrapper,BoundSyncHookEmission? SyncOuter,BoundSyncHookEmission? SyncInner,
-    BoundAsyncHookEmission? AsyncOuter,BoundAsyncHookEmission? AsyncInner,BoundAsyncFactoryEmission? AsyncFactory);
+    BoundAsyncHookEmission? AsyncOuter,BoundAsyncHookEmission? AsyncInner,BoundAsyncFactoryEmission? AsyncFactory)
+{public HookCapabilityEmission? OuterCapabilities{get;init;}public HookCapabilityEmission? InnerCapabilities{get;init;}}
 internal sealed record CanonicalWrapperEmissionModel(EquatableArray<CanonicalWrapperCompositionEmission> Compositions);

@@ -20,19 +20,26 @@ internal static class CanonicalCapabilityEmissionNormalizer
             if(graph?.IsValid!=true||graph.Schedule==null||route.Family is not (BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync)||
                 route.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void)||route.Handlers.Count!=1||!route.ExplicitHandlerOrder||route.Stages.Count==0||route.Stages.Count>2)continue;
             var sync=route.Family==BoundDispatchFamily.SendSync;var h=route.Handlers[0];
-            if(h.CompilerOwnsError||!c.Handlers.Any(x=>x.Identity==h.Type)||sync&&h.SyncEmission==null||!sync&&h.AsyncEmission==null||h.Sessions.Count!=0)continue;
-            // Partial/mixed callbacks are proved here with borrowed DI receivers only.
-            // Existing complete-capability session routes keep their established emitter.
-            if(route.Stages.Any(s=>s.Kind!=FusionStageKind.Hook||s.CompilerOwnsError||s.Capabilities==null||s.Sessions.Count!=0))continue;
-            if(route.Stages.Any(s=>s.ServiceOwnership!=FusionOwnership.BorrowedService)||h.ServiceOwnership!=FusionOwnership.BorrowedService)continue;
-            var hooks=route.Stages.Select(s=>s.Capabilities!).ToArray();
+            if(h.CompilerOwnsError||!c.Handlers.Any(x=>x.Identity==h.Type)||sync&&h.SyncEmission==null||!sync&&h.AsyncEmission==null||h.Sessions.Count>1||h.Sessions.Count!=0&&route.Stages.Count!=1)continue;
+            if(route.Stages.Any(s=>s.Kind!=FusionStageKind.Hook||s.CompilerOwnsError||s.Capabilities==null||s.Sessions.Count>1)||route.Stages.Count>1&&route.Stages.Any(s=>s.Sessions.Count!=0))continue;
+            var hooks=new List<HookCapabilityEmission>();var invalid=false;
+            foreach(var s in route.Stages){if(s.Sessions.Count==0){if(s.ServiceOwnership!=FusionOwnership.BorrowedService){invalid=true;break;}hooks.Add(s.Capabilities!);}else{var f=Factory(s.Sessions[0],sync);if(f==null||s.ServiceOwnership!=s.Sessions[0].Ownership){invalid=true;break;}hooks.Add(s.Capabilities! with{Factory=f});}}
+            var hf=h.Sessions.Count==0?null:Factory(h.Sessions[0],sync);if(invalid||h.Sessions.Count!=0&&hf==null||h.Sessions.Count==0&&h.ServiceOwnership!=FusionOwnership.BorrowedService)continue;
             var handler=sync?h.SyncEmission!:new BoundSyncHandlerEmission(h.AsyncEmission!.RequestName,h.AsyncEmission.HandlerName,h.AsyncEmission.ContractName,h.AsyncEmission.MethodName,h.AsyncEmission.ResultName);
             var registration=new CanonicalSyncCompositionEmission(i,c.GeneratedNamespace,c.MarkerName,c.UseLocalHandlers,handler,
-                null,false,route.PipelineFamily,c.MicrosoftDiProviderName)
-            {RegistrationStages=new(hooks.Select(s=>new RegistrationStageEmission(s.HookName,"Hook")))};
-            output.Add(new(registration,route.Family.Value,new(hooks)));
+                hf==null?null:new(hf.FactoryName,hf.ContractName,hf.MethodName,hf.CleanupContractName),false,route.PipelineFamily,c.MicrosoftDiProviderName)
+            {RegistrationStages=new(hooks.Select(s=>new RegistrationStageEmission(s.HookName,"Hook",s.Factory?.FactoryName)))};
+            output.Add(new(registration,route.Family.Value,new(hooks),hf));
         }
         return new(new(output));
+    }
+    internal static BoundAsyncFactoryEmission? Factory(BoundSessionModel s,bool sync)
+    {
+        if(!s.SuppliesCallbackReceiver||s.Ownership is not (FusionOwnership.OwnedSession or FusionOwnership.BorrowedResource))return null;
+        var f=sync?(s.SyncEmission is {IsSourceDeclaration:true} sf?new BoundAsyncFactoryEmission(sf.FactoryName,sf.ContractName,sf.MethodName,sf.CleanupContractName,false){IsSourceDeclaration=true}:null):s.AsyncEmission;
+        if(f is not {IsSourceDeclaration:true}||sync&&s.Acquire.Completion!=BoundCompletionKind.Synchronous||!sync&&s.Acquire.Completion is not (BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask)||
+            s.Ownership==FusionOwnership.OwnedSession&&(f.CleanupContractName==null||s.Cleanup?.Completion!=(sync?BoundCompletionKind.Synchronous:BoundCompletionKind.ValueTask))||s.Ownership==FusionOwnership.BorrowedResource&&(f.CleanupContractName!=null||s.Cleanup!=null))return null;
+        return f;
     }
     internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalCapabilityEmissionModel model,ImmutableArray<CompositionSelectionDiscovery.Binding> current,Compilation compilation,CancellationToken token)=>
         CanonicalSyncEmissionNormalizer.BindCallSites(new(new(model.Compositions.Select(c=>c.Registration))),current,compilation,token);

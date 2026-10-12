@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 namespace Zendiator.Generator.Tests;
 
-public sealed class CapabilityProbe
+public class CapabilityProbe
 {
     public readonly List<string> Trace=[];
     public readonly List<(string Phase,object? Request,CancellationToken Token,Exception? Error,SendExitInfo? Exit)> Calls=[];
@@ -15,7 +15,7 @@ public sealed class CapabilityProbe
     public readonly List<IAsyncOnceGate> Gates=[];
     public readonly CancellationTokenSource Cancellation=new();
     public string? Pending,CancelPhase;public bool NullBefore;public int Disposals;
-    private void Hit(string phase,object? r,CancellationToken t,Exception? error=null,SendExitInfo? exit=null)
+    protected void Hit(string phase,object? r,CancellationToken t,Exception? error=null,SendExitInfo? exit=null)
     {Trace.Add(phase);Calls.Add((phase,r,t,error,exit));if(CancelPhase==phase)Cancellation.Cancel();if(Failures.TryGetValue(phase,out var e))throw e;}
     public R Before<R>(int id,R r,R next,CancellationToken t)where R:class{Hit($"h{id}.before",r,t);return NullBefore?null!:next;}
     public ValueTask<R> BeforeAsync<R>(int id,R r,R next,CancellationToken t)where R:class=>Step($"h{id}.before",r,t,NullBefore?null!:next);
@@ -132,7 +132,7 @@ public sealed partial class GeneratorTests
         source=shape switch{
             "ambiguous"=>source.Replace("Hook0:ISendRequestTransform<Ping>","Hook0:ISendRequestTransform<Ping>,IAsyncSendRequestTransform<Ping>").Replace("private readonly Probe _p;public Hook0","public ValueTask<Ping> BeforeAsync(Ping r,CancellationToken t)=>new(r);private readonly Probe _p;public Hook0"),
             "async-on-sync"=>source.Replace("Hook0:ISendFinallyObserver<Ping>","Hook0:IAsyncSendFinallyObserver<Ping>").Replace("public void Finally(Ping r,SendExitInfo e,CancellationToken t)=>_p.Finally(0,r,e,t);","public ValueTask FinallyAsync(Ping r,SendExitInfo e,CancellationToken t)=>_p.FinallyAsync(0,r,e,t);"),
-            _=>source.Replace("Stage.Hook<Hook0>()","Stage.Hook<Hook0,F>()")+"namespace App{public sealed class F:IBorrowedSessionFactory<Ping,Hook0>{private readonly Probe _p;public F(Probe p){_p=p;}public Hook0 Create(Ping r,CancellationToken t)=>new(_p);}}"};
+            _=>source.Replace("Stage.Hook<Hook0>()","Stage.Hook<Hook0,F>(),Stage.Hook<Hook1>()")+"namespace App{public sealed class F:IBorrowedSessionFactory<Ping,Hook0>{private readonly Probe _p;public F(Probe p){_p=p;}public Hook0 Create(Ping r,CancellationToken t)=>new(_p);}}"};
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"CapabilityRejected"+shape),out var output,out var diagnostics);Assert.Equal(id,Assert.Single(diagnostics).Id);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.Contains("Canonical"));
         WriteNestedHookEvidence("capability-boundaries",shape,new{source,id,generatedExecution=false});
     }

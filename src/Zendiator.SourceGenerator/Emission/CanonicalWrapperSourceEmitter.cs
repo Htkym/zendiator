@@ -50,6 +50,8 @@ internal static class CanonicalWrapperSourceEmitter
     private static void Region(StringBuilder b,CanonicalWrapperCompositionEmission c,bool outer)
     {
         var h=c.Registration.Handler;var async=c.Family==BoundDispatchFamily.SendAsync;var sh=outer?c.SyncOuter:c.SyncInner;var ah=outer?c.AsyncOuter:c.AsyncInner;
+        var capabilities=outer?c.OuterCapabilities:c.InnerCapabilities;
+        if(capabilities!=null){CapabilityRegion(b,c,outer,capabilities);return;}
         var hookName=async?ah?.HookName:sh?.HookName;
         b.AppendLine($$"""
             private {{(async?"async ":"")}}{{Result(h,async)}} Execute{{(outer?"Outer":"Inner")}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken) {
@@ -100,5 +102,24 @@ internal static class CanonicalWrapperSourceEmitter
             } finally { {{Call("(("+(async?ah!.Finally.ContractName:sh!.Finally.ContractName)+")hook)."+(async?ah!.Finally.MethodName:sh!.Finally.MethodName)+"(saved,new global::Zendiator.SendExitInfo(success,error),cancellationToken)",async)}}; }
             """);
         b.AppendLine("}");
+    }
+    private static void CapabilityRegion(StringBuilder b,CanonicalWrapperCompositionEmission c,bool outer,HookCapabilityEmission hook)
+    {
+        var h=c.Registration.Handler;var async=c.Family==BoundDispatchFamily.SendAsync;var hf=c.Registration.Factory;var af=c.AsyncFactory;
+        b.AppendLine($"private {(async?"async ":"")}{Result(h,async)} Execute{(outer?"Outer":"Inner")}({h.RequestName} request,global::System.Threading.CancellationToken cancellationToken){{cancellationToken.ThrowIfCancellationRequested();");
+        b.AppendLine($"var hook=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{hook.HookName}>(_provider);var saved=request;"+(hook.Finally==null?"":"var success=false;global::System.Exception? error=null;")+"try{");
+        if(hook.Before!=null)b.AppendLine("saved="+CanonicalCapabilitySourceEmitter.Call(hook.Before,"hook","saved,cancellationToken")+";");
+        b.AppendLine("global::System.ArgumentNullException.ThrowIfNull(saved,\"request\");cancellationToken.ThrowIfCancellationRequested();");if(h.ResultName!=null)b.AppendLine(h.ResultName+" response;");
+        if(outer){b.AppendLine($"var wrapper=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{c.Wrapper.WrapperName}>(_provider);");b.AppendLine((h.ResultName==null?"":"response=")+Call("(("+c.Wrapper.ContractName+")wrapper)."+c.Wrapper.MethodName+"(saved,new WrapperNext(this),cancellationToken)",async)+";");}
+        else{
+            if(hf==null)b.AppendLine($"var handler=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{h.HandlerName}>(_provider);");
+            else b.AppendLine($"var factory=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{hf.FactoryName}>(_provider);{h.HandlerName}? handler={Call("(("+hf.ContractName+")factory)."+hf.MethodName+"(saved,cancellationToken)",async&&af!.AwaitAcquire)}??throw new global::System.InvalidOperationException(\"A session factory must return a nonnull Handler session.\");");
+            if(hf?.CleanupContractName!=null)b.AppendLine("try{");b.AppendLine((h.ResultName==null?"":"response=")+Call("(("+h.ContractName+")handler)."+h.MethodName+"(saved,cancellationToken)",async)+";");
+            if(hf?.CleanupContractName!=null)b.AppendLine($"}}finally{{var detached=handler;handler=null;{Call("(("+hf.CleanupContractName+")detached)."+(async?"DisposeAsync":"Dispose")+"()",async)};}}");
+        }
+        if(hook.Success!=null)b.AppendLine((h.ResultName==null?"":"response=")+CanonicalCapabilitySourceEmitter.Call(hook.Success,"hook","saved,"+(h.ResultName==null?"":"response,")+"cancellationToken")+";");
+        if(hook.Finally!=null)b.AppendLine("success=true;");if(h.ResultName!=null)b.AppendLine("return response;");
+        if(hook.Exception!=null||hook.Finally!=null){b.AppendLine("}catch(global::System.Exception failure){"+(hook.Finally==null?"":"error=failure;"));if(hook.Exception!=null){var call=CanonicalCapabilitySourceEmitter.Call(hook.Exception,"hook","saved,failure,cancellationToken")+";";b.AppendLine(hook.Finally==null?call:"try{"+call+"}catch(global::System.Exception replacement){error=replacement;throw;}");}b.AppendLine("throw;");}
+        b.AppendLine("}finally{");if(hook.Finally!=null)b.AppendLine(CanonicalCapabilitySourceEmitter.Call(hook.Finally,"hook","saved,new global::Zendiator.SendExitInfo(success,error),cancellationToken")+";");b.AppendLine("}} ");
     }
 }

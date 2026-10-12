@@ -27,16 +27,20 @@ internal static class CanonicalCapabilitySourceEmitter
     }
     internal static string Await(string call,bool async)=>async?"await "+call+".ConfigureAwait(false)":call;
     internal static string Call(CapabilityCallbackEmission cb,string receiver,string arguments)=>Await("(("+cb.ContractName+")"+receiver+")."+cb.MethodName+"("+arguments+")",cb.Completion==BoundCompletionKind.ValueTask);
+    private static void Acquire(StringBuilder b,BoundAsyncFactoryEmission? f,string type,string receiver,string request)
+    {if(f==null)b.AppendLine($"var {receiver}=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{type}>(_provider);");else b.AppendLine($"var {receiver}Factory=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{f.FactoryName}>(_provider);{type}? {receiver}={Await("(("+f.ContractName+")"+receiver+"Factory)."+f.MethodName+"("+request+",cancellationToken)",f.AwaitAcquire)}??throw new global::System.InvalidOperationException(\"A session factory must return a nonnull callback receiver.\");");}
+    private static void Cleanup(StringBuilder b,BoundAsyncFactoryEmission? f,string receiver,bool async)
+    {if(f?.CleanupContractName!=null)b.AppendLine($"}}finally{{var detached{receiver}={receiver};{receiver}=null;{Await("(("+f.CleanupContractName+")detached"+receiver+")."+(async?"DisposeAsync":"Dispose")+"()",async)};}}");}
     private static void Scope(StringBuilder b,CanonicalCapabilityCompositionEmission c,int index,string input)
     {
         var async=c.Family==BoundDispatchFamily.SendAsync;var h=c.Registration.Handler;
         if(index==c.Hooks.Count)
         {
-            b.AppendLine($"var handler=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{h.HandlerName}>(_provider);");
-            b.AppendLine((h.ResultName==null?"":"response=")+Await("(("+h.ContractName+")handler)."+h.MethodName+"("+input+",cancellationToken)",async)+";");return;
+            Acquire(b,c.HandlerFactory,h.HandlerName,"handler",input);if(c.HandlerFactory?.CleanupContractName!=null)b.AppendLine("try{");
+            b.AppendLine((h.ResultName==null?"":"response=")+Await("(("+h.ContractName+")handler)."+h.MethodName+"("+input+",cancellationToken)",async)+";");Cleanup(b,c.HandlerFactory,"handler",async);return;
         }
         var hook=c.Hooks[index];var receiver="hook"+index;var saved="saved"+index;var error="error"+index;var success="success"+index;
-        b.AppendLine($"var {receiver}=global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{hook.HookName}>(_provider);");
+        Acquire(b,hook.Factory,hook.HookName,receiver,input);if(hook.Factory?.CleanupContractName!=null)b.AppendLine("try{");
         b.AppendLine($"var {saved}={input};"+(hook.Finally==null?"":$"var {success}=false;global::System.Exception? {error}=null;")+"try{");
         if(hook.Before!=null)b.AppendLine(saved+"="+Call(hook.Before,receiver,saved+",cancellationToken")+";");
         b.AppendLine($"global::System.ArgumentNullException.ThrowIfNull({saved},\"request\");cancellationToken.ThrowIfCancellationRequested();");
@@ -50,6 +54,6 @@ internal static class CanonicalCapabilitySourceEmitter
                 "try{"+Call(hook.Exception,receiver,saved+",failure"+index+",cancellationToken")+";}catch(global::System.Exception replacement"+index+"){"+error+"=replacement"+index+";throw;}");
             b.AppendLine("throw;");
         }
-        b.AppendLine("}finally{");if(hook.Finally!=null)b.AppendLine(Call(hook.Finally,receiver,saved+",new global::Zendiator.SendExitInfo("+success+","+error+"),cancellationToken")+";");b.AppendLine("}");
+        b.AppendLine("}finally{");if(hook.Finally!=null)b.AppendLine(Call(hook.Finally,receiver,saved+",new global::Zendiator.SendExitInfo("+success+","+error+"),cancellationToken")+";");b.AppendLine("}");Cleanup(b,hook.Factory,receiver,async);
     }
 }

@@ -25,7 +25,7 @@ internal static class CanonicalWrapperEmissionNormalizer
             var sync=route.Family==BoundDispatchFamily.SendSync;var h=route.Handlers[0];
             if(h.CompilerOwnsError||!c.Handlers.Any(x=>x.Identity==h.Type)||sync&&h.SyncEmission==null||!sync&&h.AsyncEmission==null)continue;
             var outer=w.Index==1?route.Stages[0]:null;var inner=w.Index+1<route.Stages.Count?route.Stages[w.Index+1]:null;
-            if(new[]{outer,inner}.Any(s=>s!=null&&(s.Kind!=FusionStageKind.Hook||(sync?s.SyncEmission==null:s.AsyncEmission==null))))continue;
+            if(new[]{outer,inner}.Any(s=>s!=null&&(s.Kind!=FusionStageKind.Hook||s.Capabilities==null)))continue;
             if(w.Stage.WrapperEmission.Completion!=(sync?BoundCompletionKind.Synchronous:BoundCompletionKind.ValueTask)||h.Sessions.Count>1)continue;
             BoundSyncFactoryEmission? sf=null;BoundAsyncFactoryEmission? af=null;
             if(h.Sessions.Count==1)
@@ -52,7 +52,9 @@ internal static class CanonicalWrapperEmissionNormalizer
             var handler=sync?h.SyncEmission!:new BoundSyncHandlerEmission(h.AsyncEmission!.RequestName,h.AsyncEmission.HandlerName,h.AsyncEmission.ContractName,h.AsyncEmission.MethodName,h.AsyncEmission.ResultName);
             var registration=new CanonicalSyncCompositionEmission(i,c.GeneratedNamespace,c.MarkerName,c.UseLocalHandlers,handler,sf,false,route.PipelineFamily,c.MicrosoftDiProviderName)
             {RegistrationStages=new(route.Stages.Select(s=>new RegistrationStageEmission(s.Name,s.Kind==FusionStageKind.Wrapper?"Wrapper":"Hook")))};
-            output.Add(new(registration,route.Family.Value,w.Stage.WrapperEmission,outer?.SyncEmission,inner?.SyncEmission,outer?.AsyncEmission,inner?.AsyncEmission,af));
+            output.Add(new(registration,route.Family.Value,w.Stage.WrapperEmission,outer?.SyncEmission,inner?.SyncEmission,outer?.AsyncEmission,inner?.AsyncEmission,af)
+            {OuterCapabilities=outer!=null&&(sync?outer.SyncEmission==null:outer.AsyncEmission==null)?outer.Capabilities:null,
+                InnerCapabilities=inner!=null&&(sync?inner.SyncEmission==null:inner.AsyncEmission==null)?inner.Capabilities:null});
         }
         return new(new(output));
     }
