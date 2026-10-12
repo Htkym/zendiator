@@ -15,7 +15,7 @@ internal static class CanonicalAsyncEmissionNormalizer
         {
             var c = catalog.Compositions[i];
             if (c.GeneratedNamespace == null || c.MicrosoftDiProviderName == null || c.Errors.Count != 0 || c.CompilerOwnsHandlerError ||
-                c.HasExplicitSelection || c.Pipelines.Count != 1 || c.Facts.Count != 1 || c.Facts[0].Key != "IncompleteExecutionContract" ||
+                c.Pipelines.Count != 1 || c.Facts.Count != 1 || c.Facts[0].Key != "IncompleteExecutionContract" ||
                 catalog.Compositions.Count(other => other.Identity == c.Identity || other.Key == c.Key || other.GeneratedNamespace == c.GeneratedNamespace) != 1) continue;
             var route = c.Pipelines[0];
             var graph = execution.Compositions[i].SingleOrDefault(g => g.Contract.Anchor == route.Anchor);
@@ -36,7 +36,7 @@ internal static class CanonicalAsyncEmissionNormalizer
                 {
                     var stage = route.Stages[0];
                     if (route.Stages.Count != 1 || stage.Sessions.Count != 1 || stage.ServiceOwnership != stage.Sessions[0].Ownership ||
-                        AsyncFactory(stage.Sessions[0]) is not { IsSourceDeclaration: true } hookFactory) continue;
+                        AsyncFactory(stage.Sessions[0]) is not { } hookFactory) continue;
                     hooks.Add(stage.AsyncEmission! with { Factory = hookFactory });
                 }
                 else
@@ -50,11 +50,11 @@ internal static class CanonicalAsyncEmissionNormalizer
                 if (h.Sessions.Count != 1) continue;
                 var session = h.Sessions[0];
                 factory = AsyncFactory(session);
-                if (factory is not { IsSourceDeclaration: true }) continue;
+                if (factory is null) continue;
             }
             else if (h.ServiceOwnership != FusionOwnership.BorrowedService) continue;
             output.Add(new(i, c.GeneratedNamespace, c.MarkerName, c.UseLocalHandlers, h.AsyncEmission, factory,
-                route.HasEmptyPipeline, route.PipelineFamily, c.MicrosoftDiProviderName) { Hooks = new(hooks) });
+                route.HasEmptyPipeline, route.PipelineFamily, c.MicrosoftDiProviderName) { Hooks = new(hooks), ExplicitHandlerTypes = c.ExplicitHandlerTypes });
         }
         return new(new(output));
     }
@@ -75,6 +75,7 @@ internal static class CanonicalAsyncEmissionNormalizer
         c.Factory == null ? null : new(c.Factory.FactoryName, c.Factory.ContractName, c.Factory.MethodName, c.Factory.CleanupContractName),
         c.HasEmptyPipeline, c.PipelineFamily, c.MicrosoftDiProviderName)
     {
+        ExplicitHandlerTypes = c.ExplicitHandlerTypes,
         Hooks = new(c.Hooks.Select(h => new BoundSyncHookEmission(h.HookName,
             new(h.Before.ContractName, h.Before.MethodName), new(h.Success.ContractName, h.Success.MethodName),
             new(h.Exception.ContractName, h.Exception.MethodName), new(h.Finally.ContractName, h.Finally.MethodName))

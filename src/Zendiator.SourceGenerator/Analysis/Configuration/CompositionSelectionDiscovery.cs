@@ -75,6 +75,7 @@ internal static class CompositionSelectionDiscovery
 
             var selected = new Dictionary<INamedTypeSymbol, SelectedHandlerModel>(SymbolEqualityComparer.Default);
             var explicitTypes = new HashSet<string>(StringComparer.Ordinal);
+            var explicitHandlerNames = new List<string>();
             var lists = new CompositionListBinding(compilation, semantic, marked, Select, ct);
             if (explicitDefault) SelectLocal(); // The new default composition has implicit local membership.
             var parameter = lambda switch
@@ -118,6 +119,7 @@ internal static class CompositionSelectionDiscovery
                         if (type.IsUnboundGenericType) type = type.OriginalDefinition;
                         if (!explicitTypes.Add(MarkedHandlerDiscovery.RegistrationIdentity(type, compilation)))
                             errors.Add($"Handler {Name(type)} is explicitly selected more than once.");
+                        explicitHandlerNames.Add(Name(type));
                         Select(type);
                     }
                 }
@@ -131,7 +133,7 @@ internal static class CompositionSelectionDiscovery
                 pipelines, new(lists.Facts)) { GeneratedNamespace = generatedNamespace, MarkerName = markerName,
                     MicrosoftDiProviderName = compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.ServiceProvider") is { TypeKind: TypeKind.Class } provider &&
                         provider.ContainingAssembly.Identity.Name == "Microsoft.Extensions.DependencyInjection" && provider.Locations.All(l => !l.IsInSource) ? Name(provider) : null,
-                    UseLocalHandlers = useLocalHandlers, HasExplicitSelection = hasExplicitSelection };
+                    UseLocalHandlers = useLocalHandlers, HasExplicitSelection = hasExplicitSelection, ExplicitHandlerTypes = new(explicitHandlerNames) };
             result.Add(new(model, invocation, lists.Sources.ToImmutableDictionary(StringComparer.Ordinal)));
 
             void SelectLocal()
@@ -140,13 +142,14 @@ internal static class CompositionSelectionDiscovery
             }
             void Select(INamedTypeSymbol type)
             {
-                var candidate = marked.FirstOrDefault(c => Same(c.Symbol, type.OriginalDefinition));
+                var candidate = marked.FirstOrDefault(c => Same(c.Symbol, type.OriginalDefinition)) ??
+                    MarkedHandlerDiscovery.BindExplicitMetadata(compilation,type,ct);
                 if (candidate == null)
                 {
-                    errors.Add($"Handler {Name(type)} requires a source ZendiatorHandler marker. External catalog binding is not connected yet.");
+                    errors.Add($"Handler {Name(type)} requires a source ZendiatorHandler marker or a supported explicitly supplied metadata type.");
                     return;
                 }
-                var definition = catalog.Handlers.First(h => h.Identity == candidate.Model.Identity);
+                var definition = candidate.Model;
                 if (definition.CompilerOwnsMarkerError) { compilerOwned = true; return; }
                 selected[type] = new(MarkedHandlerDiscovery.Identity(type), definition);
             }

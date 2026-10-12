@@ -122,7 +122,7 @@ internal static class StageContractBinding
             new(callbacks.OrderBy(c => c.Phase).ThenBy(c => c.Interface, StringComparer.Ordinal)), FusionOwnership.BorrowedService, compilerOwned)
         {
             SyncEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.SendSync &&
-                kind == FusionStageKind.Hook && type.TypeKind == TypeKind.Class && Public(type) && type.Locations.Any(l => l.IsInSource) &&
+                kind == FusionStageKind.Hook && type.TypeKind == TypeKind.Class && Public(type) &&
                 !compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && !r.Properties.Aliases.Contains("global")) &&
                 callbacks.Count == 4 && syncCallbacks.Count == 4 &&
                 syncCallbacks.ContainsKey(BoundCallbackPhase.Before) && syncCallbacks.ContainsKey(BoundCallbackPhase.Success) &&
@@ -130,7 +130,7 @@ internal static class StageContractBinding
                     ? new(Name(type), syncCallbacks[BoundCallbackPhase.Before], syncCallbacks[BoundCallbackPhase.Success],
                         syncCallbacks[BoundCallbackPhase.Exception], syncCallbacks[BoundCallbackPhase.Finally]) : null,
             AsyncEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.SendAsync &&
-                kind == FusionStageKind.Hook && type.TypeKind == TypeKind.Class && Public(type) && type.Locations.Any(l => l.IsInSource) &&
+                kind == FusionStageKind.Hook && type.TypeKind == TypeKind.Class && Public(type) &&
                 !compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && !r.Properties.Aliases.Contains("global")) &&
                 callbacks.Count == 4 && asyncCallbacks.Count == 4 &&
                 asyncCallbacks.ContainsKey(BoundCallbackPhase.Before) && asyncCallbacks.ContainsKey(BoundCallbackPhase.Success) &&
@@ -139,11 +139,11 @@ internal static class StageContractBinding
                         asyncCallbacks[BoundCallbackPhase.Exception], asyncCallbacks[BoundCallbackPhase.Finally]) : null,
             WrapperEmission = facts.Count == before && !compilerOwned && kind == FusionStageKind.Wrapper &&
                 (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && type.TypeKind == TypeKind.Class && Public(type) &&
-                type.Locations.Any(l => l.IsInSource) && callbacks.Count == 1 &&
+                callbacks.Count == 1 &&
                 !compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && !r.Properties.Aliases.Contains("global"))
                     ? wrapperEmission : null,
             Capabilities = facts.Count==before&&!compilerOwned&&kind==FusionStageKind.Hook&&
-                (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync)&&type.TypeKind==TypeKind.Class&&Public(type)&&type.Locations.Any(l=>l.IsInSource)&&
+                (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync)&&type.TypeKind==TypeKind.Class&&Public(type)&&
                 !compilation.References.Any(r=>!r.Properties.Aliases.IsDefaultOrEmpty&&!r.Properties.Aliases.Contains("global"))&&capabilityCalls.Count>0&&capabilityCalls.Count<=4
                     ?new(Name(type),Capability(BoundCallbackPhase.Before),Capability(BoundCallbackPhase.Success),Capability(BoundCallbackPhase.Exception),Capability(BoundCallbackPhase.Finally)):null
         };

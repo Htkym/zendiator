@@ -125,7 +125,7 @@ internal sealed class CompositionListBinding
             if (prior != null) Reject("UnsupportedGenerationShape", entryAnchor,
                 $"Type {Name(type)} occurs more than once in this ordered list. Stage tags do not create separate registrations.", prior.Anchor);
             entries.Add(new(type, entryAnchor, kind, factoryType));
-            if (handlerList && _marked.Any(c => Same(c.Symbol, type.OriginalDefinition))) _select(type);
+            if (handlerList && (_marked.Any(c => Same(c.Symbol, type.OriginalDefinition)) || BindExplicitMetadata(_compilation,type,_ct)!=null)) _select(type);
         }
         _declarations.Add(new(anchor, request, family, handlerList, entries.ToImmutable()));
     }
@@ -188,10 +188,10 @@ internal sealed class CompositionListBinding
             foreach (var entry in handlerEntries)
             {
                 if (!Eligible(entry.Type, entry.Anchor, "Handler")) continue;
-                var candidate = _marked.FirstOrDefault(c => Same(c.Symbol, entry.Type.OriginalDefinition));
+                var candidate = _marked.FirstOrDefault(c => Same(c.Symbol, entry.Type.OriginalDefinition)) ?? BindExplicitMetadata(_compilation,entry.Type,_ct);
                 if (candidate == null)
                 {
-                    Reject("UnsupportedGenerationShape", entry.Anchor, $"Handler {Name(entry.Type)} requires a source ZendiatorHandler marker. External catalog binding is pending.");
+                    Reject("UnsupportedGenerationShape", entry.Anchor, $"Handler {Name(entry.Type)} requires a source ZendiatorHandler marker or a supported explicitly supplied metadata type.");
                     continue;
                 }
                 if (candidate.Model.CompilerOwnsMarkerError) continue;
@@ -232,7 +232,6 @@ internal sealed class CompositionListBinding
                         Identity(implementation.ReturnType), Constraints(implementation.TypeParameters),
                         family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync));
                 if ((family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && declaration.Request.TypeKind is TypeKind.Class or TypeKind.Struct &&
-                    declaration.Request.Locations.Any(l => l.IsInSource) &&
                     !_compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && !r.Properties.Aliases.Contains("global")) &&
                     entry.Type.TypeKind == TypeKind.Class && Public(entry.Type) && implementation != null && member != null &&
                     (nextResult == null || nextResult is INamedTypeSymbol or IArrayTypeSymbol))

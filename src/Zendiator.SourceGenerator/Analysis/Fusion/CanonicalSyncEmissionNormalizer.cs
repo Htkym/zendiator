@@ -17,7 +17,7 @@ internal static class CanonicalSyncEmissionNormalizer
         {
             var composition = catalog.Compositions[i];
             if (composition.GeneratedNamespace == null || composition.MicrosoftDiProviderName == null || composition.Errors.Count != 0 || composition.CompilerOwnsHandlerError ||
-                composition.HasExplicitSelection || composition.Pipelines.Count != 1 ||
+                composition.Pipelines.Count != 1 ||
                 composition.Facts.Count != 1 || composition.Facts[0].Key != "IncompleteExecutionContract" ||
                 catalog.Compositions.Count(c => c.Identity == composition.Identity || c.Key == composition.Key ||
                     c.GeneratedNamespace == composition.GeneratedNamespace) != 1) continue;
@@ -41,7 +41,7 @@ internal static class CanonicalSyncEmissionNormalizer
                     var stage = route.Stages[0];
                     if (route.Stages.Count != 1 || stage.Sessions.Count != 1 ||
                         stage.ServiceOwnership != stage.Sessions[0].Ownership ||
-                        SyncFactory(stage.Sessions[0]) is not { IsSourceDeclaration: true } hookFactory) continue;
+                        SyncFactory(stage.Sessions[0]) is not { } hookFactory) continue;
                     hooks.Add(stage.SyncEmission! with { Factory = hookFactory });
                 }
                 else
@@ -55,11 +55,11 @@ internal static class CanonicalSyncEmissionNormalizer
             {
                 if (handler.Sessions.Count != 1) continue;
                 factory = SyncFactory(handler.Sessions[0]);
-                if (factory == null || route.Stages.Count != 0 && !factory.IsSourceDeclaration) continue;
+                if (factory == null) continue;
             }
             else if (handler.ServiceOwnership != FusionOwnership.BorrowedService) continue;
             output.Add(new(i, composition.GeneratedNamespace, composition.MarkerName, composition.UseLocalHandlers,
-                handler.SyncEmission, factory, route.HasEmptyPipeline, route.PipelineFamily, composition.MicrosoftDiProviderName) { Hooks = new(hooks) });
+                handler.SyncEmission, factory, route.HasEmptyPipeline, route.PipelineFamily, composition.MicrosoftDiProviderName) { Hooks = new(hooks), ExplicitHandlerTypes = composition.ExplicitHandlerTypes });
         }
         return new(new(output));
     }

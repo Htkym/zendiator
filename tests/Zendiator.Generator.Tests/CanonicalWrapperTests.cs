@@ -240,7 +240,7 @@ public sealed partial class GeneratorTests
             "metadata"=>source.Replace("Stage.Wrapper<Wrap>()","Stage.Wrapper<global::Zendiator.Generator.Tests.MetadataWrapper<Ping>>()"),
             _=>source.Replace("Stage.Wrapper<Wrap>()","Stage.Hook<global::Zendiator.Generator.Tests.MetadataAsyncHook<Ping>>(),Stage.Wrapper<Wrap>()")};
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"WrapperUnsupported"+shape),out var output,out var diagnostics);
-        Assert.Equal("ZEN0037",Assert.Single(diagnostics).Id);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.Contains("Canonical"));
+        Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.Contains(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName=="Zendiator.Canonical.Wrappers.g.cs");
         WriteNestedHookEvidence("wrapper-boundaries",shape,new{shape,source,diagnostics=diagnostics.Select(d=>new{d.Id,message=d.GetMessage()}),generatedExecution=false});
     }
     [Fact]

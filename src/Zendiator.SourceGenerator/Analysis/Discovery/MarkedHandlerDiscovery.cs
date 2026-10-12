@@ -8,7 +8,7 @@ using static Zendiator.SourceGenerator.SymbolUtilities;
 
 namespace Zendiator.SourceGenerator;
 
-/// <summary>Only marked source symbols enter this extraction. Interfaces verify these targets.</summary>
+/// <summary>Extracts marked source and explicitly supplied metadata targets. Interfaces verify these targets.</summary>
 internal static class MarkedHandlerDiscovery
 {
     internal const string MarkerName = "Zendiator.ZendiatorHandlerAttribute";
@@ -21,8 +21,22 @@ internal static class MarkedHandlerDiscovery
         var handler = compilation.GetTypeByMetadataName(ContractNames.Handler);
         var marker = handler?.ContainingAssembly.GetTypeByMetadataName(MarkerName);
         if (marker == null || context.TargetSymbol is not INamedTypeSymbol type) return null;
+        return BindType(compilation,type,marker,true,ct);
+    }
+
+    // Known external types are supplied by explicit configuration, never by assembly-wide scanning.
+    internal static Candidate? BindExplicitMetadata(Compilation compilation,INamedTypeSymbol type,CancellationToken ct)
+    {
+        if(type.Locations.Any(l=>l.IsInSource)||type.TypeKind is not (TypeKind.Class or TypeKind.Struct))return null;
+        var marker=compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly.GetTypeByMetadataName(MarkerName);
+        if(marker==null||type.GetAttributes().Count(a=>Same(a.AttributeClass,marker))>1)return null;
+        return BindType(compilation,type,marker,false,ct);
+    }
+
+    private static Candidate? BindType(Compilation compilation,INamedTypeSymbol type,INamedTypeSymbol marker,bool markerRequired,CancellationToken ct)
+    {
         var attributes = type.GetAttributes().Where(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, marker)).ToArray();
-        if (attributes.Length == 0) return null;
+        if (markerRequired && attributes.Length == 0) return null;
         var contracts = new List<MarkedHandlerContract>();
         foreach (var metadataName in new[] { ContractNames.Handler, ContractNames.VoidHandler,
             ContractNames.SyncHandler, ContractNames.SyncVoidHandler, ContractNames.StreamHandler, ContractNames.NotificationHandler })
@@ -54,8 +68,8 @@ internal static class MarkedHandlerDiscovery
         var model = new MarkedHandlerModel(Identity(type), Name(type), new(hierarchy),
             new(contracts.OrderBy(c => c.Contract, StringComparer.Ordinal).ThenBy(c => c.Request, StringComparer.Ordinal)
                 .ThenBy(c => c.Result, StringComparer.Ordinal)),
-            attributes.Length != 1 || type.TypeKind is not (TypeKind.Class or TypeKind.Struct));
-        return new(model, type, attributes[0].ApplicationSyntaxReference?.GetSyntax(ct).GetLocation() ?? Location.None);
+            (markerRequired && attributes.Length != 1) || type.TypeKind is not (TypeKind.Class or TypeKind.Struct));
+        return new(model, type, attributes.FirstOrDefault()?.ApplicationSyntaxReference?.GetSyntax(ct).GetLocation() ?? Location.None);
     }
 
     internal static MarkedHandlerCatalog Normalize(ImmutableArray<Candidate> candidates)
