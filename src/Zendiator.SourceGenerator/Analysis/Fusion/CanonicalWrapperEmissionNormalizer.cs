@@ -23,17 +23,18 @@ internal static class CanonicalWrapperEmissionNormalizer
             if(wrappers.Length==0)continue;var w=wrappers[0];
             var sync=route.Family==BoundDispatchFamily.SendSync;var h=route.Handlers[0];
             if(h.CompilerOwnsError||!c.Handlers.Any(x=>x.Identity==h.Type)||sync&&h.SyncEmission==null||!sync&&h.AsyncEmission==null)continue;
-            var regions=new List<CanonicalWrapperRegionEmission>();HookCapabilityEmission? pending=null;var invalid=false;
+            var regions=new List<CanonicalWrapperRegionEmission>();var pending=new List<HookCapabilityEmission>();var invalid=false;
             foreach(var s in route.Stages){
                 if(s.CompilerOwnsError||s.Sessions.Count>1){invalid=true;break;}
-                if(s.Kind==FusionStageKind.Hook){if(pending!=null||s.Capabilities==null||s.Sessions.Count!=0||s.ServiceOwnership!=FusionOwnership.BorrowedService){invalid=true;break;}pending=s.Capabilities;continue;}
+                if(s.Kind==FusionStageKind.Hook){if(s.Capabilities==null){invalid=true;break;}var hf=s.Sessions.Count==0?null:CanonicalCapabilityEmissionNormalizer.Factory(s.Sessions[0],sync);if(s.Sessions.Count==0?s.ServiceOwnership!=FusionOwnership.BorrowedService:hf==null||s.ServiceOwnership!=s.Sessions[0].Ownership){invalid=true;break;}pending.Add(hf==null?s.Capabilities:s.Capabilities with{Factory=hf});continue;}
                 if(s.Kind!=FusionStageKind.Wrapper||s.WrapperEmission==null||s.WrapperEmission.Completion!=(sync?BoundCompletionKind.Synchronous:BoundCompletionKind.ValueTask)){invalid=true;break;}
                 var factory=s.Sessions.Count==0?null:CanonicalCapabilityEmissionNormalizer.Factory(s.Sessions[0],sync);
                 if(s.Sessions.Count==0?s.ServiceOwnership!=FusionOwnership.BorrowedService:factory==null||s.ServiceOwnership!=s.Sessions[0].Ownership){invalid=true;break;}
-                regions.Add(new(pending,s.WrapperEmission,factory));pending=null;
+                regions.Add(Region(s.WrapperEmission,factory));pending.Clear();
             }
-            if(invalid||h.Sessions.Count>1)continue;regions.Add(new(pending,null,null));
-            var generalized=wrappers.Length!=1||w.Stage.Sessions.Count!=0;
+            if(invalid||h.Sessions.Count>1)continue;regions.Add(Region(null,null));
+            CanonicalWrapperRegionEmission Region(BoundWrapperEmission? wrapper,BoundAsyncFactoryEmission? factory)=>pending.Count<=1&&pending.All(x=>x.Factory==null)?new(pending.SingleOrDefault(),wrapper,factory):new(null,wrapper,factory){Hooks=new(pending)};
+            var generalized=wrappers.Length!=1||w.Stage.Sessions.Count!=0||regions.Any(r=>r.Hooks.Count!=0);
             var outer=!generalized&&w.Index==1?route.Stages[0]:null;var inner=!generalized&&w.Index+1<route.Stages.Count?route.Stages[w.Index+1]:null;
             BoundSyncFactoryEmission? sf=null;BoundAsyncFactoryEmission? af=null;
             if(h.Sessions.Count==1)

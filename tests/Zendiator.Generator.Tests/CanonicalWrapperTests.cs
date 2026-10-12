@@ -43,6 +43,10 @@ public sealed class WrapperProbe
 }
 public sealed class MetadataWrapper<R>:IAsyncSendWrapper<R,int> where R:class
 {public ValueTask<int> InvokeAsync<TNext>(R r,TNext next,CancellationToken t) where TNext:IAsyncSendContinuation<R,int> =>next.InvokeAsync(r,t);}
+public sealed class MetadataOwnedReceiverFactory<R,H>:IOwnedSessionFactory<R,H> where R:class where H:class
+{public H Create(R r,CancellationToken t)=>throw new InvalidOperationException("Metadata fixture only.");}
+public sealed class MetadataSyncWrapper<R>:ISendWrapper<R,int> where R:class
+{public int Invoke<TNext>(R r,TNext next,CancellationToken t)where TNext:ISendContinuation<R,int> =>next.Invoke(r,t);}
 
 public sealed partial class GeneratorTests
 {
@@ -225,16 +229,16 @@ public sealed partial class GeneratorTests
         }
         if(outer)phases.AddRange(["h0.after","h0.finally"]);return phases.ToArray();
     }
-    [Theory][InlineData("partial-hook")][InlineData("metadata")]
+    [Theory][InlineData("metadata-hook")][InlineData("metadata")]
     public void Opaque_wrapper_unsupported_scope_shapes_keep_diagnostic_and_no_execution(string shape)
         =>AssertWrapperUnsupported(shape);
     private static void AssertWrapperUnsupported(string shape)
     {
         var source=WrapperSource(true,false,"direct","none");var start=source.IndexOf("public static object? Dispatch",StringComparison.Ordinal);var end=source.IndexOf('}',start);source=source.Remove(start,end-start+1);
         source=shape switch{
-            "wrapper-hook-session"=>source.Replace("Stage.Wrapper<Wrap>()","Stage.Hook<Hook<OuterTag>,KF>(),Stage.Wrapper<Wrap>()")+"namespace App{public sealed class KF:IAsyncOwnedSessionFactory<Ping,Hook<OuterTag>>{private readonly Probe _p;public KF(Probe p){_p=p;}public ValueTask<Hook<OuterTag>> CreateAsync(Ping r,CancellationToken t)=>new(new Hook<OuterTag>(_p));}}",
+            "metadata-factory"=>source.Replace("Stage.Wrapper<Wrap>()","Stage.Wrapper<Wrap,global::Zendiator.Generator.Tests.MetadataOwnedReceiverFactory<Ping,Wrap>>()"),
             "metadata"=>source.Replace("Stage.Wrapper<Wrap>()","Stage.Wrapper<global::Zendiator.Generator.Tests.MetadataWrapper<Ping>>()"),
-            _=>source.Replace("Stage.Wrapper<Wrap>()","Stage.Hook<Partial>(),Stage.Hook<Partial2>(),Stage.Wrapper<Wrap>()")+"namespace App{public sealed class Partial:IAsyncSendFinallyObserver<Ping>{public ValueTask FinallyAsync(Ping r,SendExitInfo e,CancellationToken t)=>default;}public sealed class Partial2:IAsyncSendFinallyObserver<Ping>{public ValueTask FinallyAsync(Ping r,SendExitInfo e,CancellationToken t)=>default;}}"};
+            _=>source.Replace("Stage.Wrapper<Wrap>()","Stage.Hook<global::Zendiator.Generator.Tests.MetadataAsyncHook<Ping>>(),Stage.Wrapper<Wrap>()")};
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"WrapperUnsupported"+shape),out var output,out var diagnostics);
         Assert.Equal("ZEN0037",Assert.Single(diagnostics).Id);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.Contains("Canonical"));
         WriteNestedHookEvidence("wrapper-boundaries",shape,new{shape,source,diagnostics=diagnostics.Select(d=>new{d.Id,message=d.GetMessage()}),generatedExecution=false});
@@ -246,7 +250,7 @@ public sealed partial class GeneratorTests
     public async Task Opaque_wrapper_corrected_void_overlap_checks_ownership_per_inner_request()
     {var f=WrapperRuntimeFixture(true,true,"async-owned","both");foreach(var generated in new[]{false,true})await RunWrapperCase(f,true,true,"async-owned","both",generated,"overlap");}
     [Fact]
-    public void Opaque_wrapper_Hook_session_region_remains_diagnosed()=>AssertWrapperUnsupported("wrapper-hook-session");
+    public void Opaque_wrapper_metadata_factory_region_remains_diagnosed()=>AssertWrapperUnsupported("metadata-factory");
     [Fact]
     public void Opaque_wrapper_body_edit_preserves_emission_cache_and_region_structure()
     {
