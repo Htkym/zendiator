@@ -27,10 +27,6 @@ internal static class CanonicalSyncSourceEmitter
                         public Zendiator(global::System.IServiceProvider provider)
                         {
                             global::System.ArgumentNullException.ThrowIfNull(provider);
-                            if (provider is not {{c.MicrosoftDiProviderName}} &&
-                                (provider.GetType().Assembly != typeof({{c.MicrosoftDiProviderName}}).Assembly ||
-                                 provider.GetType().FullName != "Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceProviderEngineScope"))
-                                throw new global::System.NotSupportedException("This generated composition currently supports Microsoft Dependency Injection providers only.");
                             _provider = provider;
                         }
                         public {{result}} Send({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default)
@@ -218,8 +214,6 @@ internal static class CanonicalSyncSourceEmitter
                     {
                         global::System.ArgumentNullException.ThrowIfNull(services);
                         global::System.ArgumentNullException.ThrowIfNull(snapshot);
-                        if (services.GetType() != typeof(global::Microsoft.Extensions.DependencyInjection.ServiceCollection))
-                            throw new global::System.NotSupportedException("This generated composition currently supports Microsoft Dependency Injection service collections only.");
                         var expected = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
             """);
         if (c.UseLocalHandlers) b.AppendLine("            expected.UseLocalHandlers();");

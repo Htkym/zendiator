@@ -14,7 +14,7 @@ internal static class CanonicalAsyncEmissionNormalizer
         for (var i = 0; i < catalog.Compositions.Count; i++)
         {
             var c = catalog.Compositions[i];
-            if (c.GeneratedNamespace == null || c.MicrosoftDiProviderName == null || c.Errors.Count != 0 || c.CompilerOwnsHandlerError ||
+            if (c.GeneratedNamespace == null || c.Errors.Count != 0 || c.CompilerOwnsHandlerError ||
                 c.Pipelines.Count != 1 || c.Facts.Count != 1 || c.Facts[0].Key != "IncompleteExecutionContract" ||
                 catalog.Compositions.Count(other => other.Identity == c.Identity || other.Key == c.Key || other.GeneratedNamespace == c.GeneratedNamespace) != 1) continue;
             var route = c.Pipelines[0];
@@ -54,7 +54,7 @@ internal static class CanonicalAsyncEmissionNormalizer
             }
             else if (h.ServiceOwnership != FusionOwnership.BorrowedService) continue;
             output.Add(new(i, c.GeneratedNamespace, c.MarkerName, c.UseLocalHandlers, h.AsyncEmission, factory,
-                route.HasEmptyPipeline, route.PipelineFamily, c.MicrosoftDiProviderName) { Hooks = new(hooks), ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes });
+                route.HasEmptyPipeline, route.PipelineFamily, c.MicrosoftDiProviderName??"") { Hooks = new(hooks), ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes });
         }
         return new(new(output));
     }
@@ -73,7 +73,7 @@ internal static class CanonicalAsyncEmissionNormalizer
     internal static CanonicalSyncCompositionEmission Registration(CanonicalAsyncCompositionEmission c) => new(c.Index, c.Namespace, c.MarkerName, c.UseLocalHandlers,
         new(c.Handler.RequestName, c.Handler.HandlerName, c.Handler.ContractName, c.Handler.MethodName, c.Handler.ResultName),
         c.Factory == null ? null : new(c.Factory.FactoryName, c.Factory.ContractName, c.Factory.MethodName, c.Factory.CleanupContractName),
-        c.HasEmptyPipeline, c.PipelineFamily, c.MicrosoftDiProviderName)
+        c.HasEmptyPipeline, c.PipelineFamily, c.MicrosoftDiProviderName??"")
     {
         ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes,
         Hooks = new(c.Hooks.Select(h => new BoundSyncHookEmission(h.HookName,

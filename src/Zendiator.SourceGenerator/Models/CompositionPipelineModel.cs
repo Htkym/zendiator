@@ -40,6 +40,8 @@ internal sealed record BoundPipelineModel(string Anchor, string Request, string 
     EquatableArray<BoundHandlerModel> Handlers, EquatableArray<BoundStageModel> Stages,
     bool ExplicitHandlerOrder, FusionContractOrigin ContractOrigin)
 {
+    public int HandlerListOrdinal { get; init; }
+    public int PipelineListOrdinal { get; init; }
     public bool HasEmptyPipeline { get; init; }
     public BoundDispatchFamily? PipelineFamily { get; init; }
 }

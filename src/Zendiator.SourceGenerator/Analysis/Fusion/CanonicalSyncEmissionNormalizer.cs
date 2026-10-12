@@ -16,7 +16,7 @@ internal static class CanonicalSyncEmissionNormalizer
         for (var i = 0; i < catalog.Compositions.Count; i++)
         {
             var composition = catalog.Compositions[i];
-            if (composition.GeneratedNamespace == null || composition.MicrosoftDiProviderName == null || composition.Errors.Count != 0 || composition.CompilerOwnsHandlerError ||
+            if (composition.GeneratedNamespace == null || composition.Errors.Count != 0 || composition.CompilerOwnsHandlerError ||
                 composition.Pipelines.Count != 1 ||
                 composition.Facts.Count != 1 || composition.Facts[0].Key != "IncompleteExecutionContract" ||
                 catalog.Compositions.Count(c => c.Identity == composition.Identity || c.Key == composition.Key ||
@@ -59,7 +59,7 @@ internal static class CanonicalSyncEmissionNormalizer
             }
             else if (handler.ServiceOwnership != FusionOwnership.BorrowedService) continue;
             output.Add(new(i, composition.GeneratedNamespace, composition.MarkerName, composition.UseLocalHandlers,
-                handler.SyncEmission, factory, route.HasEmptyPipeline, route.PipelineFamily, composition.MicrosoftDiProviderName) { Hooks = new(hooks), ExplicitHandlerTypes = composition.ExplicitHandlerTypes, CatalogMarkerTypes = composition.CatalogMarkerTypes });
+                handler.SyncEmission, factory, route.HasEmptyPipeline, route.PipelineFamily, composition.MicrosoftDiProviderName??"") { Hooks = new(hooks), ExplicitHandlerTypes = composition.ExplicitHandlerTypes, CatalogMarkerTypes = composition.CatalogMarkerTypes });
         }
         return new(new(output));
     }

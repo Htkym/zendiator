@@ -14,7 +14,7 @@ internal static class CanonicalWrapperEmissionNormalizer
         for(var i=0;i<catalog.Compositions.Count;i++)
         {
             var c=catalog.Compositions[i];
-            if(c.GeneratedNamespace==null||c.MicrosoftDiProviderName==null||c.Errors.Count!=0||c.CompilerOwnsHandlerError||c.Pipelines.Count!=1||
+            if(c.GeneratedNamespace==null||c.Errors.Count!=0||c.CompilerOwnsHandlerError||c.Pipelines.Count!=1||
                 c.Facts.Count!=1||c.Facts[0].Key!="IncompleteExecutionContract"||catalog.Compositions.Count(x=>x.Identity==c.Identity||x.Key==c.Key||x.GeneratedNamespace==c.GeneratedNamespace)!=1)continue;
             var route=c.Pipelines[0];var graph=execution.Compositions[i].SingleOrDefault(g=>g.Contract.Anchor==route.Anchor);
             if(graph?.IsValid!=true||graph.Schedule==null||route.Family is not (BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync)||
@@ -59,7 +59,7 @@ internal static class CanonicalWrapperEmissionNormalizer
             }
             else if(h.ServiceOwnership!=FusionOwnership.BorrowedService)continue;
             var handler=sync?h.SyncEmission!:new BoundSyncHandlerEmission(h.AsyncEmission!.RequestName,h.AsyncEmission.HandlerName,h.AsyncEmission.ContractName,h.AsyncEmission.MethodName,h.AsyncEmission.ResultName){RequestIsValueType=h.AsyncEmission.RequestIsValueType};
-            var registration=new CanonicalSyncCompositionEmission(i,c.GeneratedNamespace,c.MarkerName,c.UseLocalHandlers,handler,sf,false,route.PipelineFamily,c.MicrosoftDiProviderName)
+            var registration=new CanonicalSyncCompositionEmission(i,c.GeneratedNamespace,c.MarkerName,c.UseLocalHandlers,handler,sf,false,route.PipelineFamily,c.MicrosoftDiProviderName??"")
             {ExplicitHandlerTypes=c.ExplicitHandlerTypes,CatalogMarkerTypes=c.CatalogMarkerTypes,RegistrationStages=new(route.Stages.Select(s=>new RegistrationStageEmission(s.Name,s.Kind==FusionStageKind.Wrapper?"Wrapper":"Hook",s.Sessions.Count==0?null:CanonicalCapabilityEmissionNormalizer.Factory(s.Sessions[0],sync)!.FactoryName)))};
             output.Add(new(registration,route.Family.Value,w.Stage.WrapperEmission!,outer?.SyncEmission,inner?.SyncEmission,outer?.AsyncEmission,inner?.AsyncEmission,af)
             {OuterCapabilities=outer!=null&&(sync?outer.SyncEmission==null:outer.AsyncEmission==null)?outer.Capabilities:null,

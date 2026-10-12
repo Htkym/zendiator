@@ -25,10 +25,6 @@ internal static class CanonicalAsyncSourceEmitter
                         public Zendiator(global::System.IServiceProvider provider)
                         {
                             global::System.ArgumentNullException.ThrowIfNull(provider);
-                            if (provider is not {{c.MicrosoftDiProviderName}} &&
-                                (provider.GetType().Assembly != typeof({{c.MicrosoftDiProviderName}}).Assembly ||
-                                 provider.GetType().FullName != "Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceProviderEngineScope"))
-                                throw new global::System.NotSupportedException("This generated composition currently supports Microsoft Dependency Injection providers only.");
                             _provider = provider;
                         }
                         public {{result}} SendAsync({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default)

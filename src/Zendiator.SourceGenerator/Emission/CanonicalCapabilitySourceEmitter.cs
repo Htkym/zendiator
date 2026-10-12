@@ -15,7 +15,6 @@ internal static class CanonicalCapabilitySourceEmitter
                     private readonly global::System.IServiceProvider _provider;
                     public Zendiator(global::System.IServiceProvider provider){
                         global::System.ArgumentNullException.ThrowIfNull(provider);
-                        if(provider is not {{r.MicrosoftDiProviderName}}&&(provider.GetType().Assembly!=typeof({{r.MicrosoftDiProviderName}}).Assembly||provider.GetType().FullName!="Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceProviderEngineScope"))throw new global::System.NotSupportedException("This generated composition currently supports Microsoft Dependency Injection providers only.");
                         _provider=provider;
                     }
                     public {{result}} {{(async?"SendAsync":"Send")}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken=default){{{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull(request);")}}{{(async||h.ResultName!=null?"return ":"")}}Execute(request,cancellationToken);}

@@ -158,6 +158,8 @@ internal sealed class CompositionListBinding
             !resolved.Any(p => !p.Declaration.HandlerList && p.Family == d.Family && Key(p.Declaration.Request) == Key(d.Declaration.Request))))
         {
             _ct.ThrowIfCancellationRequested();
+            var explicitHandlers = resolved.FirstOrDefault(d => d.Declaration.HandlerList && d.Family == family &&
+                Key(d.Declaration.Request) == Key(declaration.Request)).Declaration;
             var before = Facts.Count;
             if (!Eligible(declaration.Request, declaration.Anchor, "Request", concrete: false) || family == null)
             {
@@ -170,8 +172,6 @@ internal sealed class CompositionListBinding
                 output.Add(Model(null, null, Array.Empty<BoundHandlerModel>(), Array.Empty<BoundStageModel>(), declaration.HandlerList));
                 continue;
             }
-            var explicitHandlers = resolved.FirstOrDefault(d => d.Declaration.HandlerList && d.Family == family &&
-                Key(d.Declaration.Request) == Key(declaration.Request)).Declaration;
             var multiple = family is BoundDispatchFamily.SendAllAsync or BoundDispatchFamily.SendAllSync;
             if (multiple && explicitHandlers == null)
             {
@@ -283,7 +283,9 @@ internal sealed class CompositionListBinding
             BoundPipelineModel Model(FusionResultKind? shape, ITypeSymbol? resultType, IEnumerable<BoundHandlerModel> boundHandlers,
                 IEnumerable<BoundStageModel> boundStages, bool explicitOrder) => new(declaration.Anchor, Identity(declaration.Request), Name(declaration.Request),
                     family, shape, resultType == null ? null : Identity(resultType), new(boundHandlers), new(boundStages), explicitOrder, FusionContractOrigin.NewCanonical)
-                { HasEmptyPipeline = !declaration.HandlerList && declaration.Entries.Length == 0,
+                { HandlerListOrdinal = explicitHandlers==null?int.MaxValue:int.Parse(explicitHandlers.Anchor.Substring(5),System.Globalization.CultureInfo.InvariantCulture),
+                    PipelineListOrdinal = declaration.HandlerList?int.MaxValue:int.Parse(declaration.Anchor.Substring(5),System.Globalization.CultureInfo.InvariantCulture),
+                    HasEmptyPipeline = !declaration.HandlerList && declaration.Entries.Length == 0,
                     PipelineFamily = declaration.HandlerList ? null : declaration.Family };
         }
         return new(output);

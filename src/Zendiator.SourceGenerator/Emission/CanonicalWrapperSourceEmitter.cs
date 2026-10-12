@@ -18,8 +18,6 @@ internal static class CanonicalWrapperSourceEmitter
                         private readonly global::System.IServiceProvider _provider;
                         public Zendiator(global::System.IServiceProvider provider) {
                             global::System.ArgumentNullException.ThrowIfNull(provider);
-                            if(provider is not {{r.MicrosoftDiProviderName}} && (provider.GetType().Assembly!=typeof({{r.MicrosoftDiProviderName}}).Assembly || provider.GetType().FullName!="Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceProviderEngineScope"))
-                                throw new global::System.NotSupportedException("This generated composition currently supports Microsoft Dependency Injection providers only.");
                             _provider=provider;
                         }
                         public {{result}} {{send}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken=default) {

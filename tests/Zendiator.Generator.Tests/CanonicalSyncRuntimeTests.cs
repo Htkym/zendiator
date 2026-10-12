@@ -409,8 +409,8 @@ public sealed partial class GeneratorTests
                 "c => { c.Handlers<Ping>(DispatchFamily.SendSync,typeof(Handler<string>)); c.Handlers<Other>(DispatchFamily.SendSync,typeof(OtherHandler)); }")+
                 "namespace App { public sealed record Other : ISyncRequest<int>; [ZendiatorHandler] public sealed class OtherHandler : ISyncRequestHandler<Other,int> { public int Handle(Other r,CancellationToken c)=>1; } }",_=>source };
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"CanonicalSyncUnsupported_"+shape),out var output,out var diagnostics);
-        if(shape is "struct-request" or "array-result" or "stage-wrapper"){
-            Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.Contains(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName==(shape=="stage-wrapper"?"Zendiator.Canonical.Wrappers.g.cs":"Zendiator.Canonical.SendSync.g.cs"));return;
+        if(shape is "struct-request" or "array-result" or "stage-wrapper" or "multiple-routes"){
+            Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.Contains(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName==(shape=="stage-wrapper"?"Zendiator.Canonical.Wrappers.g.cs":shape=="multiple-routes"?"Zendiator.Canonical.Multiple.g.cs":"Zendiator.Canonical.SendSync.g.cs"));return;
         }
         Assert.Equal(shape=="multiple-routes"?2:1,diagnostics.Length); Assert.All(diagnostics,d=>Assert.Equal("ZEN0037",d.Id));
         Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));
@@ -427,14 +427,12 @@ public sealed partial class GeneratorTests
         if (boundary=="collection")
         {
             var collection=new CustomSyncCollection();
-            var error=Assert.Throws<TargetInvocationException>(()=>f.Register.Invoke(null,[collection]));
-            Assert.IsType<NotSupportedException>(error.InnerException); Assert.Empty(collection);
+            Assert.Same(collection,f.Register.Invoke(null,[collection]));Assert.NotEmpty(collection);
         }
         else
         {
             using var provider=new ServiceCollection().BuildServiceProvider();
-            var error=Assert.Throws<TargetInvocationException>(()=>Activator.CreateInstance(f.Mediator,new RecordingSyncProvider(provider,probe,f.Service)));
-            Assert.IsType<NotSupportedException>(error.InnerException);
+            Assert.NotNull(Activator.CreateInstance(f.Mediator,new RecordingSyncProvider(provider,probe,f.Service)));
         }
         Assert.Empty(probe.Trace); probe.Cancellation.Dispose();
     }
@@ -460,8 +458,8 @@ public sealed partial class GeneratorTests
         var compilation=SyncCompilation(source,"UnsupportedProviderReference");
         if (!homonym) compilation=compilation.WithReferences(compilation.References.Where(r=>!string.Equals(Path.GetFileName(r.Display),"Microsoft.Extensions.DependencyInjection.dll",StringComparison.OrdinalIgnoreCase)));
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(compilation,out var output,out var diagnostics);
-        Assert.Equal("ZEN0037",Assert.Single(diagnostics).Id);
-        Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));
-        Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.StartsWith("Zendiator.Canonical",StringComparison.Ordinal));
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        Assert.Contains(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName=="Zendiator.Canonical.SendSync.g.cs");
     }
 }

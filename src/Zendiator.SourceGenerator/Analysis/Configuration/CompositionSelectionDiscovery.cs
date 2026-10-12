@@ -190,7 +190,8 @@ internal static class CompositionSelectionDiscovery
         CanonicalExecutionGraphCatalog execution, CanonicalSyncEmissionModel canonicalSync, CanonicalSyncInterceptorModel syncCallSites,
         CanonicalAsyncEmissionModel canonicalAsync, CanonicalSyncInterceptorModel asyncCallSites,
         CanonicalWrapperEmissionModel wrappers,CanonicalSyncInterceptorModel wrapperCallSites,
-        CanonicalCapabilityEmissionModel capabilities,CanonicalSyncInterceptorModel capabilityCallSites)
+        CanonicalCapabilityEmissionModel capabilities,CanonicalSyncInterceptorModel capabilityCallSites,
+        CanonicalMultiEmissionModel multi,CanonicalSyncInterceptorModel multiCallSites)
     {
         for (var index = 0; index < catalog.Compositions.Count; index++)
         {
@@ -215,6 +216,7 @@ internal static class CompositionSelectionDiscovery
                     var message = fact.Message;
                     if (fact.Key == "IncompleteExecutionContract")
                     {
+                        if(multi.Compositions.Any(c=>c.Index==index)&&multiCallSites.CallSites.Any(s=>s.Namespace==composition.GeneratedNamespace&&s.MarkerName==composition.MarkerName))continue;
                         var enabled = canonicalSync.Compositions.FirstOrDefault(c => c.Index == index);
                         if (enabled != null &&
                             syncCallSites.CallSites.Any(s => s.Namespace == enabled.Namespace && s.MarkerName == enabled.MarkerName))
