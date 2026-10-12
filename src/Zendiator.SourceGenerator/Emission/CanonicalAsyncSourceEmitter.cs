@@ -40,6 +40,14 @@ internal static class CanonicalAsyncSourceEmitter
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                 """);
+            if (c.Hooks.Count != 0)
+            {
+                if (h.ResultName != null) b.AppendLine($"            {h.ResultName} response;");
+                EmitHookScope(b, c, 0, "request");
+                if (h.ResultName != null) b.AppendLine("            return response;");
+            }
+            else
+            {
             if (c.Factory is not { } factory)
                 b.AppendLine($$"""            var handler = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{h.HandlerName}}>(_provider);""");
             else
@@ -61,10 +69,66 @@ internal static class CanonicalAsyncSourceEmitter
                                 await (({{c.Factory!.CleanupContractName}})detached).DisposeAsync().ConfigureAwait(false);
                             }
                     """);
+            }
             b.AppendLine("        }\n    }");
             CanonicalSyncSourceEmitter.EmitRegistrar(b, CanonicalAsyncEmissionNormalizer.Registration(c), BoundDispatchFamily.SendAsync);
             b.AppendLine("}");
         }
         return b.ToString();
+    }
+
+    private static void EmitHookScope(StringBuilder b, CanonicalAsyncCompositionEmission c, int index, string input)
+    {
+        var h = c.Handler; var hook = c.Hooks[index];
+        var receiver = "hook" + index; var saved = "saved" + index; var error = "error" + index; var success = "success" + index;
+        if (hook.Factory is { } factory)
+            b.AppendLine($$"""
+                var hookFactory{{index}} = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{factory.FactoryName}}>(_provider);
+                {{hook.HookName}}? {{receiver}} = {{(factory.AwaitAcquire ? "await " : "")}}(({{factory.ContractName}})hookFactory{{index}}).{{factory.MethodName}}({{input}}, cancellationToken){{(factory.AwaitAcquire ? ".ConfigureAwait(false)" : "")}}
+                    ?? throw new global::System.InvalidOperationException("A session factory must return a nonnull Hook session.");
+                """);
+        else b.AppendLine($$"""var {{receiver}} = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{hook.HookName}}>(_provider);""");
+        var owned = hook.Factory?.CleanupContractName != null;
+        if (owned) b.AppendLine("try\n{");
+        b.AppendLine($$"""
+            var {{saved}} = {{input}};
+            var {{success}} = false;
+            global::System.Exception? {{error}} = null;
+            try
+            {
+                {{saved}} = await (({{hook.Before.ContractName}}){{receiver}}).{{hook.Before.MethodName}}({{saved}}, cancellationToken).ConfigureAwait(false);
+                global::System.ArgumentNullException.ThrowIfNull({{saved}}, "request");
+                cancellationToken.ThrowIfCancellationRequested();
+            """);
+        if (index + 1 < c.Hooks.Count) EmitHookScope(b, c, index + 1, saved);
+        else b.AppendLine($$"""
+            var handler = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{h.HandlerName}}>(_provider);
+            {{(h.ResultName == null ? "" : "response = ")}}await (({{h.ContractName}})handler).{{h.MethodName}}({{saved}}, cancellationToken).ConfigureAwait(false);
+            """);
+        b.AppendLine($$"""
+                {{(h.ResultName == null ? "" : "response = ")}}await (({{hook.Success.ContractName}}){{receiver}}).{{hook.Success.MethodName}}({{saved}}, {{(h.ResultName == null ? "" : "response, ")}}cancellationToken).ConfigureAwait(false);
+                {{success}} = true;
+            }
+            catch (global::System.Exception failure{{index}})
+            {
+                {{error}} = failure{{index}};
+                try { await (({{hook.Exception.ContractName}}){{receiver}}).{{hook.Exception.MethodName}}({{saved}}, failure{{index}}, cancellationToken).ConfigureAwait(false); }
+                catch (global::System.Exception replacement{{index}}) { {{error}} = replacement{{index}}; throw; }
+                throw;
+            }
+            finally
+            {
+                await (({{hook.Finally.ContractName}}){{receiver}}).{{hook.Finally.MethodName}}({{saved}}, new global::Zendiator.SendExitInfo({{success}}, {{error}}), cancellationToken).ConfigureAwait(false);
+            }
+            """);
+        if (owned) b.AppendLine($$"""
+            }
+            finally
+            {
+                var detachedHook{{index}} = {{receiver}};
+                {{receiver}} = null;
+                await (({{hook.Factory!.CleanupContractName}})detachedHook{{index}}).DisposeAsync().ConfigureAwait(false);
+            }
+            """);
     }
 }

@@ -41,6 +41,7 @@ internal static class StageContractBinding
         var hierarchy = DescribeHierarchy(type);
         var callbacks = new List<BoundCallbackModel>();
         var syncCallbacks = new Dictionary<BoundCallbackPhase, BoundSyncHookCallbackEmission>();
+        var asyncCallbacks = new Dictionary<BoundCallbackPhase, BoundAsyncHookCallbackEmission>();
         var compilerOwned = false;
         void Reject(string key, string message) => facts.Add(new(key, anchor, message));
         if (type.TypeKind == TypeKind.Error) { compilerOwned = true; return Value(); }
@@ -98,6 +99,8 @@ internal static class StageContractBinding
             if (implementation == null) { compilerOwned = true; continue; }
             if (role.Completion == BoundCompletionKind.Synchronous)
                 syncCallbacks[role.Phase] = new(Name(contract), members[0].Name);
+            else if (role.Completion == BoundCompletionKind.ValueTask)
+                asyncCallbacks[role.Phase] = new(Name(contract), members[0].Name);
             callbacks.Add(new(role.Phase, role.Completion, Identity(contract),
                 implementation.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) + "/" + implementation.DeclaredAccessibility +
                 "/explicit=" + !implementation.ExplicitInterfaceImplementations.IsEmpty + "/virtual=" + implementation.IsVirtual +
@@ -120,7 +123,15 @@ internal static class StageContractBinding
                 syncCallbacks.ContainsKey(BoundCallbackPhase.Before) && syncCallbacks.ContainsKey(BoundCallbackPhase.Success) &&
                 syncCallbacks.ContainsKey(BoundCallbackPhase.Exception) && syncCallbacks.ContainsKey(BoundCallbackPhase.Finally)
                     ? new(Name(type), syncCallbacks[BoundCallbackPhase.Before], syncCallbacks[BoundCallbackPhase.Success],
-                        syncCallbacks[BoundCallbackPhase.Exception], syncCallbacks[BoundCallbackPhase.Finally]) : null
+                        syncCallbacks[BoundCallbackPhase.Exception], syncCallbacks[BoundCallbackPhase.Finally]) : null,
+            AsyncEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.SendAsync &&
+                kind == FusionStageKind.Hook && type.TypeKind == TypeKind.Class && Public(type) && type.Locations.Any(l => l.IsInSource) &&
+                !compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && !r.Properties.Aliases.Contains("global")) &&
+                callbacks.Count == 4 && asyncCallbacks.Count == 4 &&
+                asyncCallbacks.ContainsKey(BoundCallbackPhase.Before) && asyncCallbacks.ContainsKey(BoundCallbackPhase.Success) &&
+                asyncCallbacks.ContainsKey(BoundCallbackPhase.Exception) && asyncCallbacks.ContainsKey(BoundCallbackPhase.Finally)
+                    ? new(Name(type), asyncCallbacks[BoundCallbackPhase.Before], asyncCallbacks[BoundCallbackPhase.Success],
+                        asyncCallbacks[BoundCallbackPhase.Exception], asyncCallbacks[BoundCallbackPhase.Finally]) : null
         };
     }
 
