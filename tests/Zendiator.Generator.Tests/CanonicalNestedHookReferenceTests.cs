@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -120,12 +121,18 @@ public sealed partial class GeneratorTests
     [Theory]
     [MemberData(nameof(NestedHookReferenceCases))]
     public void Canonical_two_Hooks_SendSync_preserves_saved_state_and_nested_unwind(bool isVoid, string scenario, string golden)
+        => RunNestedHookScenario(isVoid, scenario, golden);
+
+    // The same fixed goldens and independent identity assertions run on either engine.
+    // The handwritten reference never reads a planner, graph or generated source.
+    private static string RunNestedHookScenario(bool isVoid, string scenario, string golden, SyncFixture? fixture = null, bool generated = false)
     {
         var probe = new NestedSendProbe(); var ambient = NestedSendProbe.Ambient.Value; var culture = CultureInfo.CurrentCulture;
         NestedSendProbe.Ambient.Value = "caller"; CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
-        object? request = scenario == "null-request" ? null : isVoid ? new NestedVoidRequest("input") : new NestedResponseRequest("input");
-        object outer = isVoid ? new NestedVoidRequest("outer") : new NestedResponseRequest("outer");
-        object inner = isVoid ? new NestedVoidRequest("inner") : new NestedResponseRequest("inner");
+        object CreateRequest(string name) => fixture != null ? Activator.CreateInstance(fixture.Request, [name])! :
+            isVoid ? new NestedVoidRequest(name) : new NestedResponseRequest(name);
+        object? request = scenario == "null-request" ? null : CreateRequest("input");
+        object outer = CreateRequest("outer"); object inner = CreateRequest("inner");
         var token = probe.Cancellation.Token;
         Exception body = scenario == "handler-oce" ? new OperationCanceledException(token) : new Exception("body identity");
         var bObserver = new Exception("B observer"); var aObserver = new Exception("A observer");
@@ -150,22 +157,26 @@ public sealed partial class GeneratorTests
         try
         {
             IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe);
-            services.AddScoped<NestedResponseHook<OuterHookTag>>(); services.AddScoped<NestedResponseHook<InnerHookTag>>(); services.AddScoped<NestedResponseHandler>();
-            services.AddScoped<NestedVoidHook<OuterHookTag>>(); services.AddScoped<NestedVoidHook<InnerHookTag>>(); services.AddScoped<NestedVoidHandler>();
+            var types = fixture != null ? NestedHookFixtureTypes(fixture) : isVoid ?
+                new[] { typeof(NestedVoidHook<OuterHookTag>), typeof(NestedVoidHook<InnerHookTag>), typeof(NestedVoidHandler) } :
+                new[] { typeof(NestedResponseHook<OuterHookTag>), typeof(NestedResponseHook<InnerHookTag>), typeof(NestedResponseHandler) };
+            foreach (var type in types) services.AddScoped(type);
             if (scenario.EndsWith("-di-error", StringComparison.Ordinal))
             {
                 var owner = scenario[..scenario.IndexOf('-')];
-                var type = owner == "A" ? isVoid ? typeof(NestedVoidHook<OuterHookTag>) : typeof(NestedResponseHook<OuterHookTag>) :
-                    owner == "B" ? isVoid ? typeof(NestedVoidHook<InnerHookTag>) : typeof(NestedResponseHook<InnerHookTag>) : isVoid ? typeof(NestedVoidHandler) : typeof(NestedResponseHandler);
+                var type = types[owner == "A" ? 0 : owner == "B" ? 1 : 2];
                 services.AddScoped(type, _ => { probe.Phases.Add(owner + ".resolve"); throw body; });
             }
+            if (fixture != null) Assert.Same(services, fixture.Register.Invoke(null, [services]));
+            object? result = null; Exception? actual = null;
             using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
             using (var scope = provider.CreateScope())
             {
-                object? result = null; Exception? actual = null;
                 try
                 {
-                    if (isVoid) CanonicalSendSyncReference.SendTwoHooksVoid<NestedVoidRequest, NestedVoidHook<OuterHookTag>, NestedVoidHook<InnerHookTag>, NestedVoidHandler>(scope.ServiceProvider, (NestedVoidRequest)request!, token);
+                    if (fixture != null) (result, actual) = generated ? InvokeSync(fixture, scope.ServiceProvider.GetRequiredService(fixture.Interface), request, token) :
+                        InvokeNestedHookReference(fixture, scope.ServiceProvider, request, token, isVoid);
+                    else if (isVoid) CanonicalSendSyncReference.SendTwoHooksVoid<NestedVoidRequest, NestedVoidHook<OuterHookTag>, NestedVoidHook<InnerHookTag>, NestedVoidHandler>(scope.ServiceProvider, (NestedVoidRequest)request!, token);
                     else result = CanonicalSendSyncReference.SendTwoHooksResponse<NestedResponseRequest, int, NestedResponseHook<OuterHookTag>, NestedResponseHook<InnerHookTag>, NestedResponseHandler>(scope.ServiceProvider, (NestedResponseRequest)request!, token);
                 }
                 catch (Exception error) { actual = error; }
@@ -227,6 +238,22 @@ public sealed partial class GeneratorTests
                 Assert.Equal(cancelPhase != null || scenario == "pre-cancel", token.IsCancellationRequested);
             }
             Assert.Equal(probe.Constructed.Order(), probe.Disposals.Keys.Order()); Assert.All(probe.Disposals.Values, count => Assert.Equal(1, count));
+            string? RequestRole(object? value) => value == null ? null : ReferenceEquals(value, request) ? "input" :
+                ReferenceEquals(value, outer) ? "outer" : ReferenceEquals(value, inner) ? "inner" : "unexpected";
+            string? ErrorRole(Exception? error) => error == null ? null : ReferenceEquals(error, body) ? "body" :
+                ReferenceEquals(error, bObserver) ? "B.observer" : ReferenceEquals(error, aObserver) ? "A.observer" :
+                ReferenceEquals(error, bFinally) ? "B.finally" : ReferenceEquals(error, aFinally) ? "A.finally" :
+                error is ArgumentNullException ? "guard-null" : error is OperationCanceledException ? "guard-cancel" : "unexpected:" + error.GetType().FullName;
+            return JsonSerializer.Serialize(new {
+                phases = probe.Phases.ToArray(), calls = probe.Calls.Select(c => new {
+                    c.Phase, request = RequestRole(c.Request), tokenPreserved = c.Token == token, c.Ambient, c.Culture }),
+                result, error = ErrorRole(actual), errorType = actual?.GetType().FullName, nullParameter = (actual as ArgumentNullException)?.ParamName,
+                cancellationTokenPreserved = actual is not OperationCanceledException oce || oce.CancellationToken == token,
+                observed = probe.Observed.OrderBy(p => p.Key).Select(p => new { owner = p.Key, error = ErrorRole(p.Value) }),
+                exits = probe.Exits.OrderBy(p => p.Key).Select(p => new { owner = p.Key, p.Value.Success, error = ErrorRole(p.Value.Error) }),
+                disposals = probe.Disposals.OrderBy(p => p.Key).Select(p => new { owner = p.Key, count = p.Value }),
+                callerAmbient = NestedSendProbe.Ambient.Value, callerCulture = CultureInfo.CurrentCulture.Name, token.IsCancellationRequested
+            });
         }
         finally { probe.Cancellation.Dispose(); NestedSendProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; }
     }
@@ -236,14 +263,22 @@ public sealed partial class GeneratorTests
     [InlineData(false, ServiceLifetime.Transient)] [InlineData(true, ServiceLifetime.Transient)]
     [InlineData(false, ServiceLifetime.Singleton)] [InlineData(true, ServiceLifetime.Singleton)]
     public void Canonical_two_Hooks_SendSync_leaves_service_cleanup_to_scope_or_root(bool isVoid, ServiceLifetime lifetime)
+        => RunNestedHookLifetimes(isVoid, lifetime, lifetime, lifetime);
+
+    private static string RunNestedHookLifetimes(bool isVoid, ServiceLifetime outerLifetime, ServiceLifetime innerLifetime,
+        ServiceLifetime handlerLifetime, SyncFixture? fixture = null, bool generated = false, bool registerAfter = false)
     {
         var probe = new NestedSendProbe(); var ambient = NestedSendProbe.Ambient.Value; var culture = CultureInfo.CurrentCulture;
         try
         {
             IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe);
-            var types = isVoid ? new[] { typeof(NestedVoidHook<OuterHookTag>), typeof(NestedVoidHook<InnerHookTag>), typeof(NestedVoidHandler) } :
+            var types = fixture != null ? NestedHookFixtureTypes(fixture) : isVoid ? new[] { typeof(NestedVoidHook<OuterHookTag>), typeof(NestedVoidHook<InnerHookTag>), typeof(NestedVoidHandler) } :
                 new[] { typeof(NestedResponseHook<OuterHookTag>), typeof(NestedResponseHook<InnerHookTag>), typeof(NestedResponseHandler) };
-            foreach (var type in types) services.Add(ServiceDescriptor.Describe(type, type, lifetime));
+            var owners = new[] { "A", "B", "handler" }; var lifetimes = new[] { outerLifetime, innerLifetime, handlerLifetime };
+            if (fixture != null && registerAfter) Assert.Same(services, fixture.Register.Invoke(null, [services]));
+            for (var t = 0; t < types.Length; t++) services.Add(ServiceDescriptor.Describe(types[t], types[t], lifetimes[t]));
+            if (fixture != null && !registerAfter) Assert.Same(services, fixture.Register.Invoke(null, [services]));
+            var cleanup = new List<int[]>();
             using (var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
             {
                 for (var s = 0; s < 2; s++)
@@ -253,20 +288,30 @@ public sealed partial class GeneratorTests
                         for (var i = 0; i < 2; i++)
                         {
                             probe.Observed.Clear(); probe.Exits.Clear();
-                            if (isVoid) CanonicalSendSyncReference.SendTwoHooksVoid<NestedVoidRequest, NestedVoidHook<OuterHookTag>, NestedVoidHook<InnerHookTag>, NestedVoidHandler>(scope.ServiceProvider, new("input"), default);
+                            if (fixture != null)
+                            {
+                                var request = Activator.CreateInstance(fixture.Request, ["input"]);
+                                var actual = generated ? InvokeSync(fixture, scope.ServiceProvider.GetRequiredService(fixture.Interface), request, default) :
+                                    InvokeNestedHookReference(fixture, scope.ServiceProvider, request, default, isVoid);
+                                Assert.Null(actual.Error); Assert.Equal(isVoid ? null : (object)43, actual.Result);
+                            }
+                            else if (isVoid) CanonicalSendSyncReference.SendTwoHooksVoid<NestedVoidRequest, NestedVoidHook<OuterHookTag>, NestedVoidHook<InnerHookTag>, NestedVoidHandler>(scope.ServiceProvider, new("input"), default);
                             else Assert.Equal(43, CanonicalSendSyncReference.SendTwoHooksResponse<NestedResponseRequest, int, NestedResponseHook<OuterHookTag>, NestedResponseHook<InnerHookTag>, NestedResponseHandler>(scope.ServiceProvider, new("input"), default));
-                            foreach (var owner in new[] { "A", "B", "handler" })
-                                Assert.Equal(s * (lifetime == ServiceLifetime.Singleton ? 0 : lifetime == ServiceLifetime.Scoped ? 1 : 2), probe.Disposals.GetValueOrDefault(owner));
+                            for (var t = 0; t < owners.Length; t++)
+                                Assert.Equal(s * (lifetimes[t] == ServiceLifetime.Singleton ? 0 : lifetimes[t] == ServiceLifetime.Scoped ? 1 : 2), probe.Disposals.GetValueOrDefault(owners[t]));
                         }
                     }
-                    foreach (var owner in new[] { "A", "B", "handler" })
-                        Assert.Equal((s + 1) * (lifetime == ServiceLifetime.Singleton ? 0 : lifetime == ServiceLifetime.Scoped ? 1 : 2), probe.Disposals.GetValueOrDefault(owner));
+                    for (var t = 0; t < owners.Length; t++)
+                        Assert.Equal((s + 1) * (lifetimes[t] == ServiceLifetime.Singleton ? 0 : lifetimes[t] == ServiceLifetime.Scoped ? 1 : 2), probe.Disposals.GetValueOrDefault(owners[t]));
+                    cleanup.Add(owners.Select(owner => probe.Disposals.GetValueOrDefault(owner)).ToArray());
                 }
-                foreach (var owner in new[] { "A", "B", "handler" })
-                    Assert.Equal(lifetime == ServiceLifetime.Singleton ? 1 : lifetime == ServiceLifetime.Scoped ? 2 : 4, probe.Phases.Count(p => p == owner + ".ctor"));
+                for (var t = 0; t < owners.Length; t++)
+                    Assert.Equal(lifetimes[t] == ServiceLifetime.Singleton ? 1 : lifetimes[t] == ServiceLifetime.Scoped ? 2 : 4, probe.Phases.Count(p => p == owners[t] + ".ctor"));
             }
-            foreach (var owner in new[] { "A", "B", "handler" })
-                Assert.Equal(lifetime == ServiceLifetime.Singleton ? 1 : lifetime == ServiceLifetime.Scoped ? 2 : 4, probe.Disposals[owner]);
+            for (var t = 0; t < owners.Length; t++)
+                Assert.Equal(lifetimes[t] == ServiceLifetime.Singleton ? 1 : lifetimes[t] == ServiceLifetime.Scoped ? 2 : 4, probe.Disposals[owners[t]]);
+            return JsonSerializer.Serialize(new { phases = probe.Phases.ToArray(), scopeCleanup = cleanup,
+                disposals = owners.Select(owner => new { owner, count = probe.Disposals[owner] }) });
         }
         finally { probe.Cancellation.Dispose(); NestedSendProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; }
     }

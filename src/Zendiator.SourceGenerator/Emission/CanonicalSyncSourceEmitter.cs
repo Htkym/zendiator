@@ -1,8 +1,9 @@
+using System.Linq;
 using System.Text;
 
 namespace Zendiator.SourceGenerator;
 
-/// <summary>Emits the limited stage-free and single-Hook SendSync matrix accepted by review.</summary>
+/// <summary>Emits accepted stage-free/single-Hook routes and the diagnostic-blocked two-Hook SendSync candidate.</summary>
 internal static class CanonicalSyncSourceEmitter
 {
     internal static string Emit(CanonicalSyncEmissionModel model)
@@ -37,9 +38,10 @@ internal static class CanonicalSyncSourceEmitter
                             global::System.ArgumentNullException.ThrowIfNull(request);
                             cancellationToken.ThrowIfCancellationRequested();
                 """);
-            if (c.Hook != null)
+            if (c.Hooks.Count != 0)
             {
-                EmitHookSend(b, c);
+                if (c.Hooks.Count == 1) EmitHookSend(b, c);
+                else EmitNestedHookSend(b, c);
                 b.AppendLine("        }\n    }");
                 EmitRegistrar(b, c);
                 b.AppendLine("}");
@@ -76,7 +78,7 @@ internal static class CanonicalSyncSourceEmitter
     private static void EmitHookSend(StringBuilder b, CanonicalSyncCompositionEmission c)
     {
         var h = c.Handler;
-        var hook = c.Hook!;
+        var hook = c.Hooks[0];
         b.AppendLine($$"""
                     var hook = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{hook.HookName}}>(_provider);
                     var saved = request;
@@ -107,6 +109,64 @@ internal static class CanonicalSyncSourceEmitter
             """);
     }
 
+    private static void EmitNestedHookSend(StringBuilder b, CanonicalSyncCompositionEmission c)
+    {
+        var h = c.Handler;
+        var outer = c.Hooks[0]; var inner = c.Hooks[1];
+        b.AppendLine($$"""
+                    var outer = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{outer.HookName}}>(_provider);
+                    var savedOuter = request;
+                    var successOuter = false;
+                    global::System.Exception? errorOuter = null;
+                    try
+                    {
+                        savedOuter = (({{outer.Before.ContractName}})outer).{{outer.Before.MethodName}}(savedOuter, cancellationToken);
+                        global::System.ArgumentNullException.ThrowIfNull(savedOuter, "request");
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var inner = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{inner.HookName}}>(_provider);
+                        var savedInner = savedOuter;
+                        var successInner = false;
+                        global::System.Exception? errorInner = null;
+                        {{(h.ResultName == null ? "" : h.ResultName + " response;")}}
+                        try
+                        {
+                            savedInner = (({{inner.Before.ContractName}})inner).{{inner.Before.MethodName}}(savedInner, cancellationToken);
+                            global::System.ArgumentNullException.ThrowIfNull(savedInner, "saved");
+                            cancellationToken.ThrowIfCancellationRequested();
+                            var handler = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{{h.HandlerName}}>(_provider);
+                            {{(h.ResultName == null ? "" : "response = ")}}(({{h.ContractName}})handler).{{h.MethodName}}(savedInner, cancellationToken);
+                            {{(h.ResultName == null ? "" : "response = ")}}(({{inner.Success.ContractName}})inner).{{inner.Success.MethodName}}(savedInner, {{(h.ResultName == null ? "" : "response, ")}}cancellationToken);
+                            successInner = true;
+                        }
+                        catch (global::System.Exception innerFailure)
+                        {
+                            errorInner = innerFailure;
+                            try { (({{inner.Exception.ContractName}})inner).{{inner.Exception.MethodName}}(savedInner, innerFailure, cancellationToken); }
+                            catch (global::System.Exception innerReplacement) { errorInner = innerReplacement; throw; }
+                            throw;
+                        }
+                        finally
+                        {
+                            (({{inner.Finally.ContractName}})inner).{{inner.Finally.MethodName}}(savedInner, new global::Zendiator.SendExitInfo(successInner, errorInner), cancellationToken);
+                        }
+                        {{(h.ResultName == null ? "" : "response = ")}}(({{outer.Success.ContractName}})outer).{{outer.Success.MethodName}}(savedOuter, {{(h.ResultName == null ? "" : "response, ")}}cancellationToken);
+                        successOuter = true;
+                        {{(h.ResultName == null ? "" : "return response;")}}
+                    }
+                    catch (global::System.Exception outerFailure)
+                    {
+                        errorOuter = outerFailure;
+                        try { (({{outer.Exception.ContractName}})outer).{{outer.Exception.MethodName}}(savedOuter, outerFailure, cancellationToken); }
+                        catch (global::System.Exception outerReplacement) { errorOuter = outerReplacement; throw; }
+                        throw;
+                    }
+                    finally
+                    {
+                        (({{outer.Finally.ContractName}})outer).{{outer.Finally.MethodName}}(savedOuter, new global::Zendiator.SendExitInfo(successOuter, errorOuter), cancellationToken);
+                    }
+            """);
+    }
+
     private static void EmitRegistrar(StringBuilder b, CanonicalSyncCompositionEmission c)
     {
         var h = c.Handler;
@@ -127,8 +187,8 @@ internal static class CanonicalSyncSourceEmitter
         var entry = c.Factory == null ? $$"""typeof({{h.HandlerName}})""" :
             $$"""global::Zendiator.HandlerEntry.Session<{{h.HandlerName}}, {{c.Factory.FactoryName}}>()""";
         b.AppendLine($$"""            expected.Handlers<{{h.RequestName}}>(global::Zendiator.DispatchFamily.SendSync, {{entry}});""");
-        if (c.Hook is { } hook)
-            b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily.SendSync, ")}}global::Zendiator.Stage.Hook<{{hook.HookName}}>());""");
+        if (c.Hooks.Count != 0)
+            b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily.SendSync, ")}}{{string.Join(", ", c.Hooks.Select(hook => "global::Zendiator.Stage.Hook<" + hook.HookName + ">()"))}});""");
         else if (c.HasEmptyPipeline)
             b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily.SendSync")}});""");
         b.AppendLine("""
@@ -136,8 +196,7 @@ internal static class CanonicalSyncSourceEmitter
                             throw new global::System.InvalidOperationException("AddZendiator configuration does not match this generated composition.");
             """);
         var service = c.Factory?.FactoryName ?? h.HandlerName;
-        var types = c.Hook == null ? new[] { service, "global::" + c.Namespace + ".Zendiator" } :
-            new[] { c.Hook.HookName, service, "global::" + c.Namespace + ".Zendiator" };
+        var types = c.Hooks.Select(hook => hook.HookName).Concat(new[] { service, "global::" + c.Namespace + ".Zendiator" });
         foreach (var type in types)
             b.AppendLine($$"""
                         global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services,

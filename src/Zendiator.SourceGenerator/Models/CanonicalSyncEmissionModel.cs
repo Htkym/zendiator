@@ -9,7 +9,7 @@ internal sealed record BoundSyncHookEmission(string HookName, BoundSyncHookCallb
 internal sealed record CanonicalSyncCompositionEmission(int Index, string Namespace, string? MarkerName, bool UseLocalHandlers,
     BoundSyncHandlerEmission Handler, BoundSyncFactoryEmission? Factory, bool HasEmptyPipeline, BoundDispatchFamily? PipelineFamily, string MicrosoftDiProviderName)
 {
-    public BoundSyncHookEmission? Hook { get; init; }
+    public EquatableArray<BoundSyncHookEmission> Hooks { get; init; } = new(System.Array.Empty<BoundSyncHookEmission>());
 }
 internal sealed record CanonicalSyncEmissionModel(EquatableArray<CanonicalSyncCompositionEmission> Compositions);
 internal sealed record CanonicalSyncCallSite(string Namespace, string? MarkerName, int Version, string Data, bool ExtensionForm);
