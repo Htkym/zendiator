@@ -124,7 +124,7 @@ public sealed partial class GeneratorTests
             Assert.Equal(p.Trace.Contains("handler")?1:0,p.Disposals);
         }finally{p.Cancellation.Dispose();}
     }
-    [Theory][InlineData("ambiguous","ZEN0027")][InlineData("async-on-sync","ZEN0030")][InlineData("session","ZEN0037")]
+    [Theory][InlineData("ambiguous","ZEN0027")][InlineData("async-on-sync","ZEN0030")][InlineData("metadata-session","ZEN0037")]
     public void Send_capabilities_unproved_or_incompatible_contracts_remain_diagnosed(string shape,string id)
     {
         var source=CapabilitySource(shape!="async-on-sync",false,shape=="ambiguous"?"s---":"---s",false);var oracle=source.IndexOf("namespace App {public static class Oracle",StringComparison.Ordinal);source=source[..oracle];
@@ -132,7 +132,7 @@ public sealed partial class GeneratorTests
         source=shape switch{
             "ambiguous"=>source.Replace("Hook0:ISendRequestTransform<Ping>","Hook0:ISendRequestTransform<Ping>,IAsyncSendRequestTransform<Ping>").Replace("private readonly Probe _p;public Hook0","public ValueTask<Ping> BeforeAsync(Ping r,CancellationToken t)=>new(r);private readonly Probe _p;public Hook0"),
             "async-on-sync"=>source.Replace("Hook0:ISendFinallyObserver<Ping>","Hook0:IAsyncSendFinallyObserver<Ping>").Replace("public void Finally(Ping r,SendExitInfo e,CancellationToken t)=>_p.Finally(0,r,e,t);","public ValueTask FinallyAsync(Ping r,SendExitInfo e,CancellationToken t)=>_p.FinallyAsync(0,r,e,t);"),
-            _=>source.Replace("Stage.Hook<Hook0>()","Stage.Hook<Hook0,F>(),Stage.Hook<Hook1>()")+"namespace App{public sealed class F:IBorrowedSessionFactory<Ping,Hook0>{private readonly Probe _p;public F(Probe p){_p=p;}public Hook0 Create(Ping r,CancellationToken t)=>new(_p);}}"};
+            _=>source.Replace("Stage.Hook<Hook0>()","Stage.Hook<Hook0,global::Zendiator.Generator.Tests.MetadataBorrowedReceiverFactory<Ping,Hook0>>(),Stage.Hook<Hook1>()")};
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"CapabilityRejected"+shape),out var output,out var diagnostics);Assert.Equal(id,Assert.Single(diagnostics).Id);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.Contains("Canonical"));
         WriteNestedHookEvidence("capability-boundaries",shape,new{source,id,generatedExecution=false});
     }

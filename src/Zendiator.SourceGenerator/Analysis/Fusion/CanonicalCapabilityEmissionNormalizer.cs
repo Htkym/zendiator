@@ -18,10 +18,10 @@ internal static class CanonicalCapabilityEmissionNormalizer
                 c.Facts.Count!=1||c.Facts[0].Key!="IncompleteExecutionContract"||catalog.Compositions.Count(x=>x.Identity==c.Identity||x.Key==c.Key||x.GeneratedNamespace==c.GeneratedNamespace)!=1)continue;
             var route=c.Pipelines[0];var graph=execution.Compositions[i].SingleOrDefault(g=>g.Contract.Anchor==route.Anchor);
             if(graph?.IsValid!=true||graph.Schedule==null||route.Family is not (BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync)||
-                route.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void)||route.Handlers.Count!=1||!route.ExplicitHandlerOrder||route.Stages.Count==0||route.Stages.Count>2)continue;
+                route.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void)||route.Handlers.Count!=1||!route.ExplicitHandlerOrder||route.Stages.Count==0)continue;
             var sync=route.Family==BoundDispatchFamily.SendSync;var h=route.Handlers[0];
-            if(h.CompilerOwnsError||!c.Handlers.Any(x=>x.Identity==h.Type)||sync&&h.SyncEmission==null||!sync&&h.AsyncEmission==null||h.Sessions.Count>1||h.Sessions.Count!=0&&route.Stages.Count!=1)continue;
-            if(route.Stages.Any(s=>s.Kind!=FusionStageKind.Hook||s.CompilerOwnsError||s.Capabilities==null||s.Sessions.Count>1)||route.Stages.Count>1&&route.Stages.Any(s=>s.Sessions.Count!=0))continue;
+            if(h.CompilerOwnsError||!c.Handlers.Any(x=>x.Identity==h.Type)||sync&&h.SyncEmission==null||!sync&&h.AsyncEmission==null||h.Sessions.Count>1)continue;
+            if(route.Stages.Any(s=>s.Kind!=FusionStageKind.Hook||s.CompilerOwnsError||s.Capabilities==null||s.Sessions.Count>1))continue;
             var hooks=new List<HookCapabilityEmission>();var invalid=false;
             foreach(var s in route.Stages){if(s.Sessions.Count==0){if(s.ServiceOwnership!=FusionOwnership.BorrowedService){invalid=true;break;}hooks.Add(s.Capabilities!);}else{var f=Factory(s.Sessions[0],sync);if(f==null||s.ServiceOwnership!=s.Sessions[0].Ownership){invalid=true;break;}hooks.Add(s.Capabilities! with{Factory=f});}}
             var hf=h.Sessions.Count==0?null:Factory(h.Sessions[0],sync);if(invalid||h.Sessions.Count!=0&&hf==null||h.Sessions.Count==0&&h.ServiceOwnership!=FusionOwnership.BorrowedService)continue;

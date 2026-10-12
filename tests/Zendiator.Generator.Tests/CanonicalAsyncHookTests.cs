@@ -329,18 +329,18 @@ public sealed partial class GeneratorTests
         }
     }
 
-    [Theory][InlineData("partial-wrapper")][InlineData("sync-mixed-wrapper")][InlineData("three")][InlineData("two-factories")]
+    [Theory][InlineData("partial-wrapper")][InlineData("sync-mixed-wrapper")][InlineData("metadata-third")][InlineData("metadata-second-factory")]
     [InlineData("metadata")][InlineData("metadata-wrapper-session")][InlineData("stream")]
     public void Async_hook_unsupported_routes_remain_diagnosed_without_execution(string shape)
     {
-        var source=AsyncHookSource(shape is "two-factories" or "metadata-wrapper-session"?"owned":"direct",false);
+        var source=AsyncHookSource(shape is "metadata-second-factory" or "metadata-wrapper-session"?"owned":"direct",false);
         var start=source.IndexOf("public static object Dispatch",StringComparison.Ordinal);source=source.Remove(start,source.IndexOf(';',start)-start+1);
         source=shape switch
         {
             "partial-wrapper"=>source.Replace("IAsyncSendFinallyObserver<Ping>,","").Replace("ValueTask IAsyncSendFinallyObserver<Ping>.FinallyAsync(Ping r,SendExitInfo e,CancellationToken t){_probe.CheckToken(t);return _probe.Finally(_id,r,e);}","").Replace("Stage.Hook<Hook<OuterTag>>()","Stage.Hook<Hook<OuterTag>>(),Stage.Wrapper<global::Zendiator.Generator.Tests.MetadataWrapper<Ping>>()")+"namespace App{public sealed class W:IAsyncSendWrapper<Ping,int>{public ValueTask<int> InvokeAsync<TNext>(Ping r,TNext n,CancellationToken t)where TNext:IAsyncSendContinuation<Ping,int> =>n.InvokeAsync(r,t);}}",
             "sync-mixed-wrapper"=>source.Replace("IAsyncSendFinallyObserver<Ping>","ISendFinallyObserver<Ping>").Replace("ValueTask ISendFinallyObserver<Ping>.FinallyAsync(","void ISendFinallyObserver<Ping>.Finally(").Replace("return _probe.Finally(_id,r,e);","_ = _probe.Finally(_id,r,e);").Replace("Stage.Hook<Hook<OuterTag>>()","Stage.Hook<Hook<OuterTag>>(),Stage.Wrapper<global::Zendiator.Generator.Tests.MetadataWrapper<Ping>>()")+"namespace App{public sealed class W:IAsyncSendWrapper<Ping,int>{public ValueTask<int> InvokeAsync<TNext>(Ping r,TNext n,CancellationToken t)where TNext:IAsyncSendContinuation<Ping,int> =>n.InvokeAsync(r,t);}}",
-            "three"=>source.Replace("Stage.Hook<Hook<OuterTag>>()","Stage.Hook<Hook<OuterTag>>(),Stage.Hook<Hook<InnerTag>>(),Stage.Hook<Hook<ThirdTag>>()")+"namespace App {public sealed class ThirdTag;}",
-            "two-factories"=>source.Replace("Stage.Hook<Hook<OuterTag>,Factory<OuterTag>>()","Stage.Hook<Hook<OuterTag>,Factory<OuterTag>>(),Stage.Hook<Hook<InnerTag>,Factory<InnerTag>>()"),
+            "metadata-third"=>source.Replace("Stage.Hook<Hook<OuterTag>>()","Stage.Hook<Hook<OuterTag>>(),Stage.Hook<Hook<InnerTag>>(),Stage.Hook<global::Zendiator.Generator.Tests.MetadataAsyncHook<Ping>>()"),
+            "metadata-second-factory"=>source.Replace("Stage.Hook<Hook<OuterTag>,Factory<OuterTag>>()","Stage.Hook<Hook<OuterTag>,Factory<OuterTag>>(),Stage.Hook<Hook<InnerTag>,global::Zendiator.Generator.Tests.MetadataOwnedReceiverFactory<Ping,Hook<InnerTag>>>()"),
             "metadata"=>source.Replace("Stage.Hook<Hook<OuterTag>>()","Stage.Hook<global::Zendiator.Generator.Tests.MetadataAsyncHook<Ping>>()"),
             "metadata-wrapper-session"=>source.Replace("Stage.Hook<Hook<OuterTag>,Factory<OuterTag>>()","Stage.Wrapper<Wrap,global::Zendiator.Generator.Tests.MetadataOwnedReceiverFactory<Ping,Wrap>>()")+"namespace App {public sealed class Wrap:IAsyncSendWrapper<Ping,int>,IAsyncDisposable{public ValueTask<int> InvokeAsync<TNext>(Ping r,TNext next,CancellationToken t) where TNext:IAsyncSendContinuation<Ping,int> =>next.InvokeAsync(r,t);public ValueTask DisposeAsync()=>default;}}",
             _=>"using System.Collections.Generic;using System.Threading;using System.Threading.Tasks;using System.Runtime.CompilerServices;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;namespace App {public sealed record Ping:IStreamRequest<int>;[ZendiatorHandler]public sealed class Handler:IStreamRequestHandler<Ping,int>{public async IAsyncEnumerable<int> HandleAsync(Ping r,[EnumeratorCancellation]CancellationToken t){await Task.CompletedTask;yield return 1;}}[ZendiatorComposition(\"stream\")]public sealed class Reads;public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<Reads>(c=>c.Handlers<Ping>(DispatchFamily.Stream,typeof(Handler)));}}"

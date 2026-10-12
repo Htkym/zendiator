@@ -3,9 +3,9 @@ namespace Zendiator.Generator.Tests;
 // Independent concrete fixture contracts. No bound model, graph or emitted body is consulted.
 internal static class CanonicalWrapperHookSessionReference
 {
-    internal static string Source(bool async,bool isVoid,bool two,string w0,string w1,string handler,string[] modes,string[] patterns)
+    internal static string Source(bool async,bool isVoid,bool two,string w0,string w1,string handler,string[] modes,string[] patterns,bool standalone=false,bool explicitObserver=false)
     {
-        var result=async?(isVoid?"ValueTask":"ValueTask<int>"):(isVoid?"void":"int");var groups=two?new[]{new[]{0,1},new[]{2},new[]{3,4}}:new[]{new[]{0,1},new[]{2,3}};
+        var result=async?(isVoid?"ValueTask":"ValueTask<int>"):(isVoid?"void":"int");var groups=standalone?new[]{new[]{0,1,2,3}}:two?new[]{new[]{0,1},new[]{2},new[]{3,4}}:new[]{new[]{0,1},new[]{2,3}};
         string Acquire(string mode,string type,string factory,string r)=>mode=="direct"?$"p.GetRequiredService<{type}>()":(mode.StartsWith("async-",StringComparison.Ordinal)?$"await p.GetRequiredService<{factory}>().CreateAsync({r},t).ConfigureAwait(false)":$"p.GetRequiredService<{factory}>().Create({r},t)")+"??throw new InvalidOperationException(\"A session factory must return a nonnull callback receiver.\")";
         string Cleanup(string v)=>async?$"await {v}.DisposeAsync().ConfigureAwait(false);":v+".Dispose();";
         string Await(string call,bool a)=>a?"await "+call+".ConfigureAwait(false)":call;
@@ -18,7 +18,7 @@ internal static class CanonicalWrapperHookSessionReference
                 body+=$"ArgumentNullException.ThrowIfNull({saved},\"request\");t.ThrowIfCancellationRequested();"+Work(at+1,saved);
                 if(pattern[1]!='-')body+=(isVoid?"":"response=")+Await(v+"."+(pattern[1]=='a'?"AfterAsync":"After")+"("+saved+(isVoid?"":",response")+",t)",pattern[1]=='a')+";";
                 if(pattern[3]!='-')body+=$"ok{i}=true;";
-                if(pattern[2]!='-'||pattern[3]!='-'){body+=$"}}catch(Exception failure{i}){{"+(pattern[3]=='-'?"":$"error{i}=failure{i};");if(pattern[2]!='-'){var observe=Await(v+"."+(pattern[2]=='a'?"OnExceptionAsync":"OnException")+$"({saved},failure{i},t)",pattern[2]=='a')+";";body+=pattern[3]=='-'?observe:$"try{{{observe}}}catch(Exception replacement{i}){{error{i}=replacement{i};throw;}}";}body+="throw;";}
+                if(pattern[2]!='-'||pattern[3]!='-'){body+=$"}}catch(Exception failure{i}){{"+(pattern[3]=='-'?"":$"error{i}=failure{i};");if(pattern[2]!='-'){var observer=explicitObserver&&i==1?"(("+(pattern[2]=='a'?"IAsyncSendExceptionObserver":"ISendExceptionObserver")+"<Ping>)"+v+")":v;var observe=Await(observer+"."+(pattern[2]=='a'?"OnExceptionAsync":"OnException")+$"({saved},failure{i},t)",pattern[2]=='a')+";";body+=pattern[3]=='-'?observe:$"try{{{observe}}}catch(Exception replacement{i}){{error{i}=replacement{i};throw;}}";}body+="throw;";}
                 body+="}finally{";if(pattern[3]!='-')body+=Await(v+"."+(pattern[3]=='a'?"FinallyAsync":"Finally")+$"({saved},new(ok{i},error{i}),t)",pattern[3]=='a')+";";body+="}";if(owned)body+="}finally{var detached="+v+";"+v+"=null;"+Cleanup("detached")+"}";return body;
             }
             text+="private static "+(async?"async ":"")+result+" Region"+region+"(IServiceProvider p,Ping r,CancellationToken t){t.ThrowIfCancellationRequested();"+(isVoid?"":"int response;")+Work(0,"r")+(isVoid?"":"return response;")+"}";
