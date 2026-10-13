@@ -16,12 +16,14 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
             MarkedHandlerDiscovery.MarkerName,
             static (node, _) => node is TypeDeclarationSyntax,
             static (ctx, ct) => MarkedHandlerDiscovery.Bind(ctx, ct))
-            .Where(static candidate => candidate != null).Select(static (candidate, _) => candidate!).Collect();
-        var producerCatalog=marked.Combine(context.CompilationProvider).Select(static(input,ct)=>GeneratedHandlerCatalog.Produce(input.Right,input.Left,ct));
+            .Where(static candidate => candidate != null).Select(static (candidate, _) => candidate!);
+        var markedBindings = marked.Collect();
+        var producerCatalog=markedBindings.Combine(context.CompilationProvider).Select(static(input,ct)=>GeneratedHandlerCatalog.Produce(input.Right,input.Left,ct));
         var producerCatalogSource=producerCatalog.Select(static(result,_)=>result.Source).WithTrackingName("GeneratedHandlerCatalogSource");
         context.RegisterSourceOutput(producerCatalogSource,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource(GeneratedHandlerCatalog.HintName,SourceText.From(text,Encoding.UTF8));});
         context.RegisterSourceOutput(producerCatalog,static(ctx,result)=>{foreach(var diagnostic in result.Diagnostics)ctx.ReportDiagnostic(diagnostic);});
-        var markedValue = marked.Select(static (candidates, _) => MarkedHandlerDiscovery.Normalize(candidates));
+        var markedValue = marked.Select(static (candidate, _) => candidate.Model).WithTrackingName("MarkedHandlerContractEntry").Collect()
+            .Select(static (models, _) => new MarkedHandlerCatalog(new(models.GroupBy(m=>m.Identity).Select(g=>g.First()).OrderBy(m=>m.Identity,System.StringComparer.Ordinal))));
         // Equality keeps the value cached while the current binding stream refreshes Locations.
         var markedModel = markedValue.Select(static (model, _) => model).WithTrackingName("MarkedHandlerModel");
         var declarations = context.SyntaxProvider.ForAttributeWithMetadataName(
@@ -33,17 +35,25 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
             {
                 Expression: MemberAccessExpressionSyntax { Name.Identifier.Text: "AddZendiator" }
             },
-            static (ctx, _) => (InvocationExpressionSyntax)ctx.Node).Collect();
-        var compositions = invocations.Combine(context.CompilationProvider).Combine(marked).Combine(markedModel)
-            .Select(static (input, ct) => CompositionSelectionDiscovery.Bind(input.Left.Left.Left, input.Left.Left.Right,
-                input.Left.Right, input.Right, ct));
-        var compositionValue = compositions.Select(static (current, _) => CompositionSelectionDiscovery.Normalize(current));
+            static (ctx, _) => (InvocationExpressionSyntax)ctx.Node);
+        var invocationBindings = invocations.Collect();
+        var compositionBindings = invocations.Combine(context.CompilationProvider).Combine(markedBindings).Combine(markedModel)
+            .Select(static (input, ct) => CompositionSelectionDiscovery.Bind(
+                System.Collections.Immutable.ImmutableArray.Create(input.Left.Left.Left), input.Left.Left.Right,
+                input.Left.Right, input.Right, ct).SingleOrDefault()).Where(static binding=>binding!=null).Select(static(binding,_)=>binding!);
+        var compositions = compositionBindings.Collect(); // Current symbols and locations only; not value equality.
+        var compositionEntries = compositionBindings.Select(static(binding,_)=>binding.Model).WithTrackingName("CompositionContractEntry");
+        var compositionValue = compositionEntries.Collect().Select(static (entries, _) => new CompositionSelectionCatalog(new(entries)));
         var compositionModel = compositionValue.Select(static (model, _) => model).WithTrackingName("CompositionSelectionModel");
-        var executionValue = compositionModel.Select(static (catalog, _) => CanonicalExecutionGraphNormalizer.Create(catalog));
+        var routeEntries = compositionEntries.SelectMany(static(entry,_)=>CanonicalRouteIncremental.Project(entry)).WithTrackingName("CanonicalRouteContractEntry");
+        var routeGraphs = routeEntries.Select(static(route,_)=>CanonicalRouteIncremental.Graph(route)).WithTrackingName("CanonicalRouteGraphEntry");
+        var routeBackends = routeGraphs.Select(static(route,_)=>CanonicalRouteIncremental.Lower(route)).WithTrackingName("CanonicalRouteBackendEntry");
+        var routeTexts = routeBackends.Select(static(route,_)=>CanonicalRouteIncremental.Render(route)).WithTrackingName("CanonicalRouteSourceEntry").Collect();
+        var executionValue = compositionModel.Combine(routeGraphs.Collect()).Select(static (input, _) => CanonicalRouteIncremental.AssembleGraphs(input.Left,input.Right));
         var executionModel = executionValue.Select(static (model, _) => model).WithTrackingName("CanonicalExecutionGraphModel");
         var canonicalSync = compositionModel.Combine(executionModel)
             .Select(static (input, _) => CanonicalSyncEmissionNormalizer.Create(input.Left, input.Right)).WithTrackingName("CanonicalSyncEmissionModel");
-        var canonicalSyncSource = canonicalSync.Select(static (model, _) => CanonicalSyncSourceEmitter.Emit(model)).WithTrackingName("CanonicalSyncSourceEmission");
+        var canonicalSyncSource = canonicalSync.Combine(routeTexts).Select(static (input, _) => CanonicalRouteIncremental.Sync(input.Left,input.Right)).WithTrackingName("CanonicalSyncSourceEmission");
         context.RegisterSourceOutput(canonicalSyncSource, static (ctx, text) =>
         {
             if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.SendSync.g.cs", SourceText.From(text, Encoding.UTF8));
@@ -58,7 +68,7 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         });
         var canonicalAsync = compositionModel.Combine(executionModel)
             .Select(static (input, _) => CanonicalAsyncEmissionNormalizer.Create(input.Left, input.Right)).WithTrackingName("CanonicalAsyncEmissionModel");
-        var canonicalAsyncSource = canonicalAsync.Select(static (model, _) => CanonicalAsyncSourceEmitter.Emit(model)).WithTrackingName("CanonicalAsyncSourceEmission");
+        var canonicalAsyncSource = canonicalAsync.Combine(routeTexts).Select(static (input, _) => CanonicalRouteIncremental.Async(input.Left,input.Right)).WithTrackingName("CanonicalAsyncSourceEmission");
         context.RegisterSourceOutput(canonicalAsyncSource, static (ctx, text) =>
         {
             if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.SendAsync.g.cs", SourceText.From(text, Encoding.UTF8));
@@ -72,20 +82,20 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
             if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.SendAsync.Interceptors.g.cs", SourceText.From(text, Encoding.UTF8));
         });
         var canonicalWrapper=compositionModel.Combine(executionModel).Select(static(input,_)=>CanonicalWrapperEmissionNormalizer.Create(input.Left,input.Right)).WithTrackingName("CanonicalWrapperEmissionModel");
-        var wrapperSource=canonicalWrapper.Select(static(model,_)=>CanonicalWrapperSourceEmitter.Emit(model)).WithTrackingName("CanonicalWrapperSourceEmission");
+        var wrapperSource=canonicalWrapper.Combine(routeTexts).Select(static(input,_)=>CanonicalRouteIncremental.Wrapper(input.Left,input.Right)).WithTrackingName("CanonicalWrapperSourceEmission");
         context.RegisterSourceOutput(wrapperSource,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Wrappers.g.cs",SourceText.From(text,Encoding.UTF8));});
         var wrapperSites=canonicalWrapper.Combine(compositions).Combine(context.CompilationProvider).Select(static(input,ct)=>CanonicalWrapperEmissionNormalizer.BindCallSites(input.Left.Left,input.Left.Right,input.Right,ct));
         var wrapperInterceptors=wrapperSites.Select(static(model,_)=>CanonicalSyncSourceEmitter.EmitInterceptors(model,"CanonicalWrapperShims"));
         context.RegisterSourceOutput(wrapperInterceptors,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Wrappers.Interceptors.g.cs",SourceText.From(text,Encoding.UTF8));});
         var capabilities=compositionModel.Combine(executionModel).Combine(canonicalSync).Combine(canonicalAsync).Combine(canonicalWrapper)
             .Select(static(input,_)=>CanonicalCapabilityEmissionNormalizer.Create(input.Left.Left.Left.Left,input.Left.Left.Left.Right,input.Left.Left.Right,input.Left.Right,input.Right)).WithTrackingName("CanonicalCapabilityEmissionModel");
-        var capabilitySource=capabilities.Select(static(model,_)=>CanonicalCapabilitySourceEmitter.Emit(model)).WithTrackingName("CanonicalCapabilitySourceEmission");
+        var capabilitySource=capabilities.Combine(routeTexts).Select(static(input,_)=>CanonicalRouteIncremental.Capability(input.Left,input.Right)).WithTrackingName("CanonicalCapabilitySourceEmission");
         context.RegisterSourceOutput(capabilitySource,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Capabilities.g.cs",SourceText.From(text,Encoding.UTF8));});
         var capabilitySites=capabilities.Combine(compositions).Combine(context.CompilationProvider).Select(static(input,ct)=>CanonicalCapabilityEmissionNormalizer.BindCallSites(input.Left.Left,input.Left.Right,input.Right,ct));
         var capabilityInterceptors=capabilitySites.Select(static(model,_)=>CanonicalSyncSourceEmitter.EmitInterceptors(model,"CanonicalCapabilityShims"));
         context.RegisterSourceOutput(capabilityInterceptors,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Capabilities.Interceptors.g.cs",SourceText.From(text,Encoding.UTF8));});
         var multi=compositionModel.Combine(executionModel).Select(static(input,_)=>CanonicalMultiEmissionNormalizer.Create(input.Left,input.Right)).WithTrackingName("CanonicalMultiEmissionModel");
-        var multiSource=multi.Select(static(model,_)=>CanonicalMultiSourceEmitter.Emit(model)).WithTrackingName("CanonicalMultiSourceEmission");
+        var multiSource=multi.Combine(routeTexts).Select(static(input,_)=>CanonicalMultiSourceEmitter.Emit(input.Left,r=>CanonicalRouteIncremental.Find(input.Right,r.Registration.Namespace,r.Registration.Handler.RequestName,r.Sync!=null?BoundDispatchFamily.SendSync:r.Async!=null?BoundDispatchFamily.SendAsync:r.Wrapper!=null?r.Wrapper.Family:r.Capability!.Family))).WithTrackingName("CanonicalMultiSourceEmission");
         context.RegisterSourceOutput(multiSource,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Multiple.g.cs",SourceText.From(text,Encoding.UTF8));});
         var multiSites=multi.Combine(compositions).Combine(context.CompilationProvider).Select(static(input,ct)=>CanonicalMultiEmissionNormalizer.BindCallSites(input.Left.Left,input.Left.Right,input.Right,ct));
         var multiInterceptors=multiSites.Select(static(model,_)=>CanonicalSyncSourceEmitter.EmitInterceptors(model,"CanonicalMultiShims"));
@@ -97,7 +107,7 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
             CompositionSelectionDiscovery.Report(ctx, sync.Left.Left.Left.Left, sync.Left.Left.Right, sync.Left.Left.Left.Right, sync.Left.Right, sync.Right,
                 original.Left.Right, original.Right,wrapperInput.Left.Right,wrapperInput.Right,originalInput.Left.Right,originalInput.Right,input.Left.Right,input.Right);
         });
-        var legacyInvocations = invocations.Combine(compositions)
+        var legacyInvocations = invocationBindings.Combine(compositions)
             .Select(static (input, _) => CompositionSelectionDiscovery.LegacyInvocations(input.Left, input.Right));
         // Discovery metadata alone never gates unrelated legacy generation.
         var result = declarations.Combine(legacyInvocations).Combine(context.CompilationProvider)
