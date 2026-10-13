@@ -4,9 +4,10 @@ using System.Linq;
 
 namespace Zendiator.SourceGenerator;
 
-internal enum CanonicalStreamConnectionKind { Candidate, CanonicalPending, InvalidContract, ConflictingComposition }
+internal enum CanonicalStreamConnectionKind { Candidate, CanonicalCandidate, CanonicalPending, InvalidContract, ConflictingComposition }
 internal sealed record CanonicalStreamConnection(string RouteKey, string CompositionIdentity, string Anchor,
-    CanonicalStreamConnectionKind Kind, CanonicalStreamPrototypeModel? Candidate, string Reason);
+    CanonicalStreamConnectionKind Kind, CanonicalStreamPrototypeModel? Candidate, string Reason)
+{ public CanonicalStreamFallbackModel? Canonical { get; init; } }
 internal sealed record CanonicalStreamConnectionCatalog(EquatableArray<CanonicalStreamConnection> Routes);
 
 // C05 connects the reviewed candidate to route lowering/rendering. Deferred canonical
@@ -21,6 +22,7 @@ internal static class CanonicalStreamEmissionNormalizer
         {
             var input = row.Route.Input; var c = input.Composition; var route = input.Route;
             CanonicalStreamConnectionKind kind; string reason; CanonicalStreamPrototypeModel? candidate = null;
+            CanonicalStreamFallbackModel? canonical = null;
             if (catalog.Compositions.Count(other => other.Identity == c.Identity || other.Key == c.Key ||
                 c.GeneratedNamespace != null && other.GeneratedNamespace == c.GeneratedNamespace) != 1)
             {
@@ -39,27 +41,34 @@ internal static class CanonicalStreamEmissionNormalizer
                 kind = CanonicalStreamConnectionKind.Candidate; candidate = selected;
                 reason = ValidGraph + "The selected closed Stream candidate is connected to route lowering and rendering. Public runtime generation and equivalence are pending; registration remains blocked.";
             }
+            else if (row.StreamCanonical is { } fallback)
+            {
+                kind = CanonicalStreamConnectionKind.CanonicalCandidate; canonical = fallback;
+                reason = ValidGraph + "A same-contract canonical Stream candidate is generated for this closed shape. Public runtime generation and equivalence are pending; registration remains blocked. No legacy/reference adapter is selected.";
+            }
             else
             {
                 kind = CanonicalStreamConnectionKind.CanonicalPending;
-                reason = ValidGraph + "This shape is outside the selected closed class/int/Filter->Map->Filter candidate or its supported schedule. Same-contract canonical runtime generation and equivalence are pending; emission remains blocked. No legacy/reference fallback is selected.";
+                reason = ValidGraph + "This shape is outside the closed class-receiver canonical backend or its supported schedule. Open binding, value-type receivers, sessions and alias support remain pending; emission remains blocked. No legacy/reference fallback is selected.";
             }
-            connections.Add(new(input.Key, c.Identity, route.Anchor, kind, candidate, reason));
+            connections.Add(new(input.Key, c.Identity, route.Anchor, kind, candidate, reason) { Canonical = canonical });
         }
-        var collisions = new HashSet<string>(connections.Where(c => c.Candidate != null).GroupBy(c => c.Candidate!.HintName)
+        string? Hint(CanonicalStreamConnection c) => c.Candidate?.HintName ?? c.Canonical?.HintName;
+        var collisions = new HashSet<string>(connections.Where(c => Hint(c) != null).GroupBy(c => Hint(c)!)
             .Where(g => g.Count() != 1).Select(g => g.Key), StringComparer.Ordinal);
-        return new(new(connections.Select(c => c.Candidate != null && collisions.Contains(c.Candidate.HintName)
-            ? c with { Kind = CanonicalStreamConnectionKind.ConflictingComposition, Candidate = null,
+        return new(new(connections.Select(c => Hint(c) is { } hint && collisions.Contains(hint)
+            ? c with { Kind = CanonicalStreamConnectionKind.ConflictingComposition, Candidate = null, Canonical = null,
                 Reason = "Stream candidate output identity is ambiguous; public emission remains blocked." } : c)));
     }
 
-    internal static IEnumerable<CanonicalSourceFile> Files(IEnumerable<CanonicalStreamPrototypeModel> models, IEnumerable<CanonicalRouteText> rows)
+    internal static IEnumerable<CanonicalSourceFile> Files(IEnumerable<CanonicalStreamPrototypeModel> fused,
+        IEnumerable<CanonicalStreamFallbackModel> canonical, IEnumerable<CanonicalRouteText> rows)
     {
-        var rendered = rows.ToArray();
-        foreach (var model in models)
+        var rendered = rows.SelectMany(r => new[] { r.StreamCandidateFile, r.StreamCanonicalFile }).Where(f => f != null).Select(f => f!).ToArray();
+        foreach (var hint in fused.Select(m => m.HintName).Concat(canonical.Select(m => m.HintName)))
         {
-            var file = rendered.Single(r => r.StreamCandidateFile?.HintName == model.HintName).StreamCandidateFile;
-            if (file == null || file.Source.Length == 0)
+            var file = rendered.Single(f => f.HintName == hint);
+            if (file.Source.Length == 0)
                 throw new InvalidOperationException("Selected Stream candidate has no matching rendered route file.");
             yield return file;
         }

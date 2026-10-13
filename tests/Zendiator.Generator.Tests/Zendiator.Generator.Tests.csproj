@@ -2,6 +2,7 @@
   <PropertyGroup><TargetFramework>net10.0</TargetFramework><IsTestProject>true</IsTestProject></PropertyGroup>
   <ItemGroup>
     <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamItemReference.cs" Link="Reference/CanonicalStreamItemReference.cs" />
+    <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamWrapperReference.cs" Link="Reference/CanonicalStreamWrapperReference.cs" />
     <Compile Include="../Zendiator.Tests/Contracts/ContractEvents.cs" Link="Reference/ContractEvents.cs" />
     <ProjectReference Include="../../src/Zendiator.Abstractions/Zendiator.Abstractions.csproj" />
     <ProjectReference Include="../../src/Zendiator/Zendiator.csproj" />

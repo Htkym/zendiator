@@ -127,6 +127,9 @@ internal static class StageContractBinding
         {
             StreamEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.Stream &&
                 kind == FusionStageKind.Hook && callbacks.Count == 1 ? streamEmission : null,
+            StreamWrapperEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.Stream &&
+                kind == FusionStageKind.Wrapper && callbacks.Count == 1 && wrapperEmission != null
+                    ? wrapperEmission with { WrapperIsValueType = type.IsValueType } : null,
             SyncEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.SendSync &&
                 kind == FusionStageKind.Hook && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type,compilation.Assembly) &&
                 callbacks.Count == 4 && syncCallbacks.Count == 4 &&

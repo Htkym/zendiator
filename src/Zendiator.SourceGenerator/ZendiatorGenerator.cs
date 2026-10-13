@@ -54,10 +54,13 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         var streamPrototypeModels = streamConnections.SelectMany(static (catalog, _) => catalog.Routes
             .Where(c => c.Kind == CanonicalStreamConnectionKind.Candidate).Select(c => c.Candidate!))
             .WithTrackingName("CanonicalStreamPrototypeProjection");
+        var streamCanonicalModels = streamConnections.SelectMany(static (catalog, _) => catalog.Routes
+            .Where(c => c.Kind == CanonicalStreamConnectionKind.CanonicalCandidate).Select(c => c.Canonical!))
+            .WithTrackingName("CanonicalStreamCanonicalProjection");
         var routeTextEntries = routeBackends.Select(static(route,_)=>CanonicalRouteIncremental.Render(route)).WithTrackingName("CanonicalRouteSourceEntry");
         var routeTexts = routeTextEntries.Collect();
-        var streamPrototypeFiles = streamPrototypeModels.Collect().Combine(routeTexts)
-            .SelectMany(static (input, _) => CanonicalStreamEmissionNormalizer.Files(input.Left, input.Right))
+        var streamPrototypeFiles = streamPrototypeModels.Collect().Combine(streamCanonicalModels.Collect()).Combine(routeTexts)
+            .SelectMany(static (input, _) => CanonicalStreamEmissionNormalizer.Files(input.Left.Left, input.Left.Right, input.Right))
             .WithTrackingName("CanonicalStreamPrototypeSource");
         context.RegisterSourceOutput(streamPrototypeFiles, static (ctx, file) => ctx.AddSource(file.HintName, SourceText.From(file.Source, Encoding.UTF8)));
         var splitRouteEntries = routeTextEntries.Select(static(route,_)=>new CanonicalRouteFile(route,CanonicalSplitSourceEmitter.Route(route))).WithTrackingName("CanonicalRouteFileEntry");

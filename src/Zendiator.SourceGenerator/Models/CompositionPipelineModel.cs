@@ -17,6 +17,7 @@ internal sealed record BoundStageModel(string Anchor, string Type, string Name, 
     public BoundWrapperEmission? WrapperEmission { get; init; }
     public HookCapabilityEmission? Capabilities { get; init; }
     public BoundStreamHookEmission? StreamEmission { get; init; }
+    public BoundWrapperEmission? StreamWrapperEmission { get; init; }
 }
 internal sealed record BoundHandlerModel(string Anchor, string Type, string Name, string Contract, string? Result,
     string Implementation, FusionOwnership ServiceOwnership, bool CompilerOwnsError, BoundCallbackModel? Callback)

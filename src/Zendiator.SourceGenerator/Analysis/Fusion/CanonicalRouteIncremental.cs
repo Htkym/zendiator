@@ -9,12 +9,16 @@ internal sealed record CanonicalRouteInput(string Key, CompositionSelectionModel
 internal sealed record CanonicalRouteGraph(CanonicalRouteInput Input, CanonicalExecutionGraphModel? Graph);
 internal sealed record CanonicalRouteBackend(CanonicalRouteGraph Route, CanonicalSyncCompositionEmission? Sync,
     CanonicalAsyncCompositionEmission? Async, CanonicalWrapperCompositionEmission? Wrapper, CanonicalCapabilityCompositionEmission? Capability)
-{ public CanonicalStreamPrototypeModel? StreamCandidate { get; init; } }
+{
+    public CanonicalStreamPrototypeModel? StreamCandidate { get; init; }
+    public CanonicalStreamFallbackModel? StreamCanonical { get; init; }
+}
 internal sealed record CanonicalRouteText(string Key, string Namespace, string RequestName, BoundDispatchFamily? Family, string Source)
 {
     public string StableKey { get; init; } = "";
     // Candidate text must never enter the public registration/partial-route emitter.
     public CanonicalSourceFile? StreamCandidateFile { get; init; }
+    public CanonicalSourceFile? StreamCanonicalFile { get; init; }
 }
 
 // Semantic binding refreshes current symbols/locations. Structural values stop unrelated graph/template work.
@@ -55,9 +59,10 @@ internal static class CanonicalRouteIncremental
         var async = CanonicalAsyncEmissionNormalizer.Create(catalog, graphs);
         var wrapper = CanonicalWrapperEmissionNormalizer.Create(catalog, graphs);
         var capability = CanonicalCapabilityEmissionNormalizer.Create(catalog, graphs, sync, async, wrapper);
+        var stream = CanonicalStreamPrototypeProjection.Create(row);
         return new(row, sync.Compositions.SingleOrDefault(), async.Compositions.SingleOrDefault(),
             wrapper.Compositions.SingleOrDefault(), capability.Compositions.SingleOrDefault())
-            { StreamCandidate = CanonicalStreamPrototypeProjection.Create(row) };
+            { StreamCandidate = stream, StreamCanonical = stream == null ? CanonicalStreamFallbackProjection.Create(row) : null };
     }
     internal static CanonicalRouteText Render(CanonicalRouteBackend row)
     {
@@ -69,7 +74,8 @@ internal static class CanonicalRouteIncremental
             row.Route.Input.Route.Family, source)
             {
                 StableKey = row.Route.Input.Composition.Identity + "|" + row.Route.Input.Route.Family + "|" + row.Route.Input.Route.Request,
-                StreamCandidateFile = row.StreamCandidate is { } stream ? CanonicalStreamPrototypeEmitter.Emit(stream) : null
+                StreamCandidateFile = row.StreamCandidate is { } stream ? CanonicalStreamPrototypeEmitter.Emit(stream) : null,
+                StreamCanonicalFile = row.StreamCanonical is { } canonical ? CanonicalStreamFallbackEmitter.Emit(canonical) : null
             };
     }
     internal static string Find(IEnumerable<CanonicalRouteText> rows, string ns, string request, BoundDispatchFamily? family) =>
