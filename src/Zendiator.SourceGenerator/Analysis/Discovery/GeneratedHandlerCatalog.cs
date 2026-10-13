@@ -79,11 +79,15 @@ internal static class GeneratedHandlerCatalog
         foreach(var attr in attributes.Where(a=>Same(a.AttributeClass,exportType)))
         {
             ct.ThrowIfCancellationRequested();var values=attr.ConstructorArguments;
+            if(values.Length==2&&(values[0].Kind==TypedConstantKind.Error||values[0].Value is INamedTypeSymbol{TypeKind:TypeKind.Error}))
+            {reject("CatalogDependencyUnavailable: reference the producer's required assemblies or regenerate a catalog with available types.");continue;}
             if(values.Length!=2||values[0].Value is not INamedTypeSymbol type){reject("MalformedCatalogExport");continue;}
             if(type.IsUnboundGenericType)type=type.OriginalDefinition;
             if(!Same(type.ContainingAssembly,assembly)){reject("CatalogForeignType: "+Name(type));continue;}
             if(!seen.Add(type)){reject("DuplicateCatalogExport: "+Name(type));continue;}
             var fact=CatalogSignatureV1.Inspect(compilation,type);
+            if(fact.Errors.Contains("CatalogDependencyUnavailable"))
+            {reject("CatalogDependencyUnavailable: "+Name(type)+" requires missing type metadata. Reference the producer's required assemblies or regenerate its catalog.");continue;}
             foreach(var error in fact.Errors)reject(error+": "+Name(type));
             if(fact.Errors.Contains("UnsupportedCatalogSignature"))continue;
             if(values[1].Value is not string fingerprint||fingerprint.Length!=64||fingerprint.Any(c=>!Uri.IsHexDigit(c)))

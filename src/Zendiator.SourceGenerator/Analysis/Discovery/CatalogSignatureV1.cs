@@ -55,6 +55,9 @@ internal static class CatalogSignatureV1
         foreach(var iface in type.AllInterfaces)foreach(var (name,family) in definitions)
             if(Same(iface.OriginalDefinition,assembly?.GetTypeByMetadataName(name)))contracts.Add(new(family,iface.TypeArguments[0],iface.TypeArguments.Length==2?iface.TypeArguments[1]:null));
         if(contracts.Count==0)errors.Add("MissingHandlerContract");
+        if(ContainsErrorType(type)||type.AllInterfaces.Any(ContainsErrorType)||
+            Parameters(type).SelectMany(p=>p.ConstraintTypes).Any(ContainsErrorType)||MissingBaseType(type))
+            errors.Add("CatalogDependencyUnavailable");
         if(!SupportedSignature(type)||Parameters(type).SelectMany(p=>p.ConstraintTypes).Any(t=>!SupportedSignature(t))||
             contracts.Any(c=>!SupportedSignature(c.Request)||c.Response!=null&&!SupportedSignature(c.Response)))
             errors.Add("UnsupportedCatalogSignature");
@@ -65,6 +68,18 @@ internal static class CatalogSignatureV1
         }
         return new(type,contracts.ToArray(),errors.Distinct().ToArray());
     }
+    private static bool MissingBaseType(INamedTypeSymbol type)
+    {
+        for(var parent=type.BaseType;parent!=null;parent=parent.BaseType)
+            if(ContainsErrorType(parent))return true;
+        return false;
+    }
+    private static bool ContainsErrorType(ITypeSymbol type)=>type.TypeKind==TypeKind.Error||(type switch
+    {
+        IArrayTypeSymbol a=>ContainsErrorType(a.ElementType),
+        INamedTypeSymbol n=>n.TypeArguments.Any(ContainsErrorType)||(n.ContainingType!=null&&ContainsErrorType(n.ContainingType)),
+        _=>false
+    });
     // An incomplete/invalid source contract may carry error, pointer or function-pointer symbols.
     // The compiler owns those errors; never send an unencodable shape to the fingerprint writer.
     private static bool SupportedSignature(ITypeSymbol type)=>type switch
