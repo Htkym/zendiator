@@ -134,7 +134,7 @@ public sealed partial class GeneratorTests
     {
         var source=WrapperSource(key.Async,key.Void,key.Receiver,key.Hooks);var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"Wrapper_"+Guid.NewGuid().ToString("N")),out var output,out var diagnostics);
         Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        using var bytes=new MemoryStream();var emitted=output.Emit(bytes);Assert.True(emitted.Success,string.Join("\n",emitted.Diagnostics));var sources=driver.GetRunResult().Results.Single().GeneratedSources;Assert.Equal(2,sources.Count(s=>s.HintName!="Zendiator.GeneratedCatalog.g.cs"));
+        using var bytes=new MemoryStream();var emitted=output.Emit(bytes);Assert.True(emitted.Success,string.Join("\n",emitted.Diagnostics));var sources=driver.GetRunResult().Results.Single().GeneratedSources;AssertCanonicalOutputRoles(sources);
         var evidence=Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");if(!string.IsNullOrEmpty(evidence))
         {var folder=Path.Combine(evidence,"wrapper-"+key.Async+"-"+key.Void+"-"+key.Receiver+"-"+key.Hooks);Directory.CreateDirectory(folder);File.WriteAllText(Path.Combine(folder,"input.cs"),source);foreach(var s in sources)File.WriteAllText(Path.Combine(folder,s.HintName),s.SourceText.ToString());File.WriteAllBytes(Path.Combine(folder,"generated.dll"),bytes.ToArray());File.WriteAllText(Path.Combine(folder,"compile.json"),JsonSerializer.Serialize(new{emitted.Success,productionEnabled=true,candidateOnly=false,warnings=0,errors=0,generatorErrors=diagnostics.Length}));}
         bytes.Position=0;var a=AssemblyLoadContext.Default.LoadFromStream(bytes);var bridge=a.GetType("App.Bridge")!;
@@ -240,7 +240,7 @@ public sealed partial class GeneratorTests
             "metadata"=>source.Replace("Stage.Wrapper<Wrap>()","Stage.Wrapper<global::Zendiator.Generator.Tests.MetadataWrapper<Ping>>()"),
             _=>source.Replace("Stage.Wrapper<Wrap>()","Stage.Hook<global::Zendiator.Generator.Tests.MetadataAsyncHook<Ping>>(),Stage.Wrapper<Wrap>()")};
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"WrapperUnsupported"+shape),out var output,out var diagnostics);
-        Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.Contains(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName=="Zendiator.Canonical.Wrappers.g.cs");
+        Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
         WriteNestedHookEvidence("wrapper-boundaries",shape,new{shape,source,diagnostics=diagnostics.Select(d=>new{d.Id,message=d.GetMessage()}),generatedExecution=false});
     }
     [Fact]
@@ -254,9 +254,9 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Opaque_wrapper_body_edit_preserves_emission_cache_and_region_structure()
     {
-        var source=WrapperSource(true,false,"async-owned","both");var driver=SyncDriver().RunGenerators(SyncCompilation(source,"WrapperCache"));var body=driver.GetRunResult().Results.Single().GeneratedSources.Single(s=>s.HintName=="Zendiator.Canonical.Wrappers.g.cs").SourceText.ToString();
+        var source=WrapperSource(true,false,"async-owned","both");var driver=SyncDriver().RunGenerators(SyncCompilation(source,"WrapperCache"));var body=CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
         driver=driver.RunGenerators(SyncCompilation(source.Replace("return value+1;","return value+2;"),"WrapperCache"));
-        Assert.Equal(body,driver.GetRunResult().Results.Single().GeneratedSources.Single(s=>s.HintName=="Zendiator.Canonical.Wrappers.g.cs").SourceText.ToString());Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalWrapperSourceEmission"].SelectMany(s=>s.Outputs),o=>Assert.Equal(IncrementalStepRunReason.Cached,o.Reason));
+        Assert.Equal(body,CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalRouteOutputFile"].SelectMany(s=>s.Outputs),o=>Assert.True(o.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
         Assert.Contains("ExecuteOuter",body);Assert.Contains("ExecuteInner",body);WriteNestedHookEvidence("wrapper-incremental","body",new{cached=true,explicitRegions=2});
     }
     [Fact]

@@ -169,8 +169,8 @@ public sealed partial class GeneratorTests
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"CanonicalAsync_"+Guid.NewGuid().ToString("N")),out var output,out var diagnostics);
         Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success,string.Join("\n",emitted.Diagnostics));
-        var sources = driver.GetRunResult().Results.Single().GeneratedSources; Assert.Equal(2,sources.Count(s=>s.HintName!="Zendiator.GeneratedCatalog.g.cs"));
-        Assert.Contains(sources,s=>s.HintName=="Zendiator.Canonical.SendAsync.g.cs");
+        var sources = driver.GetRunResult().Results.Single().GeneratedSources; AssertCanonicalOutputRoles(sources);
+        AssertCanonicalOutputRoles(sources);
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence))
         {
@@ -331,7 +331,7 @@ public sealed partial class GeneratorTests
         var source=AsyncSource("direct",false);var start=source.IndexOf("public static object Dispatch",StringComparison.Ordinal);source=source.Remove(start,source.IndexOf(';',start)-start+1);
         source=source.Replace("c=>c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(Handler<string>))","c=>{c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(Handler<string>));c.Pipeline<Ping>(DispatchFamily.SendAsync,Stage.Wrapper<Wrap>());}")+"namespace App {public sealed class Wrap:IAsyncSendWrapper<Ping,int>{public ValueTask<int> InvokeAsync<TNext>(Ping r,TNext next,CancellationToken t) where TNext:IAsyncSendContinuation<Ping,int> =>next.InvokeAsync(r,t);}}";
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"ExistingOpaqueWrapper"),out var output,out var diagnostics);
-        Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));Assert.Equal(2,driver.GetRunResult().Results.Single().GeneratedSources.Count(s=>s.HintName!="Zendiator.GeneratedCatalog.g.cs"));
+        Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
     }
 
     private static void AssertUnsupportedAsyncShape(string shape)
@@ -347,9 +347,9 @@ public sealed partial class GeneratorTests
             _=>source.Replace("c=>c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(Handler<string>))","c=>{c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(Handler<string>));c.Pipeline<Ping>(DispatchFamily.SendAsync,Stage.Wrapper<Wrap>());}")+"namespace App {public sealed class Wrap:IAsyncSendWrapper<Ping,int>{public ValueTask<int> InvokeAsync<TNext>(Ping r,TNext next,CancellationToken t) where TNext:IAsyncSendContinuation<Ping,int> =>next.InvokeAsync(r,t);}}"};
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"AsyncUnsupported"+shape),out var output,out var diagnostics);
         if(shape=="struct"){
-            Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.Contains(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName=="Zendiator.Canonical.SendAsync.g.cs");return;
+            Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);return;
         }
-        Assert.Equal("ZEN0037",Assert.Single(diagnostics).Id);Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.StartsWith("Zendiator.Canonical",StringComparison.Ordinal));
+        Assert.Equal("ZEN0037",Assert.Single(diagnostics).Id);AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
         Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));
     }
 
@@ -358,11 +358,11 @@ public sealed partial class GeneratorTests
     {
         var source=AsyncSource("direct",false);
         var input=SyncCompilation(source,"AsyncIncremental");var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(input,out _,out _);
-        var text=driver.GetRunResult().Results.Single().GeneratedSources.Single(s=>s.HintName=="Zendiator.Canonical.SendAsync.g.cs").SourceText.ToString();
+        var text=CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
         var changed=source.Replace("=>_probe.Handle(this,request,token);","{ return _probe.Handle(this,request,token); }");
         driver=driver.RunGeneratorsAndUpdateCompilation(input.ReplaceSyntaxTree(input.SyntaxTrees.Single(),Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(changed,SyncParseOptions)),out _,out var diagnostics);
-        Assert.Empty(diagnostics);Assert.Equal(text,driver.GetRunResult().Results.Single().GeneratedSources.Single(s=>s.HintName=="Zendiator.Canonical.SendAsync.g.cs").SourceText.ToString());
-        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalAsyncSourceEmission"].SelectMany(s=>s.Outputs),o=>Assert.Equal(IncrementalStepRunReason.Cached,o.Reason));
+        Assert.Empty(diagnostics);Assert.Equal(text,CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
+        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalRouteOutputFile"].SelectMany(s=>s.Outputs),o=>Assert.True(o.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
         var other=SyncRuntimeSource("direct",false).Replace("namespace App {","namespace SyncApp {").Replace("global::App.Generated.Reads","global::SyncApp.Generated.Reads").Replace("ZendiatorComposition(\"reads\")","ZendiatorComposition(\"sync-reads\")");
         var both=SyncCompilation(source,"BothFamilies").AddSyntaxTrees(Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(other,SyncParseOptions));
         driver=SyncDriver().RunGeneratorsAndUpdateCompilation(both,out var output,out diagnostics);

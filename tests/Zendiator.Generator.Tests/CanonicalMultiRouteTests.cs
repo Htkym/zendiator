@@ -33,11 +33,11 @@ public sealed partial class GeneratorTests
         var sources=new[]{MultiRouteSource(k,false),MultiRouteSource(k,true),MultiRegistration(k)};
         var compilation=SyncCompilation("", "Multi_"+Guid.NewGuid().ToString("N")).RemoveAllSyntaxTrees().AddSyntaxTrees(sources.Select(s=>Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(s,SyncParseOptions)));
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(compilation,out var output,out var diagnostics);Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        using var bytes=new MemoryStream();var emitted=output.Emit(bytes);Assert.True(emitted.Success,string.Join("\n",emitted.Diagnostics));var generated=driver.GetRunResult().Results.Single().GeneratedSources;Assert.Equal(2,generated.Count(s=>s.HintName!="Zendiator.GeneratedCatalog.g.cs"));
-        var body=generated.Single(s=>s.HintName=="Zendiator.Canonical.Multiple.g.cs").SourceText.ToString();Assert.DoesNotContain("GetAwaiter",body);Assert.DoesNotContain("ServiceProviderEngineScope",body);Assert.DoesNotContain("GetType()",body);
+        using var bytes=new MemoryStream();var emitted=output.Emit(bytes);Assert.True(emitted.Success,string.Join("\n",emitted.Diagnostics));var generated=driver.GetRunResult().Results.Single().GeneratedSources;AssertCanonicalOutputRoles(generated,routes:2);
+        var body=CanonicalCompositionSource(generated);foreach(var route in generated.Where(IsCanonicalRoute)){var text=route.SourceText.ToString();Assert.DoesNotContain("GetAwaiter",text);Assert.DoesNotContain("ServiceProviderEngineScope",text);Assert.DoesNotContain("GetType()",text);}
         if(!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR"))){var p=Path.Combine(MultiArtifactRoot,"generated-artifacts","multi-"+k);Directory.CreateDirectory(p);for(var i=0;i<sources.Length;i++)File.WriteAllText(Path.Combine(p,"input"+i+".cs"),sources[i]);foreach(var s in generated)File.WriteAllText(Path.Combine(p,s.HintName),s.SourceText.ToString());File.WriteAllBytes(Path.Combine(p,"generated.dll"),bytes.ToArray());File.WriteAllText(Path.Combine(p,"compile.json"),JsonSerializer.Serialize(new{emitted.Success,productionEnabled=true,candidateOnly=false,warnings=0,errors=0,generatorErrors=0,routes=2,handlerOrder="A,B",pipelineOrder="B,A"}));}
         bytes.Position=0;var a=AssemblyLoadContext.Default.LoadFromStream(bytes);var bridge=a.GetType("App.Bridge")!;var mediator=a.GetType("App.Generated.Reads.Zendiator")!;var register=bridge.GetMethod("Register")!;
-        ManagedShapeFixture Route(bool second){var q=MultiShape(k,second);var n=second?"RouteB":"RouteA";return new(a,mediator,a.GetType(n+".Ping")!,register,bridge.GetMethod(second?"DispatchB":"DispatchA")!,a.GetType(n+".Oracle")!.GetMethod("Send")!,q.Result=="array"?typeof(int[]):q.Result=="nullable"?typeof(int?):a.GetType(n+".Reply")!,body);}
+        ManagedShapeFixture Route(bool second){var q=MultiShape(k,second);var n=second?"RouteB":"RouteA";return new(a,mediator,a.GetType(n+".Ping")!,register,bridge.GetMethod(second?"DispatchB":"DispatchA")!,a.GetType(n+".Oracle")!.GetMethod("Send")!,q.Result=="array"?typeof(int[]):q.Result=="nullable"?typeof(int?):a.GetType(n+".Reply")!,CanonicalRouteSource(generated,n+".Ping"));}
         return new(a,mediator,register,Route(false),Route(true),body);
     })).Value;
     [Theory][InlineData("mixed")][InlineData("same-family")][InlineData("wrappers")]
@@ -51,8 +51,8 @@ public sealed partial class GeneratorTests
     {
         var source=MultiRegistration("mixed").Replace("Stage.Hook<RouteB.Hook>()","Stage.Hook<RouteA.Hook>()");var parts=new[]{MultiRouteSource("mixed",false),MultiRouteSource("mixed",true),source};
         var compilation=SyncCompilation("","MultiInvalid").RemoveAllSyntaxTrees().AddSyntaxTrees(parts.Select(s=>Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(s,SyncParseOptions)));
-        var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(compilation,out var output,out var diagnostics);Assert.Contains(diagnostics,d=>d.Id=="ZEN0026");Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.Contains("Canonical"));Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error&&d.Id!="CS0234"));
-        MultiEvidence("multi-boundaries","invalid-route",new{noPartialCanonical=true,diagnostics=diagnostics.Select(d=>d.GetMessage())});
+        var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(compilation,out var output,out var diagnostics);Assert.Contains(diagnostics,d=>d.Id=="ZEN0026");AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error&&d.Id!="CS0234"));
+        MultiEvidence("multi-boundaries","invalid-route",new{noPartialExecutionOrComposition=true,diagnostics=diagnostics.Select(d=>d.GetMessage())});
     }
     [Fact]
     public void Multi_route_null_provider_and_null_collection_guards_remain()

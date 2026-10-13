@@ -42,14 +42,14 @@ public sealed partial class GeneratorTests
     {
         var driver=IncrementalRouteRun(SyncDriver(),IncrementalRouteSource,"unrelated-before");var changed=IncrementalRouteSource.Replace("Handle(A r,CancellationToken t)=>r.Value","Handle(A r,CancellationToken t)=>r.Value+1")+"namespace Unrelated{public sealed class Noise{public string Text=>\"noise\";}}";
         driver=IncrementalRouteRun(driver,changed,"unrelated-after");foreach(var step in new[]{"CanonicalRouteGraphEntry","CanonicalRouteBackendEntry","CanonicalRouteSourceEntry"})Assert.All(RouteReasons(driver,step).Values,r=>Assert.Equal(IncrementalStepRunReason.Cached,r));
-        CatalogEvidence("incremental-route-observations","unrelated",new{graphCached=true,templateCached=true,bodyAndUnrelatedEdit=true,generatedBytesEqual=true});
+        CatalogEvidence("incremental-route-observations","unrelated",new{graphCached=true,templateCached=true,bodyAndUnrelatedEdit=true,routeOutputCountMatchesAcceptedModel=true});
     }
     [Fact]
     public void Incremental_route_contract_edit_only_regenerates_affected_route()
     {
         var driver=IncrementalRouteRun(SyncDriver(),IncrementalRouteSource,"contract-before");var changed=IncrementalRouteSource.Replace("A(int Value):ISyncRequest<int>","A(int Value):ISyncRequest<long>").Replace("ISyncRequestHandler<A,int>","ISyncRequestHandler<A,long>").Replace("public int Handle(A","public long Handle(A");driver=IncrementalRouteRun(driver,changed,"contract-after");
         foreach(var step in new[]{"CanonicalRouteGraphEntry","CanonicalRouteBackendEntry","CanonicalRouteSourceEntry"}){var reasons=RouteReasons(driver,step);Assert.Equal(IncrementalStepRunReason.Modified,reasons["global::Fine.A"]);Assert.Equal(IncrementalStepRunReason.Cached,reasons["global::Fine.B"]);}
-        CatalogEvidence("incremental-route-observations","contract",new{affectedModified=true,unrelatedCached=true,wholeOutputMatchesDirectEmitter=true});
+        CatalogEvidence("incremental-route-observations","contract",new{affectedModified=true,unrelatedCached=true,routeOutputCountMatchesAcceptedModel=true,generatedCompilationChecked=true});
     }
     [Fact]
     public void Incremental_route_current_diagnostic_locations_refresh_without_template_work()
@@ -62,8 +62,25 @@ public sealed partial class GeneratorTests
     public void Incremental_route_multiple_compositions_keep_unrelated_composition_cached()
     {
         var source=IncrementalRouteSource.Replace("[ZendiatorComposition(\"fine\")]public sealed class Reads;","[ZendiatorComposition(\"fine\")]public sealed class Reads;[ZendiatorComposition(\"other\")]public sealed class Other;").Replace("c.Handlers<B>(DispatchFamily.SendSync,typeof(HB));","").Replace("});}","});public static IServiceCollection RegisterOther(IServiceCollection s)=>s.AddZendiator<Other>(c=>c.Handlers<B>(DispatchFamily.SendSync,typeof(HB)));}");
-        var driver=IncrementalRouteRun(SyncDriver(),source,"compositions-before");var changed=source.Replace("A(int Value):ISyncRequest<int>","A(int Value):ISyncRequest<long>").Replace("ISyncRequestHandler<A,int>","ISyncRequestHandler<A,long>").Replace("public int Handle(A","public long Handle(A");driver=IncrementalRouteRun(driver,changed,"compositions-after");var reasons=RouteReasons(driver,"CanonicalRouteSourceEntry");Assert.Equal(IncrementalStepRunReason.Modified,reasons["global::Fine.A"]);Assert.Equal(IncrementalStepRunReason.Cached,reasons["global::Fine.B"]);CatalogEvidence("incremental-route-observations","compositions",new{compositionCount=2,unrelatedTemplateCached=true,generatedBytesMatchDirectEmitter=true});
+        var driver=IncrementalRouteRun(SyncDriver(),source,"compositions-before");var changed=source.Replace("A(int Value):ISyncRequest<int>","A(int Value):ISyncRequest<long>").Replace("ISyncRequestHandler<A,int>","ISyncRequestHandler<A,long>").Replace("public int Handle(A","public long Handle(A");driver=IncrementalRouteRun(driver,changed,"compositions-after");var reasons=RouteReasons(driver,"CanonicalRouteSourceEntry");Assert.Equal(IncrementalStepRunReason.Modified,reasons["global::Fine.A"]);Assert.Equal(IncrementalStepRunReason.Cached,reasons["global::Fine.B"]);CatalogEvidence("incremental-route-observations","compositions",new{compositionCount=2,unrelatedTemplateCached=true,routeOutputCountMatchesAcceptedModel=true,generatedCompilationChecked=true});
     }
+    private static bool IsCanonicalRoute(GeneratedSourceResult source)=>source.HintName.StartsWith("Zendiator.Route.",StringComparison.Ordinal);
+    private static bool IsCanonicalComposition(GeneratedSourceResult source)=>source.HintName.StartsWith("Zendiator.Composition.",StringComparison.Ordinal);
+    private static string CanonicalRouteSource(IEnumerable<GeneratedSourceResult> sources,string? request=null)
+        =>Assert.Single(sources,s=>IsCanonicalRoute(s)&&(request==null||s.SourceText.ToString().Contains("global::"+request+" request",StringComparison.Ordinal))).SourceText.ToString();
+    private static string CanonicalCompositionSource(IEnumerable<GeneratedSourceResult> sources)
+        =>Assert.Single(sources,IsCanonicalComposition).SourceText.ToString();
+    private static void AssertCanonicalOutputRoles(IEnumerable<GeneratedSourceResult> sources,int routes=1,int compositions=1,int interceptors=1)
+    {
+        var files=sources.ToArray();var execution=files.Where(IsCanonicalRoute).ToArray();var shared=files.Where(IsCanonicalComposition).ToArray();
+        Assert.Equal(routes,execution.Length);Assert.Equal(compositions,shared.Length);
+        Assert.Equal(interceptors,files.Count(s=>s.HintName.EndsWith(".Interceptors.g.cs",StringComparison.Ordinal)));
+        Assert.All(execution,s=>{Assert.Contains("partial interface IZendiator",s.SourceText.ToString());Assert.DoesNotContain("ZendiatorGeneratedRegistrar",s.SourceText.ToString());});
+        Assert.All(shared,s=>{Assert.Contains("ZendiatorGeneratedRegistrar",s.SourceText.ToString());Assert.DoesNotContain("interface IZendiator",s.SourceText.ToString());});
+        Assert.All(files,s=>Assert.True(IsCanonicalRoute(s)||IsCanonicalComposition(s)||s.HintName.EndsWith(".Interceptors.g.cs",StringComparison.Ordinal)||s.HintName=="Zendiator.GeneratedCatalog.g.cs",s.HintName));
+    }
+    private static void AssertNoCanonicalOutput(IEnumerable<GeneratedSourceResult> sources)
+        =>Assert.DoesNotContain(sources,s=>IsCanonicalRoute(s)||IsCanonicalComposition(s));
     private static Dictionary<string,string> SplitFiles(GeneratorDriver driver)=>driver.GetRunResult().Results.Single().GeneratedSources.ToDictionary(s=>s.HintName,s=>s.SourceText.ToString());
     private static string SplitRouteHint(Dictionary<string,string> files,string request)=>files.Single(p=>p.Key.StartsWith("Zendiator.Route.",StringComparison.Ordinal)&&p.Value.Contains("Send(global::Fine."+request+" request",StringComparison.Ordinal)).Key;
     [Fact]

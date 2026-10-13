@@ -121,16 +121,16 @@ public sealed partial class GeneratorTests
     public void Mixed_session_body_edits_cache_emission_and_each_ownership_change_updates_its_cleanup()
     {
         var source=MixedBackendSource(true,true,false,dispatch:false);var driver=SyncDriver().RunGenerators(SyncCompilation(source,"MixedIncremental"));
-        var first=driver.GetRunResult().Results.Single().GeneratedSources.First(s=>s.HintName=="Zendiator.Canonical.SendSync.g.cs").SourceText.ToString();
+        var first=CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
         Assert.Contains("var detached = hook;",first);Assert.Contains("var detached = handler;",first);
         driver=driver.RunGenerators(SyncCompilation(source.Replace("return _probe.Core.Handle(request,token);","return _probe.Core.Handle(request,token)+0;"),"MixedIncremental"));
-        Assert.Equal(first,driver.GetRunResult().Results.Single().GeneratedSources.First(s=>s.HintName=="Zendiator.Canonical.SendSync.g.cs").SourceText.ToString());
-        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalSyncSourceEmission"].SelectMany(s=>s.Outputs),o=>Assert.True(o.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
+        Assert.Equal(first,CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
+        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalRouteOutputFile"].SelectMany(s=>s.Outputs),o=>Assert.True(o.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
         driver=driver.RunGenerators(SyncCompilation(MixedBackendSource(false,true,false,dispatch:false),"MixedIncremental"));
-        var borrowedHook=driver.GetRunResult().Results.Single().GeneratedSources.First(s=>s.HintName=="Zendiator.Canonical.SendSync.g.cs").SourceText.ToString();
+        var borrowedHook=CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
         Assert.DoesNotContain("var detached = hook;",borrowedHook);Assert.Contains("var detached = handler;",borrowedHook);
         driver=driver.RunGenerators(SyncCompilation(MixedBackendSource(true,false,false,dispatch:false),"MixedIncremental"));
-        var borrowedHandler=driver.GetRunResult().Results.Single().GeneratedSources.First(s=>s.HintName=="Zendiator.Canonical.SendSync.g.cs").SourceText.ToString();
+        var borrowedHandler=CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
         Assert.Contains("var detached = hook;",borrowedHandler);Assert.DoesNotContain("var detached = handler;",borrowedHandler);
         WriteNestedHookEvidence("mixed-session-backend-incremental","ownership",new{bodyCached=true,hookOwnershipChangesOuterCleanup=true,handlerOwnershipChangesInnerCleanup=true});
     }

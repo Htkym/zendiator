@@ -141,7 +141,7 @@ public sealed partial class GeneratorTests
         var emitted = output.Emit(bytes);
         Assert.True(emitted.Success,string.Join("\n",emitted.Diagnostics));
         var sources = driver.GetRunResult().Results.Single().GeneratedSources;
-        Assert.Equal(2,sources.Count(s=>s.HintName!="Zendiator.GeneratedCatalog.g.cs"));
+        AssertCanonicalOutputRoles(sources);
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence))
         {
@@ -366,14 +366,14 @@ public sealed partial class GeneratorTests
     {
         var source=SyncRuntimeSource("owned",false);
         var driver=SyncDriver().RunGenerators(SyncCompilation(source,"CanonicalSyncCache"));
-        var original=driver.GetRunResult().Results.Single().GeneratedSources.Single(s=>s.HintName=="Zendiator.Canonical.SendSync.g.cs").SourceText.ToString();
+        var original=CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
         driver=driver.RunGenerators(SyncCompilation("\n"+source.Replace("return _probe.Handle(this,request,token);","return _probe.Handle(this,request,token)+1;"),"CanonicalSyncCache"));
-        Assert.Equal(original,driver.GetRunResult().Results.Single().GeneratedSources.Single(s=>s.HintName=="Zendiator.Canonical.SendSync.g.cs").SourceText.ToString());
-        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalSyncSourceEmission"].SelectMany(s=>s.Outputs),o=>Assert.Equal(IncrementalStepRunReason.Cached,o.Reason));
+        Assert.Equal(original,CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
+        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalRouteOutputFile"].SelectMany(s=>s.Outputs),o=>Assert.True(o.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
         Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalSyncInterceptorsEmission"].SelectMany(s=>s.Outputs),o=>Assert.Equal(IncrementalStepRunReason.Modified,o.Reason));
         driver=driver.RunGenerators(SyncCompilation(source.Replace("IOwnedSessionFactory","IBorrowedSessionFactory"),"CanonicalSyncCache"));
-        Assert.NotEqual(original,driver.GetRunResult().Results.Single().GeneratedSources.Single(s=>s.HintName=="Zendiator.Canonical.SendSync.g.cs").SourceText.ToString());
-        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalSyncSourceEmission"].SelectMany(s=>s.Outputs),o=>Assert.Equal(IncrementalStepRunReason.Modified,o.Reason));
+        Assert.NotEqual(original,CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
+        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalRouteOutputFile"].SelectMany(s=>s.Outputs),o=>Assert.Equal(IncrementalStepRunReason.Modified,o.Reason));
     }
 
     [Theory]
@@ -410,11 +410,11 @@ public sealed partial class GeneratorTests
                 "namespace App { public sealed record Other : ISyncRequest<int>; [ZendiatorHandler] public sealed class OtherHandler : ISyncRequestHandler<Other,int> { public int Handle(Other r,CancellationToken c)=>1; } }",_=>source };
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"CanonicalSyncUnsupported_"+shape),out var output,out var diagnostics);
         if(shape is "struct-request" or "struct-handler" or "struct-factory" or "array-result" or "stage-wrapper" or "multiple-routes"){
-            Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.Contains(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName==(shape=="stage-wrapper"?"Zendiator.Canonical.Wrappers.g.cs":shape=="multiple-routes"?"Zendiator.Canonical.Multiple.g.cs":"Zendiator.Canonical.SendSync.g.cs"));return;
+            Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources,routes:shape=="multiple-routes"?2:1);return;
         }
         Assert.Equal(shape=="multiple-routes"?2:1,diagnostics.Length); Assert.All(diagnostics,d=>Assert.Equal("ZEN0037",d.Id));
         Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));
-        Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.StartsWith("Zendiator.Canonical",StringComparison.Ordinal));
+        AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
     }
 
     private sealed class CustomSyncCollection : System.Collections.ObjectModel.Collection<ServiceDescriptor>,IServiceCollection;
@@ -446,7 +446,7 @@ public sealed partial class GeneratorTests
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"UnsupportedSingletonConfig"),out var output,out var diagnostics);
         Assert.Equal("ZEN0035",Assert.Single(diagnostics).Id);
         Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));
-        Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.StartsWith("Zendiator.Canonical",StringComparison.Ordinal));
+        AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
     }
 
     [Theory]
@@ -460,6 +460,6 @@ public sealed partial class GeneratorTests
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(compilation,out var output,out var diagnostics);
         Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        Assert.Contains(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName=="Zendiator.Canonical.SendSync.g.cs");
+        AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
     }
 }

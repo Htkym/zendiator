@@ -101,12 +101,12 @@ public sealed partial class GeneratorTests
     {
         var source=HookHandlerBackendSource(true,false,dispatch:false);
         var driver=SyncDriver().RunGenerators(SyncCompilation(source,"HookHandlerIncremental"));
-        var first=driver.GetRunResult().Results.Single().GeneratedSources.First(s=>s.HintName=="Zendiator.Canonical.SendSync.g.cs").SourceText.ToString();
+        var first=CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
         driver=driver.RunGenerators(SyncCompilation(source.Replace("return _probe.Core.Handle(request,token);","return _probe.Core.Handle(request,token)+0;"),"HookHandlerIncremental"));
-        Assert.Equal(first,driver.GetRunResult().Results.Single().GeneratedSources.First(s=>s.HintName=="Zendiator.Canonical.SendSync.g.cs").SourceText.ToString());
-        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalSyncSourceEmission"].SelectMany(s=>s.Outputs),o=>Assert.True(o.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
+        Assert.Equal(first,CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
+        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalRouteOutputFile"].SelectMany(s=>s.Outputs),o=>Assert.True(o.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
         driver=driver.RunGenerators(SyncCompilation(HookHandlerBackendSource(false,false,dispatch:false),"HookHandlerIncremental"));
-        var borrowed=driver.GetRunResult().Results.Single().GeneratedSources.First(s=>s.HintName=="Zendiator.Canonical.SendSync.g.cs").SourceText.ToString();
+        var borrowed=CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
         Assert.NotEqual(first,borrowed);Assert.Contains("var detached = handler;",first);Assert.DoesNotContain("var detached = handler;",borrowed);
         WriteNestedHookEvidence("hook-handler-session-incremental","ownership",new{bodyCached=true,ownershipChangesCleanup=true});
     }

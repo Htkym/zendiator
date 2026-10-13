@@ -134,7 +134,7 @@ public sealed partial class GeneratorTests
         var source=AsyncHookSource(key.Mode,key.Void);var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"AsyncHook_"+Guid.NewGuid().ToString("N")),out var output,out var diagnostics);
         Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         using var bytes=new MemoryStream();var emitted=output.Emit(bytes);Assert.True(emitted.Success,string.Join("\n",emitted.Diagnostics));
-        var sources=driver.GetRunResult().Results.Single().GeneratedSources;Assert.Equal(2,sources.Count(s=>s.HintName!="Zendiator.GeneratedCatalog.g.cs"));
+        var sources=driver.GetRunResult().Results.Single().GeneratedSources;AssertCanonicalOutputRoles(sources);
         var evidence=Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if(!string.IsNullOrEmpty(evidence))
         {
@@ -346,21 +346,21 @@ public sealed partial class GeneratorTests
             _=>"using System.Collections.Generic;using System.Threading;using System.Threading.Tasks;using System.Runtime.CompilerServices;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;namespace App {public sealed record Ping:IStreamRequest<int>;[ZendiatorHandler]public sealed class Handler:IStreamRequestHandler<Ping,int>{public async IAsyncEnumerable<int> HandleAsync(Ping r,[EnumeratorCancellation]CancellationToken t){await Task.CompletedTask;yield return 1;}}[ZendiatorComposition(\"stream\")]public sealed class Reads;public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<Reads>(c=>c.Handlers<Ping>(DispatchFamily.Stream,typeof(Handler)));}}"
         };
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"HookUnsupported"+shape),out var output,out var diagnostics);
-        if(shape!="stream"){Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.Contains(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.StartsWith("Zendiator.Canonical",StringComparison.Ordinal));return;}
+        if(shape!="stream"){Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);return;}
         Assert.Equal("ZEN0037",Assert.Single(diagnostics).Id);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));
-        Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.StartsWith("Zendiator.Canonical",StringComparison.Ordinal));
+        AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
         WriteNestedHookEvidence("async-hook-boundaries",shape,new{shape,source,diagnostics=diagnostics.Select(d=>new{d.Id,message=d.GetMessage()}),generatedExecution=false});
     }
     [Fact]
     public void Async_hook_body_edits_cache_emission_and_factory_ownership_changes_it()
     {
         var source=AsyncHookSource("async-owned",false);var driver=SyncDriver().RunGenerators(SyncCompilation(source,"HookIncremental"));
-        var body=driver.GetRunResult().Results.Single().GeneratedSources.Single(s=>s.HintName=="Zendiator.Canonical.SendAsync.g.cs").SourceText.ToString();
+        var body=CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
         driver=driver.RunGenerators(SyncCompilation(source.Replace("new Ping(r.Value+1)","new Ping(r.Value+2)"),"HookIncremental"));
-        Assert.Equal(body,driver.GetRunResult().Results.Single().GeneratedSources.Single(s=>s.HintName=="Zendiator.Canonical.SendAsync.g.cs").SourceText.ToString());
-        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalAsyncSourceEmission"].SelectMany(s=>s.Outputs),o=>Assert.Equal(IncrementalStepRunReason.Cached,o.Reason));
+        Assert.Equal(body,CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
+        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalRouteOutputFile"].SelectMany(s=>s.Outputs),o=>Assert.True(o.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
         driver=driver.RunGenerators(SyncCompilation(source.Replace("IAsyncOwnedSessionFactory","IAsyncBorrowedSessionFactory"),"HookIncremental"));
-        Assert.NotEqual(body,driver.GetRunResult().Results.Single().GeneratedSources.Single(s=>s.HintName=="Zendiator.Canonical.SendAsync.g.cs").SourceText.ToString());
+        Assert.NotEqual(body,CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
         WriteNestedHookEvidence("async-hook-incremental","body-and-ownership",new{bodyCached=true,ownershipChangesEmission=true});
     }
     [Theory][InlineData("direct",true)][InlineData("async-owned",false)]
