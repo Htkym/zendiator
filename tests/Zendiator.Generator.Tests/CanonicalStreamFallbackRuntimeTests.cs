@@ -174,7 +174,7 @@ public sealed partial class GeneratorTests
         {
             if (FallbackFixtures.TryGetValue(shape, out var cached)) return cached;
             var item = shape is "long" or "string" ? shape : "int";
-            var wrapper = shape == "wrapper";
+            var wrapper = shape is "wrapper" or "wrapper-trace";
             var pipeline = wrapper ? "Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()" :
                 shape == "order" ? "Stage.Hook<DoubleItem>(),Stage.Hook<Positive>(),Stage.Hook<Small>()" :
                 "Stage.Hook<Positive>(),Stage.Hook<DoubleItem>(),Stage.Hook<Small>()";
@@ -192,12 +192,14 @@ public sealed partial class GeneratorTests
                 .Replace("=>item*2;", "=>p.Map(r,item,c);")
                 .Replace("public sealed class Small :", "public sealed class Small(global::Zendiator.Generator.Tests.CanonicalStreamFallbackProbe p) :")
                 .Replace("=>item<4;", "=>p.Last(r,item,c);");
+            if (shape == "wrapper-trace") source = source.Replace("global::Zendiator.Generator.Tests.CanonicalStreamFallbackProbe",
+                "global::Zendiator.Generator.Tests.CanonicalStreamWrapperEventProbe");
             if (wrapper) source = source.Replace("""
                 public sealed class StreamOpaque : IStreamWrapper<Items,int> {
                     public System.Collections.Generic.IAsyncEnumerable<int> Wrap<N>(Items r,N n,CancellationToken c)
                         where N : IStreamUpstream<Items,int> => n.Open(r,c);
                 }
-                """, """
+                """, shape == "wrapper-trace" ? WrapperTraceFixtureCode : """
                 public sealed class StreamOpaque(global::Zendiator.Generator.Tests.CanonicalStreamFallbackProbe p) : IStreamWrapper<Items,int> {
                     public System.Collections.Generic.IAsyncEnumerable<int> Wrap<N>(Items r,N n,CancellationToken c) where N : IStreamUpstream<Items,int> {
                         p.Wrap(r,c);
