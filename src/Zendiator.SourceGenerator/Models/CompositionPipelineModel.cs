@@ -47,5 +47,12 @@ internal sealed record BoundPipelineModel(string Anchor, string Request, string 
     public int PipelineListOrdinal { get; init; }
     public bool HasEmptyPipeline { get; init; }
     public BoundDispatchFamily? PipelineFamily { get; init; }
+    public BoundStreamGenericEmission? StreamGeneric { get; init; }
+}
+// Symbols stay in the frontend. Generic declarations participate in value equality and rendering.
+internal sealed record BoundStreamGenericEmission(EquatableArray<string> Parameters, EquatableArray<string> Constraints)
+{
+    public string TypeParameters => "<" + string.Join(", ", Parameters) + ">";
+    public string TypeConstraints => string.Concat(Constraints);
 }
 internal sealed record CompositionDiagnosticFact(string Key, string Anchor, string Message, string? AdditionalAnchor = null);

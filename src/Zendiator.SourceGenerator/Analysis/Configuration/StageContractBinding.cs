@@ -35,10 +35,10 @@ internal static class StageContractBinding
 
     internal static BoundStageModel Bind(INamedTypeSymbol type, FusionStageKind kind, string anchor,
         INamedTypeSymbol request, BoundDispatchFamily family, FusionResultKind resultKind, ITypeSymbol? result,
-        Compilation compilation, List<CompositionDiagnosticFact> facts)
+        Compilation compilation, List<CompositionDiagnosticFact> facts, CanonicalStreamOpenBinding? open = null)
     {
         var before = facts.Count;
-        string Name(ITypeSymbol symbol) => CanonicalSymbolName.Display(symbol, compilation);
+        string Name(ITypeSymbol symbol) => open?.Display(symbol) ?? CanonicalSymbolName.Display(symbol, compilation);
         var hierarchy = DescribeHierarchy(type);
         var callbacks = new List<BoundCallbackModel>();
         var syncCallbacks = new Dictionary<BoundCallbackPhase, BoundSyncHookCallbackEmission>();
@@ -53,7 +53,7 @@ internal static class StageContractBinding
         if (!compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
             Reject("InaccessibleStage", $"Stage {Name(type)} is inaccessible to generated code.");
         if (type.IsRefLikeType) Reject("RefLikeCapture", $"Stage {Name(type)} cannot be held as a borrowed DI service.");
-        if (type.IsAbstract || type.IsStatic || type.IsUnboundGenericType || HasOpenShape(type) ||
+        if (type.IsAbstract || type.IsStatic || type.IsUnboundGenericType || HasOpenShape(type) && (open == null || !open.Contains(type)) ||
             type.TypeKind is not (TypeKind.Class or TypeKind.Struct))
             Reject("UnsupportedGenerationShape", $"Stage {Name(type)} requires a closed, concrete class or struct; open binding is not connected yet.");
         if (facts.Count != before) return Value();

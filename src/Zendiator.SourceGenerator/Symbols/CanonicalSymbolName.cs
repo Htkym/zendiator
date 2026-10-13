@@ -20,15 +20,17 @@ internal static class CanonicalSymbolName
     internal static string Declarations(IEnumerable<string> aliases) => string.Concat(aliases.Distinct(StringComparer.Ordinal)
         .OrderBy(a => a, StringComparer.Ordinal).Select(a => "extern alias " + Identifier(a) + ";\n"));
 
-    internal static string Display(ITypeSymbol type, Compilation compilation)
+    internal static string Display(ITypeSymbol type, Compilation compilation, IReadOnlyDictionary<ITypeParameterSymbol, string>? parameters = null)
     {
-        if (!compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && r.Properties.Aliases.Any(a => a != "global")))
+        if (parameters == null && !compilation.References.Any(r => !r.Properties.Aliases.IsDefaultOrEmpty && r.Properties.Aliases.Any(a => a != "global")))
             return SymbolUtilities.Name(type);
         var parts = type.ToDisplayParts(SymbolUtilities.TypeFormat);
         var text = new StringBuilder();
         for (var i = 0; i < parts.Length; i++)
         {
             var part = parts[i];
+            if (part.Symbol is ITypeParameterSymbol parameter && parameters != null && parameters.TryGetValue(parameter, out var replacement))
+            { text.Append(replacement); continue; }
             if (part.ToString() == "global" && i + 1 < parts.Length && parts[i + 1].ToString() == "::")
             {
                 // Each qualified named type, including a nested generic argument, has its own prefix.

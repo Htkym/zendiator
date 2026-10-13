@@ -30,6 +30,21 @@ public sealed class ZendiatorConfiguration
     public void Pipeline<TRequest>(params Stage[] stages) => RecordPipeline(typeof(TRequest), null, stages);
     /// <summary>Declares stages in order for one explicit dispatch family.</summary>
     public void Pipeline<TRequest>(DispatchFamily family, params Stage[] stages) => RecordPipeline(typeof(TRequest), family, stages);
+    /// <summary>Declares ordered stages for a known closed request or an open request definition.</summary>
+    public void Pipeline(Type request, DispatchFamily family, params Stage[] stages)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        RecordPipeline(request, family, stages);
+    }
+    /// <summary>Declares the handler list for a known closed request or an open request definition.</summary>
+    public void Handlers(Type request, DispatchFamily family, params Type[] handlers)
+    {
+        ThrowIfFrozen();
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(handlers);
+        if (handlers.Any(static type => type == null)) throw new ArgumentException("Every handler entry must name a type.", nameof(handlers));
+        RecordHandlers(request, family, handlers.Select(static type => HandlerEntry.Service(type)).ToArray());
+    }
     /// <summary>Declares the authoritative handler order for one route.</summary>
     public void Handlers<TRequest>(DispatchFamily family, params Type[] handlers)
     {

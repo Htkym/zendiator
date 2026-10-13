@@ -32,6 +32,8 @@ internal static class CanonicalRouteIncremental
             var handlerAnchor = "list:" + r.HandlerListOrdinal;
             var relevant = c.Facts.Where(f => f.Anchor == r.Anchor || f.Anchor.StartsWith(r.Anchor + "/", StringComparison.Ordinal) ||
                 f.Anchor == handlerAnchor || f.Anchor.StartsWith(handlerAnchor + "/", StringComparison.Ordinal) ||
+                f.AdditionalAnchor == r.Anchor || (f.AdditionalAnchor?.StartsWith(r.Anchor + "/", StringComparison.Ordinal) ?? false) ||
+                f.AdditionalAnchor == handlerAnchor || (f.AdditionalAnchor?.StartsWith(handlerAnchor + "/", StringComparison.Ordinal) ?? false) ||
                 f.Anchor.StartsWith("catalog:", StringComparison.Ordinal));
             var members = new HashSet<string>(r.Handlers.Select(h => h.Type), StringComparer.Ordinal);
             var projected = c with { Pipelines = new(new[] { r }), Facts = new(relevant),

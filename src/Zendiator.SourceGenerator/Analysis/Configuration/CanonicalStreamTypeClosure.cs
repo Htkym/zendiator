@@ -6,29 +6,34 @@ using static Zendiator.SourceGenerator.MarkedHandlerDiscovery;
 
 namespace Zendiator.SourceGenerator;
 
-// Closes explicitly supplied service definitions for a closed Stream route. It does
-// not invent public open-route signatures or inspect arbitrary service method bodies.
+// Binds supplied services to a known request/item shape. A validated open pattern
+// may retain its own parameters; public signatures and callback bodies are not inferred here.
 internal static class CanonicalStreamTypeClosure
 {
     internal sealed record Result(INamedTypeSymbol? Type, string? Error);
-    internal static Result Handler(INamedTypeSymbol type, INamedTypeSymbol request, Compilation compilation)
+    internal static Result Handler(INamedTypeSymbol type, INamedTypeSymbol request, Compilation compilation, CanonicalStreamOpenBinding? open = null)
     {
         var assembly = compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly;
         var itemContract = assembly?.GetTypeByMetadataName(ContractNames.StreamRequest);
         var items = request.AllInterfaces.Where(i => Same(i.OriginalDefinition, itemContract)).Select(i => i.TypeArguments[0]).ToArray();
         if (items.Length != 1) return new(null, "A Stream request requires one item contract before closing its handler.");
-        return Close(type, request, items[0], new[] { ContractNames.StreamHandler }, compilation);
+        return Close(type, request, items[0], new[] { ContractNames.StreamHandler }, compilation, open);
     }
     internal static Result Stage(INamedTypeSymbol type, INamedTypeSymbol request, ITypeSymbol item,
-        FusionStageKind kind, Compilation compilation) => Close(type, request, item,
+        FusionStageKind kind, Compilation compilation, CanonicalStreamOpenBinding? open = null) => Close(type, request, item,
         kind == FusionStageKind.Wrapper ? new[] { "Zendiator.IStreamWrapper`2" } :
-            new[] { "Zendiator.IStreamItemFilter`2", "Zendiator.IStreamItemMap`2" }, compilation);
+            new[] { "Zendiator.IStreamItemFilter`2", "Zendiator.IStreamItemMap`2" }, compilation, open);
 
     private static Result Close(INamedTypeSymbol type, INamedTypeSymbol request, ITypeSymbol item,
-        string[] names, Compilation compilation)
+        string[] names, Compilation compilation, CanonicalStreamOpenBinding? open)
     {
         if (!IsOpenDefinition(type))
         {
+            if (open != null)
+            {
+                var error = open.ApplyConstraints(type);
+                return error == null ? new(type, null) : new(null, error);
+            }
             if (HasOpenShape(type)) return new(null, "Partially open Stream services require a closed route binding.");
             if (!Constraints(type, compilation)) return new(null, "The closed Stream service does not satisfy its generic constraints.");
             return new(type, null);
@@ -45,10 +50,15 @@ internal static class CanonicalStreamTypeClosure
                 !Match(contract.TypeArguments[1], item, definition, map, compilation)) continue;
             if (definition.TypeParameters.Any(p => !map.ContainsKey(p))) { missingArgument = true; continue; }
             var args = definition.TypeParameters.Select(p => map[p]).ToArray();
-            if (args.Any(HasOpenArguments) || !GenericConstraints.SatisfiesConstraints(definition, args, compilation))
+            if (open == null && (args.Any(HasOpenArguments) || !GenericConstraints.SatisfiesConstraints(definition, args, compilation)))
             { constraintFailure = true; continue; }
             var closed = definition.Construct(args);
             if (!candidates.Any(c => Same(c, closed))) candidates.Add(closed);
+        }
+        if (candidates.Count == 1 && open != null)
+        {
+            var error = open.ApplyConstraints(candidates[0]);
+            return error == null ? new(candidates[0], null) : new(null, error);
         }
         return candidates.Count == 1 ? new(candidates[0], null) : new(null, candidates.Count > 1
             ? "The Stream service has more than one possible request/item type closure. Supply a closed service type."

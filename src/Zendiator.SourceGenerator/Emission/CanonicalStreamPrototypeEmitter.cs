@@ -16,7 +16,7 @@ internal static class CanonicalStreamPrototypeEmitter
             // Unregistered Stream candidate. Public canonical runtime acceptance remains blocked.
             namespace {{model.Namespace}}
             {
-                internal static class {{model.ClassName}}
+                internal static class {{model.ClassName}}{{model.Generic?.TypeParameters}}{{model.Generic?.TypeConstraints}}
                 {
                     internal static global::System.Collections.Generic.IAsyncEnumerable<{{h.ItemName}}> Create(
                         global::System.IServiceProvider services, {{h.RequestName}} request,

@@ -39,12 +39,12 @@ internal static class CanonicalStreamEmissionNormalizer
             else if (row.StreamCandidate is { } selected)
             {
                 kind = CanonicalStreamConnectionKind.Candidate; candidate = selected;
-                reason = ValidGraph + "The selected closed Stream candidate is connected to route lowering and rendering. Public runtime generation and equivalence are pending; registration remains blocked.";
+                reason = ValidGraph + "The selected " + (route.StreamGeneric == null ? "closed" : "open generic") + " Stream candidate is connected to route lowering and rendering. Public runtime generation and equivalence are pending; registration remains blocked.";
             }
             else if (row.StreamCanonical is { } fallback)
             {
                 kind = CanonicalStreamConnectionKind.CanonicalCandidate; canonical = fallback;
-                reason = ValidGraph + "A same-contract canonical Stream candidate is generated for this closed shape. Public runtime generation and equivalence are pending; registration remains blocked. No legacy/reference adapter is selected.";
+                reason = ValidGraph + "A same-contract canonical Stream candidate is generated for this " + (route.StreamGeneric == null ? "closed" : "open generic") + " shape. Public runtime generation and equivalence are pending; registration remains blocked. No legacy/reference adapter is selected.";
             }
             else
             {

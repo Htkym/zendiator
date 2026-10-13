@@ -16,4 +16,7 @@ internal sealed record CanonicalStreamSourceCleanupRegion(EquatableArray<StreamE
 internal sealed record CanonicalStreamPrototypeModel(string Namespace, string ClassName, string HintName,
     CanonicalStreamExecutionSchedule Schedule, StreamSiteId TerminalCleanupEntry,
     BoundStreamHandlerEmission Handler, EquatableArray<BoundStreamHookEmission> Hooks,
-    CanonicalStreamItemRegion ItemRegion, CanonicalStreamSourceCleanupRegion CleanupRegion);
+    CanonicalStreamItemRegion ItemRegion, CanonicalStreamSourceCleanupRegion CleanupRegion)
+{
+    public BoundStreamGenericEmission? Generic { get; init; }
+}
