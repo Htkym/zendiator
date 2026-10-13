@@ -20,40 +20,70 @@ public sealed class CanonicalStreamPrototypeProbe
     public Func<ValueTask<bool>>? PendingMove;
     public Func<ValueTask>? PendingDispose;
     public bool Context;
+    public Action<string, object?, CancellationToken>? Observe;
+    public Exception? GetEnumeratorError;
+    public object? Request;
+    public CancellationToken StartToken, EnumeratorToken;
     public void Resolve(string role)
     {
         Trace.Add("resolve:" + role);
+        Observe?.Invoke("factory:" + role + ".enter", null, default);
         if (Context && role == "F1") Ambient.Value = "factory";
         if (Context && role == "Map") Trace.Add("Map.factory@" + Ambient.Value);
+        Observe?.Invoke("factory:" + role + ".exit", null, default);
     }
-    public bool First(int item)
+    public bool First(object request, int item, CancellationToken token)
     {
+        Observe?.Invoke("F1.enter", request, token);
         Trace.Add("F1:" + item);
         if (Context) { Trace.Add("F1@" + Ambient.Value); Ambient.Value = "callback"; }
-        if (CancelInFirst is not null) { CancelInFirst.Cancel(); return false; }
-        return item > 0;
+        if (CancelInFirst is not null) { CancelInFirst.Cancel(); Observe?.Invoke("F1.exit", request, token); return false; }
+        Observe?.Invoke("F1.exit", request, token); return item > 0;
     }
-    public int Map(int item)
+    public int Map(object request, int item, CancellationToken token)
     {
+        Observe?.Invoke("Map.enter", request, token);
         Trace.Add("Map:" + item); Effects++;
         if (Context) Trace.Add("Map@" + Ambient.Value);
         if (MapError is not null) throw MapError;
-        return item * 2;
+        Observe?.Invoke("Map.exit", request, token); return item * 2;
     }
-    public bool Last(int item) { Trace.Add("F2:" + item); return item < 4; }
-    public IAsyncEnumerable<int> Start()
-    { Trace.Add("H.start"); return new Source(this); }
+    public bool Last(object request, int item, CancellationToken token)
+    { Observe?.Invoke("F2.enter", request, token); Trace.Add("F2:" + item); Observe?.Invoke("F2.exit", request, token); return item < 4; }
+    public IAsyncEnumerable<int> Start(object request, CancellationToken token)
+    {
+        Assert.Same(Request, request); StartToken = token; Observe?.Invoke("handler.enter", request, token);
+        Trace.Add("H.start"); var source = new Source(this); Observe?.Invoke("handler.exit", request, token); return source;
+    }
     private sealed class Source(CanonicalStreamPrototypeProbe probe) : IAsyncEnumerable<int>, IAsyncEnumerator<int>
     {
         private int _index = -1;
-        public int Current { get { probe.Reads++; return probe.Input[_index]; } }
-        public IAsyncEnumerator<int> GetAsyncEnumerator(CancellationToken token = default) => this;
+        public int Current
+        {
+            get
+            {
+                probe.Observe?.Invoke("Current.enter", probe.Request, probe.EnumeratorToken); probe.Reads++;
+                var item = probe.Input[_index]; probe.Observe?.Invoke("Current.exit", probe.Request, probe.EnumeratorToken); return item;
+            }
+        }
+        public IAsyncEnumerator<int> GetAsyncEnumerator(CancellationToken token = default)
+        {
+            probe.EnumeratorToken = token; probe.Observe?.Invoke("GetEnumerator.enter", probe.Request, token);
+            if (probe.GetEnumeratorError is not null) throw probe.GetEnumeratorError;
+            probe.Observe?.Invoke("GetEnumerator.exit", probe.Request, token); return this;
+        }
         public ValueTask<bool> MoveNextAsync()
-        { probe.Moves++; _index++; return _index == 0 && probe.PendingMove is not null ? probe.PendingMove() : new(_index < probe.Input.Length); }
+        {
+            probe.Observe?.Invoke("Move.enter", probe.Request, probe.EnumeratorToken); probe.Moves++; _index++;
+            var pending = _index == 0 && probe.PendingMove is not null ? probe.PendingMove() : new(_index < probe.Input.Length);
+            probe.Observe?.Invoke("Move.return", probe.Request, probe.EnumeratorToken); return pending;
+        }
         public ValueTask DisposeAsync()
         {
             probe.Disposals++; probe.Trace.Add("H.finally");
-            return probe.CleanupError is not null ? ValueTask.FromException(probe.CleanupError) : probe.PendingDispose?.Invoke() ?? default;
+            probe.Observe?.Invoke("Dispose.enter", probe.Request, probe.EnumeratorToken);
+            var pending = probe.CleanupError is not null ? ValueTask.FromException(probe.CleanupError) : probe.PendingDispose?.Invoke() ?? default;
+            probe.Observe?.Invoke("Dispose.return", probe.Request, probe.EnumeratorToken); return pending;
         }
     }
 }
@@ -67,13 +97,13 @@ public sealed partial class GeneratorTests
     {
         var source = StreamGraphFixture()
             .Replace("public sealed class ItemsHandler : IStreamRequestHandler<Items,int> {", "public sealed class ItemsHandler : IStreamRequestHandler<Items,int> { private readonly global::Zendiator.Generator.Tests.CanonicalStreamPrototypeProbe p; public ItemsHandler(global::Zendiator.Generator.Tests.CanonicalStreamPrototypeProbe p){this.p=p;}")
-            .Replace("HandleAsync(Items r,CancellationToken c)=>throw new NotImplementedException();", "HandleAsync(Items r,CancellationToken c)=>p.Start();")
+            .Replace("HandleAsync(Items r,CancellationToken c)=>throw new NotImplementedException();", "HandleAsync(Items r,CancellationToken c)=>p.Start(r,c);")
             .Replace("public sealed class Positive : IStreamItemFilter<Items,int> {", "public sealed class Positive : IStreamItemFilter<Items,int> { private readonly global::Zendiator.Generator.Tests.CanonicalStreamPrototypeProbe p; public Positive(global::Zendiator.Generator.Tests.CanonicalStreamPrototypeProbe p){this.p=p;}")
-            .Replace("Accept(Items r,int item,CancellationToken c)=>item>0;", "Accept(Items r,int item,CancellationToken c)=>p.First(item);")
+            .Replace("Accept(Items r,int item,CancellationToken c)=>item>0;", "Accept(Items r,int item,CancellationToken c)=>p.First(r,item,c);")
             .Replace("public sealed class Small : IStreamItemFilter<Items,int> {", "public sealed class Small : IStreamItemFilter<Items,int> { private readonly global::Zendiator.Generator.Tests.CanonicalStreamPrototypeProbe p; public Small(global::Zendiator.Generator.Tests.CanonicalStreamPrototypeProbe p){this.p=p;}")
-            .Replace("Accept(Items r,int item,CancellationToken c)=>item<4;", "Accept(Items r,int item,CancellationToken c)=>p.Last(item);")
+            .Replace("Accept(Items r,int item,CancellationToken c)=>item<4;", "Accept(Items r,int item,CancellationToken c)=>p.Last(r,item,c);")
             .Replace("public sealed class DoubleItem : IStreamItemMap<Items,int> {", "public sealed class DoubleItem : IStreamItemMap<Items,int> { private readonly global::Zendiator.Generator.Tests.CanonicalStreamPrototypeProbe p; public DoubleItem(global::Zendiator.Generator.Tests.CanonicalStreamPrototypeProbe p){this.p=p;}")
-            .Replace("Map(Items r,int item,CancellationToken c)=>item*2;", "Map(Items r,int item,CancellationToken c)=>p.Map(item);") + """
+            .Replace("Map(Items r,int item,CancellationToken c)=>item*2;", "Map(Items r,int item,CancellationToken c)=>p.Map(r,item,c);") + """
             public sealed class StreamPrototypeBridge(System.IServiceProvider services) {
                 public System.Collections.Generic.IAsyncEnumerable<int> Start(Items r,CancellationToken t)=>
                     Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<ItemsHandler>(services).HandleAsync(r,t);
@@ -113,13 +143,15 @@ public sealed partial class GeneratorTests
         return new(assembly, assembly.GetType("App.Items")!, new[] { "ItemsHandler", "Positive", "DoubleItem", "Small" }.Select(n => assembly.GetType("App." + n)!).ToArray(),
             prototype.GetMethod("Create", BindingFlags.NonPublic | BindingFlags.Static)!, bridge.GetMethod("Start")!, bridge, generated.SourceText.ToString(), projection, routeGraph);
     }
-    private static (ServiceProvider Services, IAsyncEnumerator<int> Cursor) PrototypeCursor(CanonicalStreamPrototypeProbe probe, bool generated, CancellationToken token = default)
+    private static (ServiceProvider Services, IAsyncEnumerator<int> Cursor) PrototypeCursor(CanonicalStreamPrototypeProbe probe, bool generated,
+        CancellationToken token = default, CancellationToken enumeration = default)
     {
         var fixture = StreamPrototype.Value; var collection = new ServiceCollection();
         var roles = new[] { "H", "F1", "Map", "F2" };
         for (var i = 0; i < fixture.Services.Length; i++)
         { var type = fixture.Services[i]; var role = roles[i]; collection.AddTransient(type, _ => { probe.Resolve(role); return Activator.CreateInstance(type, probe)!; }); }
         var provider = collection.BuildServiceProvider(); var request = Activator.CreateInstance(fixture.Request)!;
+        probe.Request = request;
         IAsyncEnumerable<int> stream;
         if (generated) stream = (IAsyncEnumerable<int>)fixture.Create.Invoke(null, [provider, request, token])!;
         else
@@ -129,7 +161,7 @@ public sealed partial class GeneratorTests
             var method = typeof(CanonicalStreamItemReference).GetMethod("FilterMapFilter")!.MakeGenericMethod(fixture.Request, typeof(int), fixture.Services[1], fixture.Services[2], fixture.Services[3]);
             stream = (IAsyncEnumerable<int>)method.Invoke(null, [provider, request, start, token, null])!;
         }
-        return (provider, stream.GetAsyncEnumerator());
+        return (provider, stream.GetAsyncEnumerator(enumeration));
     }
 
     [Fact]
