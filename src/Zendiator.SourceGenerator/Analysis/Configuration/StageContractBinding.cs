@@ -44,6 +44,7 @@ internal static class StageContractBinding
         var syncCallbacks = new Dictionary<BoundCallbackPhase, BoundSyncHookCallbackEmission>();
         var asyncCallbacks = new Dictionary<BoundCallbackPhase, BoundAsyncHookCallbackEmission>();
         BoundWrapperEmission? wrapperEmission = null;
+        BoundStreamHookEmission? streamEmission = null;
         var capabilityCalls = new Dictionary<BoundCallbackPhase,CapabilityCallbackEmission>();
         CapabilityCallbackEmission? Capability(BoundCallbackPhase phase)=>capabilityCalls.TryGetValue(phase,out var value)?value:null;
         var compilerOwned = false;
@@ -102,6 +103,8 @@ internal static class StageContractBinding
             var implementation = members.Length == 1 ? type.FindImplementationForInterfaceMember(members[0]) as IMethodSymbol : null;
             if (implementation == null) { compilerOwned = true; continue; }
             if (role.Wrapper) wrapperEmission = new(Name(type),Name(contract),members[0].Name,role.Completion);
+            if (role.Stream && !role.Wrapper && role.Completion == BoundCompletionKind.Synchronous)
+                streamEmission = new(Name(type), Name(contract), members[0].Name, role.Phase, type.IsValueType);
             if(!role.Wrapper&&!role.Stream)capabilityCalls[role.Phase]=new(Name(contract),members[0].Name,role.Completion);
             if (role.Completion == BoundCompletionKind.Synchronous)
                 syncCallbacks[role.Phase] = new(Name(contract), members[0].Name);
@@ -122,6 +125,8 @@ internal static class StageContractBinding
         BoundStageModel Value() => new(anchor, Identity(type), Name(type), kind, hierarchy,
             new(callbacks.OrderBy(c => c.Phase).ThenBy(c => c.Interface, StringComparer.Ordinal)), FusionOwnership.BorrowedService, compilerOwned)
         {
+            StreamEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.Stream &&
+                kind == FusionStageKind.Hook && callbacks.Count == 1 ? streamEmission : null,
             SyncEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.SendSync &&
                 kind == FusionStageKind.Hook && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type,compilation.Assembly) &&
                 callbacks.Count == 4 && syncCallbacks.Count == 4 &&

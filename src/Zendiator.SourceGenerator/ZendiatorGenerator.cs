@@ -47,6 +47,12 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         var compositionModel = compositionValue.Select(static (model, _) => model).WithTrackingName("CompositionSelectionModel");
         var routeEntries = compositionEntries.SelectMany(static(entry,_)=>CanonicalRouteIncremental.Project(entry)).WithTrackingName("CanonicalRouteContractEntry");
         var routeGraphs = routeEntries.Select(static(route,_)=>CanonicalRouteIncremental.Graph(route)).WithTrackingName("CanonicalRouteGraphEntry");
+        var streamPrototypeModels = routeGraphs.Select(static (route, _) => CanonicalStreamPrototypeProjection.Create(route))
+            .Where(static model => model != null).Select(static (model, _) => model!).WithTrackingName("CanonicalStreamPrototypeProjection");
+        var streamPrototypeFiles = streamPrototypeModels.Select(static (model, _) => CanonicalStreamPrototypeEmitter.Emit(model))
+            .Collect().SelectMany(static (files, _) => files.GroupBy(f => f.HintName).Where(g => g.Count() == 1).Select(g => g.Single()))
+            .WithTrackingName("CanonicalStreamPrototypeSource");
+        context.RegisterSourceOutput(streamPrototypeFiles, static (ctx, file) => ctx.AddSource(file.HintName, SourceText.From(file.Source, Encoding.UTF8)));
         var routeBackends = routeGraphs.Select(static(route,_)=>CanonicalRouteIncremental.Lower(route)).WithTrackingName("CanonicalRouteBackendEntry");
         var routeTextEntries = routeBackends.Select(static(route,_)=>CanonicalRouteIncremental.Render(route)).WithTrackingName("CanonicalRouteSourceEntry");
         var routeTexts = routeTextEntries.Collect();

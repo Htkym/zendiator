@@ -16,6 +16,7 @@ internal sealed record BoundStageModel(string Anchor, string Type, string Name, 
     public BoundAsyncHookEmission? AsyncEmission { get; init; }
     public BoundWrapperEmission? WrapperEmission { get; init; }
     public HookCapabilityEmission? Capabilities { get; init; }
+    public BoundStreamHookEmission? StreamEmission { get; init; }
 }
 internal sealed record BoundHandlerModel(string Anchor, string Type, string Name, string Contract, string? Result,
     string Implementation, FusionOwnership ServiceOwnership, bool CompilerOwnsError, BoundCallbackModel? Callback)
@@ -23,6 +24,7 @@ internal sealed record BoundHandlerModel(string Anchor, string Type, string Name
     public EquatableArray<BoundSessionModel> Sessions { get; init; }
     public BoundSyncHandlerEmission? SyncEmission { get; init; }
     public BoundAsyncHandlerEmission? AsyncEmission { get; init; }
+    public BoundStreamHandlerEmission? StreamEmission { get; init; }
 }
 // Explicit factory facts for operation state. DI services remain borrowed; no callback body
 // or IDisposable interface on a service authorizes an ownership transfer.

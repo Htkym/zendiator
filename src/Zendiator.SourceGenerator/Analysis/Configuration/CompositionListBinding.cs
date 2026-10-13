@@ -243,6 +243,11 @@ internal sealed class CompositionListBinding
                         handlerModel = handlerModel with { AsyncEmission = new(Name(declaration.Request), Name(entry.Type),
                             Name(contract), member.Name, nextResult == null ? null : Name(nextResult)){RequestIsValueType=declaration.Request.IsValueType,HandlerIsValueType=entry.Type.IsValueType} };
                 }
+                if (family == BoundDispatchFamily.Stream && implementation != null && member != null && nextResult != null &&
+                    declaration.Request.TypeKind is (TypeKind.Class or TypeKind.Struct) &&
+                    entry.Type.TypeKind is (TypeKind.Class or TypeKind.Struct) && _compilation.IsSymbolAccessibleWithin(entry.Type, _compilation.Assembly))
+                    handlerModel = handlerModel with { StreamEmission = new(Name(declaration.Request), Name(nextResult), Name(entry.Type),
+                        Name(contract), member.Name, declaration.Request.IsValueType, entry.Type.IsValueType) };
                 if (entry.Factory != null && !handlerModel.CompilerOwnsError)
                 {
                     var binding = SessionFactoryContractBinding.Bind(entry.Factory, entry.Type, declaration.Request, family.Value,
