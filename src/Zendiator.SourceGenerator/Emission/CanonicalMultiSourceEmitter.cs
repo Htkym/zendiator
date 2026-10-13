@@ -75,7 +75,7 @@ internal static class CanonicalMultiSourceEmitter
         }
         return text.ToString();
     }
-    private sealed class RouteNames: CSharpSyntaxRewriter
+    internal sealed class RouteNames: CSharpSyntaxRewriter
     {
         private readonly Dictionary<string,string> _methods;private readonly Dictionary<string,string> _types;
         internal RouteNames(ClassDeclarationSyntax type,string suffix)

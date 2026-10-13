@@ -48,16 +48,16 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         var routeEntries = compositionEntries.SelectMany(static(entry,_)=>CanonicalRouteIncremental.Project(entry)).WithTrackingName("CanonicalRouteContractEntry");
         var routeGraphs = routeEntries.Select(static(route,_)=>CanonicalRouteIncremental.Graph(route)).WithTrackingName("CanonicalRouteGraphEntry");
         var routeBackends = routeGraphs.Select(static(route,_)=>CanonicalRouteIncremental.Lower(route)).WithTrackingName("CanonicalRouteBackendEntry");
-        var routeTexts = routeBackends.Select(static(route,_)=>CanonicalRouteIncremental.Render(route)).WithTrackingName("CanonicalRouteSourceEntry").Collect();
+        var routeTextEntries = routeBackends.Select(static(route,_)=>CanonicalRouteIncremental.Render(route)).WithTrackingName("CanonicalRouteSourceEntry");
+        var routeTexts = routeTextEntries.Collect();
+        var splitRouteEntries = routeTextEntries.Select(static(route,_)=>new CanonicalRouteFile(route,CanonicalSplitSourceEmitter.Route(route))).WithTrackingName("CanonicalRouteFileEntry");
         var executionValue = compositionModel.Combine(routeGraphs.Collect()).Select(static (input, _) => CanonicalRouteIncremental.AssembleGraphs(input.Left,input.Right));
         var executionModel = executionValue.Select(static (model, _) => model).WithTrackingName("CanonicalExecutionGraphModel");
         var canonicalSync = compositionModel.Combine(executionModel)
             .Select(static (input, _) => CanonicalSyncEmissionNormalizer.Create(input.Left, input.Right)).WithTrackingName("CanonicalSyncEmissionModel");
         var canonicalSyncSource = canonicalSync.Combine(routeTexts).Select(static (input, _) => CanonicalRouteIncremental.Sync(input.Left,input.Right)).WithTrackingName("CanonicalSyncSourceEmission");
-        context.RegisterSourceOutput(canonicalSyncSource, static (ctx, text) =>
-        {
-            if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.SendSync.g.cs", SourceText.From(text, Encoding.UTF8));
-        });
+        var canonicalSyncSourceFiles=canonicalSyncSource.SelectMany(static(text,_)=>CanonicalSplitSourceEmitter.Composition(text)).WithTrackingName("canonicalSyncSourceCompositionFiles");
+        context.RegisterSourceOutput(canonicalSyncSourceFiles,static(ctx,file)=>ctx.AddSource(file.HintName,SourceText.From(file.Source,Encoding.UTF8)));
         var canonicalSyncSites = canonicalSync.Combine(compositions).Combine(context.CompilationProvider)
             .Select(static (input, ct) => CanonicalSyncEmissionNormalizer.BindCallSites(input.Left.Left, input.Left.Right, input.Right, ct));
         var canonicalSyncInterceptors = canonicalSyncSites.Select(static (model, _) => CanonicalSyncSourceEmitter.EmitInterceptors(model))
@@ -69,10 +69,8 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         var canonicalAsync = compositionModel.Combine(executionModel)
             .Select(static (input, _) => CanonicalAsyncEmissionNormalizer.Create(input.Left, input.Right)).WithTrackingName("CanonicalAsyncEmissionModel");
         var canonicalAsyncSource = canonicalAsync.Combine(routeTexts).Select(static (input, _) => CanonicalRouteIncremental.Async(input.Left,input.Right)).WithTrackingName("CanonicalAsyncSourceEmission");
-        context.RegisterSourceOutput(canonicalAsyncSource, static (ctx, text) =>
-        {
-            if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.SendAsync.g.cs", SourceText.From(text, Encoding.UTF8));
-        });
+        var canonicalAsyncSourceFiles=canonicalAsyncSource.SelectMany(static(text,_)=>CanonicalSplitSourceEmitter.Composition(text)).WithTrackingName("canonicalAsyncSourceCompositionFiles");
+        context.RegisterSourceOutput(canonicalAsyncSourceFiles,static(ctx,file)=>ctx.AddSource(file.HintName,SourceText.From(file.Source,Encoding.UTF8)));
         var canonicalAsyncSites = canonicalAsync.Combine(compositions).Combine(context.CompilationProvider)
             .Select(static (input, ct) => CanonicalAsyncEmissionNormalizer.BindCallSites(input.Left.Left, input.Left.Right, input.Right, ct));
         var canonicalAsyncInterceptors = canonicalAsyncSites.Select(static (model, _) => CanonicalSyncSourceEmitter.EmitInterceptors(model, "CanonicalAsyncShims"))
@@ -83,20 +81,29 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         });
         var canonicalWrapper=compositionModel.Combine(executionModel).Select(static(input,_)=>CanonicalWrapperEmissionNormalizer.Create(input.Left,input.Right)).WithTrackingName("CanonicalWrapperEmissionModel");
         var wrapperSource=canonicalWrapper.Combine(routeTexts).Select(static(input,_)=>CanonicalRouteIncremental.Wrapper(input.Left,input.Right)).WithTrackingName("CanonicalWrapperSourceEmission");
-        context.RegisterSourceOutput(wrapperSource,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Wrappers.g.cs",SourceText.From(text,Encoding.UTF8));});
+        var wrapperSourceFiles=wrapperSource.SelectMany(static(text,_)=>CanonicalSplitSourceEmitter.Composition(text)).WithTrackingName("wrapperSourceCompositionFiles");
+        context.RegisterSourceOutput(wrapperSourceFiles,static(ctx,file)=>ctx.AddSource(file.HintName,SourceText.From(file.Source,Encoding.UTF8)));
         var wrapperSites=canonicalWrapper.Combine(compositions).Combine(context.CompilationProvider).Select(static(input,ct)=>CanonicalWrapperEmissionNormalizer.BindCallSites(input.Left.Left,input.Left.Right,input.Right,ct));
         var wrapperInterceptors=wrapperSites.Select(static(model,_)=>CanonicalSyncSourceEmitter.EmitInterceptors(model,"CanonicalWrapperShims"));
         context.RegisterSourceOutput(wrapperInterceptors,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Wrappers.Interceptors.g.cs",SourceText.From(text,Encoding.UTF8));});
         var capabilities=compositionModel.Combine(executionModel).Combine(canonicalSync).Combine(canonicalAsync).Combine(canonicalWrapper)
             .Select(static(input,_)=>CanonicalCapabilityEmissionNormalizer.Create(input.Left.Left.Left.Left,input.Left.Left.Left.Right,input.Left.Left.Right,input.Left.Right,input.Right)).WithTrackingName("CanonicalCapabilityEmissionModel");
         var capabilitySource=capabilities.Combine(routeTexts).Select(static(input,_)=>CanonicalRouteIncremental.Capability(input.Left,input.Right)).WithTrackingName("CanonicalCapabilitySourceEmission");
-        context.RegisterSourceOutput(capabilitySource,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Capabilities.g.cs",SourceText.From(text,Encoding.UTF8));});
+        var capabilitySourceFiles=capabilitySource.SelectMany(static(text,_)=>CanonicalSplitSourceEmitter.Composition(text)).WithTrackingName("capabilitySourceCompositionFiles");
+        context.RegisterSourceOutput(capabilitySourceFiles,static(ctx,file)=>ctx.AddSource(file.HintName,SourceText.From(file.Source,Encoding.UTF8)));
         var capabilitySites=capabilities.Combine(compositions).Combine(context.CompilationProvider).Select(static(input,ct)=>CanonicalCapabilityEmissionNormalizer.BindCallSites(input.Left.Left,input.Left.Right,input.Right,ct));
         var capabilityInterceptors=capabilitySites.Select(static(model,_)=>CanonicalSyncSourceEmitter.EmitInterceptors(model,"CanonicalCapabilityShims"));
         context.RegisterSourceOutput(capabilityInterceptors,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Capabilities.Interceptors.g.cs",SourceText.From(text,Encoding.UTF8));});
         var multi=compositionModel.Combine(executionModel).Select(static(input,_)=>CanonicalMultiEmissionNormalizer.Create(input.Left,input.Right)).WithTrackingName("CanonicalMultiEmissionModel");
         var multiSource=multi.Combine(routeTexts).Select(static(input,_)=>CanonicalMultiSourceEmitter.Emit(input.Left,r=>CanonicalRouteIncremental.Find(input.Right,r.Registration.Namespace,r.Registration.Handler.RequestName,r.Sync!=null?BoundDispatchFamily.SendSync:r.Async!=null?BoundDispatchFamily.SendAsync:r.Wrapper!=null?r.Wrapper.Family:r.Capability!.Family))).WithTrackingName("CanonicalMultiSourceEmission");
-        context.RegisterSourceOutput(multiSource,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Multiple.g.cs",SourceText.From(text,Encoding.UTF8));});
+        var multiSourceFiles=multiSource.SelectMany(static(text,_)=>CanonicalSplitSourceEmitter.Composition(text)).WithTrackingName("multiSourceCompositionFiles");
+        context.RegisterSourceOutput(multiSourceFiles,static(ctx,file)=>ctx.AddSource(file.HintName,SourceText.From(file.Source,Encoding.UTF8)));
+        var acceptedRoutes=canonicalSync.Combine(canonicalAsync).Combine(canonicalWrapper).Combine(capabilities).Combine(multi)
+            .Select(static(input,_)=>CanonicalSplitSourceEmitter.Accepted(input.Left.Left.Left.Left,input.Left.Left.Left.Right,input.Left.Left.Right,input.Left.Right,input.Right)).WithTrackingName("CanonicalAcceptedRouteFiles");
+        var selectedRouteFiles=splitRouteEntries.Combine(acceptedRoutes)
+            .Select(static(input,_)=>CanonicalSplitSourceEmitter.SelectRoute(input.Left.Route,input.Left.File,input.Right))
+            .Where(static(file)=>file!=null).Select(static(file,_)=>file!).WithTrackingName("CanonicalRouteOutputFile");
+        context.RegisterSourceOutput(selectedRouteFiles,static(ctx,file)=>ctx.AddSource(file.HintName,SourceText.From(file.Source,Encoding.UTF8)));
         var multiSites=multi.Combine(compositions).Combine(context.CompilationProvider).Select(static(input,ct)=>CanonicalMultiEmissionNormalizer.BindCallSites(input.Left.Left,input.Left.Right,input.Right,ct));
         var multiInterceptors=multiSites.Select(static(model,_)=>CanonicalSyncSourceEmitter.EmitInterceptors(model,"CanonicalMultiShims"));
         context.RegisterSourceOutput(multiInterceptors,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Multiple.Interceptors.g.cs",SourceText.From(text,Encoding.UTF8));});
