@@ -181,13 +181,24 @@ internal sealed class CompositionListBinding
                 output.Add(Model(null, null, Array.Empty<BoundHandlerModel>(), Array.Empty<BoundStageModel>(), false));
                 continue;
             }
-            var handlerEntries = explicitHandlers?.Entries ?? selectedTypes.Where(t => Contracts(t, declaration.Request, family.Value).Any())
+            var handlerEntries = explicitHandlers?.Entries ?? selectedTypes.Where(t => Contracts(t, declaration.Request, family.Value).Any() ||
+                family == BoundDispatchFamily.Stream && CanonicalStreamTypeClosure.Handler(t, declaration.Request, _compilation).Type is { } closed &&
+                    Contracts(closed, declaration.Request, family.Value).Any())
                 .OrderBy(Identity, StringComparer.Ordinal).Select(t => new Entry(t, declaration.Anchor)).ToImmutableArray();
             var handlers = new List<BoundHandlerModel>();
+            var closedHandlers = new Dictionary<string, string>(StringComparer.Ordinal);
             ITypeSymbol? result = null;
             FusionResultKind? resultKind = null;
-            foreach (var entry in handlerEntries)
+            foreach (var supplied in handlerEntries)
             {
+                var entry = supplied;
+                if (family == BoundDispatchFamily.Stream)
+                {
+                    var closure = CanonicalStreamTypeClosure.Handler(entry.Type, declaration.Request, _compilation);
+                    if (closure.Type == null)
+                    { Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!); continue; }
+                    entry = entry with { Type = closure.Type };
+                }
                 if (!Eligible(entry.Type, entry.Anchor, "Handler")) continue;
                 var candidate = _marked.FirstOrDefault(c => Same(c.Symbol, entry.Type.OriginalDefinition)) ?? BindExplicitMetadata(_compilation,entry.Type,_ct);
                 if (candidate == null)
@@ -196,6 +207,18 @@ internal sealed class CompositionListBinding
                     continue;
                 }
                 if (candidate.Model.CompilerOwnsMarkerError) continue;
+                if (family == BoundDispatchFamily.Stream)
+                {
+                    var closedKey = Key(entry.Type);
+                    if (closedHandlers.TryGetValue(closedKey, out var original))
+                    {
+                        if (!Facts.Any(f => f.Key == "UnsupportedGenerationShape" && f.Anchor == entry.Anchor && f.AdditionalAnchor == original))
+                            Reject("UnsupportedGenerationShape", entry.Anchor, "Stream service entries close to the same handler type.", original);
+                        continue;
+                    }
+                    closedHandlers.Add(closedKey, entry.Anchor);
+                    _select(entry.Type); // Exact closed service membership, only after marker validation.
+                }
                 var contracts = Contracts(entry.Type, declaration.Request, family.Value).ToArray();
                 if (contracts.Length != 1)
                 {
@@ -263,9 +286,26 @@ internal sealed class CompositionListBinding
                 Reject("UnsupportedGenerationShape", explicitHandlers?.Anchor ?? declaration.Anchor,
                     multiple ? "SendAll requires at least one handler." : "Send/Stream requires exactly one selected handler; use an explicit list to resolve ambiguity.");
             var stages = new List<BoundStageModel>();
+            var closedStages = new Dictionary<string, string>(StringComparer.Ordinal);
             if (resultKind != null && handlers.Count == handlerEntries.Length)
-                foreach (var entry in declaration.HandlerList ? ImmutableArray<Entry>.Empty : declaration.Entries)
+                foreach (var supplied in declaration.HandlerList ? ImmutableArray<Entry>.Empty : declaration.Entries)
                 {
+                    var entry = supplied;
+                    if (family == BoundDispatchFamily.Stream && result != null)
+                    {
+                        var closure = CanonicalStreamTypeClosure.Stage(entry.Type, declaration.Request, result, entry.Kind, _compilation);
+                        if (closure.Type == null)
+                        { Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!); continue; }
+                        entry = entry with { Type = closure.Type };
+                        var closedKey = Key(entry.Type);
+                        if (closedStages.TryGetValue(closedKey, out var original))
+                        {
+                            if (!Facts.Any(f => f.Key == "UnsupportedGenerationShape" && f.Anchor == entry.Anchor && f.AdditionalAnchor == original))
+                                Reject("UnsupportedGenerationShape", entry.Anchor, "Stream service entries close to the same stage type.", original);
+                            continue;
+                        }
+                        closedStages.Add(closedKey, entry.Anchor);
+                    }
                     var stageModel = StageContractBinding.Bind(entry.Type, entry.Kind, entry.Anchor, declaration.Request, family.Value,
                         resultKind.Value, result, _compilation, Facts);
                     if (entry.Factory != null && !stageModel.CompilerOwnsError)
@@ -318,6 +358,8 @@ internal sealed class CompositionListBinding
     {
         foreach (var family in new[] { BoundDispatchFamily.SendAsync, BoundDispatchFamily.SendSync, BoundDispatchFamily.Stream, BoundDispatchFamily.Notification })
             if (Contracts(handler, request, family).Any()) yield return family;
+            else if (family == BoundDispatchFamily.Stream && CanonicalStreamTypeClosure.Handler(handler, request, _compilation).Type is { } closed &&
+                Contracts(closed, request, family).Any()) yield return family;
     }
 
     private IEnumerable<INamedTypeSymbol> Contracts(INamedTypeSymbol handler, INamedTypeSymbol request, BoundDispatchFamily family)
