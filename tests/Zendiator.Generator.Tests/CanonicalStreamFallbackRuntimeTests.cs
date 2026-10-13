@@ -17,6 +17,12 @@ public sealed class CanonicalStreamFallbackProbe
     public object? Outer;
     public CancellationToken ReplacementToken;
     public CancellationToken ApiToken;
+    public Action<CancellationToken>? ValidateStartToken;
+    public Exception? GetEnumeratorError, MoveError, DisposeError;
+    public CancellationTokenSource? CancelInFirst;
+    public bool CancelAndAccept;
+    public CancellationToken SourceToken => _sourceToken;
+    public Action<string, object?, CancellationToken>? Observe;
     public bool Context;
     public readonly List<string> Trace = [];
     public int Starts, Moves, Reads, Disposals, Effects, BeforeResolves, AfterResolves, WrapperFinals;
@@ -29,6 +35,7 @@ public sealed class CanonicalStreamFallbackProbe
     public void Resolve(string role)
     {
         Trace.Add("resolve:" + role + "@" + Ambient.Value);
+        Observe?.Invoke("factory:" + role, null, default);
         if (role == "F1") { BeforeResolves++; if (Context) Ambient.Value = "factory"; }
         if (role == "F2") AfterResolves++;
     }
@@ -36,6 +43,7 @@ public sealed class CanonicalStreamFallbackProbe
     {
         var id = request.GetType().GetProperty("Id")!.GetValue(request);
         Trace.Add(phase + ":" + id + ":" + item + ":" + identity + ":" + token.Equals(expected) + "@" + Ambient.Value);
+        Observe?.Invoke(phase, request, token);
         Assert.True(identity); Assert.Equal(expected, token);
     }
     private static T Value<T>(long value) => (T)Convert.ChangeType(value, typeof(T), System.Globalization.CultureInfo.InvariantCulture)!;
@@ -43,6 +51,7 @@ public sealed class CanonicalStreamFallbackProbe
     {
         Record("F1", request, token, item, ReferenceEquals(request, _sourceRequest), _sourceToken);
         if (Context) Ambient.Value = "callback";
+        if (CancelInFirst != null) { CancelInFirst.Cancel(); return CancelAndAccept; }
         return Convert.ToInt64(item) > 0;
     }
     public T Map<T>(object request, T item, CancellationToken token)
@@ -58,34 +67,44 @@ public sealed class CanonicalStreamFallbackProbe
     }
     public IAsyncEnumerable<T> Start<T>(object request, CancellationToken token)
     {
-        var expected = WrapperMode == null ? ApiToken : _opens[request];
+        ValidateStartToken?.Invoke(token);
+        var expected = WrapperMode == null ? ValidateStartToken == null ? ApiToken : token : _opens[request];
         Record("H", request, token, null, WrapperMode == null ? ReferenceEquals(request, Outer) : _opens.ContainsKey(request), expected);
         Starts++; _sourceRequest = request; _sourceToken = token;
         return new Source<T>(this, request, token);
     }
     public void Wrap(object request, CancellationToken token)
-    { _wrapperToken = token; Record("W.wrap", request, token, null, ReferenceEquals(request, Outer), ApiToken); }
+    {
+        _wrapperToken = token; Record("W.wrap", request, token, null, ReferenceEquals(request, Outer), ApiToken);
+        if (Context) Ambient.Value = "wrapper-sync";
+    }
     public void Open(object request, CancellationToken token)
     { _opens.Add(request, token); Record("W.open", request, token, null, true, token); }
     public void WrapperEvent(string phase, object request, CancellationToken token, int? item = null)
-    { Record(phase, request, token, item, ReferenceEquals(request, Outer), _wrapperToken); if (phase == "W.finally") WrapperFinals++; }
+    {
+        Record(phase, request, token, item, ReferenceEquals(request, Outer), _wrapperToken);
+        if (Context && phase == "W.before") Ambient.Value = "wrapper-async";
+        if (phase == "W.finally") WrapperFinals++;
+    }
     private sealed class Source<T>(CanonicalStreamFallbackProbe p, object request, CancellationToken start)
         : IAsyncEnumerable<T>, IAsyncEnumerator<T>
     {
         private int _index = -1;
         private CancellationToken _token;
         public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken token = default)
-        { _token = token; p.Record("Get", request, token, null, true, start); return this; }
+        { _token = token; p.Record("Get", request, token, null, true, start); if (p.GetEnumeratorError != null) throw p.GetEnumeratorError; return this; }
         public T Current
         { get { p.Reads++; var value = Value<T>(p.Input[_index]); p.Record("Current", request, _token, value, true, start); return value; } }
         public ValueTask<bool> MoveNextAsync()
         {
             p.Moves++; _index++; p.Record("Move", request, _token, null, true, start);
+            if (p.MoveError != null) return ValueTask.FromException<bool>(p.MoveError);
             return p.Pending && _index == 0 ? p.MoveGate.Task : new(_index < p.Input.Length);
         }
         public ValueTask DisposeAsync()
         {
             p.Disposals++; p.Record("H.finally", request, _token, null, true, start);
+            if (p.DisposeError != null) return ValueTask.FromException(p.DisposeError);
             return p.PendingFailure ? ValueTask.FromException(p.CleanupError) : p.Pending ? p.DisposeGate.Void : default;
         }
     }
@@ -193,11 +212,12 @@ public sealed partial class GeneratorTests
     private sealed record FallbackResult(string[] Values, string[] Trace, int Starts, int Moves, int Reads, int Disposals,
         int Effects, int BeforeResolves, int AfterResolves, int WrapperFinals, int MoveConsumptions, int DisposeConsumptions,
         string Error, bool Canceled, bool Faulted);
-    private static async Task<FallbackResult> RunFallback<T>(FallbackFixture f, string backend, string? wrapperMode = null, bool pending = false, bool failure = false, bool context = false)
+    private static async Task<FallbackResult> RunFallback<T>(FallbackFixture f, string backend, string? wrapperMode = null, bool pending = false, bool failure = false, bool context = false,
+        Action<string, object?, CancellationToken>? observe = null)
     {
         using var api = new CancellationTokenSource(); using var replacement = new CancellationTokenSource();
         var p = new CanonicalStreamFallbackProbe { WrapperMode = wrapperMode, ReplacementToken = replacement.Token, ApiToken = api.Token,
-            Pending = pending, PendingFailure = failure, Context = context, Input = pending || wrapperMode == "two-open" ? [1] : [-1, 1, 2] };
+            Pending = pending, PendingFailure = failure, Context = context, Observe = observe, Input = pending || wrapperMode == "two-open" ? [1] : [-1, 1, 2] };
         var request = Activator.CreateInstance(f.Request, [1])!; p.Outer = request;
         var before = CanonicalStreamFallbackProbe.Ambient.Value; CanonicalStreamFallbackProbe.Ambient.Value = "caller";
         var collection = new ServiceCollection(); var roles = f.Wrapper ? new[] { "H", "F1", "W", "F2" } : new[] { "H", "F1", "Map", "F2" };

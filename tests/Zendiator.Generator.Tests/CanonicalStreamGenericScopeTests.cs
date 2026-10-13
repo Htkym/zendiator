@@ -12,6 +12,8 @@ public sealed class StreamGenericScopeProbe
     public readonly List<(object Instance, string Role)> Created = [];
     public readonly List<object> Called = [], Released = [];
     public int SourceDisposals, FactoryCalls;
+    internal readonly Zendiator.Tests.Contracts.ContractOnce<bool> PendingGate = new();
+    public bool PendingSource;
     public void Create(object instance, string role) => Created.Add((instance, role));
     public void Call(object instance) { Assert.DoesNotContain(Released, r => ReferenceEquals(r, instance)); Called.Add(instance); }
     public void Release(object instance) { Assert.DoesNotContain(Released, r => ReferenceEquals(r, instance)); Released.Add(instance); }
@@ -23,7 +25,7 @@ public sealed class StreamGenericScopeProbe
         {
             private bool _moved, _disposed;
             public T Current => value;
-            public ValueTask<bool> MoveNextAsync() { var result = !_moved; _moved = true; return new(result); }
+            public ValueTask<bool> MoveNextAsync() { var result = !_moved; _moved = true; return p.PendingSource && result ? p.PendingGate.Task : new(result); }
             public ValueTask DisposeAsync() { Assert.False(_disposed); _disposed = true; p.SourceDisposals++; return default; }
         }
     }
