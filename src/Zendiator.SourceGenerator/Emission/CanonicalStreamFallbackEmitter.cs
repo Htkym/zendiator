@@ -22,7 +22,7 @@ internal static class CanonicalStreamFallbackEmitter
                         global::System.Threading.CancellationToken token = default)
                     {
                         global::System.ArgumentNullException.ThrowIfNull(services);
-                        global::System.ArgumentNullException.ThrowIfNull(request);
+                        {{(h.RequestIsValueType ? "" : "global::System.ArgumentNullException.ThrowIfNull(request);")}}
                         return new Envelope{{model.ConsumerSegment}}(services, request, token);
                     }
             """);
@@ -37,7 +37,7 @@ internal static class CanonicalStreamFallbackEmitter
                             public global::System.Collections.Generic.IAsyncEnumerable<{{h.ItemName}}> Open(
                                 {{h.RequestName}} request, global::System.Threading.CancellationToken token)
                             {
-                                global::System.ArgumentNullException.ThrowIfNull(request);
+                                {{(h.RequestIsValueType ? "" : "global::System.ArgumentNullException.ThrowIfNull(request);")}}
                                 return new Envelope{{upstream}}(services, request, token);
                             }
                         }

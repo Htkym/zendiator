@@ -12,7 +12,7 @@ internal static class CanonicalStreamFallbackProjection
             c.ExternAliases.Count != 0 || c.Facts.Count != 1 || c.Facts[0].Key != "IncompleteExecutionContract" ||
             route.Family != BoundDispatchFamily.Stream || route.Handlers.Count != 1) return null;
         var handler = route.Handlers[0]; var call = handler.StreamEmission;
-        if (call == null || call.RequestIsValueType || call.HandlerIsValueType || handler.CompilerOwnsError ||
+        if (call == null || call.HandlerIsValueType || handler.CompilerOwnsError ||
             handler.Sessions.Count != 0 || handler.ServiceOwnership != FusionOwnership.BorrowedService) return null;
         foreach (var stage in route.Stages)
         {

@@ -16,7 +16,7 @@ internal static class CanonicalStreamPrototypeProjection
         var handler = route.Handlers[0];
         var call = handler.StreamEmission;
         if (call == null || handler.CompilerOwnsError || handler.ServiceOwnership != FusionOwnership.BorrowedService ||
-            handler.Sessions.Count != 0 || call.RequestIsValueType || call.HandlerIsValueType ||
+            handler.Sessions.Count != 0 || call.HandlerIsValueType ||
             call.ItemName is not ("int" or "global::System.Int32")) return null;
         var expected = new[] { BoundCallbackPhase.Filter, BoundCallbackPhase.Map, BoundCallbackPhase.Filter };
         for (var i = 0; i < route.Stages.Count; i++)

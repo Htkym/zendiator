@@ -23,7 +23,7 @@ internal static class CanonicalStreamPrototypeEmitter
                         global::System.Threading.CancellationToken token = default)
                     {
                         global::System.ArgumentNullException.ThrowIfNull(services);
-                        global::System.ArgumentNullException.ThrowIfNull(request);
+                        {{(h.RequestIsValueType ? "" : "global::System.ArgumentNullException.ThrowIfNull(request);")}}
                         return new Envelope(services, request, token);
                     }
                     private sealed class Envelope(global::System.IServiceProvider services, {{h.RequestName}} request,
