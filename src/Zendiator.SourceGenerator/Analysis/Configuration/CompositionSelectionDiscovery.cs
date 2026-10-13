@@ -193,7 +193,8 @@ internal static class CompositionSelectionDiscovery
         CanonicalAsyncEmissionModel canonicalAsync, CanonicalSyncInterceptorModel asyncCallSites,
         CanonicalWrapperEmissionModel wrappers,CanonicalSyncInterceptorModel wrapperCallSites,
         CanonicalCapabilityEmissionModel capabilities,CanonicalSyncInterceptorModel capabilityCallSites,
-        CanonicalMultiEmissionModel multi,CanonicalSyncInterceptorModel multiCallSites)
+        CanonicalMultiEmissionModel multi,CanonicalSyncInterceptorModel multiCallSites,
+        CanonicalStreamConnectionCatalog streams)
     {
         for (var index = 0; index < catalog.Compositions.Count; index++)
         {
@@ -235,6 +236,8 @@ internal static class CompositionSelectionDiscovery
                             message = graph.IsValid
                                 ? "The " + (graph.Contract.Family == BoundDispatchFamily.Stream ? "Stream" : "Send") + " execution graph satisfies its structural contract. Canonical runtime generation and equivalence are pending; emission remains blocked."
                                 : "The execution graph is incomplete: " + string.Join(", ", graph.Facts.Select(f => f.Reason)) + ". Canonical emission remains blocked.";
+                        var stream = streams.Routes.FirstOrDefault(r => r.CompositionIdentity == composition.Identity && r.Anchor == fact.Anchor);
+                        if (stream != null && stream.Kind != CanonicalStreamConnectionKind.InvalidContract) message = stream.Reason;
                     }
                     context.ReportDiagnostic(Diagnostic.Create(Descriptor(fact.Key), primary, additional, null, message));
                 }
