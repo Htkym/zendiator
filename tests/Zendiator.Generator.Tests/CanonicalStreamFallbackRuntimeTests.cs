@@ -23,6 +23,9 @@ public sealed class CanonicalStreamFallbackProbe
     public bool CancelAndAccept;
     public CancellationToken SourceToken => _sourceToken;
     public Action<string, object?, CancellationToken>? Observe;
+    public Func<bool, ValueTask<bool>>? NativeMove;
+    public Func<ValueTask>? NativeDispose;
+    public int NativeMovePendingReturns, NativeDisposePendingReturns;
     public bool Context;
     public readonly List<string> Trace = [];
     public int Starts, Moves, Reads, Disposals, Effects, BeforeResolves, AfterResolves, WrapperFinals;
@@ -98,12 +101,24 @@ public sealed class CanonicalStreamFallbackProbe
         public ValueTask<bool> MoveNextAsync()
         {
             p.Moves++; _index++; p.Record("Move", request, _token, null, true, start);
+            if (p.NativeMove != null)
+            {
+                var move = p.NativeMove(_index < p.Input.Length);
+                if (!move.IsCompleted) p.NativeMovePendingReturns++;
+                p.Observe?.Invoke("native-move.return", request, _token); return move;
+            }
             if (p.MoveError != null) return ValueTask.FromException<bool>(p.MoveError);
             return p.Pending && _index == 0 ? p.MoveGate.Task : new(_index < p.Input.Length);
         }
         public ValueTask DisposeAsync()
         {
             p.Disposals++; p.Record("H.finally", request, _token, null, true, start);
+            if (p.NativeDispose != null)
+            {
+                var dispose = p.NativeDispose();
+                if (!dispose.IsCompleted) p.NativeDisposePendingReturns++;
+                p.Observe?.Invoke("native-dispose.return", request, _token); return dispose;
+            }
             if (p.DisposeError != null) return ValueTask.FromException(p.DisposeError);
             return p.PendingFailure ? ValueTask.FromException(p.CleanupError) : p.Pending ? p.DisposeGate.Void : default;
         }
