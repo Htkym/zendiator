@@ -6,8 +6,14 @@ internal sealed record BoundStreamHandlerEmission(string RequestName, string Ite
 internal sealed record BoundStreamHookEmission(string HookName, string ContractName, string MethodName,
     BoundCallbackPhase Phase, bool HookIsValueType);
 
-// C03 projection reuses the accepted schedule. Terminal cleanup invokes its existing Dispose subtree.
+internal sealed record CanonicalStreamItemRegion(EquatableArray<StreamExecutionSite> Steps,
+    StreamExecutionAwait MoveAwait, StreamValueTransfer CurrentTransfer);
+internal sealed record CanonicalStreamSourceCleanupRegion(EquatableArray<StreamExecutionSite> Steps,
+    StreamExecutionAwait DisposeAwait, StreamValueTransfer DetachTransfer, StreamExecutionOwner SourceOwner);
+
+// Selected region views reuse the existing sites/edges/operands, not a new generic IR.
 // This is an unregistered C04 prototype; it does not accept a public canonical runtime route.
 internal sealed record CanonicalStreamPrototypeModel(string Namespace, string ClassName, string HintName,
     CanonicalStreamExecutionSchedule Schedule, StreamSiteId TerminalCleanupEntry,
-    BoundStreamHandlerEmission Handler, EquatableArray<BoundStreamHookEmission> Hooks);
+    BoundStreamHandlerEmission Handler, EquatableArray<BoundStreamHookEmission> Hooks,
+    CanonicalStreamItemRegion ItemRegion, CanonicalStreamSourceCleanupRegion CleanupRegion);

@@ -38,8 +38,10 @@ internal static class CanonicalStreamPrototypeProjection
             !schedule.Awaits.Any(a => a.Producer == new StreamSiteId(StreamProgram.Dispose, StreamPhase.DisposeSource)) ||
             !schedule.Owners.Any(o => o.Id == "source" && o.Cleanup == StreamCleanup.AsyncDispose && !o.Borrowed)) return null;
         var id = CanonicalSplitSourceEmitter.Id(composition.Identity + "|Stream|" + route.Request);
+        var lowering = CanonicalStreamPrototypeLowering.Create(route, schedule);
+        if (lowering == null) return null;
         return new(composition.GeneratedNamespace, "__ZendiatorStreamPrototype_" + id,
             "Zendiator.StreamPrototype." + id + ".g.cs", schedule, cleanup, call,
-            new(route.Stages.Select(s => s.StreamEmission!)));
+            new(route.Stages.Select(s => s.StreamEmission!)), lowering.Value.Item, lowering.Value.Cleanup);
     }
 }

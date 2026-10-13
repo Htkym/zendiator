@@ -61,7 +61,7 @@ public sealed class CanonicalStreamPrototypeProbe
 public sealed partial class GeneratorTests
 {
     private sealed record StreamPrototypeFixture(Assembly Assembly, Type Request, Type[] Services, MethodInfo Create, MethodInfo Start,
-        Type Bridge, string GeneratedSource, CanonicalStreamPrototypeModel Projection);
+        Type Bridge, string GeneratedSource, CanonicalStreamPrototypeModel Projection, CanonicalRouteGraph RouteGraph);
     private static readonly Lazy<StreamPrototypeFixture> StreamPrototype = new(CompileStreamPrototype);
     private static StreamPrototypeFixture CompileStreamPrototype()
     {
@@ -93,6 +93,8 @@ public sealed partial class GeneratorTests
         var generated = Assert.Single(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.StreamPrototype.", StringComparison.Ordinal));
         var projection = Assert.IsType<CanonicalStreamPrototypeModel>(Assert.Single(driver.GetRunResult().Results.Single()
             .TrackedSteps["CanonicalStreamPrototypeProjection"].SelectMany(s => s.Outputs)).Value);
+        var routeGraph = Assert.IsType<CanonicalRouteGraph>(Assert.Single(driver.GetRunResult().Results.Single()
+            .TrackedSteps["CanonicalRouteGraphEntry"].SelectMany(s => s.Outputs)).Value);
         using var bytes = new MemoryStream(); var emitted = output.Emit(bytes);
         if (folder != null)
         {
@@ -109,7 +111,7 @@ public sealed partial class GeneratorTests
         var prototype = Assert.Single(assembly.GetTypes(), t => t.Name.StartsWith("__ZendiatorStreamPrototype_", StringComparison.Ordinal));
         var bridge = assembly.GetType("App.StreamPrototypeBridge")!;
         return new(assembly, assembly.GetType("App.Items")!, new[] { "ItemsHandler", "Positive", "DoubleItem", "Small" }.Select(n => assembly.GetType("App." + n)!).ToArray(),
-            prototype.GetMethod("Create", BindingFlags.NonPublic | BindingFlags.Static)!, bridge.GetMethod("Start")!, bridge, generated.SourceText.ToString(), projection);
+            prototype.GetMethod("Create", BindingFlags.NonPublic | BindingFlags.Static)!, bridge.GetMethod("Start")!, bridge, generated.SourceText.ToString(), projection, routeGraph);
     }
     private static (ServiceProvider Services, IAsyncEnumerator<int> Cursor) PrototypeCursor(CanonicalStreamPrototypeProbe probe, bool generated, CancellationToken token = default)
     {

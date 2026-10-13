@@ -107,29 +107,67 @@ internal static class CanonicalStreamPrototypeEmitter
                             source = handler.{{h.MethodName}}(request, token).GetAsyncEnumerator(token);
                             while (true)
                             {
-                                token.ThrowIfCancellationRequested();
-                                if (!await source.MoveNextAsync().ConfigureAwait(false)) yield break;
-                                var item = source.Current;
             """);
-        for (var i = 0; i < model.Hooks.Count; i++)
+        foreach (var site in model.ItemRegion.Steps)
         {
-            var hook = model.Hooks[i];
-            b.AppendLine("                    token.ThrowIfCancellationRequested();");
-            b.AppendLine("                    hook" + i + " ??= (" + hook.ContractName + ")global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService(services, typeof(" + hook.HookName + "));");
-            var call = "hook" + i + "." + hook.MethodName + "(request, item, token)";
-            b.AppendLine(hook.Phase == BoundCallbackPhase.Filter ? "                    if (!" + call + ") continue;" : "                    item = " + call + ";");
+            switch (site.Id.Phase)
+            {
+                case StreamPhase.SourceGuard:
+                case StreamPhase.HookGuard:
+                    b.AppendLine("                    token.ThrowIfCancellationRequested();"); break;
+                case StreamPhase.SourceMove:
+                    b.AppendLine("                    if (!await source.MoveNextAsync().ConfigureAwait(" +
+                        (model.ItemRegion.MoveAwait.ConfigureAwaitFalse ? "false" : "true") + ")) yield break;"); break;
+                case StreamPhase.SourceCurrent:
+                    b.AppendLine("                    var " + Slot(model.ItemRegion.CurrentTransfer.Destination) + " = " +
+                        Slot(model.ItemRegion.CurrentTransfer.Source) + ";"); break;
+                case StreamPhase.ResolveHook:
+                    var service = model.Hooks[site.Id.Stage];
+                    b.AppendLine("                    hook" + site.Id.Stage + " ??= (" + service.ContractName + ")global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService(services, typeof(" + service.HookName + "));"); break;
+                case StreamPhase.Filter:
+                case StreamPhase.Map:
+                    var callback = model.Hooks[site.Id.Stage];
+                    var call = "hook" + site.Id.Stage + "." + callback.MethodName + "(request, item, token)";
+                    b.AppendLine(site.Id.Phase == StreamPhase.Filter ? "                    if (!" + call + ") continue;" : "                    item = " + call + ";"); break;
+                case StreamPhase.CacheCurrent:
+                    b.AppendLine("                    yield return item;"); break;
+                default:
+                    throw new System.InvalidOperationException("Unsupported lowered Stream item site.");
+            }
         }
-        b.AppendLine("                    yield return item;");
         b.AppendLine("                }");
         b.AppendLine("            }");
         b.AppendLine("            finally");
         b.AppendLine("            {");
-        b.AppendLine("                var detached = source; source = null;");
-        b.AppendLine("                if (detached is not null) await detached.DisposeAsync().ConfigureAwait(false);");
+        foreach (var site in model.CleanupRegion.Steps)
+        {
+            switch (site.Id.Phase)
+            {
+                case StreamPhase.DetachSource:
+                    b.AppendLine("                var " + Slot(model.CleanupRegion.DetachTransfer.Destination) + " = " +
+                        Slot(model.CleanupRegion.DetachTransfer.Source) + "; " + Slot(model.CleanupRegion.DetachTransfer.Source) + " = null;"); break;
+                case StreamPhase.SourcePresent:
+                    b.AppendLine("                if (" + Slot(model.CleanupRegion.DetachTransfer.Destination) + " is not null)"); break;
+                case StreamPhase.DisposeSource:
+                    b.AppendLine("                    await " + Slot(model.CleanupRegion.DetachTransfer.Destination) + ".DisposeAsync().ConfigureAwait(" +
+                        (model.CleanupRegion.DisposeAwait.ConfigureAwaitFalse ? "false" : "true") + ");"); break;
+                default:
+                    throw new System.InvalidOperationException("Unsupported lowered Stream source cleanup site.");
+            }
+        }
         b.AppendLine("            }");
         b.AppendLine("        }");
         b.AppendLine("    }");
         b.AppendLine("}");
         return new(model.HintName, b.ToString());
     }
+
+    private static string Slot(string value) => value switch
+    {
+        "source/Current" => "source.Current",
+        "cursor/item" => "item",
+        "cursor/source" => "source",
+        "dispose/source" => "detached",
+        _ => throw new System.InvalidOperationException("Unsupported lowered Stream operand.")
+    };
 }
