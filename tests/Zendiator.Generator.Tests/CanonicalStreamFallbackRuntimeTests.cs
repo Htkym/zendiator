@@ -23,6 +23,8 @@ public sealed class CanonicalStreamFallbackProbe
     public bool CancelAndAccept;
     public CancellationToken SourceToken => _sourceToken;
     public Action<string, object?, CancellationToken>? Observe;
+    public Action<CanonicalStreamProbeEvent>? CanonicalEvent;
+    public Exception? FirstError;
     public Func<bool, ValueTask<bool>>? NativeMove;
     public Func<ValueTask>? NativeDispose;
     public int NativeMovePendingReturns, NativeDisposePendingReturns;
@@ -35,12 +37,16 @@ public sealed class CanonicalStreamFallbackProbe
     private readonly Dictionary<object, CancellationToken> _opens = new(ReferenceEqualityComparer.Instance);
     private object? _sourceRequest;
     private CancellationToken _sourceToken, _wrapperToken;
+    private void EmitCanonical(string kind, string stage, object? request, CancellationToken token,
+        int? sequence = null, object? input = null, object? output = null, bool? result = null, Exception? error = null)
+        => CanonicalEvent?.Invoke(new(kind, stage, request, token, sequence, input, output, result, error));
     public void Resolve(string role)
     {
         Trace.Add("resolve:" + role + "@" + Ambient.Value);
         Observe?.Invoke("factory:" + role, null, default);
         if (role == "F1") { BeforeResolves++; if (Context) Ambient.Value = "factory"; }
         if (role == "F2") AfterResolves++;
+        EmitCanonical("Resolve", role, Outer, ApiToken);
     }
     private void Record(string phase, object request, CancellationToken token, object? item, bool identity, CancellationToken expected)
     {
@@ -54,19 +60,40 @@ public sealed class CanonicalStreamFallbackProbe
     {
         Record("F1", request, token, item, ReferenceEquals(request, _sourceRequest), _sourceToken);
         if (Context) Ambient.Value = "callback";
-        if (CancelInFirst != null) { CancelInFirst.Cancel(); return CancelAndAccept; }
-        return Convert.ToInt64(item) > 0;
+        if (FirstError != null)
+        {
+            EmitCanonical("Throw", "F1", request, token, Reads - 1, input: item, error: FirstError);
+            throw FirstError;
+        }
+        bool accepted;
+        if (CancelInFirst != null) { CancelInFirst.Cancel(); accepted = CancelAndAccept; }
+        else accepted = Convert.ToInt64(item) > 0;
+        EmitCanonical("Filter", "F1", request, token, Reads - 1, input: item, result: accepted);
+        return accepted;
     }
     public T Map<T>(object request, T item, CancellationToken token)
     {
         Record("Map", request, token, item, ReferenceEquals(request, _sourceRequest), _sourceToken); Effects++;
-        return Value<T>(Convert.ToInt64(item) * 2);
+        T mapped;
+        try
+        {
+            mapped = Value<T>(Convert.ToInt64(item) * 2);
+        }
+        catch (Exception error)
+        {
+            EmitCanonical("Throw", "Map", request, token, Reads - 1, input: item, error: error);
+            throw;
+        }
+        EmitCanonical("Map", "Map", request, token, Reads - 1, input: item, output: mapped);
+        return mapped;
     }
     public bool Last<T>(object request, T item, CancellationToken token)
     {
         Record("F2", request, token, item, ReferenceEquals(request, WrapperMode == null ? _sourceRequest : Outer),
             WrapperMode == null ? _sourceToken : _wrapperToken);
-        return WrapperMode == null ? Convert.ToInt64(item) < 4 : Convert.ToInt64(item) != 20;
+        var accepted = WrapperMode == null ? Convert.ToInt64(item) < 4 : Convert.ToInt64(item) != 20;
+        EmitCanonical("Filter", "F2", request, token, Reads - 1, input: item, result: accepted);
+        return accepted;
     }
     public IAsyncEnumerable<T> Start<T>(object request, CancellationToken token)
     {
@@ -74,6 +101,7 @@ public sealed class CanonicalStreamFallbackProbe
         var expected = WrapperMode == null ? ValidateStartToken == null ? ApiToken : token : _opens[request];
         Record("H", request, token, null, WrapperMode == null ? ReferenceEquals(request, Outer) : _opens.ContainsKey(request), expected);
         Starts++; _sourceRequest = request; _sourceToken = token;
+        EmitCanonical("HandlerStart", "H", request, token);
         return new Source<T>(this, request, token);
     }
     public void Wrap(object request, CancellationToken token)
@@ -97,10 +125,12 @@ public sealed class CanonicalStreamFallbackProbe
         public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken token = default)
         { _token = token; p.Record("Get", request, token, null, true, start); if (p.GetEnumeratorError != null) throw p.GetEnumeratorError; return this; }
         public T Current
-        { get { p.Reads++; var value = Value<T>(p.Input[_index]); p.Record("Current", request, _token, value, true, start); return value; } }
+        { get { p.Reads++; var value = Value<T>(p.Input[_index]); p.Record("Current", request, _token, value, true, start);
+            p.EmitCanonical("InnerCurrent", "H", request, _token, _index, output: value); return value; } }
         public ValueTask<bool> MoveNextAsync()
         {
             p.Moves++; _index++; p.Record("Move", request, _token, null, true, start);
+            p.EmitCanonical("InnerMoveNext", "H", request, _token, _index);
             if (p.NativeMove != null)
             {
                 var move = p.NativeMove(_index < p.Input.Length);
@@ -113,14 +143,22 @@ public sealed class CanonicalStreamFallbackProbe
         public ValueTask DisposeAsync()
         {
             p.Disposals++; p.Record("H.finally", request, _token, null, true, start);
+            p.EmitCanonical("InnerDisposeStart", "H", request, _token);
             if (p.NativeDispose != null)
             {
                 var dispose = p.NativeDispose();
                 if (!dispose.IsCompleted) p.NativeDisposePendingReturns++;
                 p.Observe?.Invoke("native-dispose.return", request, _token); return dispose;
             }
-            if (p.DisposeError != null) return ValueTask.FromException(p.DisposeError);
-            return p.PendingFailure ? ValueTask.FromException(p.CleanupError) : p.Pending ? p.DisposeGate.Void : default;
+            if (p.DisposeError != null)
+            {
+                p.EmitCanonical("InnerDisposeThrow", "H", request, _token, error: p.DisposeError);
+                return ValueTask.FromException(p.DisposeError);
+            }
+            if (p.PendingFailure) return ValueTask.FromException(p.CleanupError);
+            if (p.Pending) return p.DisposeGate.Void;
+            p.EmitCanonical("InnerDisposeEnd", "H", request, _token);
+            return default;
         }
     }
 }
