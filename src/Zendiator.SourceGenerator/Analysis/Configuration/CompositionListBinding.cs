@@ -318,7 +318,12 @@ internal sealed class CompositionListBinding
                         {
                             AsyncEmission = new(Name(declaration.Request), Name(entry.Type),
                             Name(contract), member.Name, nextResult == null ? null : Name(nextResult))
-                            { RequestIsValueType = declaration.Request.IsValueType, HandlerIsValueType = entry.Type.IsValueType }
+                            {
+                                RequestIsValueType = declaration.Request.IsValueType,
+                                HandlerIsValueType = entry.Type.IsValueType,
+                                IsNonGenericReferencePair = declaration.Request is INamedTypeSymbol { TypeKind: TypeKind.Class, IsGenericType: false } &&
+                                    entry.Type is { TypeKind: TypeKind.Class, IsGenericType: false }
+                            }
                         };
                 }
                 if (family == BoundDispatchFamily.Stream && implementation != null && member != null && nextResult != null &&

@@ -1,7 +1,11 @@
 namespace Zendiator.SourceGenerator;
 
 internal sealed record BoundAsyncHandlerEmission(string RequestName, string HandlerName, string ContractName, string MethodName, string? ResultName)
-{ public bool RequestIsValueType { get; init; } public bool HandlerIsValueType { get; init; } }
+{
+    public bool RequestIsValueType { get; init; }
+    public bool HandlerIsValueType { get; init; }
+    public bool IsNonGenericReferencePair { get; init; }
+}
 internal sealed record BoundAsyncFactoryEmission(string FactoryName, string ContractName, string MethodName, string? CleanupContractName, bool AwaitAcquire)
 {
     public bool FactoryIsValueType { get; init; }

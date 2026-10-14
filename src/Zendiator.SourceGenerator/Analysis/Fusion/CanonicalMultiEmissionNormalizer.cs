@@ -20,7 +20,7 @@ internal static class CanonicalMultiEmissionNormalizer
             var mixedStream = c.Pipelines.Any(r => r.Family == BoundDispatchFamily.Stream);
             if (mixedStream && (streams == null || c.ExternAliases.Count != 0 || c.Pipelines.Count != 2 ||
                 c.Pipelines.Count(r => r.Family == BoundDispatchFamily.Stream) != 1 ||
-                c.Pipelines.Count(r => r.Family == BoundDispatchFamily.SendSync) != 1)) continue;
+                c.Pipelines.Count(r => r.Family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) != 1)) continue;
             var routes = new List<CanonicalMultiRouteEmission>();
             foreach (var route in c.Pipelines)
             {
@@ -44,10 +44,11 @@ internal static class CanonicalMultiEmissionNormalizer
                 var capability = CanonicalCapabilityEmissionNormalizer.Create(projected, graphs, sync, async, wrapper);
                 var s = sync.Compositions.SingleOrDefault(); var a = async.Compositions.SingleOrDefault(); var w = wrapper.Compositions.SingleOrDefault(); var h = capability.Compositions.SingleOrDefault();
                 if ((s == null ? 0 : 1) + (a == null ? 0 : 1) + (w == null ? 0 : 1) + (h == null ? 0 : 1) != 1) break;
-                if (mixedStream && (s == null || s.Handler.RequestIsValueType || s.Handler.HandlerIsValueType ||
-                    s.Handler.ResultName is not ("int" or "global::System.Int32") || s.Factory != null ||
-                    route.Stages.Count != 0 || route.Handlers.Count != 1 || !route.HasEmptyPipeline)) break;
                 var registration = s ?? (a == null ? null : CanonicalAsyncEmissionNormalizer.Registration(a)) ?? w?.Registration ?? h!.Registration;
+                if (mixedStream && ((s == null && a == null) || a != null && !a.Handler.IsNonGenericReferencePair ||
+                    registration.Handler.RequestIsValueType || registration.Handler.HandlerIsValueType ||
+                    registration.Handler.ResultName is not ("int" or "global::System.Int32") || registration.Factory != null ||
+                    route.Stages.Count != 0 || route.Handlers.Count != 1 || !route.HasEmptyPipeline)) break;
                 var key = c.Identity + "|" + route.Family + "|" + route.Request + "|" + route.Result;
                 routes.Add(new(key, route.HandlerListOrdinal, route.PipelineListOrdinal, registration, s, a, w, h));
             }
