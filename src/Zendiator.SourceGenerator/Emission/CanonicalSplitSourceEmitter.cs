@@ -41,7 +41,7 @@ internal static class CanonicalSplitSourceEmitter
         .Concat(wrappers.Compositions.Select(c => new CanonicalOutputSelection(c.Registration.Namespace, c.Registration.Handler.RequestName, c.Family)))
         .Concat(capabilities.Compositions.Select(c => new CanonicalOutputSelection(c.Registration.Namespace, c.Registration.Handler.RequestName, c.Family)))
         .Concat(multi.Compositions.SelectMany(c => c.Routes.Select(r => new CanonicalOutputSelection(c.Namespace, r.Registration.Handler.RequestName,
-            r.Sync != null ? BoundDispatchFamily.SendSync : r.Async != null ? BoundDispatchFamily.SendAsync : r.Wrapper != null ? r.Wrapper.Family : r.Capability!.Family)))));
+            r.Family)))));
     internal static CanonicalSourceFile? SelectRoute(CanonicalRouteText route, CanonicalSourceFile file, EquatableArray<CanonicalOutputSelection> selected) =>
         file.Source.Length != 0 && selected.Any(s => s.Namespace == route.Namespace && s.RequestName == route.RequestName && s.Family == route.Family) ? file : null;
 

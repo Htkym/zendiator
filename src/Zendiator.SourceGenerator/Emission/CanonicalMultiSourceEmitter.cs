@@ -14,6 +14,7 @@ internal static class CanonicalMultiSourceEmitter
 {
     internal static string RouteSource(CanonicalMultiRouteEmission r) => r.Sync != null ? CanonicalSyncSourceEmitter.Emit(new(new(new[] { r.Sync }))) :
         r.Async != null ? CanonicalAsyncSourceEmitter.Emit(new(new(new[] { r.Async }))) :
+        r.Stream != null ? CanonicalStreamPublicConnection.Source(r.Stream) :
         r.Wrapper != null ? CanonicalWrapperSourceEmitter.Emit(new(new(new[] { r.Wrapper }))) :
         CanonicalCapabilitySourceEmitter.Emit(new(new(new[] { r.Capability! })));
     private static string Suffix(string key)
