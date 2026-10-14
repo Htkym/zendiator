@@ -33,8 +33,12 @@ internal static class StreamWrapperTokenFlowValidator
             var found = candidate.Segments.Where(s => s.Descriptor.Id == id).ToArray();
             if (found.Length != 1) { Reject("TokenFlowSegmentMissing"); return "?"; }
             var segment = found[0]; var cursor = segment.Cursor;
-            var local = new Dictionary<string, string> {
-                ["api/request"] = request, ["api/token"] = api, ["enumerator/token"] = enumeration, ["CancellationToken.None"] = ""
+            var local = new Dictionary<string, string>
+            {
+                ["api/request"] = request,
+                ["api/token"] = api,
+                ["enumerator/token"] = enumeration,
+                ["CancellationToken.None"] = ""
             };
             ApplyCore(StreamProgram.Create, StreamPhase.CreateEnvelope, StreamOutcome.Always);
             ApplyCore(StreamProgram.GetEnumerator, StreamPhase.CreateCursor, StreamOutcome.Always);
@@ -116,8 +120,13 @@ internal static class StreamWrapperTokenFlowValidator
                 api == enumeration ? StreamTokenCase.SameToken : StreamTokenCase.DistinctCancelable;
             var rules = cursor.Tokens.Where(t => t.Case == @case).ToArray();
             if (rules.Length != 1) { Reject("MissingTokenFlowMergeRule"); return "?"; }
-            return rules[0].Source switch { StreamTokenSource.Api => api, StreamTokenSource.Enumerator => enumeration,
-                StreamTokenSource.Linked => "link(" + api + ";" + enumeration + ")", _ => "?" };
+            return rules[0].Source switch
+            {
+                StreamTokenSource.Api => api,
+                StreamTokenSource.Enumerator => enumeration,
+                StreamTokenSource.Linked => "link(" + api + ";" + enumeration + ")",
+                _ => "?"
+            };
         }
     }
     // Direct C01/D02 oracle; deliberately does not read builder or RequiredStream* tables.

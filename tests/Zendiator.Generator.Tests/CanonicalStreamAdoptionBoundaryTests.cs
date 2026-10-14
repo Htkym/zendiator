@@ -9,9 +9,16 @@ public sealed partial class GeneratorTests
     private sealed record StreamBoundaryResult(string Error, bool Canceled, bool Faulted, bool? TokenPreserved,
         int Starts, int Moves, int Reads, int Disposals, int Effects, int AfterResolves, int Consumed, string[] Trace);
     [Theory]
-    [InlineData("pre-api")] [InlineData("pre-enum")] [InlineData("pending-api")] [InlineData("pending-enum")]
-    [InlineData("hook-false")] [InlineData("hook-true")]
-    [InlineData("foreign-oce")] [InlineData("cancel-cleanup-error")] [InlineData("error-cleanup-oce")] [InlineData("get-failure")]
+    [InlineData("pre-api")]
+    [InlineData("pre-enum")]
+    [InlineData("pending-api")]
+    [InlineData("pending-enum")]
+    [InlineData("hook-false")]
+    [InlineData("hook-true")]
+    [InlineData("foreign-oce")]
+    [InlineData("cancel-cleanup-error")]
+    [InlineData("error-cleanup-oce")]
+    [InlineData("get-failure")]
     public async Task Stream_adoption_canonical_cancellation_and_escaping_status_match_new_contract_reference(string profile)
     {
         var f = FallbackFixtureFor("long");
@@ -22,11 +29,17 @@ public sealed partial class GeneratorTests
             var pending = profile.StartsWith("pending-", StringComparison.Ordinal) || profile == "cancel-cleanup-error";
             var source = new ApplicationException("source"); var cleanup = new InvalidOperationException("cleanup");
             var foreignError = new OperationCanceledException(foreign.Token); var cleanupOce = new OperationCanceledException(foreign.Token);
-            var p = new CanonicalStreamFallbackProbe { ApiToken = api.Token, Pending = pending, Input = [1, 2],
-                CancelInFirst = profile.StartsWith("hook-", StringComparison.Ordinal) ? api : null, CancelAndAccept = profile == "hook-true",
+            var p = new CanonicalStreamFallbackProbe
+            {
+                ApiToken = api.Token,
+                Pending = pending,
+                Input = [1, 2],
+                CancelInFirst = profile.StartsWith("hook-", StringComparison.Ordinal) ? api : null,
+                CancelAndAccept = profile == "hook-true",
                 MoveError = profile == "foreign-oce" ? foreignError : profile == "error-cleanup-oce" ? source : null,
                 DisposeError = profile == "cancel-cleanup-error" ? cleanup : profile == "error-cleanup-oce" ? cleanupOce : null,
-                GetEnumeratorError = profile == "get-failure" ? source : null };
+                GetEnumeratorError = profile == "get-failure" ? source : null
+            };
             if (linked) p.ValidateStartToken = token => { Assert.True(token.CanBeCanceled); Assert.NotEqual(api.Token, token); Assert.NotEqual(enumeration.Token, token); };
             var request = Activator.CreateInstance(f.Request, [1])!; p.Outer = request;
             var collection = new ServiceCollection(); var roles = new[] { "H", "F1", "Map", "F2" };
@@ -89,7 +102,8 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData("direct")] [InlineData("early-break")]
+    [InlineData("direct")]
+    [InlineData("early-break")]
     public async Task Stream_adoption_wrapper_sync_and_native_async_context_boundaries_match_reference(string mode)
     {
         var f = FallbackFixtureFor("wrapper");
@@ -102,7 +116,8 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Stream_adoption_canonical_context_and_suppressed_TaskRun_representatives_match_reference(bool suppress)
     {
         var f = FallbackFixtureFor("long");
@@ -148,8 +163,15 @@ public sealed partial class GeneratorTests
         if (suppress) Assert.All(canonical.Context, x => Assert.EndsWith(":False", x));
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence)) File.WriteAllText(Path.Combine(evidence, "stream-fallback", "context-boundary-" + suppress + ".json"),
-            System.Text.Json.JsonSerializer.Serialize(new { suppress, reference = new { reference.Result, reference.Context }, canonical = new { canonical.Result, canonical.Context },
-                scope = suppress ? "Task.Run flow suppression representative" : "synchronous actual SynchronizationContext identity representative", candidateOnly = true, productionEnabled = false }));
+            System.Text.Json.JsonSerializer.Serialize(new
+            {
+                suppress,
+                reference = new { reference.Result, reference.Context },
+                canonical = new { canonical.Result, canonical.Context },
+                scope = suppress ? "Task.Run flow suppression representative" : "synchronous actual SynchronizationContext identity representative",
+                candidateOnly = true,
+                productionEnabled = false
+            }));
     }
 
     [Fact]
@@ -166,7 +188,14 @@ public sealed partial class GeneratorTests
         p.PendingGate.Complete(true); await Assert.ThrowsAsync<ObjectDisposedException>(async () => await task.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.True(task.IsFaulted); Assert.Equal(2, p.Created.Count); Assert.Equal(2, p.Released.Count); Assert.Equal(1, p.SourceDisposals);
         Assert.Equal(1, p.PendingGate.Consumptions); await cursor.DisposeAsync(); Assert.False(await cursor.MoveNextAsync());
-        StreamGenericEvidence("active-scope-violation", new { stoppedAtNextDI = true, created = p.Created.Count, releasedByScope = p.Released.Count,
-            p.SourceDisposals, sourceConsumed = p.PendingGate.Consumptions, safeScopeEscapeGuaranteed = false });
+        StreamGenericEvidence("active-scope-violation", new
+        {
+            stoppedAtNextDI = true,
+            created = p.Created.Count,
+            releasedByScope = p.Released.Count,
+            p.SourceDisposals,
+            sourceConsumed = p.PendingGate.Consumptions,
+            safeScopeEscapeGuaranteed = false
+        });
     }
 }

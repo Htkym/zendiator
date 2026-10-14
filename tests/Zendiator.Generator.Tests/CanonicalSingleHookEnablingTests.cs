@@ -6,10 +6,14 @@ namespace Zendiator.Generator.Tests;
 public sealed partial class GeneratorTests
 {
     [Theory]
-    [InlineData(false, "default")] [InlineData(true, "default")]
-    [InlineData(false, "static")] [InlineData(true, "static")]
-    [InlineData(false, "default-static")] [InlineData(true, "default-static")]
-    [InlineData(false, "inferred")] [InlineData(true, "inferred")]
+    [InlineData(false, "default")]
+    [InlineData(true, "default")]
+    [InlineData(false, "static")]
+    [InlineData(true, "static")]
+    [InlineData(false, "default-static")]
+    [InlineData(true, "default-static")]
+    [InlineData(false, "inferred")]
+    [InlineData(true, "inferred")]
     public void Enabled_single_Hook_public_registration_forms_compile_and_match_reference(bool isVoid, string form)
     {
         var named = form is not ("default" or "default-static"); var extension = form is not ("static" or "default-static");
@@ -25,7 +29,8 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Unaccepted_async_single_Hook_public_API_keeps_ZEN0037_and_emits_no_backend(bool isVoid)
     {
         var source = SingleHookBackendSource(isVoid, "async").Replace("ISyncRequest", "IRequest").Replace("DispatchFamily.SendSync", "DispatchFamily.SendAsync");
@@ -34,7 +39,7 @@ public sealed partial class GeneratorTests
             source.Replace("int IRequestHandler<Ping,int>.Handle(Ping request,CancellationToken token) { return _probe.Handle(request,token); }",
                 "global::System.Threading.Tasks.ValueTask<int> IRequestHandler<Ping,int>.HandleAsync(Ping request,CancellationToken token)=>global::System.Threading.Tasks.ValueTask.FromResult(_probe.Handle(request,token));");
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "UnacceptedAsyncHook" + isVoid), out var output, out var diagnostics);
-        AssertAcceptedSendEmission(driver,diagnostics,global::Zendiator.SourceGenerator.BoundDispatchFamily.SendAsync,isVoid);
+        AssertAcceptedSendEmission(driver, diagnostics, global::Zendiator.SourceGenerator.BoundDispatchFamily.SendAsync, isVoid);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
     }

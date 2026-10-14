@@ -111,7 +111,8 @@ public sealed partial class GeneratorTests
         services.Add(ServiceDescriptor.Describe(typeof(ReferenceVoidHandler), typeof(ReferenceVoidHandler), lifetime));
         var factory = fixture?.Service ?? (isVoid ? owned ? typeof(OwnedHookReferenceFactory<ReferenceVoidRequest, VoidHookSession>) : typeof(BorrowedHookReferenceFactory<ReferenceVoidRequest, VoidHookSession>) :
             owned ? typeof(OwnedHookReferenceFactory<ReferenceResponseRequest, ResponseHookSession>) : typeof(BorrowedHookReferenceFactory<ReferenceResponseRequest, ResponseHookSession>));
-        Func<IServiceProvider, object> resolve = fixture != null ? fixture.ResolveService.CreateDelegate<Func<IServiceProvider, object>>() : provider => {
+        Func<IServiceProvider, object> resolve = fixture != null ? fixture.ResolveService.CreateDelegate<Func<IServiceProvider, object>>() : provider =>
+        {
             probe.Core.Phases.Add("factory.resolve"); if (probe.DiError is { } error) throw error; if (probe.NullFactory) return null!;
             var dependency = provider.GetRequiredService<HookFactoryDependency>();
             return isVoid ? owned ? new OwnedHookReferenceFactory<ReferenceVoidRequest, VoidHookSession>(probe, dependency, () => new(probe)) :
@@ -260,14 +261,30 @@ public sealed partial class GeneratorTests
                     Assert.Equal(scenario is "pre-cancel" or "cancel-in-before" or "cancel-in-factory" or "cancel-in-handler" or "cancel-in-after" or "cancel-in-finally" or "cancel-in-dispose", token.IsCancellationRequested);
                     Assert.Equal(owned && hasCallbacks ? "session.dispose" : hasCallbacks ? "finally" : enteredFactory ? "factory" : "caller", ReferenceSendProbe.Ambient.Value);
                     Assert.Equal(owned && hasCallbacks ? "ko-KR" : hasCallbacks ? "de-DE" : enteredFactory ? "it-IT" : "", CultureInfo.CurrentCulture.Name);
-                    var observation = new {
-                        owned, isVoid, scenario, golden, trace = core.Phases.ToArray(), actual.Result, errorType = actual.Error?.GetType().FullName,
-                        exceptionIdentityPreserved = escaping == null || ReferenceEquals(escaping, actual.Error), observerIdentityPreserved = ReferenceEquals(expectedObserved, core.ObservedError),
-                        success = core.Exit?.Success, exitErrorIdentityPreserved = ReferenceEquals(core.ObserverError ?? expectedObserved, core.Exit?.Error),
+                    var observation = new
+                    {
+                        owned,
+                        isVoid,
+                        scenario,
+                        golden,
+                        trace = core.Phases.ToArray(),
+                        actual.Result,
+                        errorType = actual.Error?.GetType().FullName,
+                        exceptionIdentityPreserved = escaping == null || ReferenceEquals(escaping, actual.Error),
+                        observerIdentityPreserved = ReferenceEquals(expectedObserved, core.ObservedError),
+                        success = core.Exit?.Success,
+                        exitErrorIdentityPreserved = ReferenceEquals(core.ObserverError ?? expectedObserved, core.Exit?.Error),
                         calls = core.Calls.Select(call => new { call.Phase, effectiveRequestPreserved = ReferenceEquals(call.Phase == "before" ? request : saved, call.Request), tokenPreserved = call.Token == token, call.Ambient, call.Culture }),
                         sessionCalls = probe.Calls.Select(call => new { call.Phase, call.Ambient, call.Culture }),
-                        createdSessions = probe.Created.Count, operationReleasedSessions = probe.Released.Count, core.HandlerDisposals, probe.FactoryDisposals, probe.DependencyDisposals, probe.PartialDisposals,
-                        ambient = ReferenceSendProbe.Ambient.Value, culture = CultureInfo.CurrentCulture.Name, token.IsCancellationRequested
+                        createdSessions = probe.Created.Count,
+                        operationReleasedSessions = probe.Released.Count,
+                        core.HandlerDisposals,
+                        probe.FactoryDisposals,
+                        probe.DependencyDisposals,
+                        probe.PartialDisposals,
+                        ambient = ReferenceSendProbe.Ambient.Value,
+                        culture = CultureInfo.CurrentCulture.Name,
+                        token.IsCancellationRequested
                     };
                     snapshot = JsonSerializer.Serialize(observation);
                     if (fixture == null) WriteNestedHookEvidence("hook-session-reference", owned + "-" + isVoid + "-" + scenario, observation);
@@ -281,8 +298,15 @@ public sealed partial class GeneratorTests
             foreach (var hook in probe.Borrowed) hook.Dispose();
             Assert.Equal(probe.Created.Count, probe.Released.Count);
             Assert.All(probe.Created, hook => Assert.Single(probe.Released, item => ReferenceEquals(item, hook)));
-            return JsonSerializer.Serialize(new { operation = JsonSerializer.Deserialize<JsonElement>(snapshot), finalTrace = core.Phases.ToArray(),
-                core.HandlerDisposals, probe.FactoryDisposals, probe.DependencyDisposals, finalOwnerReleasedSessions = probe.Released.Count });
+            return JsonSerializer.Serialize(new
+            {
+                operation = JsonSerializer.Deserialize<JsonElement>(snapshot),
+                finalTrace = core.Phases.ToArray(),
+                core.HandlerDisposals,
+                probe.FactoryDisposals,
+                probe.DependencyDisposals,
+                finalOwnerReleasedSessions = probe.Released.Count
+            });
         }
         finally { core.Cancellation.Dispose(); ReferenceSendProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; }
         static bool goldenFactoryCaptured(string scenario) => scenario is not ("null-request" or "pre-cancel" or "stage-di-error" or "factory-di-null" or "factory-ctor-error");
@@ -334,9 +358,20 @@ public sealed partial class GeneratorTests
             Assert.Equal(4, probe.Created.Distinct(ReferenceEqualityComparer.Instance).Count());
             foreach (var hook in probe.Borrowed) hook.Dispose();
             Assert.Equal(4, probe.Released.Count); Assert.All(probe.Created, hook => Assert.Single(probe.Released, item => ReferenceEquals(item, hook)));
-            var observation = new {
-                owned, isVoid, lifetime = lifetime.ToString(), trace = core.Phases.ToArray(), services, core.HandlerDisposals, probe.FactoryDisposals,
-                probe.Dependencies, probe.DependencyDisposals, createdSessions = probe.Created.Count, operationReleasedSessions = owned ? 4 : 0, finalOwnerReleasedSessions = probe.Released.Count
+            var observation = new
+            {
+                owned,
+                isVoid,
+                lifetime = lifetime.ToString(),
+                trace = core.Phases.ToArray(),
+                services,
+                core.HandlerDisposals,
+                probe.FactoryDisposals,
+                probe.Dependencies,
+                probe.DependencyDisposals,
+                createdSessions = probe.Created.Count,
+                operationReleasedSessions = owned ? 4 : 0,
+                finalOwnerReleasedSessions = probe.Released.Count
             };
             if (fixture == null) WriteNestedHookEvidence("hook-session-reference-lifetimes", owned + "-" + isVoid + "-" + lifetime, observation);
             return JsonSerializer.Serialize(observation);

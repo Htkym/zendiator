@@ -101,8 +101,14 @@ public sealed partial class GeneratorTests
         using var api = new CancellationTokenSource(); using var enumeration = new CancellationTokenSource();
         var input = new OpenAsyncRuntimeItem { Number = 1 }; var mapped = new OpenAsyncRuntimeItem { Number = 2 };
         var request = Activator.CreateInstance(fixture.Request, input)!;
-        var p = new CanonicalOpenAsyncRuntimeProbe<OpenAsyncRuntimeItem> { Request = request, Input = input, Mapped = mapped,
-            Distractor = new() { Number = 9 }, SourceCurrent = input };
+        var p = new CanonicalOpenAsyncRuntimeProbe<OpenAsyncRuntimeItem>
+        {
+            Request = request,
+            Input = input,
+            Mapped = mapped,
+            Distractor = new() { Number = 9 },
+            SourceCurrent = input
+        };
         var collection = new ServiceCollection(); collection.AddSingleton(p);
         foreach (var type in fixture.Definitions) collection.AddScoped(type, type); // Actual open-generic DI registrations, no factory bypass.
         using var provider = collection.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true }); using var scope = provider.CreateScope();

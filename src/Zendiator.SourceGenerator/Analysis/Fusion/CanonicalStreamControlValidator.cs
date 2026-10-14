@@ -28,7 +28,7 @@ internal static class CanonicalStreamControlValidator
 
     internal static EquatableArray<CanonicalExecutionGraphFact> Validate(BoundPipelineModel route, CanonicalStreamExecutionSchedule candidate) =>
         Validate(new StreamSegmentContract(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages)
-            { SourceSessions = route.Handlers[0].Sessions }, candidate);
+        { SourceSessions = route.Handlers[0].Sessions }, candidate);
 
     internal static EquatableArray<CanonicalExecutionGraphFact> Validate(StreamSegmentContract contract, CanonicalStreamExecutionSchedule candidate)
     {
@@ -128,7 +128,8 @@ internal static class CanonicalStreamControlValidator
 
         StreamOutcome[] Outcomes(StreamSiteId id, Path s)
         {
-            bool? decision = id.Phase switch {
+            bool? decision = id.Phase switch
+            {
                 StreamPhase.Stopped => s.Life.Ended || s.Life.Disposed,
                 StreamPhase.Started => s.Life.Started,
                 StreamPhase.HookCached => HasService(s.Life, id.Stage),
@@ -137,7 +138,8 @@ internal static class CanonicalStreamControlValidator
                 StreamPhase.SessionPresent => Has(s.DetachedSessions, id.Stage),
                 StreamPhase.CurrentGuard => s.Life.Cache && !s.Busy && !s.Life.Ended && !s.Life.Disposed,
                 StreamPhase.AlreadyDisposed => s.Life.Disposed,
-                StreamPhase.DisposeResult => s.Failure, _ => null
+                StreamPhase.DisposeResult => s.Failure,
+                _ => null
             };
             if (decision != null) return new[] { decision.Value ? StreamOutcome.True : StreamOutcome.False };
             if (id.Phase is StreamPhase.MoveGuard or StreamPhase.DisposeGuard) return new[] { s.Busy ? StreamOutcome.Failure : StreamOutcome.Success };
@@ -190,8 +192,14 @@ internal static class CanonicalStreamControlValidator
                     return s with { ValidatedSessions = failed ? s.ValidatedSessions : s.ValidatedSessions + "|" + id.Stage + "|", Failure = failed };
                 case StreamPhase.CommitSession:
                     Need(Has(s.ValidatedSessions, id.Stage) && !s.Failure, "OwnershipTransferredBeforeNonNullSessionValidation");
-                    return s with { Life = life with { LiveSessions = life.LiveSessions + "|" + id.Stage + "|",
-                        Resolved = id.Stage < 0 ? life.Resolved : life.Resolved + "|" + id.Stage + "|" } };
+                    return s with
+                    {
+                        Life = life with
+                        {
+                            LiveSessions = life.LiveSessions + "|" + id.Stage + "|",
+                            Resolved = id.Stage < 0 ? life.Resolved : life.Resolved + "|" + id.Stage + "|"
+                        }
+                    };
                 case StreamPhase.SourceFactory:
                 case StreamPhase.WrapperFactory:
                     Need(s.Handler && !s.Enumerable && !s.Failure, "SourceFactoryBeforeResolveOrRepeated"); return s with { Enumerable = !failed, Failure = failed };
@@ -206,8 +214,17 @@ internal static class CanonicalStreamControlValidator
                     return s with { SourceGuard = !failed, Failure = failed };
                 case StreamPhase.SourceMove:
                     Need(s.SourceGuard && life.Started && life.Source && !s.Failure, "SourceMoveWithoutFreshCancellationGuard");
-                    return s with { SourceGuard = false, SourceCompleted = true, SourceSuccess = outcome == StreamOutcome.True, CurrentRead = false, NextStage = 0,
-                        GuardedStage = -1, Cached = false, Failure = failed };
+                    return s with
+                    {
+                        SourceGuard = false,
+                        SourceCompleted = true,
+                        SourceSuccess = outcome == StreamOutcome.True,
+                        CurrentRead = false,
+                        NextStage = 0,
+                        GuardedStage = -1,
+                        Cached = false,
+                        Failure = failed
+                    };
                 case StreamPhase.SourceCurrent:
                     Need(s.SourceSuccess && !s.CurrentRead && !s.Failure, "SourceCurrentWithoutSuccessfulMoveOrRepeated");
                     return s with { CurrentRead = !failed, Failure = failed };
@@ -267,8 +284,11 @@ internal static class CanonicalStreamControlValidator
                 case StreamPhase.DetachSession:
                     Need(id.Program == StreamProgram.Move ? s.StartupDetached && !life.Started : s.SourceDetached && s.LinkDetached && s.DisposeBegan,
                         "SessionDetachOutsideStartupFailureOrDispose");
-                    return s with { DetachedSessions = Has(life.LiveSessions, id.Stage) ? s.DetachedSessions + "|" + id.Stage + "|" : s.DetachedSessions,
-                        Life = life with { LiveSessions = life.LiveSessions.Replace("|" + id.Stage + "|", "") } };
+                    return s with
+                    {
+                        DetachedSessions = Has(life.LiveSessions, id.Stage) ? s.DetachedSessions + "|" + id.Stage + "|" : s.DetachedSessions,
+                        Life = life with { LiveSessions = life.LiveSessions.Replace("|" + id.Stage + "|", "") }
+                    };
                 case StreamPhase.SessionPresent:
                     Need(life.LiveSessions.Length == 0, "SessionCleanupBeforeAllLeasesDetached"); return s;
                 case StreamPhase.CleanupSession:
@@ -301,7 +321,8 @@ internal static class CanonicalStreamControlValidator
         void CheckExit(StreamSiteId id, Path s)
         {
             var life = s.Life;
-            bool valid = id.Phase switch {
+            bool valid = id.Phase switch
+            {
                 StreamPhase.NullFailure => s.Failure && !s.EnvelopeCreated,
                 StreamPhase.EnvelopeReturn => s.EnvelopeCreated && s.NullChecked,
                 StreamPhase.CursorReturn => s.CursorCreated && !life.Started && !life.Source && !life.Link,
@@ -323,11 +344,16 @@ internal static class CanonicalStreamControlValidator
         }
     }
     private static bool HasService(Lifecycle life, int stage) => life.Resolved.Contains("|" + stage + "|");
-    private static StreamSiteId Entry(StreamProgram program) => Id(program, program switch {
-        StreamProgram.Create => StreamPhase.NullGuard, StreamProgram.GetEnumerator => StreamPhase.CreateCursor,
-        StreamProgram.Move => StreamPhase.MoveGuard, StreamProgram.Current => StreamPhase.CurrentGuard, _ => StreamPhase.DisposeGuard
+    private static StreamSiteId Entry(StreamProgram program) => Id(program, program switch
+    {
+        StreamProgram.Create => StreamPhase.NullGuard,
+        StreamProgram.GetEnumerator => StreamPhase.CreateCursor,
+        StreamProgram.Move => StreamPhase.MoveGuard,
+        StreamProgram.Current => StreamPhase.CurrentGuard,
+        _ => StreamPhase.DisposeGuard
     });
-    private static StreamOutcome[] AllOutcomes(StreamPhase phase) => phase switch {
+    private static StreamOutcome[] AllOutcomes(StreamPhase phase) => phase switch
+    {
         StreamPhase.NullFailure or StreamPhase.EnvelopeReturn or StreamPhase.CursorReturn or StreamPhase.MoveTrue or StreamPhase.MoveFalse or
             StreamPhase.MoveFailure or StreamPhase.BusyFailure or StreamPhase.ReadCache or StreamPhase.CurrentFailure or
             StreamPhase.DisposeSuccess or StreamPhase.DisposeFailure => Array.Empty<StreamOutcome>(),

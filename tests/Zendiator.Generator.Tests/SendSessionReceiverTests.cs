@@ -47,7 +47,7 @@ public sealed partial class GeneratorTests
         string family, bool owned, bool asyncFactory, bool wrapper, bool isVoid)
     {
         var source = SendReceiverFixture(family, owned, asyncFactory, wrapper, isVoid);
-        var driver = family is "SendSync" or "SendAsync" ? BindAcceptedSendLists(source) : BindLists(source,"ZEN0037");
+        var driver = family is "SendSync" or "SendAsync" ? BindAcceptedSendLists(source) : BindLists(source, "ZEN0037");
         var graph = Graph(driver);
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         var schedule = graph.Schedule!;
@@ -74,7 +74,8 @@ public sealed partial class GeneratorTests
             Assert.Equal(!owned, owner.Borrowed);
             Assert.Equal(owned, schedule.SessionCalls.Any(c => c.At == SessionSite(branch, 0, 0, SendExecutionPhase.CleanupSession)));
         }
-        Assert.All(schedule.Owners.Where(o => o.Kind == SendOwnerKind.Service), o => {
+        Assert.All(schedule.Owners.Where(o => o.Kind == SendOwnerKind.Service), o =>
+        {
             Assert.True(o.Borrowed); Assert.Equal(FusionCleanupKind.None, o.Cleanup);
         });
         Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.Contains("Reads"));
@@ -126,7 +127,8 @@ public sealed partial class GeneratorTests
         var graph = Graph(BindAcceptedSendLists(SendReceiverFixture("SendAsync", asyncFactory: true, fullHook: true)));
         var original = graph.Schedule!;
         var resource = Session(0, 0, 0);
-        var candidate = mutation switch {
+        var candidate = mutation switch
+        {
             "factory-receiver" => original with { CallbackReceivers = new(original.CallbackReceivers.Select(c => c with { Receiver = Service(0, 0) + "/resolved" })) },
             "factory-result-receiver" => original with { CallbackReceivers = new(original.CallbackReceivers.Select(c => c with { Receiver = resource + "/factory-result" })) },
             "other-session-receiver" => original with { CallbackReceivers = new(original.CallbackReceivers.Select(c => c with { Receiver = Session(0, 1, 0) + "/live" })) },
@@ -140,8 +142,11 @@ public sealed partial class GeneratorTests
             "acquire-result-slot" => original with { SessionCalls = new(original.SessionCalls.Select(c => c.At.Phase == SendExecutionPhase.AcquireSession ? c with { Result = "other/result" } : c)) },
             "retain-result-alias" => original with { SessionTransfers = new(original.SessionTransfers.Where(t => !(t.At.Phase == SendExecutionPhase.CommitSession && t.Source == "null"))) },
             "pending-factory-lost" => original with { Awaits = new(original.Awaits.Select(a => a with { RetainedSlots = new(a.RetainedSlots.Where(s => s != Service(0, 0) + "/resolved")) })) },
-            "pending-body-lease-lost" => original with { Awaits = new(original.Awaits.Select(a => a.Producer.Phase == SendExecutionPhase.Finally
-                ? a with { RetainedSlots = new(a.RetainedSlots.Where(s => s != resource + "/live")) } : a)) },
+            "pending-body-lease-lost" => original with
+            {
+                Awaits = new(original.Awaits.Select(a => a.Producer.Phase == SendExecutionPhase.Finally
+                ? a with { RetainedSlots = new(a.RetainedSlots.Where(s => s != resource + "/live")) } : a))
+            },
             _ => throw new ArgumentOutOfRangeException(nameof(mutation))
         };
         Assert.Equal(original.Sites, candidate.Sites);
@@ -174,11 +179,15 @@ public sealed partial class GeneratorTests
         var cleanup = SessionSite(0, 0, 0, SendExecutionPhase.CleanupSession);
         var result = Point(owner, SessionSite(0, 0, -1, SendExecutionPhase.SessionResult));
         var candidate = ChangeControl(original, owner, e => e.From.Site?.Phase == SendExecutionPhase.DetachSession ? e with { To = Point(owner, cleanup) } : e);
-        candidate = candidate with {
+        candidate = candidate with
+        {
             SessionCalls = new(candidate.SessionCalls.Append(new(cleanup, Session(0, 0, 0) + "/detached", null, true, true, false))),
-            ControlFlows = new(candidate.ControlFlows.Select(f => f.Owner != owner ? f : f with { Edges = new(f.Edges.Concat(new[] {
+            ControlFlows = new(candidate.ControlFlows.Select(f => f.Owner != owner ? f : f with
+            {
+                Edges = new(f.Edges.Concat(new[] {
                 new SendControlEdge(Point(owner, cleanup), result, SendControlOutcome.Success, SendControlPredicate.Any),
-                new SendControlEdge(Point(owner, cleanup), result, SendControlOutcome.Failure, SendControlPredicate.Any) })) }))
+                new SendControlEdge(Point(owner, cleanup), result, SendControlOutcome.Failure, SendControlPredicate.Any) }))
+            }))
         };
         Assert.Contains(CanonicalSendSessionValidator.Validate(graph.Contract, candidate), f => f.Reason == "BorrowedResourceDisposedByOperation");
     }

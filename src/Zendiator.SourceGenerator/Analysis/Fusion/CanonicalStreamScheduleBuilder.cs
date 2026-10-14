@@ -7,7 +7,7 @@ namespace Zendiator.SourceGenerator;
 internal static class CanonicalStreamScheduleBuilder
 {
     internal static CanonicalStreamExecutionSchedule Build(BoundPipelineModel route) => Build(new StreamSegmentContract(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages)
-        { SourceSessions = route.Handlers[0].Sessions });
+    { SourceSessions = route.Handlers[0].Sessions });
 
     internal static CanonicalStreamExecutionSchedule Build(StreamSegmentContract contract)
     {

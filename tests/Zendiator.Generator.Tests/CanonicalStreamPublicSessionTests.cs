@@ -46,9 +46,11 @@ public sealed partial class GeneratorTests
             foreach (var file in generated) File.WriteAllText(Path.Combine(inputFolder, file.HintName), file.SourceText.ToString());
             File.WriteAllText(Path.Combine(inputFolder, "compile.json"), System.Text.Json.JsonSerializer.Serialize(new
             {
-                emitted.Success, composition = Selection(driver),
+                emitted.Success,
+                composition = Selection(driver),
                 diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
-                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }), sources = generated.Select(f => f.HintName)
+                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
+                sources = generated.Select(f => f.HintName)
             }));
         }
         Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error));
@@ -114,10 +116,24 @@ public sealed partial class GeneratorTests
             var folder = PublicSessionFolder(profile);
             if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), System.Text.Json.JsonSerializer.Serialize(new
             {
-                profile, values, enumerations = count, created = expectedCreated, distinctSessionInstances = probe.Instances.Distinct(ReferenceEqualityComparer.Instance).Count(),
-                probe.Starts, probe.Moves, probe.Reads, probe.SourceDisposals, probe.SessionDisposals,
-                getResults = probe.Consumptions.Select(c => c()), borrowedServiceDisposalsBeforeScope = 0, borrowedServiceDisposalsAfterScope = probe.ServiceDisposals,
-                factoryErrorIdentity, lazyBeforeMove = true, ownedHeldUntilCursorDispose = profile == "reenumerate", eventsBeforeScope = beforeScope, events = probe.Events
+                profile,
+                values,
+                enumerations = count,
+                created = expectedCreated,
+                distinctSessionInstances = probe.Instances.Distinct(ReferenceEqualityComparer.Instance).Count(),
+                probe.Starts,
+                probe.Moves,
+                probe.Reads,
+                probe.SourceDisposals,
+                probe.SessionDisposals,
+                getResults = probe.Consumptions.Select(c => c()),
+                borrowedServiceDisposalsBeforeScope = 0,
+                borrowedServiceDisposalsAfterScope = probe.ServiceDisposals,
+                factoryErrorIdentity,
+                lazyBeforeMove = true,
+                ownedHeldUntilCursorDispose = profile == "reenumerate",
+                eventsBeforeScope = beforeScope,
+                events = probe.Events
             }));
         }
     }

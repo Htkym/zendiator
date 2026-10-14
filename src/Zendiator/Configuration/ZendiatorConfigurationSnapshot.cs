@@ -105,7 +105,7 @@ public sealed class ZendiatorConfigurationSnapshot
         if (Behaviors is StreamValidatorRegistrations validators)
             parts.Add("streamValidators=" + string.Join(",", validators.Validators.Select(static entry =>
                 entry.Order.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + entry.ValidatorType)));
-        if (CatalogMarkers.Count != 0)parts.Add("catalogs="+string.Join(",",CatalogMarkers.Select(static type=>type.Assembly.FullName).OrderBy(static identity=>identity,StringComparer.Ordinal)));
+        if (CatalogMarkers.Count != 0) parts.Add("catalogs=" + string.Join(",", CatalogMarkers.Select(static type => type.Assembly.FullName).OrderBy(static identity => identity, StringComparer.Ordinal)));
         if (UseLocalHandlers || Handlers.Count != 0)
             parts.Add("localHandlers=" + UseLocalHandlers + ";handlers=" + string.Join(",", Handlers));
         if (Pipelines.Count != 0)

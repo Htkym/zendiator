@@ -50,18 +50,40 @@ public sealed partial class GeneratorTests
     private static async Task RunWrapperRetry(string? id)
     {
         if (!string.IsNullOrEmpty(id) && id != WrapperRetryProfile) throw new ArgumentException("Choose the single fixed retry profile.", nameof(id));
-        WriteWrapperRetryArtifact("profile.json", new { id = WrapperRetryProfile, cases = 1, input = new[] { 1 },
-            outerEnumerationsPerSeries = 1, firstFailureInvocation = 2, failurePosition = "first source Move,ValueTask.FromException",
-            reopenAfterExplicitDispose = true, series = new[] { "reference", "canonical" }, candidateOnly = true, productionEnabled = false });
+        WriteWrapperRetryArtifact("profile.json", new
+        {
+            id = WrapperRetryProfile,
+            cases = 1,
+            input = new[] { 1 },
+            outerEnumerationsPerSeries = 1,
+            firstFailureInvocation = 2,
+            failurePosition = "first source Move,ValueTask.FromException",
+            reopenAfterExplicitDispose = true,
+            series = new[] { "reference", "canonical" },
+            candidateOnly = true,
+            productionEnabled = false
+        });
         var fixture = FallbackFixtureFor("wrapper-retry"); Assert.Null(fixture.Fused);
         var reference = await RunWrapperRetryBranch(fixture, "reference");
         var canonical = await RunWrapperRetryBranch(fixture, "canonical");
-        WriteWrapperRetryArtifact("comparison.json", new { profile = WrapperRetryProfile, reference, canonical,
-            candidateOnly = true, productionEnabled = false, scope = "one synchronous source fault/catch/close/reopen" });
+        WriteWrapperRetryArtifact("comparison.json", new
+        {
+            profile = WrapperRetryProfile,
+            reference,
+            canonical,
+            candidateOnly = true,
+            productionEnabled = false,
+            scope = "one synchronous source fault/catch/close/reopen"
+        });
         Assert.Equal(reference.Values, canonical.Values); Assert.Equal(reference.Events, canonical.Events);
         Assert.Equal(reference.UpstreamOperations, canonical.UpstreamOperations); Assert.Equal(reference.OuterOperations, canonical.OuterOperations);
-        Assert.Equal(reference with { Values = canonical.Values, Events = canonical.Events,
-            UpstreamOperations = canonical.UpstreamOperations, OuterOperations = canonical.OuterOperations }, canonical);
+        Assert.Equal(reference with
+        {
+            Values = canonical.Values,
+            Events = canonical.Events,
+            UpstreamOperations = canonical.UpstreamOperations,
+            OuterOperations = canonical.OuterOperations
+        }, canonical);
         CheckWrapperRetry(reference); CheckWrapperRetry(canonical);
     }
     private static void WriteWrapperRetryArtifact(string name, object data)
@@ -74,8 +96,14 @@ public sealed partial class GeneratorTests
     private static async Task<WrapperRetryResult> RunWrapperRetryBranch(FallbackFixture fixture, string backend)
     {
         using var api = new CancellationTokenSource(); using var firstToken = new CancellationTokenSource(); using var secondToken = new CancellationTokenSource();
-        var probe = new CanonicalStreamWrapperEventProbe { ApiToken = api.Token, FirstToken = firstToken.Token, SecondToken = secondToken.Token,
-            Input = [1], FailInvocation = 2 };
+        var probe = new CanonicalStreamWrapperEventProbe
+        {
+            ApiToken = api.Token,
+            FirstToken = firstToken.Token,
+            SecondToken = secondToken.Token,
+            Input = [1],
+            FailInvocation = 2
+        };
         var request = Activator.CreateInstance(fixture.Request, [1])!;
         var services = new ServiceCollection(); var roles = new[] { "H", "F1", "W", "F2" };
         for (var i = 0; i < fixture.Services.Length; i++)
@@ -112,9 +140,20 @@ public sealed partial class GeneratorTests
         }
         finally
         {
-            WriteWrapperRetryArtifact(backend + ".json", new { profile = WrapperRetryProfile, backend, complete, values,
-                events = probe.Snapshot(), upstreamOperations = probe.OperationSnapshot(), outerOperations = operations,
-                probe.Starts, probe.Moves, probe.Reads, probe.Disposals });
+            WriteWrapperRetryArtifact(backend + ".json", new
+            {
+                profile = WrapperRetryProfile,
+                backend,
+                complete,
+                values,
+                events = probe.Snapshot(),
+                upstreamOperations = probe.OperationSnapshot(),
+                outerOperations = operations,
+                probe.Starts,
+                probe.Moves,
+                probe.Reads,
+                probe.Disposals
+            });
         }
     }
     private static void CheckWrapperRetry(WrapperRetryResult result)
@@ -123,8 +162,11 @@ public sealed partial class GeneratorTests
         Assert.Equal(1, result.Reads); Assert.Equal(2, result.Disposals);
         var events = result.Events;
         Assert.Equal(new[] { 2, 3 }, events.Where(e => e.Kind == "UpstreamOpen").Select(e => e.Invocation));
-        Assert.All(events, e => { Assert.Equal(e.Invocation == 1 ? 0 : 1, e.ParentInvocation);
-            Assert.Equal(e.Invocation == 1 ? 1 : 2, e.Request); Assert.Equal(e.Invocation, e.Token); });
+        Assert.All(events, e =>
+        {
+            Assert.Equal(e.Invocation == 1 ? 0 : 1, e.ParentInvocation);
+            Assert.Equal(e.Invocation == 1 ? 1 : 2, e.Request); Assert.Equal(e.Invocation, e.Token);
+        });
         var failure = Assert.Single(events, e => e.Kind == "Throw"); Assert.Equal(2, failure.Invocation); Assert.Equal("H.Move", failure.Stage);
         Assert.Equal(0, failure.Sequence); Assert.Equal(1, failure.Error); Assert.Equal("System.FormatException", failure.ErrorType);
         var caught = Assert.Single(events, e => e.Kind == "WrapperCatch"); Assert.Equal(1, caught.Invocation); Assert.Equal(2, caught.RelatedInvocation);

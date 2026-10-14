@@ -99,8 +99,15 @@ public sealed partial class GeneratorTests
                 var folder = Path.Combine(evidence, "stream-generic", key); Directory.CreateDirectory(folder);
                 File.WriteAllText(Path.Combine(folder, "input.cs"), source); File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
                 foreach (var file in driver.GetRunResult().Results.Single().GeneratedSources) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
-                File.WriteAllText(Path.Combine(folder, "closure.json"), System.Text.Json.JsonSerializer.Serialize(new { emitted.Success, kind = connection.Kind.ToString(),
-                    handlers = route.Handlers.Select(h => h.Name), stages = route.Stages.Select(s => s.Name), candidateOnly = true, productionEnabled = false }));
+                File.WriteAllText(Path.Combine(folder, "closure.json"), System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    emitted.Success,
+                    kind = connection.Kind.ToString(),
+                    handlers = route.Handlers.Select(h => h.Name),
+                    stages = route.Stages.Select(s => s.Name),
+                    candidateOnly = true,
+                    productionEnabled = false
+                }));
             }
             bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var t = item == "int" ? typeof(int) : item == "long" ? typeof(long) : typeof(string);
             var names = wrapper ? new[] { "GenericHandler`1", "GenericFirst`1", "GenericWrapper`1", "GenericLast`1" } : new[] { "GenericHandler`1", "GenericFirst`1", "GenericMap`1", "GenericLast`1" };
@@ -128,8 +135,11 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData("int", false, false)] [InlineData("long", false, false)] [InlineData("string", false, false)]
-    [InlineData("int", true, false)] [InlineData("int", false, true)]
+    [InlineData("int", false, false)]
+    [InlineData("long", false, false)]
+    [InlineData("string", false, false)]
+    [InlineData("int", true, false)]
+    [InlineData("int", false, true)]
     public async Task Stream_generic_definitions_close_to_typed_fused_or_canonical_routes(string item, bool wrapper, bool local)
     {
         var f = StreamGenericFixtureFor(item, wrapper, local); var p = new StreamGenericScopeProbe(); IServiceCollection collection = new ServiceCollection(); collection.AddSingleton(p);
@@ -141,7 +151,9 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData(ServiceLifetime.Transient, false)] [InlineData(ServiceLifetime.Scoped, false)] [InlineData(ServiceLifetime.Singleton, false)]
+    [InlineData(ServiceLifetime.Transient, false)]
+    [InlineData(ServiceLifetime.Scoped, false)]
+    [InlineData(ServiceLifetime.Singleton, false)]
     [InlineData(ServiceLifetime.Scoped, true)]
     public async Task Stream_generic_cursor_caches_preserve_provider_lifetime_and_DI_ownership(ServiceLifetime lifetime, bool wrapper)
     {
@@ -165,7 +177,8 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Stream_generic_closed_factory_override_and_disposed_provider_remain_lazy(bool wrapper)
     {
         var f = StreamGenericFixtureFor("int", wrapper); var p = new StreamGenericScopeProbe(); IServiceCollection collection = new ServiceCollection(); collection.AddSingleton(p);
@@ -185,7 +198,10 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData("unused")] [InlineData("constraints")] [InlineData("inconsistent")] [InlineData("duplicate")]
+    [InlineData("unused")]
+    [InlineData("constraints")]
+    [InlineData("inconsistent")]
+    [InlineData("duplicate")]
     public void Stream_generic_unclosable_and_invalid_constraint_inputs_keep_source_diagnostics(string failure)
     {
         var source = StreamGenericSource("int");

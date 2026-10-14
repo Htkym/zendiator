@@ -150,8 +150,16 @@ public sealed partial class GeneratorTests
                 foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
                 File.WriteAllText(Path.Combine(folder, "compile.json"), System.Text.Json.JsonSerializer.Serialize(new
                 {
-                    shape, emitted.Success, diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage(),
-                        inSource = d.Location.IsInSource, anchor = d.Location.IsInSource ? d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan) : null }),
+                    shape,
+                    emitted.Success,
+                    diagnostics = diagnostics.Select(d => new
+                    {
+                        d.Id,
+                        severity = d.Severity.ToString(),
+                        message = d.GetMessage(),
+                        inSource = d.Location.IsInSource,
+                        anchor = d.Location.IsInSource ? d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan) : null
+                    }),
                     compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
                     sources = generated.Select(f => f.HintName)
                 }));

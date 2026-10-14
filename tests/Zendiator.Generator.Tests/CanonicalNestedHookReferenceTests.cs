@@ -142,16 +142,34 @@ public sealed partial class GeneratorTests
         if (scenario == "replace-both") probe.Replacements["B"] = inner;
         if (scenario == "A-before-null") probe.Replacements["A"] = null;
         if (scenario == "B-before-null") probe.Replacements["B"] = null;
-        var directFailure = scenario switch { "A-ctor-error" => "A.ctor", "B-ctor-error" => "B.ctor", "handler-ctor-error" => "handler.ctor",
-            "A-before-error" => "A.before", "B-before-error" => "B.before", "B-after-error" => "B.after", "A-after-error" => "A.after", _ => null };
+        var directFailure = scenario switch
+        {
+            "A-ctor-error" => "A.ctor",
+            "B-ctor-error" => "B.ctor",
+            "handler-ctor-error" => "handler.ctor",
+            "A-before-error" => "A.before",
+            "B-before-error" => "B.before",
+            "B-after-error" => "B.after",
+            "A-after-error" => "A.after",
+            _ => null
+        };
         if (directFailure != null) probe.Errors[directFailure] = body;
         if (scenario is "handler-error" or "handler-oce" or "B-observer-error" or "A-observer-error" or "B-finally-error-over-body" or "B-finally-oce-over-body" or "A-finally-error-over-B-error" or "cascade-replacements") probe.Errors["handler"] = body;
         if (scenario is "B-observer-error" or "cascade-replacements") probe.Errors["B.onexception"] = bObserver;
         if (scenario is "A-observer-error" or "cascade-replacements") probe.Errors["A.onexception"] = aObserver;
         if (scenario is "B-finally-error-success" or "B-finally-error-over-body" or "B-finally-oce-over-body" or "A-finally-error-over-B-error" or "cascade-replacements") probe.Errors["B.finally"] = bFinally;
         if (scenario is "A-finally-error-over-B-error" or "cascade-replacements") probe.Errors["A.finally"] = aFinally;
-        var cancelPhase = scenario switch { "A-before-cancel" => "A.before", "B-before-cancel" => "B.before", "handler-cancel-success" => "handler",
-            "B-after-cancel-success" => "B.after", "B-finally-cancel-success" => "B.finally", "A-after-cancel-success" => "A.after", "A-finally-cancel-success" => "A.finally", _ => null };
+        var cancelPhase = scenario switch
+        {
+            "A-before-cancel" => "A.before",
+            "B-before-cancel" => "B.before",
+            "handler-cancel-success" => "handler",
+            "B-after-cancel-success" => "B.after",
+            "B-finally-cancel-success" => "B.finally",
+            "A-after-cancel-success" => "A.after",
+            "A-finally-cancel-success" => "A.finally",
+            _ => null
+        };
         if (cancelPhase != null) probe.CancelAt.Add(cancelPhase);
         if (scenario == "pre-cancel") probe.Cancellation.Cancel();
         try
@@ -244,24 +262,40 @@ public sealed partial class GeneratorTests
                 ReferenceEquals(error, bObserver) ? "B.observer" : ReferenceEquals(error, aObserver) ? "A.observer" :
                 ReferenceEquals(error, bFinally) ? "B.finally" : ReferenceEquals(error, aFinally) ? "A.finally" :
                 error is ArgumentNullException ? "guard-null" : error is OperationCanceledException ? "guard-cancel" : "unexpected:" + error.GetType().FullName;
-            return JsonSerializer.Serialize(new {
-                phases = probe.Phases.ToArray(), calls = probe.Calls.Select(c => new {
-                    c.Phase, request = RequestRole(c.Request), tokenPreserved = c.Token == token, c.Ambient, c.Culture }),
-                result, error = ErrorRole(actual), errorType = actual?.GetType().FullName, nullParameter = (actual as ArgumentNullException)?.ParamName,
+            return JsonSerializer.Serialize(new
+            {
+                phases = probe.Phases.ToArray(),
+                calls = probe.Calls.Select(c => new
+                {
+                    c.Phase,
+                    request = RequestRole(c.Request),
+                    tokenPreserved = c.Token == token,
+                    c.Ambient,
+                    c.Culture
+                }),
+                result,
+                error = ErrorRole(actual),
+                errorType = actual?.GetType().FullName,
+                nullParameter = (actual as ArgumentNullException)?.ParamName,
                 cancellationTokenPreserved = actual is not OperationCanceledException oce || oce.CancellationToken == token,
                 observed = probe.Observed.OrderBy(p => p.Key).Select(p => new { owner = p.Key, error = ErrorRole(p.Value) }),
                 exits = probe.Exits.OrderBy(p => p.Key).Select(p => new { owner = p.Key, p.Value.Success, error = ErrorRole(p.Value.Error) }),
                 disposals = probe.Disposals.OrderBy(p => p.Key).Select(p => new { owner = p.Key, count = p.Value }),
-                callerAmbient = NestedSendProbe.Ambient.Value, callerCulture = CultureInfo.CurrentCulture.Name, token.IsCancellationRequested
+                callerAmbient = NestedSendProbe.Ambient.Value,
+                callerCulture = CultureInfo.CurrentCulture.Name,
+                token.IsCancellationRequested
             });
         }
         finally { probe.Cancellation.Dispose(); NestedSendProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; }
     }
 
     [Theory]
-    [InlineData(false, ServiceLifetime.Scoped)] [InlineData(true, ServiceLifetime.Scoped)]
-    [InlineData(false, ServiceLifetime.Transient)] [InlineData(true, ServiceLifetime.Transient)]
-    [InlineData(false, ServiceLifetime.Singleton)] [InlineData(true, ServiceLifetime.Singleton)]
+    [InlineData(false, ServiceLifetime.Scoped)]
+    [InlineData(true, ServiceLifetime.Scoped)]
+    [InlineData(false, ServiceLifetime.Transient)]
+    [InlineData(true, ServiceLifetime.Transient)]
+    [InlineData(false, ServiceLifetime.Singleton)]
+    [InlineData(true, ServiceLifetime.Singleton)]
     public void Canonical_two_Hooks_SendSync_leaves_service_cleanup_to_scope_or_root(bool isVoid, ServiceLifetime lifetime)
         => RunNestedHookLifetimes(isVoid, lifetime, lifetime, lifetime);
 
@@ -310,8 +344,12 @@ public sealed partial class GeneratorTests
             }
             for (var t = 0; t < owners.Length; t++)
                 Assert.Equal(lifetimes[t] == ServiceLifetime.Singleton ? 1 : lifetimes[t] == ServiceLifetime.Scoped ? 2 : 4, probe.Disposals[owners[t]]);
-            return JsonSerializer.Serialize(new { phases = probe.Phases.ToArray(), scopeCleanup = cleanup,
-                disposals = owners.Select(owner => new { owner, count = probe.Disposals[owner] }) });
+            return JsonSerializer.Serialize(new
+            {
+                phases = probe.Phases.ToArray(),
+                scopeCleanup = cleanup,
+                disposals = owners.Select(owner => new { owner, count = probe.Disposals[owner] })
+            });
         }
         finally { probe.Cancellation.Dispose(); NestedSendProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; }
     }

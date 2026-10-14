@@ -195,7 +195,8 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Canonical_zero_Hook_SendSync_resolves_only_the_Handler(bool isVoid)
     {
         var probe = new ReferenceSendProbe(); var ambient = ReferenceSendProbe.Ambient.Value; var culture = CultureInfo.CurrentCulture;
@@ -219,7 +220,8 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Enabled_single_Hook_SendSync_public_API_compiles_and_executes_without_generator_diagnostics(bool isVoid)
     {
         var afterContract = isVoid ? "ISendSuccessObserver<Ping>" : "ISendResponseTransform<Ping,int>";

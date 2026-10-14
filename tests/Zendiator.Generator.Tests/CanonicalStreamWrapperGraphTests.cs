@@ -16,9 +16,13 @@ public sealed partial class GeneratorTests
     private static CanonicalStreamWrapperSchedule ChangeWrapper(CanonicalStreamWrapperSchedule schedule, Func<StreamWrapperProtocol, StreamWrapperProtocol> edit) =>
         schedule with { Wrappers = new(schedule.Wrappers.Select(edit)) };
     private static CanonicalStreamWrapperSchedule ChangeWrapperPath(CanonicalStreamWrapperSchedule schedule, StreamWrapperProgram program,
-        StreamWrapperPhase from, StreamWrapperOutcome outcome, StreamWrapperPhase to) => ChangeWrapper(schedule, w => w with {
-            Flows = new(w.Flows.Select(f => f.Program == program ? f with { Edges = new(f.Edges.Select(e => e.From == StreamWrapperNames.Site(program, from) && e.Outcome == outcome
-                ? e with { To = StreamWrapperNames.Site(program, to) } : e)) } : f))
+        StreamWrapperPhase from, StreamWrapperOutcome outcome, StreamWrapperPhase to) => ChangeWrapper(schedule, w => w with
+        {
+            Flows = new(w.Flows.Select(f => f.Program == program ? f with
+            {
+                Edges = new(f.Edges.Select(e => e.From == StreamWrapperNames.Site(program, from) && e.Outcome == outcome
+                ? e with { To = StreamWrapperNames.Site(program, to) } : e))
+            } : f))
         });
 
     [Fact]
@@ -57,7 +61,8 @@ public sealed partial class GeneratorTests
                 Assert.DoesNotContain(segment.Cursor.Sites, site => site.Id.Phase is StreamPhase.SourceFactory or StreamPhase.ResolveHandler);
             }
         }
-        Assert.All(s.Wrappers, w => {
+        Assert.All(s.Wrappers, w =>
+        {
             Assert.Equal(StreamMultiplicity.ZeroOrMore, w.OpenCalls); Assert.Equal(StreamMultiplicity.ZeroOrMore, w.EnumerationsPerOpen);
             Assert.True(w.BodyOpaque); Assert.False(w.BodyCleanupProven); Assert.False(w.InsertAsyncAdapter);
             Assert.Equal("wrapper-call-or-enumeration", w.OpenAvailability);
@@ -131,8 +136,14 @@ public sealed partial class GeneratorTests
         Reject(ChangeWrapper(s, w => w with { Awaits = new(w.Awaits.Append(w.Awaits[0])) }), "UnexpectedWrapperAwait");
         Reject(ChangeWrapper(s, w => w with { Awaits = new(w.Awaits.Select(a => a.Producer.Phase == StreamWrapperPhase.DisposeCursor ? a with { LastErrorReplaces = false } : a)) }), "MissingWrapperAwait");
         var outer = s.Segments[1];
-        var corrupted = outer.Cursor with { Flows = new(outer.Cursor.Flows.Select(f => f.Program == StreamProgram.Move ? f with { Edges = new(f.Edges.Select(e =>
-            e.From.Phase == StreamPhase.PreCancel && e.Outcome == StreamOutcome.Success ? e with { To = StreamExecutionNames.Id(StreamProgram.Move, StreamPhase.WrapperFactory) } : e)) } : f)) };
+        var corrupted = outer.Cursor with
+        {
+            Flows = new(outer.Cursor.Flows.Select(f => f.Program == StreamProgram.Move ? f with
+            {
+                Edges = new(f.Edges.Select(e =>
+            e.From.Phase == StreamPhase.PreCancel && e.Outcome == StreamOutcome.Success ? e with { To = StreamExecutionNames.Id(StreamProgram.Move, StreamPhase.WrapperFactory) } : e))
+            } : f))
+        };
         Reject(s with { Segments = new(s.Segments.Select(segment => segment == outer ? segment with { Cursor = corrupted } : segment)) }, "SourceFactoryBeforeResolveOrRepeated");
         void Reject(CanonicalStreamWrapperSchedule candidate, string reason) => Assert.Contains(CanonicalStreamWrapperValidator.Validate(graph.Contract, candidate), f => f.Reason == reason);
     }
@@ -145,7 +156,8 @@ public sealed partial class GeneratorTests
     {
         var source = WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()");
         var driver = BindLists(source, "ZEN0037"); var previous = Graph(driver);
-        var changed = body switch {
+        var changed = body switch
+        {
             0 => source.Replace("=> n.Open(r,c);", "=> Empty(); private static async System.Collections.Generic.IAsyncEnumerable<int> Empty() { await Task.Yield(); yield break; }"),
             1 => source.Replace("=> n.Open(r,c);", "{ n.Open(r,c); n.Open(r,c); return n.Open(r,c); }"),
             _ => source.Replace("public System.Collections.Generic.IAsyncEnumerable<int> Wrap<N>", "public async System.Collections.Generic.IAsyncEnumerable<int> Wrap<N>")
@@ -210,10 +222,17 @@ public sealed partial class GeneratorTests
     public void Original_implicit_outer_token_bug_is_rejected_by_cross_path_oracle_without_using_matching_required_tables()
     {
         var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"), "ZEN0037")); var s = graph.StreamWrapperSchedule!;
-        var oldBug = s with { Segments = new(s.Segments.Select(segment => segment.Descriptor.Contract.SourceKind == StreamSourceKind.Wrapper ? segment with {
-            Cursor = segment.Cursor with { Transfers = new(segment.Cursor.Transfers.Select(t => t.At.Phase == StreamPhase.AcquireSource && t.Destination == "source/token"
-                ? t with { Source = "cursor/start-token" } : t)) }
-        } : segment)) };
+        var oldBug = s with
+        {
+            Segments = new(s.Segments.Select(segment => segment.Descriptor.Contract.SourceKind == StreamSourceKind.Wrapper ? segment with
+            {
+                Cursor = segment.Cursor with
+                {
+                    Transfers = new(segment.Cursor.Transfers.Select(t => t.At.Phase == StreamPhase.AcquireSource && t.Destination == "source/token"
+                    ? t with { Source = "cursor/start-token" } : t))
+                }
+            } : segment))
+        };
         // This check deliberately bypasses the Required matrices that copied the bug in cc811fe.
         var result = StreamWrapperTokenFlowValidator.Trace(graph.Contract, oldBug);
         Assert.Contains(result.Facts, f => f.Reason == "ImplicitWrapperTokenRecombinedWithOpenSelection");
@@ -225,11 +244,17 @@ public sealed partial class GeneratorTests
     public void Delegated_acquisition_and_outer_hook_token_writes_are_checked_across_actual_storage_slots()
     {
         var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"), "ZEN0037")); var s = graph.StreamWrapperSchedule!;
-        var injected = ChangeWrapper(s, w => w with { Transfers = new(w.Transfers.Select(t => t.At.Program == StreamWrapperProgram.AcquireDelegatedOutput &&
-            t.Destination == w.InputSegment + "/cursor/enumerator-token" ? t with { Source = w.OutputSegment + "/cursor/start-token" } : t)) });
+        var injected = ChangeWrapper(s, w => w with
+        {
+            Transfers = new(w.Transfers.Select(t => t.At.Program == StreamWrapperProgram.AcquireDelegatedOutput &&
+            t.Destination == w.InputSegment + "/cursor/enumerator-token" ? t with { Source = w.OutputSegment + "/cursor/start-token" } : t))
+        });
         Assert.Contains(StreamWrapperTokenFlowValidator.Trace(graph.Contract, injected).Facts, f => f.Reason == "ImplicitWrapperTokenRecombinedWithOpenSelection");
-        var overwritten = ChangeWrapper(s, w => w with { Transfers = new(w.Transfers.Append(new StreamWrapperTransfer("Open/token-argument",
-            w.OutputSegment + "/cursor/start-token", StreamWrapperNames.Site(StreamWrapperProgram.Open, StreamWrapperPhase.SaveToken), StreamWrapperOutcome.Always))) });
+        var overwritten = ChangeWrapper(s, w => w with
+        {
+            Transfers = new(w.Transfers.Append(new StreamWrapperTransfer("Open/token-argument",
+            w.OutputSegment + "/cursor/start-token", StreamWrapperNames.Site(StreamWrapperProgram.Open, StreamWrapperPhase.SaveToken), StreamWrapperOutcome.Always)))
+        });
         Assert.Contains(StreamWrapperTokenFlowValidator.Trace(graph.Contract, overwritten).Facts, f => f.Reason == "OuterHookRequestOrTokenOverwritten");
     }
 }

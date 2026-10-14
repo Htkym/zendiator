@@ -89,7 +89,7 @@ internal static class CanonicalStreamGraphValidator
         if (initial.Count != 0) return initial;
         if (route.Stages.Any(s => s.Kind == FusionStageKind.Wrapper)) return new(new[] { new CanonicalExecutionGraphFact("WrapperRequiresSegmentGraph", route.Anchor) });
         return ValidateSegment(new(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages)
-            { SourceSessions = route.Handlers[0].Sessions }, candidate);
+        { SourceSessions = route.Handlers[0].Sessions }, candidate);
     }
 
     internal static EquatableArray<CanonicalExecutionGraphFact> ValidateSegment(StreamSegmentContract contract, CanonicalStreamExecutionSchedule candidate)

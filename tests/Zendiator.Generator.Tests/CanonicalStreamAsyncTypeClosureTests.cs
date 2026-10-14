@@ -76,13 +76,30 @@ public sealed partial class GeneratorTests
                 foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
                 File.WriteAllText(Path.Combine(folder, "binding.json"), System.Text.Json.JsonSerializer.Serialize(new
                 {
-                    id, accepted, emitted.Success, route.RequestName, generic = route.StreamGeneric,
-                    stages = route.Stages.Select(s => new { s.Name, ownership = s.ServiceOwnership.ToString(), sessions = s.Sessions.Count,
-                        typed = s.StreamEmission, callbacks = s.Callbacks.Select(c => new { phase = c.Phase.ToString(), completion = c.Completion.ToString(), c.RequiresSingleConsumption }) }),
-                    generatorDiagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), inSource = d.Location.IsInSource,
-                        anchor = d.Location.IsInSource ? d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan) : null }),
+                    id,
+                    accepted,
+                    emitted.Success,
+                    route.RequestName,
+                    generic = route.StreamGeneric,
+                    stages = route.Stages.Select(s => new
+                    {
+                        s.Name,
+                        ownership = s.ServiceOwnership.ToString(),
+                        sessions = s.Sessions.Count,
+                        typed = s.StreamEmission,
+                        callbacks = s.Callbacks.Select(c => new { phase = c.Phase.ToString(), completion = c.Completion.ToString(), c.RequiresSingleConsumption })
+                    }),
+                    generatorDiagnostics = diagnostics.Select(d => new
+                    {
+                        d.Id,
+                        message = d.GetMessage(),
+                        inSource = d.Location.IsInSource,
+                        anchor = d.Location.IsInSource ? d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan) : null
+                    }),
                     compilerDiagnostics = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
-                    candidateOnly = true, productionEnabled = false, runtimeEnumerations = 0
+                    candidateOnly = true,
+                    productionEnabled = false,
+                    runtimeEnumerations = 0
                 }));
             }
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));

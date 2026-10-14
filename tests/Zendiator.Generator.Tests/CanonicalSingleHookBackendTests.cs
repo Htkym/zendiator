@@ -136,13 +136,29 @@ public sealed partial class GeneratorTests
                 { Assert.NotNull(actual.Error); Assert.Same(actual.Error, probe.ObservedError); Assert.Same(actual.Error, probe.Exit?.Error); }
                 if (scenario is "null-request" or "pre-cancel") { Assert.Null(probe.ObservedError); Assert.Null(probe.Exit); }
                 Assert.Equal(0, probe.HookDisposals); Assert.Equal(0, probe.HandlerDisposals);
-                snapshot = JsonSerializer.Serialize(new { phases = probe.Phases.ToArray(), calls = probe.Calls.Select(c => new {
-                    c.Phase, request = RequestRole(c.Request), tokenPreserved = c.Token == token, c.Ambient, c.Culture }),
-                    actual.Result, error = ErrorRole(actual.Error), errorType = actual.Error?.GetType().FullName,
+                snapshot = JsonSerializer.Serialize(new
+                {
+                    phases = probe.Phases.ToArray(),
+                    calls = probe.Calls.Select(c => new
+                    {
+                        c.Phase,
+                        request = RequestRole(c.Request),
+                        tokenPreserved = c.Token == token,
+                        c.Ambient,
+                        c.Culture
+                    }),
+                    actual.Result,
+                    error = ErrorRole(actual.Error),
+                    errorType = actual.Error?.GetType().FullName,
                     nullParameter = (actual.Error as ArgumentNullException)?.ParamName,
                     cancellationTokenPreserved = actual.Error is not OperationCanceledException oce || oce.CancellationToken == token,
-                    observedError = ErrorRole(probe.ObservedError), exitSuccess = probe.Exit?.Success, exitError = ErrorRole(probe.Exit?.Error),
-                    callerAmbient = ReferenceSendProbe.Ambient.Value, callerCulture = CultureInfo.CurrentCulture.Name, token.IsCancellationRequested });
+                    observedError = ErrorRole(probe.ObservedError),
+                    exitSuccess = probe.Exit?.Success,
+                    exitError = ErrorRole(probe.Exit?.Error),
+                    callerAmbient = ReferenceSendProbe.Ambient.Value,
+                    callerCulture = CultureInfo.CurrentCulture.Name,
+                    token.IsCancellationRequested
+                });
             }
             Assert.Equal(probe.HookConstructed ? 1 : 0, probe.HookDisposals); Assert.Equal(probe.HandlerConstructed ? 1 : 0, probe.HandlerDisposals);
             return snapshot;
@@ -220,23 +236,33 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData(false, "missing-before")] [InlineData(true, "missing-before")]
-    [InlineData(false, "missing-after")] [InlineData(true, "missing-after")]
-    [InlineData(false, "missing-exception")] [InlineData(true, "missing-exception")]
-    [InlineData(false, "missing-finally")] [InlineData(true, "missing-finally")]
-    [InlineData(false, "two-hooks")] [InlineData(true, "two-hooks")]
-    [InlineData(false, "struct")] [InlineData(true, "struct")]
-    [InlineData(false, "handler-owned")] [InlineData(true, "handler-owned")]
-    [InlineData(false, "hook-owned")] [InlineData(true, "hook-owned")]
-    [InlineData(false, "wrapper")] [InlineData(true, "wrapper")]
-    [InlineData(false, "external")] [InlineData(true, "external")]
+    [InlineData(false, "missing-before")]
+    [InlineData(true, "missing-before")]
+    [InlineData(false, "missing-after")]
+    [InlineData(true, "missing-after")]
+    [InlineData(false, "missing-exception")]
+    [InlineData(true, "missing-exception")]
+    [InlineData(false, "missing-finally")]
+    [InlineData(true, "missing-finally")]
+    [InlineData(false, "two-hooks")]
+    [InlineData(true, "two-hooks")]
+    [InlineData(false, "struct")]
+    [InlineData(true, "struct")]
+    [InlineData(false, "handler-owned")]
+    [InlineData(true, "handler-owned")]
+    [InlineData(false, "hook-owned")]
+    [InlineData(true, "hook-owned")]
+    [InlineData(false, "wrapper")]
+    [InlineData(true, "wrapper")]
+    [InlineData(false, "external")]
+    [InlineData(true, "external")]
     public void Single_Hook_shape_boundary_enables_accepted_two_Hooks_and_blocks_other_shapes(bool isVoid, string shape)
     {
         var source = SingleHookBackendSource(isVoid, shape);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "UnsupportedHook_" + shape + isVoid), out var output, out var diagnostics);
         // Partial callbacks, struct/metadata receivers, sessions and opaque wrappers are accepted Send shapes.
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        AssertAcceptedSendEmission(driver,diagnostics,BoundDispatchFamily.SendSync,isVoid);
+        AssertAcceptedSendEmission(driver, diagnostics, BoundDispatchFamily.SendSync, isVoid);
     }
 
     [Fact]
@@ -253,7 +279,7 @@ public sealed partial class GeneratorTests
             output => Assert.True(output.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
         var capability = body.ReplaceSyntaxTree(body.SyntaxTrees.Single(), CSharpSyntaxTree.ParseText(SingleHookBackendSource(false, "missing-before"), SyncParseOptions));
         driver = driver.RunGenerators(capability);
-        AssertAcceptedSendEmission(driver,driver.GetRunResult().Diagnostics,BoundDispatchFamily.SendSync,false);
-        Assert.NotEqual(original,CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
+        AssertAcceptedSendEmission(driver, driver.GetRunResult().Diagnostics, BoundDispatchFamily.SendSync, false);
+        Assert.NotEqual(original, CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
     }
 }

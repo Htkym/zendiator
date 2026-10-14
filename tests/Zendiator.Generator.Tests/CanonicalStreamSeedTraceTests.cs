@@ -36,13 +36,20 @@ public sealed partial class GeneratorTests
         if (selected.Length == 0) throw new ArgumentException("Choose one of the eight fixed corpus IDs.", nameof(caseId));
         WriteSeedArtifact("corpus.json", new
         {
-            seed = CanonicalStreamSeedCorpus.Seed, generatorVersion = CanonicalStreamSeedCorpus.Version,
+            seed = CanonicalStreamSeedCorpus.Seed,
+            generatorVersion = CanonicalStreamSeedCorpus.Version,
             algorithm = "xorshift32:uint shifts13/17/5;value=(int)(state%9)-4;one stream draws0..19",
-            stageOrder = new[] { "F1", "Map", "F2" }, corpus, selectedIds = selected.Select(c => c.Id),
-            selectedCaseCount = selected.Length, branchExecutions = selected.Length * 3, newContractComparisons = selected.Length * 2,
+            stageOrder = new[] { "F1", "Map", "F2" },
+            corpus,
+            selectedIds = selected.Select(c => c.Id),
+            selectedCaseCount = selected.Length,
+            branchExecutions = selected.Length * 3,
+            newContractComparisons = selected.Length * 2,
             replaySelector = "ZENDIATOR_STREAM_C08_CASE=<known ID> or ReplayStreamSeedCase(ID)",
             shape = "closed reference request/int item/borrowed class/sync hooks/None token/full consumption",
-            candidateOnly = true, productionEnabled = false, measurements = 0
+            candidateOnly = true,
+            productionEnabled = false,
+            measurements = 0
         });
         var fixture = FallbackFixtureFor("int"); Assert.NotNull(fixture.Fused);
         foreach (var input in selected)
@@ -50,8 +57,16 @@ public sealed partial class GeneratorTests
             var reference = await RunSeedBranch(fixture, input, "reference");
             var canonical = await RunSeedBranch(fixture, input, "canonical");
             var fused = await RunSeedBranch(fixture, input, "fused");
-            WriteSeedArtifact(input.Id + "/comparison.json", new { input, reference, canonical, fused,
-                candidateOnly = true, productionEnabled = false, sameContract = true });
+            WriteSeedArtifact(input.Id + "/comparison.json", new
+            {
+                input,
+                reference,
+                canonical,
+                fused,
+                candidateOnly = true,
+                productionEnabled = false,
+                sameContract = true
+            });
             Assert.Equal(reference.Values, canonical.Values); Assert.Equal(reference.Values, fused.Values);
             Assert.Equal(reference.Events, canonical.Events); Assert.Equal(reference.Events, fused.Events);
             Assert.Equal(reference.Operations, canonical.Operations); Assert.Equal(reference.Operations, fused.Operations);
@@ -174,9 +189,24 @@ public sealed partial class GeneratorTests
         finally
         {
             // Preserve partial events/operations even if a newly observed difference aborts the run.
-            WriteSeedArtifact(input.Id + "/" + backend + ".json", new { input, backend, complete, values,
-                events = events.Snapshot(), operations, p.Starts, p.Moves, p.Reads, p.Disposals, p.Effects,
-                p.BeforeResolves, p.AfterResolves, error = failure?.GetType().FullName, exceptionIdentityPreserved = failure == null || ReferenceEquals(events.FirstError, failure) });
+            WriteSeedArtifact(input.Id + "/" + backend + ".json", new
+            {
+                input,
+                backend,
+                complete,
+                values,
+                events = events.Snapshot(),
+                operations,
+                p.Starts,
+                p.Moves,
+                p.Reads,
+                p.Disposals,
+                p.Effects,
+                p.BeforeResolves,
+                p.AfterResolves,
+                error = failure?.GetType().FullName,
+                exceptionIdentityPreserved = failure == null || ReferenceEquals(events.FirstError, failure)
+            });
             CanonicalStreamFallbackProbe.Ambient.Value = saved; CultureInfo.CurrentCulture = savedCulture;
             SynchronizationContext.SetSynchronizationContext(savedContext);
         }

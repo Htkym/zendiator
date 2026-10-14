@@ -25,9 +25,15 @@ internal static class RequiredSendSessionContract
                     var callbacks = stage == route.Stages.Count ? new[] { route.Handlers[branch].Callback! } : route.Stages[stage].Callbacks.ToArray();
                     foreach (var callback in callbacks)
                     {
-                        var phase = callback.Phase switch { BoundCallbackPhase.Before => SendExecutionPhase.Before, BoundCallbackPhase.Success => SendExecutionPhase.Success,
-                            BoundCallbackPhase.Exception => SendExecutionPhase.Exception, BoundCallbackPhase.Finally => SendExecutionPhase.Finally,
-                            BoundCallbackPhase.Handler => SendExecutionPhase.InvokeHandler, _ => SendExecutionPhase.InvokeWrapper };
+                        var phase = callback.Phase switch
+                        {
+                            BoundCallbackPhase.Before => SendExecutionPhase.Before,
+                            BoundCallbackPhase.Success => SendExecutionPhase.Success,
+                            BoundCallbackPhase.Exception => SendExecutionPhase.Exception,
+                            BoundCallbackPhase.Finally => SendExecutionPhase.Finally,
+                            BoundCallbackPhase.Handler => SendExecutionPhase.InvokeHandler,
+                            _ => SendExecutionPhase.InvokeWrapper
+                        };
                         required.CallbackReceivers.Add(new(Site(branch, stage, phase), Session(branch, stage, 0) + "/live",
                             phase == SendExecutionPhase.Before || state.EffectiveRequestSlot == null ? state.InputRequestSlot : state.EffectiveRequestSlot, state.StartTokenSlot));
                     }
@@ -55,7 +61,7 @@ internal static class RequiredSendSessionContract
                     if (!callbackSession) Add(index, SendExecutionPhase.ResolveSessionFactory, producer: binding.FactoryServiceType);
                     Add(index, SendExecutionPhase.AcquireSession, binding.Acquire);
                     required.SessionCalls.Add(new(SessionSite(branch, stage, index, SendExecutionPhase.AcquireSession), callbackSession ? Service(branch, stage) + "/resolved" : resource + "/factory/resolved", resource + "/factory-result", true, true, false)
-                        { RequestSlot = state.InputRequestSlot, TokenSlot = state.StartTokenSlot });
+                    { RequestSlot = state.InputRequestSlot, TokenSlot = state.StartTokenSlot });
                     if (callbackSession) Add(index, SendExecutionPhase.ValidateSessionResult);
                     Add(index, SendExecutionPhase.CommitSession);
                     Add(index, SendExecutionPhase.DetachSession);

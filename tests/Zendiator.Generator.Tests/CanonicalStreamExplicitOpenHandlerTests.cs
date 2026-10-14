@@ -28,10 +28,12 @@ public sealed partial class GeneratorTests
             foreach (var file in generated) File.WriteAllText(Path.Combine(root, file.HintName), file.SourceText.ToString());
             File.WriteAllText(Path.Combine(root, "compile.json"), System.Text.Json.JsonSerializer.Serialize(new
             {
-                emitted.Success, composition = Selection(driver),
+                emitted.Success,
+                composition = Selection(driver),
                 diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
                 compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
-                sources = generated.Select(f => f.HintName), runtimeEnumerations = 0
+                sources = generated.Select(f => f.HintName),
+                runtimeEnumerations = 0
             }));
         }
         Assert.Empty(diagnostics);
@@ -49,9 +51,13 @@ public sealed partial class GeneratorTests
         if (!string.IsNullOrEmpty(root)) File.WriteAllText(Path.Combine(root, "snapshot-check.json"), System.Text.Json.JsonSerializer.Serialize(new
         {
             expectedExplicitCall = "expected.AddHandler(typeof(global::App.OpenAsyncHandler<>));",
-            declaredSnapshotAcceptedByGeneratedGuard = true, registrationCalls = 1,
+            declaredSnapshotAcceptedByGeneratedGuard = true,
+            registrationCalls = 1,
             registrations = services.Select(d => new { service = d.ServiceType.FullName, implementation = d.ImplementationType?.FullName, lifetime = d.Lifetime.ToString() }),
-            providerBuilds = 0, handlerStarts = 0, runtimeEnumerations = 0, existingMatrixRerun = false
+            providerBuilds = 0,
+            handlerStarts = 0,
+            runtimeEnumerations = 0,
+            existingMatrixRerun = false
         }));
     }
 }

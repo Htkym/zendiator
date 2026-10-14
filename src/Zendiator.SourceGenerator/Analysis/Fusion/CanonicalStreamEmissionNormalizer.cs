@@ -57,8 +57,13 @@ internal static class CanonicalStreamEmissionNormalizer
         var collisions = new HashSet<string>(connections.Where(c => Hint(c) != null).GroupBy(c => Hint(c)!)
             .Where(g => g.Count() != 1).Select(g => g.Key), StringComparer.Ordinal);
         return new(new(connections.Select(c => Hint(c) is { } hint && collisions.Contains(hint)
-            ? c with { Kind = CanonicalStreamConnectionKind.ConflictingComposition, Candidate = null, Canonical = null,
-                Reason = "Stream candidate output identity is ambiguous; public emission remains blocked." } : c)));
+            ? c with
+            {
+                Kind = CanonicalStreamConnectionKind.ConflictingComposition,
+                Candidate = null,
+                Canonical = null,
+                Reason = "Stream candidate output identity is ambiguous; public emission remains blocked."
+            } : c)));
     }
 
     internal static IEnumerable<CanonicalSourceFile> Files(IEnumerable<CanonicalStreamPrototypeModel> fused,

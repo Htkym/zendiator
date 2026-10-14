@@ -59,7 +59,8 @@ internal static class CanonicalStreamFallbackProjection
             s.Schedule.Owners.Any(o => o.Borrowed && o.Cleanup != StreamCleanup.None))) return null;
         var id = CanonicalSplitSourceEmitter.Id(c.Identity + "|Stream|" + route.Request);
         return new(c.GeneratedNamespace, "__ZendiatorStreamCanonical_" + id, "Zendiator.StreamCanonical." + id + ".g.cs",
-            call, new(segments), consumer) { Generic = route.StreamGeneric, ItemFlow = route.StreamItemFlow, HandlerFactory = Factory(handler.Sessions) };
+            call, new(segments), consumer)
+        { Generic = route.StreamGeneric, ItemFlow = route.StreamItemFlow, HandlerFactory = Factory(handler.Sessions) };
     }
     private static BoundAsyncFactoryEmission? Factory(EquatableArray<BoundSessionModel> sessions) =>
         sessions.Count == 1 ? CanonicalCapabilityEmissionNormalizer.Factory(sessions[0], false) : null;

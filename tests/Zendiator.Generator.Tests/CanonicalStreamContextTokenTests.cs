@@ -28,11 +28,17 @@ public sealed partial class GeneratorTests
         int LinkedCallbacksAfterExit, string EffectiveToken, bool? ErrorTokenMatchesEffective, int ContextPosts);
 
     [Theory]
-    [InlineData("none-sync-context")] [InlineData("api-suppression")] [InlineData("enum-delivery")]
-    [InlineData("same-pending-context")] [InlineData("distinct-delivery")]
-    [InlineData("distinct-pre-api")] [InlineData("distinct-pre-enum")]
-    [InlineData("distinct-pending-api")] [InlineData("distinct-pending-enum")]
-    [InlineData("distinct-between-enum")] [InlineData("distinct-start-failure")]
+    [InlineData("none-sync-context")]
+    [InlineData("api-suppression")]
+    [InlineData("enum-delivery")]
+    [InlineData("same-pending-context")]
+    [InlineData("distinct-delivery")]
+    [InlineData("distinct-pre-api")]
+    [InlineData("distinct-pre-enum")]
+    [InlineData("distinct-pending-api")]
+    [InlineData("distinct-pending-enum")]
+    [InlineData("distinct-between-enum")]
+    [InlineData("distinct-start-failure")]
     [InlineData("distinct-pending-failure-cleanup")]
     public async Task Stream_selected_context_token_and_failure_representatives_match(string profile)
     {
@@ -50,8 +56,12 @@ public sealed partial class GeneratorTests
             var observations = new List<StreamEnvironmentObservation>();
             var sourceError = new FormatException("source"); var cleanupError = new InvalidOperationException("cleanup");
             var startupError = new ApplicationException("startup");
-            var probe = new CanonicalStreamPrototypeProbe { Input = [1, 1], GetEnumeratorError = profile == "distinct-start-failure" ? startupError : null,
-                CleanupError = pendingFailure ? cleanupError : null };
+            var probe = new CanonicalStreamPrototypeProbe
+            {
+                Input = [1, 1],
+                GetEnumeratorError = profile == "distinct-start-failure" ? startupError : null,
+                CleanupError = pendingFailure ? cleanupError : null
+            };
             CancellationToken? handlerEffectiveToken = null;
             string Token(CancellationToken value) => !value.CanBeCanceled ? "none" : value == apiToken ? "api" : value == enumToken ? "enum" : "linked";
             void Observe(string phase, object? request, CancellationToken token)

@@ -73,8 +73,13 @@ public sealed partial class GeneratorTests
         Assert.DoesNotContain(generated, f => f.HintName.StartsWith("Zendiator.StreamPrototype.", StringComparison.Ordinal));
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error));
         using var bytes = new MemoryStream(); var emitted = output.Emit(bytes);
-        WriteAsyncItemArtifact("compile.json", new { emitted.Success, consumerCompilations = 1, productionEnabled = false,
-            diagnostics = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }) });
+        WriteAsyncItemArtifact("compile.json", new
+        {
+            emitted.Success,
+            consumerCompilations = 1,
+            productionEnabled = false,
+            diagnostics = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() })
+        });
         var folder = AsyncItemEvidenceFolder();
         if (folder != null)
         {

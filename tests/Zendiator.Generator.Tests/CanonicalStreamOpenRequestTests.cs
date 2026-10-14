@@ -73,9 +73,12 @@ public sealed partial class GeneratorTests
             var source = StreamOpenSource(shape, closed);
             var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "StreamOpen_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
             using var bytes = new MemoryStream(); var emitted = output.Emit(bytes);
-            SaveOpenEvidence(key, source, driver, bytes.ToArray(), new { emitted.Success,
+            SaveOpenEvidence(key, source, driver, bytes.ToArray(), new
+            {
+                emitted.Success,
                 generatorDiagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }),
-                compilerDiagnostics = emitted.Diagnostics.Select(d => new { d.Id, message = d.GetMessage() }) });
+                compilerDiagnostics = emitted.Diagnostics.Select(d => new { d.Id, message = d.GetMessage() })
+            });
             Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
             var route = Assert.Single(Selection(driver).Pipelines);
             var connection = Assert.Single(StreamConnections(driver).Routes);
@@ -89,9 +92,17 @@ public sealed partial class GeneratorTests
             if (shape == "constrained-base") Assert.Equal(" where __ZendiatorType0 : global::App.OpenBase, global::App.IOpenValue, new()", route.StreamGeneric!.TypeConstraints);
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
             Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-            SaveOpenEvidence(key, source, driver, bytes.ToArray(), new { emitted.Success, kind = connection.Kind.ToString(),
-                route.RequestName, handlers = route.Handlers.Select(h => h.Name), stages = route.Stages.Select(s => s.Name),
-                generic = route.StreamGeneric, candidateOnly = true, productionEnabled = false });
+            SaveOpenEvidence(key, source, driver, bytes.ToArray(), new
+            {
+                emitted.Success,
+                kind = connection.Kind.ToString(),
+                route.RequestName,
+                handlers = route.Handlers.Select(h => h.Name),
+                stages = route.Stages.Select(s => s.Name),
+                generic = route.StreamGeneric,
+                candidateOnly = true,
+                productionEnabled = false
+            });
             bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
             var helper = Assert.Single(assembly.GetTypes(), t => t.Name.StartsWith(expected == CanonicalStreamConnectionKind.Candidate ? "__ZendiatorStreamPrototype_" : "__ZendiatorStreamCanonical_", StringComparison.Ordinal));
             var fixture = new OpenFixture(assembly, helper, expected); OpenFixtures.Add(key, fixture); return fixture;
@@ -154,9 +165,14 @@ public sealed partial class GeneratorTests
         finally { scope.Dispose(); }
     }
     [Theory]
-    [InlineData("general", "int")] [InlineData("general", "string")] [InlineData("fixed", "string")]
-    [InlineData("reordered", "int")] [InlineData("nested", "int")] [InlineData("partial", "int")]
-    [InlineData("wrapper", "int")] [InlineData("constrained", "value")]
+    [InlineData("general", "int")]
+    [InlineData("general", "string")]
+    [InlineData("fixed", "string")]
+    [InlineData("reordered", "int")]
+    [InlineData("nested", "int")]
+    [InlineData("partial", "int")]
+    [InlineData("wrapper", "int")]
+    [InlineData("constrained", "value")]
     public async Task Stream_open_request_typed_candidates_match_reference_after_closing_patterns(string shape, string kind)
     {
         var f = OpenFixtureFor(shape);
@@ -182,12 +198,29 @@ public sealed partial class GeneratorTests
         }
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence)) File.WriteAllText(Path.Combine(evidence, "stream-open", "runtime-" + shape + "-" + kind + ".json"),
-            System.Text.Json.JsonSerializer.Serialize(new { shape, kind, reference, generated, closedResult, baseReference, baseGenerated,
-                actualHelper = f.Helper.FullName, candidateOnly = true, productionEnabled = false }));
+            System.Text.Json.JsonSerializer.Serialize(new
+            {
+                shape,
+                kind,
+                reference,
+                generated,
+                closedResult,
+                baseReference,
+                baseGenerated,
+                actualHelper = f.Helper.FullName,
+                candidateOnly = true,
+                productionEnabled = false
+            }));
     }
     [Theory]
-    [InlineData("unused")] [InlineData("unused-handler")] [InlineData("repeat")] [InlineData("contradictory")]
-    [InlineData("closed-constraint")] [InlineData("overlap")] [InlineData("duplicate")] [InlineData("ambiguous-open")]
+    [InlineData("unused")]
+    [InlineData("unused-handler")]
+    [InlineData("repeat")]
+    [InlineData("contradictory")]
+    [InlineData("closed-constraint")]
+    [InlineData("overlap")]
+    [InlineData("duplicate")]
+    [InlineData("ambiguous-open")]
     public void Stream_open_request_invalid_patterns_keep_diagnostics_and_block_candidates(string failure)
     {
         var source = StreamOpenSource(failure == "repeat" ? "reordered" : "general", failure is "duplicate" or "closed-constraint" ? "int" : null);
@@ -208,9 +241,14 @@ public sealed partial class GeneratorTests
             "[ZendiatorHandler] public sealed class OtherOpenHandler<T>:IStreamRequestHandler<GenericItems<T>,T>{public System.Collections.Generic.IAsyncEnumerable<T> HandleAsync(GenericItems<T> r,CancellationToken c)=>throw new NotImplementedException();}";
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "StreamOpenReject_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
         using var bytes = new MemoryStream(); var emitted = output.Emit(bytes);
-        SaveOpenEvidence("reject-" + failure, source, driver, bytes.ToArray(), new { emitted.Success, failure, candidateOnly = true,
+        SaveOpenEvidence("reject-" + failure, source, driver, bytes.ToArray(), new
+        {
+            emitted.Success,
+            failure,
+            candidateOnly = true,
             diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), location = d.Location.SourceSpan.ToString(), additional = d.AdditionalLocations.Select(l => l.SourceSpan.ToString()) }),
-            compilerDiagnostics = emitted.Diagnostics.Select(d => new { d.Id, message = d.GetMessage() }) });
+            compilerDiagnostics = emitted.Diagnostics.Select(d => new { d.Id, message = d.GetMessage() })
+        });
         Assert.Contains(diagnostics, d => d.Id != "ZEN0037" && d.Severity == DiagnosticSeverity.Error);
         Assert.All(diagnostics.Where(d => d.Id != "ZEN0037"), d => Assert.True(d.Location.IsInSource));
         if (failure is "overlap" or "duplicate") Assert.Contains(diagnostics, d => d.AdditionalLocations.Count == 1);

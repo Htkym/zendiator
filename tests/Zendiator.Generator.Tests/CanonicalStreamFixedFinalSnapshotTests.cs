@@ -32,9 +32,11 @@ public sealed partial class GeneratorTests
             foreach (var file in generated) File.WriteAllText(Path.Combine(root, file.HintName), file.SourceText.ToString());
             File.WriteAllText(Path.Combine(root, "compile.json"), System.Text.Json.JsonSerializer.Serialize(new
             {
-                emitted.Success, composition = Selection(driver),
+                emitted.Success,
+                composition = Selection(driver),
                 diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
-                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }), sources = generated.Select(f => f.HintName)
+                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
+                sources = generated.Select(f => f.HintName)
             }));
         }
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); Assert.Empty(diagnostics);
@@ -53,9 +55,15 @@ public sealed partial class GeneratorTests
         Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == assembly.GetType("App.OpenMapFactory`2")).Lifetime);
         if (!string.IsNullOrEmpty(root)) File.WriteAllText(Path.Combine(root, "snapshot.json"), System.Text.Json.JsonSerializer.Serialize(new
         {
-            declaredFinal = registration.FinalDefinitionName, boundFinal = route.StreamItemFlow.Final.Name, snapshotFingerprintMatched = true,
-            registrationCalls = 1, services = services.Select(d => new { type = d.ServiceType.ToString(), lifetime = d.Lifetime.ToString() }),
-            providerBuilds = 0, factoryAcquisitions = 0, handlerStarts = 0, runtimeEnumerations = 0
+            declaredFinal = registration.FinalDefinitionName,
+            boundFinal = route.StreamItemFlow.Final.Name,
+            snapshotFingerprintMatched = true,
+            registrationCalls = 1,
+            services = services.Select(d => new { type = d.ServiceType.ToString(), lifetime = d.Lifetime.ToString() }),
+            providerBuilds = 0,
+            factoryAcquisitions = 0,
+            handlerStarts = 0,
+            runtimeEnumerations = 0
         }));
     }
 }

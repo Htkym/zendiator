@@ -87,10 +87,18 @@ public sealed partial class GeneratorTests
             {
                 File.WriteAllText(Path.Combine(folder, "input.cs"), source); File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
                 foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
-                File.WriteAllText(Path.Combine(folder, "binding.json"), System.Text.Json.JsonSerializer.Serialize(new { id, emitted.Success, generic = route.StreamGeneric, flow = route.StreamItemFlow,
-                    handlerSessions = route.Handlers.Select(h => h.Sessions), stageSessions = route.Stages.Select(s => s.Sessions),
+                File.WriteAllText(Path.Combine(folder, "binding.json"), System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    id,
+                    emitted.Success,
+                    generic = route.StreamGeneric,
+                    flow = route.StreamItemFlow,
+                    handlerSessions = route.Handlers.Select(h => h.Sessions),
+                    stageSessions = route.Stages.Select(s => s.Sessions),
                     diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), inSource = d.Location.IsInSource, anchor = d.Location.IsInSource ? d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan) : null }),
-                    compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }), productionEnabled = false }));
+                    compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
+                    productionEnabled = false
+                }));
             }
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error)); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
             if (id is "factory-undetermined" or "constraint-conflict" or "interval-mismatch")
@@ -200,8 +208,15 @@ public sealed partial class GeneratorTests
                     for (var i = 0; i < body.Length;)
                     {
                         var at = i; ushort code = body[i++]; if (code == 0xFE) code = (ushort)(0xFE00 | body[i++]); var op = codes[code];
-                        var size = op.OperandType switch { OperandType.InlineNone => 0, OperandType.ShortInlineBrTarget or OperandType.ShortInlineI or OperandType.ShortInlineVar => 1,
-                            OperandType.InlineVar => 2, OperandType.InlineI8 or OperandType.InlineR => 8, OperandType.InlineSwitch => 4 + 4 * BitConverter.ToInt32(body, i), _ => 4 };
+                        var size = op.OperandType switch
+                        {
+                            OperandType.InlineNone => 0,
+                            OperandType.ShortInlineBrTarget or OperandType.ShortInlineI or OperandType.ShortInlineVar => 1,
+                            OperandType.InlineVar => 2,
+                            OperandType.InlineI8 or OperandType.InlineR => 8,
+                            OperandType.InlineSwitch => 4 + 4 * BitConverter.ToInt32(body, i),
+                            _ => 4
+                        };
                         if (op == OpCodes.Box || op == OpCodes.Unbox_Any)
                         {
                             var item = method.Module.ResolveType(BitConverter.ToInt32(body, i), type.GetGenericArguments(), Type.EmptyTypes);

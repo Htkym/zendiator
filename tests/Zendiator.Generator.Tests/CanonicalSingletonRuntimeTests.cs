@@ -159,8 +159,12 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData("direct", false)] [InlineData("borrowed", false)] [InlineData("owned", false)]
-    [InlineData("direct", true)] [InlineData("borrowed", true)] [InlineData("owned", true)]
+    [InlineData("direct", false)]
+    [InlineData("borrowed", false)]
+    [InlineData("owned", false)]
+    [InlineData("direct", true)]
+    [InlineData("borrowed", true)]
+    [InlineData("owned", true)]
     public void Generated_SendSync_distinguishes_external_instance_from_container_captured_delegate(string receiver, bool external)
     {
         var f = SyncRuntimeFixture(receiver, false); var probe = new CanonicalSyncRuntimeProbe();
@@ -191,7 +195,8 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData("direct")] [InlineData("owned")]
+    [InlineData("direct")]
+    [InlineData("owned")]
     public void Generated_standard_implementation_type_constructor_failure_preserves_identity_without_session_cleanup(string receiver)
     {
         var f = SyncRuntimeFixture(receiver, false); var error = new Exception("standard implementation-type constructor identity");
@@ -221,8 +226,12 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData("direct", false)] [InlineData("borrowed", false)] [InlineData("owned", false)]
-    [InlineData("direct", true)] [InlineData("borrowed", true)] [InlineData("owned", true)]
+    [InlineData("direct", false)]
+    [InlineData("borrowed", false)]
+    [InlineData("owned", false)]
+    [InlineData("direct", true)]
+    [InlineData("borrowed", true)]
+    [InlineData("owned", true)]
     public async Task Generated_Singleton_SendSync_keeps_parallel_request_token_exception_and_session_identity(string receiver, bool isVoid)
     {
         var f = ConcurrentSingletonFixture(receiver, isVoid); var probe = new CanonicalConcurrentSyncProbe();
@@ -266,8 +275,12 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData("direct", false)] [InlineData("borrowed", false)] [InlineData("owned", false)]
-    [InlineData("direct", true)] [InlineData("borrowed", true)] [InlineData("owned", true)]
+    [InlineData("direct", false)]
+    [InlineData("borrowed", false)]
+    [InlineData("owned", false)]
+    [InlineData("direct", true)]
+    [InlineData("borrowed", true)]
+    [InlineData("owned", true)]
     public void Generated_Singleton_SendSync_reentry_keeps_inner_failure_and_cleanup_separate_from_outer(string receiver, bool isVoid)
     {
         var f = ConcurrentSingletonFixture(receiver, isVoid); var probe = new CanonicalConcurrentSyncProbe();

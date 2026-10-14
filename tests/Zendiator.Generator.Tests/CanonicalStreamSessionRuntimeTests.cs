@@ -81,10 +81,17 @@ public sealed partial class GeneratorTests
         {
             File.WriteAllText(Path.Combine(folder, "input.cs"), source); File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
             foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
-            File.WriteAllText(Path.Combine(folder, "binding.json"), System.Text.Json.JsonSerializer.Serialize(new { id, emitted.Success, graph.IsValid,
-                facts = graph.Facts, sessionOwners = graph.StreamSchedule!.Owners.Where(o => o.Kind == StreamOwnerKind.Session),
+            File.WriteAllText(Path.Combine(folder, "binding.json"), System.Text.Json.JsonSerializer.Serialize(new
+            {
+                id,
+                emitted.Success,
+                graph.IsValid,
+                facts = graph.Facts,
+                sessionOwners = graph.StreamSchedule!.Owners.Where(o => o.Kind == StreamOwnerKind.Session),
                 diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), inSource = d.Location.IsInSource }),
-                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }), productionEnabled = false }));
+                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
+                productionEnabled = false
+            }));
         }
         if (owned) Assert.Empty(diagnostics); // This accepted closed plain session shape now has a public connection.
         else Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);

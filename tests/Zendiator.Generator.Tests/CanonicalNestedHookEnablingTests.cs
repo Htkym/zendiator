@@ -9,10 +9,14 @@ namespace Zendiator.Generator.Tests;
 public sealed partial class GeneratorTests
 {
     [Theory]
-    [InlineData(false, "default")] [InlineData(true, "default")]
-    [InlineData(false, "static")] [InlineData(true, "static")]
-    [InlineData(false, "default-static")] [InlineData(true, "default-static")]
-    [InlineData(false, "inferred")] [InlineData(true, "inferred")]
+    [InlineData(false, "default")]
+    [InlineData(true, "default")]
+    [InlineData(false, "static")]
+    [InlineData(true, "static")]
+    [InlineData(false, "default-static")]
+    [InlineData(true, "default-static")]
+    [InlineData(false, "inferred")]
+    [InlineData(true, "inferred")]
     public void Enabled_two_Hooks_public_registration_forms_compile_and_match_reference(bool isVoid, string form)
     {
         var named = form is not ("default" or "default-static"); var extension = form is not ("static" or "default-static");
@@ -31,7 +35,8 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Unaccepted_async_two_Hooks_public_API_keeps_ZEN0037_and_emits_no_backend(bool isVoid)
     {
         var source = NestedHookBackendSource(isVoid, "async").Replace("ISyncRequest", "IRequest").Replace("DispatchFamily.SendSync", "DispatchFamily.SendAsync");
@@ -40,7 +45,7 @@ public sealed partial class GeneratorTests
             source.Replace("int IRequestHandler<Ping,int>.Handle(Ping request,CancellationToken token) { return _probe.Handle(request,token); }",
                 "global::System.Threading.Tasks.ValueTask<int> IRequestHandler<Ping,int>.HandleAsync(Ping request,CancellationToken token)=>global::System.Threading.Tasks.ValueTask.FromResult(_probe.Handle(request,token));");
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "UnacceptedAsyncNestedHook" + isVoid), out var output, out var diagnostics);
-        AssertAcceptedSendEmission(driver,diagnostics,global::Zendiator.SourceGenerator.BoundDispatchFamily.SendAsync,isVoid);
+        AssertAcceptedSendEmission(driver, diagnostics, global::Zendiator.SourceGenerator.BoundDispatchFamily.SendAsync, isVoid);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
         WriteNestedHookEvidence("nested-hook-async-boundaries", isVoid ? "void" : "response",
@@ -126,10 +131,16 @@ public sealed partial class GeneratorTests
         string RequestRole(object request) => ReferenceEquals(request, operation.Input) ? "input" : ReferenceEquals(request, operation.Outer) ? "outer" : "inner";
         string? ErrorRole(Exception? error) => error == null ? null : ReferenceEquals(error, operation.BodyError) ? "body" :
             ReferenceEquals(error, operation.InnerFinallyError) ? "inner-finally" : "unexpected";
-        return new { operation.Name, actual.Result, error = ErrorRole(actual.Error), errorType = actual.Error?.GetType().FullName,
+        return new
+        {
+            operation.Name,
+            actual.Result,
+            error = ErrorRole(actual.Error),
+            errorType = actual.Error?.GetType().FullName,
             calls = calls.Select(c => new { c.Phase, request = RequestRole(c.Request), tokenPreserved = c.Token == operation.Token }),
             observed = operation.Observed.OrderBy(p => p.Key).Select(p => new { owner = p.Key, error = ErrorRole(p.Value) }),
-            exits = operation.Exits.OrderBy(p => p.Key).Select(p => new { owner = p.Key, p.Value.Success, error = ErrorRole(p.Value.Error) }) };
+            exits = operation.Exits.OrderBy(p => p.Key).Select(p => new { owner = p.Key, p.Value.Success, error = ErrorRole(p.Value.Error) })
+        };
     }
 
     private static async Task<string> RunOverlappingNestedHookEngine(bool isVoid, ServiceLifetime lifetime, bool generated, bool reentrant, bool variant)
@@ -183,14 +194,22 @@ public sealed partial class GeneratorTests
             foreach (var owner in new[] { "A", "B", "handler" }) Assert.Equal(lifetime == ServiceLifetime.Singleton ? 0 : lifetime == ServiceLifetime.Transient ? 2 : 1, probe.Disposals.GetValueOrDefault(owner));
         }
         foreach (var owner in new[] { "A", "B", "handler" }) Assert.Equal(lifetime == ServiceLifetime.Transient ? 2 : 1, probe.Disposals.GetValueOrDefault(owner));
-        return JsonSerializer.Serialize(new { operations = snapshots, trace = reentrant ? probe.Trace.ToArray() : null,
-            constructions = probe.Constructions.OrderBy(p => p.Key), disposals = probe.Disposals.OrderBy(p => p.Key) });
+        return JsonSerializer.Serialize(new
+        {
+            operations = snapshots,
+            trace = reentrant ? probe.Trace.ToArray() : null,
+            constructions = probe.Constructions.OrderBy(p => p.Key),
+            disposals = probe.Disposals.OrderBy(p => p.Key)
+        });
     }
 
     [Theory]
-    [InlineData(false, ServiceLifetime.Scoped)] [InlineData(true, ServiceLifetime.Scoped)]
-    [InlineData(false, ServiceLifetime.Transient)] [InlineData(true, ServiceLifetime.Transient)]
-    [InlineData(false, ServiceLifetime.Singleton)] [InlineData(true, ServiceLifetime.Singleton)]
+    [InlineData(false, ServiceLifetime.Scoped)]
+    [InlineData(true, ServiceLifetime.Scoped)]
+    [InlineData(false, ServiceLifetime.Transient)]
+    [InlineData(true, ServiceLifetime.Transient)]
+    [InlineData(false, ServiceLifetime.Singleton)]
+    [InlineData(true, ServiceLifetime.Singleton)]
     public async Task Enabled_two_Hooks_parallel_Sends_keep_operation_state_separate(bool isVoid, ServiceLifetime lifetime)
     {
         foreach (var variant in new[] { false, true })
@@ -204,9 +223,12 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData(false, ServiceLifetime.Scoped)] [InlineData(true, ServiceLifetime.Scoped)]
-    [InlineData(false, ServiceLifetime.Transient)] [InlineData(true, ServiceLifetime.Transient)]
-    [InlineData(false, ServiceLifetime.Singleton)] [InlineData(true, ServiceLifetime.Singleton)]
+    [InlineData(false, ServiceLifetime.Scoped)]
+    [InlineData(true, ServiceLifetime.Scoped)]
+    [InlineData(false, ServiceLifetime.Transient)]
+    [InlineData(true, ServiceLifetime.Transient)]
+    [InlineData(false, ServiceLifetime.Singleton)]
+    [InlineData(true, ServiceLifetime.Singleton)]
     public async Task Enabled_two_Hooks_reentry_keeps_inner_failure_separate_from_outer(bool isVoid, ServiceLifetime lifetime)
     {
         foreach (var variant in new[] { false, true })

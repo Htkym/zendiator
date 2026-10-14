@@ -62,8 +62,12 @@ public sealed partial class GeneratorTests
             {
                 File.WriteAllText(Path.Combine(folder, "input.cs"), source); File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
                 foreach (var file in driver.GetRunResult().Results.Single().GeneratedSources) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
-                File.WriteAllText(Path.Combine(folder, "compile.json"), System.Text.Json.JsonSerializer.Serialize(new { emitted.Success,
-                    diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }), compiler = emitted.Diagnostics.Select(d => new { d.Id, message = d.GetMessage() }) }));
+                File.WriteAllText(Path.Combine(folder, "compile.json"), System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    emitted.Success,
+                    diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }),
+                    compiler = emitted.Diagnostics.Select(d => new { d.Id, message = d.GetMessage() })
+                }));
             }
             Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
             var connection = Assert.Single(StreamConnections(driver).Routes);
@@ -116,7 +120,8 @@ public sealed partial class GeneratorTests
                 for (var i = 0; i < body.Length;)
                 {
                     var at = i; ushort code = body[i++]; if (code == 0xFE) code = (ushort)(0xFE00 | body[i++]); var op = codes[code];
-                    var size = op.OperandType switch {
+                    var size = op.OperandType switch
+                    {
                         OperandType.InlineNone => 0,
                         OperandType.ShortInlineBrTarget or OperandType.ShortInlineI or OperandType.ShortInlineVar => 1,
                         OperandType.InlineVar => 2,
@@ -186,12 +191,23 @@ public sealed partial class GeneratorTests
         scope.Dispose(); Assert.Equal(4, p.Owner.Released.Count);
         var size = (int)typeof(GeneratorTests).GetMethod(nameof(ValueRequestSize), BindingFlags.NonPublic | BindingFlags.Static)!.MakeGenericMethod(requestType).Invoke(null, null)!;
         Assert.True(size >= 64);
-        return System.Text.Json.JsonSerializer.Serialize(new { size, drains, p.Owner.FactoryCalls, p.Owner.SourceDisposals, released = p.Owner.Released.Count,
-            seen = p.Seen.Select(s => new { s.Role, s.Marker, s.Version, s.Padding, sameShared = ReferenceEquals(shared, s.Shared) }), gateConsumptions = p.Owner.PendingGate.Consumptions });
+        return System.Text.Json.JsonSerializer.Serialize(new
+        {
+            size,
+            drains,
+            p.Owner.FactoryCalls,
+            p.Owner.SourceDisposals,
+            released = p.Owner.Released.Count,
+            seen = p.Seen.Select(s => new { s.Role, s.Marker, s.Version, s.Padding, sameShared = ReferenceEquals(shared, s.Shared) }),
+            gateConsumptions = p.Owner.PendingGate.Consumptions
+        });
     }
     [Theory]
-    [InlineData(false, "int", false)] [InlineData(false, "long", false)]
-    [InlineData(true, "int", false)] [InlineData(true, "string", false)] [InlineData(false, "int", true)]
+    [InlineData(false, "int", false)]
+    [InlineData(false, "long", false)]
+    [InlineData(true, "int", false)]
+    [InlineData(true, "string", false)]
+    [InlineData(false, "int", true)]
     public async Task Stream_value_request_typed_storage_copy_replay_and_wrapper_match_reference(bool open, string item, bool wrapper)
     {
         var f = ValueRequestFixtureFor(true, open, item, wrapper); var pending = item == "long";
@@ -212,7 +228,8 @@ public sealed partial class GeneratorTests
         if (folder != null) File.WriteAllText(Path.Combine(folder, "result.json"), System.Text.Json.JsonSerializer.Serialize(new { valueDefaultCreateSucceeded = true, failedAtDI = true, candidateOnly = true }));
     }
     [Theory]
-    [InlineData("int")] [InlineData("long")]
+    [InlineData("int")]
+    [InlineData("long")]
     public void Stream_value_request_change_preserves_reference_request_null_timing(string item)
     {
         var f = ValueRequestFixtureFor(false, false, item); using var provider = new ServiceCollection().BuildServiceProvider();

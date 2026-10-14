@@ -147,7 +147,7 @@ internal sealed class CompositionListBinding
             if (prior != null) Reject("UnsupportedGenerationShape", entryAnchor,
                 $"Type {Name(type)} occurs more than once in this ordered list. Stage tags do not create separate registrations.", prior.Anchor);
             entries.Add(new(type, entryAnchor, kind, factoryType));
-            if (handlerList && (_marked.Any(c => Same(c.Symbol, type.OriginalDefinition)) || BindExplicitMetadata(_compilation,type,_ct)!=null)) _select(type);
+            if (handlerList && (_marked.Any(c => Same(c.Symbol, type.OriginalDefinition)) || BindExplicitMetadata(_compilation, type, _ct) != null)) _select(type);
         }
         _declarations.Add(new(anchor, request, family, handlerList, entries.ToImmutable(), streamFinal));
     }
@@ -247,7 +247,7 @@ internal sealed class CompositionListBinding
                     entry = entry with { Type = closure.Type };
                 }
                 if (!Eligible(entry.Type, entry.Anchor, "Handler", open: open)) continue;
-                var candidate = _marked.FirstOrDefault(c => Same(c.Symbol, entry.Type.OriginalDefinition)) ?? BindExplicitMetadata(_compilation,entry.Type,_ct);
+                var candidate = _marked.FirstOrDefault(c => Same(c.Symbol, entry.Type.OriginalDefinition)) ?? BindExplicitMetadata(_compilation, entry.Type, _ct);
                 if (candidate == null)
                 {
                     Reject("UnsupportedGenerationShape", entry.Anchor, $"Handler {Name(entry.Type)} requires a source ZendiatorHandler marker or a supported explicitly supplied metadata type.");
@@ -303,21 +303,32 @@ internal sealed class CompositionListBinding
                         Identity(implementation.ReturnType), Constraints(implementation.TypeParameters),
                         family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync));
                 if ((family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && declaration.Request.TypeKind is TypeKind.Class or TypeKind.Struct &&
-                    entry.Type.TypeKind is (TypeKind.Class or TypeKind.Struct) && _compilation.IsSymbolAccessibleWithin(entry.Type,_compilation.Assembly) && implementation != null && member != null &&
+                    entry.Type.TypeKind is (TypeKind.Class or TypeKind.Struct) && _compilation.IsSymbolAccessibleWithin(entry.Type, _compilation.Assembly) && implementation != null && member != null &&
                     (nextResult == null || nextResult is INamedTypeSymbol or IArrayTypeSymbol))
                 {
                     if (family == BoundDispatchFamily.SendSync)
-                        handlerModel = handlerModel with { SyncEmission = new(Name(declaration.Request), Name(entry.Type),
-                            Name(contract), member.Name, nextResult == null ? null : Name(nextResult)){RequestIsValueType=declaration.Request.IsValueType,HandlerIsValueType=entry.Type.IsValueType} };
+                        handlerModel = handlerModel with
+                        {
+                            SyncEmission = new(Name(declaration.Request), Name(entry.Type),
+                            Name(contract), member.Name, nextResult == null ? null : Name(nextResult))
+                            { RequestIsValueType = declaration.Request.IsValueType, HandlerIsValueType = entry.Type.IsValueType }
+                        };
                     else
-                        handlerModel = handlerModel with { AsyncEmission = new(Name(declaration.Request), Name(entry.Type),
-                            Name(contract), member.Name, nextResult == null ? null : Name(nextResult)){RequestIsValueType=declaration.Request.IsValueType,HandlerIsValueType=entry.Type.IsValueType} };
+                        handlerModel = handlerModel with
+                        {
+                            AsyncEmission = new(Name(declaration.Request), Name(entry.Type),
+                            Name(contract), member.Name, nextResult == null ? null : Name(nextResult))
+                            { RequestIsValueType = declaration.Request.IsValueType, HandlerIsValueType = entry.Type.IsValueType }
+                        };
                 }
                 if (family == BoundDispatchFamily.Stream && implementation != null && member != null && nextResult != null &&
                     declaration.Request.TypeKind is (TypeKind.Class or TypeKind.Struct) &&
                     entry.Type.TypeKind is (TypeKind.Class or TypeKind.Struct) && _compilation.IsSymbolAccessibleWithin(entry.Type, _compilation.Assembly))
-                    handlerModel = handlerModel with { StreamEmission = new(BoundName(request), BoundName(nextResult), BoundName(entry.Type),
-                        BoundName(contract), member.Name, request.IsValueType, entry.Type.IsValueType) };
+                    handlerModel = handlerModel with
+                    {
+                        StreamEmission = new(BoundName(request), BoundName(nextResult), BoundName(entry.Type),
+                        BoundName(contract), member.Name, request.IsValueType, entry.Type.IsValueType)
+                    };
                 if (entry.Factory != null && !handlerModel.CompilerOwnsError)
                 {
                     if (family == BoundDispatchFamily.Stream)
@@ -328,9 +339,12 @@ internal sealed class CompositionListBinding
                     }
                     var binding = SessionFactoryContractBinding.Bind(entry.Factory, entry.Type, request, family.Value,
                         entry.Anchor, _compilation, Facts, open);
-                    handlerModel = handlerModel with { CompilerOwnsError = binding.CompilerOwnsError,
+                    handlerModel = handlerModel with
+                    {
+                        CompilerOwnsError = binding.CompilerOwnsError,
                         ServiceOwnership = binding.Session?.Ownership ?? handlerModel.ServiceOwnership,
-                        Sessions = binding.Session == null ? default : new(new[] { binding.Session! }) };
+                        Sessions = binding.Session == null ? default : new(new[] { binding.Session! })
+                    };
                 }
                 handlers.Add(handlerModel);
             }
@@ -373,9 +387,12 @@ internal sealed class CompositionListBinding
                         }
                         var binding = SessionFactoryContractBinding.Bind(entry.Factory, entry.Type, request, family.Value,
                             entry.Anchor, _compilation, Facts, open);
-                        stageModel = stageModel with { CompilerOwnsError = binding.CompilerOwnsError,
+                        stageModel = stageModel with
+                        {
+                            CompilerOwnsError = binding.CompilerOwnsError,
                             ServiceOwnership = binding.Session?.Ownership ?? stageModel.ServiceOwnership,
-                            Sessions = binding.Session == null ? default : new(new[] { binding.Session! }) };
+                            Sessions = binding.Session == null ? default : new(new[] { binding.Session! })
+                        };
                     }
                     stages.Add(stageModel);
                     if (open != null)
@@ -402,7 +419,8 @@ internal sealed class CompositionListBinding
                 Reject("UnsupportedGenerationShape", declaration.Anchor, constraintError!);
             output.Add(Model(resultKind, result, handlers, stages, explicitHandlers != null) with
             {
-                StreamGeneric = generic, StreamItemFlow = itemFlow,
+                StreamGeneric = generic,
+                StreamItemFlow = itemFlow,
                 StreamDeclaredStages = declaration.StreamFinal == null ? default : new(declaration.Entries.Select(entry =>
                     new RegistrationStageEmission(Name(entry.Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated)), entry.Kind.ToString(),
                         entry.Factory == null ? null : Name(entry.Factory.WithNullableAnnotation(NullableAnnotation.NotAnnotated))))),
@@ -424,10 +442,12 @@ internal sealed class CompositionListBinding
             BoundPipelineModel Model(FusionResultKind? shape, ITypeSymbol? resultType, IEnumerable<BoundHandlerModel> boundHandlers,
                 IEnumerable<BoundStageModel> boundStages, bool explicitOrder) => new(declaration.Anchor, Identity(request), BoundName(request),
                     family, shape, resultType == null ? null : Identity(resultType), new(boundHandlers), new(boundStages), explicitOrder, FusionContractOrigin.NewCanonical)
-                { HandlerListOrdinal = explicitHandlers==null?int.MaxValue:int.Parse(explicitHandlers.Anchor.Substring(5),System.Globalization.CultureInfo.InvariantCulture),
-                    PipelineListOrdinal = declaration.HandlerList?int.MaxValue:int.Parse(declaration.Anchor.Substring(5),System.Globalization.CultureInfo.InvariantCulture),
+                {
+                    HandlerListOrdinal = explicitHandlers == null ? int.MaxValue : int.Parse(explicitHandlers.Anchor.Substring(5), System.Globalization.CultureInfo.InvariantCulture),
+                    PipelineListOrdinal = declaration.HandlerList ? int.MaxValue : int.Parse(declaration.Anchor.Substring(5), System.Globalization.CultureInfo.InvariantCulture),
                     HasEmptyPipeline = !declaration.HandlerList && declaration.Entries.Length == 0,
-                    PipelineFamily = declaration.HandlerList ? null : declaration.Family };
+                    PipelineFamily = declaration.HandlerList ? null : declaration.Family
+                };
         }
         return new(output);
     }
@@ -443,8 +463,10 @@ internal sealed class CompositionListBinding
         if (type.IsRefLikeType) { Reject("RefLikeCapture", anchor, $"{role} {Name(type)} cannot be captured in a DI route."); return false; }
         if (type.IsUnboundGenericType || HasOpenShape(type) && (open == null || !open.Contains(type)) ||
             type.TypeKind is not (TypeKind.Class or TypeKind.Struct) || (concrete && (type.IsAbstract || type.IsStatic)))
-        { Reject("UnsupportedGenerationShape", anchor, $"{role} {Name(type)} requires a closed class or struct" +
-            (concrete ? " with a concrete implementation." : ".") + " Open binding is pending."); return false; }
+        {
+            Reject("UnsupportedGenerationShape", anchor, $"{role} {Name(type)} requires a closed class or struct" +
+            (concrete ? " with a concrete implementation." : ".") + " Open binding is pending."); return false;
+        }
         if (!_compilation.IsSymbolAccessibleWithin(type, _compilation.Assembly))
         { Reject("UnsupportedGenerationShape", anchor, $"{role} {Name(type)} is inaccessible to generated code."); return false; }
         if (role == "Request" && !(open?.Public(type) ?? Public(type)))

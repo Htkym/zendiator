@@ -81,7 +81,8 @@ public sealed partial class GeneratorTests
         services.Add(ServiceDescriptor.Describe(typeof(SessionFactoryDependency), typeof(SessionFactoryDependency), lifetime));
         var factory = fixture?.Service ?? (isVoid ? owned ? typeof(OwnedReferenceSessionFactory<SessionVoidRequest, ReferenceVoidSession>) : typeof(BorrowedReferenceSessionFactory<SessionVoidRequest, ReferenceVoidSession>) :
             owned ? typeof(OwnedReferenceSessionFactory<SessionResponseRequest, ReferenceResponseSession>) : typeof(BorrowedReferenceSessionFactory<SessionResponseRequest, ReferenceResponseSession>));
-        Func<IServiceProvider, object> resolve = fixture != null ? fixture.ResolveService.CreateDelegate<Func<IServiceProvider, object>>() : provider => {
+        Func<IServiceProvider, object> resolve = fixture != null ? fixture.ResolveService.CreateDelegate<Func<IServiceProvider, object>>() : provider =>
+        {
             probe.Core.Trace.Add("resolve-factory");
             if (probe.Core.DiError != null) throw probe.Core.DiError;
             if (probe.Core.NullService) return null!;
@@ -160,20 +161,32 @@ public sealed partial class GeneratorTests
                 var actual = fixture == null ? InvokeHandlerSessionReference(scope.ServiceProvider, isVoid, owned, request, core.Cancellation.Token) :
                     generated ? InvokeSync(fixture, scope.ServiceProvider.GetRequiredService(fixture.Interface), request, core.Cancellation.Token) :
                     InvokeCompiledHandlerSessionReference(fixture, scope.ServiceProvider, isVoid, owned, request, core.Cancellation.Token);
-                string[] golden = scenario switch {
-                    "null-request" or "pre-cancel" => [], "di-error" or "di-null" => ["resolve-factory"],
+                string[] golden = scenario switch
+                {
+                    "null-request" or "pre-cancel" => [],
+                    "di-error" or "di-null" => ["resolve-factory"],
                     "factory-ctor-error" => ["resolve-factory", "dependency.ctor", "factory.ctor"],
                     "factory-error" or "factory-oce" or "factory-null" => ["resolve-factory", "dependency.ctor", "factory.ctor", "factory"],
                     "partial-error" or "partial-oce" => ["resolve-factory", "dependency.ctor", "factory.ctor", "factory", "partial.acquire", "partial.dispose"],
                     "handler-ctor-error" => ["resolve-factory", "dependency.ctor", "factory.ctor", "factory", "handler.ctor"],
                     _ => owned ? ["resolve-factory", "dependency.ctor", "factory.ctor", "factory", "handler.ctor", "handler", "handler.dispose"] :
-                        ["resolve-factory", "dependency.ctor", "factory.ctor", "factory", "handler.ctor", "handler"] };
+                        ["resolve-factory", "dependency.ctor", "factory.ctor", "factory", "handler.ctor", "handler"]
+                };
                 Assert.Equal(golden, core.Trace);
-                Exception? escaping = scenario switch { "di-error" => diError, "factory-error" => factoryError, "factory-oce" => factoryOce,
-                    "factory-ctor-error" or "handler-ctor-error" => constructorError, "handler-error" => bodyError, "handler-oce" => bodyOce,
-                    "partial-error" => partialError, "partial-oce" => partialOce,
+                Exception? escaping = scenario switch
+                {
+                    "di-error" => diError,
+                    "factory-error" => factoryError,
+                    "factory-oce" => factoryOce,
+                    "factory-ctor-error" or "handler-ctor-error" => constructorError,
+                    "handler-error" => bodyError,
+                    "handler-oce" => bodyOce,
+                    "partial-error" => partialError,
+                    "partial-oce" => partialOce,
                     "cleanup-error-success" or "cleanup-error-over-body" or "cleanup-error-over-oce" => cleanupError,
-                    "cleanup-oce-success" or "cleanup-oce-over-body" or "cleanup-oce-over-oce" => cleanupOce, _ => null };
+                    "cleanup-oce-success" or "cleanup-oce-over-body" or "cleanup-oce-over-oce" => cleanupOce,
+                    _ => null
+                };
                 if (escaping != null) Assert.Same(escaping, actual.Error);
                 else if (scenario == "null-request") Assert.Equal("request", Assert.IsType<ArgumentNullException>(actual.Error).ParamName);
                 else if (scenario == "pre-cancel") Assert.Equal(core.Cancellation.Token, Assert.IsType<OperationCanceledException>(actual.Error).CancellationToken);
@@ -192,15 +205,29 @@ public sealed partial class GeneratorTests
                 Assert.Equal(ran ? owned ? "cleanup" : "handler" : acquired ? "factory" : "caller", CanonicalSyncRuntimeProbe.Ambient.Value);
                 Assert.Equal(ran ? owned ? "en-US" : "es-ES" : acquired ? "fr-FR" : "", CultureInfo.CurrentCulture.Name);
                 Assert.Equal(scenario is "pre-cancel" or "cancel-in-factory" or "cancel-in-handler" or "cancel-in-cleanup", core.Cancellation.IsCancellationRequested);
-                var observation = new {
-                    owned, isVoid, scenario, golden, trace = core.Trace.ToArray(), actual.Result,
-                    errorType = actual.Error?.GetType().FullName, originalExceptionPreserved = escaping == null || ReferenceEquals(escaping, actual.Error),
+                var observation = new
+                {
+                    owned,
+                    isVoid,
+                    scenario,
+                    golden,
+                    trace = core.Trace.ToArray(),
+                    actual.Result,
+                    errorType = actual.Error?.GetType().FullName,
+                    originalExceptionPreserved = escaping == null || ReferenceEquals(escaping, actual.Error),
                     nullParameter = (actual.Error as ArgumentNullException)?.ParamName,
                     calls = core.Calls.Select(call => new { call.Phase, requestPreserved = ReferenceEquals(request, call.Request), tokenPreserved = call.Token == core.Cancellation.Token }),
-                    createdSessions = core.Created.Count, operationReleasedSessions = core.Released.Count,
-                    core.FactoryDisposals, probe.DependencyCreated, probe.DependencyDisposed, probe.PartialDisposed,
-                    ambient = CanonicalSyncRuntimeProbe.Ambient.Value, culture = CultureInfo.CurrentCulture.Name,
-                    ambientObserved = core.AmbientObserved.ToArray(), cultureObserved = core.CultureObserved.ToArray(), core.Cancellation.IsCancellationRequested
+                    createdSessions = core.Created.Count,
+                    operationReleasedSessions = core.Released.Count,
+                    core.FactoryDisposals,
+                    probe.DependencyCreated,
+                    probe.DependencyDisposed,
+                    probe.PartialDisposed,
+                    ambient = CanonicalSyncRuntimeProbe.Ambient.Value,
+                    culture = CultureInfo.CurrentCulture.Name,
+                    ambientObserved = core.AmbientObserved.ToArray(),
+                    cultureObserved = core.CultureObserved.ToArray(),
+                    core.Cancellation.IsCancellationRequested
                 };
                 snapshot = JsonSerializer.Serialize(observation);
                 if (fixture == null) WriteNestedHookEvidence("handler-session-reference", owned + "-" + isVoid + "-" + scenario, observation);
@@ -210,8 +237,14 @@ public sealed partial class GeneratorTests
             Assert.Equal(owned ? core.Created.Count : 0, core.Released.Count);
             foreach (var borrowed in probe.Borrowed) borrowed.Dispose();
             Assert.Equal(core.Created.Count, core.Released.Count);
-            return JsonSerializer.Serialize(new { operation = JsonSerializer.Deserialize<JsonElement>(snapshot), finalTrace = core.Trace.ToArray(),
-                core.FactoryDisposals, probe.DependencyDisposed, finalOwnerReleasedSessions = core.Released.Count });
+            return JsonSerializer.Serialize(new
+            {
+                operation = JsonSerializer.Deserialize<JsonElement>(snapshot),
+                finalTrace = core.Trace.ToArray(),
+                core.FactoryDisposals,
+                probe.DependencyDisposed,
+                finalOwnerReleasedSessions = core.Released.Count
+            });
         }
         finally { core.Cancellation.Dispose(); CanonicalSyncRuntimeProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; }
     }
@@ -262,10 +295,19 @@ public sealed partial class GeneratorTests
             Assert.Equal(4, core.Created.Distinct(ReferenceEqualityComparer.Instance).Count());
             foreach (var borrowed in probe.Borrowed) borrowed.Dispose();
             Assert.Equal(4, core.Released.Count); Assert.All(core.Created, session => Assert.Single(core.Released, item => ReferenceEquals(item, session)));
-            var observation = new {
-                owned, isVoid, lifetime = lifetime.ToString(), trace = core.Trace.ToArray(), factories, core.FactoryDisposals,
-                probe.DependencyCreated, probe.DependencyDisposed, createdSessions = core.Created.Count,
-                operationReleasedSessions = owned ? 4 : 0, finalOwnerReleasedSessions = core.Released.Count
+            var observation = new
+            {
+                owned,
+                isVoid,
+                lifetime = lifetime.ToString(),
+                trace = core.Trace.ToArray(),
+                factories,
+                core.FactoryDisposals,
+                probe.DependencyCreated,
+                probe.DependencyDisposed,
+                createdSessions = core.Created.Count,
+                operationReleasedSessions = owned ? 4 : 0,
+                finalOwnerReleasedSessions = core.Released.Count
             };
             if (fixture == null) WriteNestedHookEvidence("handler-session-reference-lifetimes", owned + "-" + isVoid + "-" + lifetime, observation);
             return JsonSerializer.Serialize(observation);

@@ -42,10 +42,19 @@ public sealed partial class GeneratorTests
             foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
             File.WriteAllText(Path.Combine(folder, "compile.json"), System.Text.Json.JsonSerializer.Serialize(new
             {
-                shape, emitted.Success, composition = Selection(driver),
-                diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage(), inSource = d.Location.IsInSource,
-                    anchor = d.Location.IsInSource ? d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan) : null }),
-                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }), sources = generated.Select(f => f.HintName)
+                shape,
+                emitted.Success,
+                composition = Selection(driver),
+                diagnostics = diagnostics.Select(d => new
+                {
+                    d.Id,
+                    severity = d.Severity.ToString(),
+                    message = d.GetMessage(),
+                    inSource = d.Location.IsInSource,
+                    anchor = d.Location.IsInSource ? d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan) : null
+                }),
+                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
+                sources = generated.Select(f => f.HintName)
             }));
         }
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
@@ -111,10 +120,28 @@ public sealed partial class GeneratorTests
             var folder = PublicWrapperSessionFolder(profile);
             if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), System.Text.Json.JsonSerializer.Serialize(new
             {
-                profile, values, outerEnumerations = 1, probe.Opens, probe.UpstreamEnumerations, created, distinctSessionInstances = probe.Instances.Distinct(ReferenceEqualityComparer.Instance).Count(),
-                probe.Starts, probe.Moves, probe.Reads, probe.SourceDisposals, probe.SessionDisposals, probe.WrapperFinallys, probe.InnerHeldChecks, probe.OuterAliveChecks,
-                lazyBeforeMove = true, borrowedFactoryDisposalsBeforeScope = 0, borrowedFactoryDisposalsAfterScope = probe.ServiceDisposals,
-                sessionDisposalsBeforeScope = sessionDisposals, sessionDisposalsAfterScope = probe.SessionDisposals, eventsBeforeScope = beforeScope, events = probe.Events
+                profile,
+                values,
+                outerEnumerations = 1,
+                probe.Opens,
+                probe.UpstreamEnumerations,
+                created,
+                distinctSessionInstances = probe.Instances.Distinct(ReferenceEqualityComparer.Instance).Count(),
+                probe.Starts,
+                probe.Moves,
+                probe.Reads,
+                probe.SourceDisposals,
+                probe.SessionDisposals,
+                probe.WrapperFinallys,
+                probe.InnerHeldChecks,
+                probe.OuterAliveChecks,
+                lazyBeforeMove = true,
+                borrowedFactoryDisposalsBeforeScope = 0,
+                borrowedFactoryDisposalsAfterScope = probe.ServiceDisposals,
+                sessionDisposalsBeforeScope = sessionDisposals,
+                sessionDisposalsAfterScope = probe.SessionDisposals,
+                eventsBeforeScope = beforeScope,
+                events = probe.Events
             }));
         }
     }

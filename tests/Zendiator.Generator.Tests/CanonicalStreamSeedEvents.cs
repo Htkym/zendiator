@@ -12,7 +12,8 @@ internal static class StreamEventItems
 {
     public static int? Int32(object? value) => value switch
     {
-        null => null, int item => item,
+        null => null,
+        int item => item,
         _ => throw new InvalidOperationException("This corpus has only typed int items.")
     };
 }

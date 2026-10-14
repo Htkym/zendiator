@@ -124,8 +124,15 @@ public sealed partial class GeneratorTests
                             var calls = core.Calls.Where(c => ReferenceEquals(c.Request, requests[i])).ToArray();
                             Assert.Equal(new[] { "factory", "handler" }, calls.Select(c => c.Phase)); Assert.All(calls, c => Assert.Equal(cancellation[i].Token, c.Token));
                             Assert.Same(Assert.Single(core.Created), calls[1].Receiver);
-                            snapshots.Add(new { index = i, actual[j].Result, originalErrorPreserved = ReferenceEquals(errors[i], actual[j].Error),
-                                errorType = actual[j].Error?.GetType().FullName, tokenPreserved = calls.All(c => c.Token == cancellation[i].Token), sharedReceiverPreserved = true });
+                            snapshots.Add(new
+                            {
+                                index = i,
+                                actual[j].Result,
+                                originalErrorPreserved = ReferenceEquals(errors[i], actual[j].Error),
+                                errorType = actual[j].Error?.GetType().FullName,
+                                tokenPreserved = calls.All(c => c.Token == cancellation[i].Token),
+                                sharedReceiverPreserved = true
+                            });
                         }
                         Assert.Empty(core.Released);
                         Assert.Equal(lifetime == ServiceLifetime.Singleton ? 0 : s * (lifetime == ServiceLifetime.Scoped ? 1 : 2), core.FactoryDisposals);
@@ -139,8 +146,16 @@ public sealed partial class GeneratorTests
             var factoryCalls = core.Calls.Where(c => c.Phase == "factory").ToArray(); Assert.Equal(count, factoryCalls.Length);
             Assert.Equal(factories, factoryCalls.Select(c => c.Receiver).Distinct(ReferenceEqualityComparer.Instance).Count());
             Assert.Empty(core.Released); probe.ReleaseOwner(); Assert.Same(Assert.Single(core.Created), Assert.Single(core.Released));
-            return JsonSerializer.Serialize(new { operations = snapshots, scopeCleanup, core.FactoryConstructions, core.FactoryDisposals,
-                createdSessions = core.Created.Count, operationReleasedSessions = 0, finalOwnerReleasedSessions = core.Released.Count });
+            return JsonSerializer.Serialize(new
+            {
+                operations = snapshots,
+                scopeCleanup,
+                core.FactoryConstructions,
+                core.FactoryDisposals,
+                createdSessions = core.Created.Count,
+                operationReleasedSessions = 0,
+                finalOwnerReleasedSessions = core.Released.Count
+            });
         }
         finally { foreach (var source in cancellation) source.Dispose(); }
     }

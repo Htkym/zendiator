@@ -32,36 +32,36 @@ public sealed partial class GeneratorTests
         var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source), out var output, out var diagnostics);
         Assert.Equal(expectedIds.OrderBy(x => x), diagnostics.Select(d => d.Id).OrderBy(x => x));
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error && !d.Id.StartsWith("ZEN", StringComparison.Ordinal)));
-        if (expectedIds.Length!=0) AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
+        if (expectedIds.Length != 0) AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
         return driver;
     }
-    private static GeneratorDriver BindAcceptedSendLists(string source,int routes=1,bool legacy=true)
+    private static GeneratorDriver BindAcceptedSendLists(string source, int routes = 1, bool legacy = true)
     {
-        var driver=BindLists(source);
-        var selection=Selection(driver);
-        Assert.Equal(routes,selection.Pipelines.Count);
-        var generated=driver.GetRunResult().Results.Single().GeneratedSources;
-        AssertCanonicalOutputRoles(generated,routes:routes,legacy:legacy);
-        foreach(var route in selection.Pipelines)
+        var driver = BindLists(source);
+        var selection = Selection(driver);
+        Assert.Equal(routes, selection.Pipelines.Count);
+        var generated = driver.GetRunResult().Results.Single().GeneratedSources;
+        AssertCanonicalOutputRoles(generated, routes: routes, legacy: legacy);
+        foreach (var route in selection.Pipelines)
         {
             Assert.True(route.Family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync);
-            var body=string.Concat(generated.Where(IsCanonicalRoute).Select(s=>s.SourceText.ToString()));
-            Assert.Contains((route.Family==BoundDispatchFamily.SendSync?"Send(":"SendAsync(")+route.RequestName+" request",body);
+            var body = string.Concat(generated.Where(IsCanonicalRoute).Select(s => s.SourceText.ToString()));
+            Assert.Contains((route.Family == BoundDispatchFamily.SendSync ? "Send(" : "SendAsync(") + route.RequestName + " request", body);
         }
         return driver;
     }
-    private static void AssertAcceptedSendEmission(GeneratorDriver driver,IEnumerable<Diagnostic> diagnostics,
-        BoundDispatchFamily family,bool isVoid)
+    private static void AssertAcceptedSendEmission(GeneratorDriver driver, IEnumerable<Diagnostic> diagnostics,
+        BoundDispatchFamily family, bool isVoid)
     {
         Assert.Empty(diagnostics);
-        var route=Assert.Single(Selection(driver).Pipelines);
-        Assert.Equal(family,route.Family);
-        Assert.Equal(isVoid?FusionResultKind.Void:FusionResultKind.Response,route.ResultKind);
+        var route = Assert.Single(Selection(driver).Pipelines);
+        Assert.Equal(family, route.Family);
+        Assert.Equal(isVoid ? FusionResultKind.Void : FusionResultKind.Response, route.ResultKind);
         Assert.Single(route.Handlers);
-        Assert.All(route.Stages,s=>Assert.NotEmpty(s.Callbacks));
-        var files=driver.GetRunResult().Results.Single().GeneratedSources;
+        Assert.All(route.Stages, s => Assert.NotEmpty(s.Callbacks));
+        var files = driver.GetRunResult().Results.Single().GeneratedSources;
         AssertCanonicalOutputRoles(files);
-        Assert.Contains((family==BoundDispatchFamily.SendSync?"Send(":"SendAsync(")+route.RequestName+" request",CanonicalRouteSource(files));
+        Assert.Contains((family == BoundDispatchFamily.SendSync ? "Send(" : "SendAsync(") + route.RequestName + " request", CanonicalRouteSource(files));
     }
 
     [Theory]
@@ -187,7 +187,7 @@ public sealed partial class GeneratorTests
         Assert.Equal(BoundDispatchFamily.SendSync, Assert.Single(Selection(sync).Pipelines).Family);
         var both = source.Replace("c.Pipeline<Ping>(DispatchFamily.SendSync, Stage.Hook<Mixed<string>>());",
             "c.Pipeline<Ping>(DispatchFamily.SendSync, Stage.Hook<Last>()); c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(A)); c.Pipeline<Ping>(DispatchFamily.SendAsync,Stage.Hook<Mixed<string>>());");
-        var separate = BindAcceptedSendLists(both,routes:2,legacy:false);
+        var separate = BindAcceptedSendLists(both, routes: 2, legacy: false);
         Assert.Equal(new[] { BoundDispatchFamily.SendSync, BoundDispatchFamily.SendAsync }, Selection(separate).Pipelines.Select(p => p.Family!.Value));
         BindLists(both.Replace("c.Pipeline<Ping>(DispatchFamily.SendSync, Stage.Hook<Last>())", "c.Pipeline<Ping>(Stage.Hook<Last>())"), "ZEN0029", "ZEN0037", "ZEN0037");
         var @void = ListFixture("c.Handlers<Ping>(DispatchFamily.SendAllAsync,typeof(B),typeof(A)); c.Pipeline<Ping>(Stage.Hook<Mixed<string>>(),Stage.Wrapper<Opaque>());")
@@ -195,7 +195,7 @@ public sealed partial class GeneratorTests
             .Replace("ValueTask<int> HandleAsync", "ValueTask HandleAsync").Replace("=> new(1)", "=> default")
             .Replace("IAsyncSendWrapper<Ping,int>", "IAsyncSendWrapper<Ping>").Replace("IAsyncSendContinuation<Ping,int>", "IAsyncSendContinuation<Ping>")
             .Replace("ValueTask<int> InvokeAsync", "ValueTask InvokeAsync");
-        var boundVoid = BindLists(@void,"ZEN0037");
+        var boundVoid = BindLists(@void, "ZEN0037");
         Assert.Equal(FusionResultKind.Void, Assert.Single(Selection(boundVoid).Pipelines).ResultKind);
         Assert.Null(Selection(boundVoid).Pipelines[0].Result);
     }
@@ -259,7 +259,7 @@ public sealed partial class GeneratorTests
             .Replace("IRequestHandler<Ping,int>", "IRequestHandler<Ping,System.Collections.Generic.IEnumerable<int>>")
             .Replace("ValueTask<int> HandleAsync", "ValueTask<System.Collections.Generic.IEnumerable<int>> HandleAsync")
             .Replace("=> new(1)", "=> new(new int[]{1})");
-        BindAcceptedSendLists(response,legacy:false); // An interface response is a valid closed public shape.
+        BindAcceptedSendLists(response, legacy: false); // An interface response is a valid closed public shape.
         var hiddenResponse = source.Replace("IRequest<int>", "IRequest<HiddenResult>").Replace("IRequestHandler<Ping,int>", "IRequestHandler<Ping,HiddenResult>")
             .Replace("ValueTask<int> HandleAsync", "ValueTask<HiddenResult> HandleAsync").Replace("=> new(1)", "=> new(new HiddenResult())")
             .Replace("public sealed class Handler", "internal sealed class Handler") + "internal sealed class HiddenResult;";
@@ -274,26 +274,26 @@ public sealed partial class GeneratorTests
         {
             var family = sync ? "SendAllSync" : "SendAllAsync";
             foreach (var useLocal in new[] { false, true })
-            foreach (var defaultComposition in new[] { false, true })
-            {
-                var selection = useLocal ? "c.UseLocalHandlers(); " : "c.AddHandler<A>(); ";
-                var body = selection + $"c.Pipeline<Ping>(DispatchFamily.{family});";
-                var driver = BindLists(FamilyFixture(body, sync, isVoid: false, defaultComposition), "ZEN0028");
-                var route = Assert.Single(Selection(driver).Pipelines);
-                Assert.False(route.ExplicitHandlerOrder);
-                Assert.Empty(route.Handlers); // A sorted candidate set cannot become a branch list.
-                Assert.Null(route.ResultKind);
-                var diagnostic = Assert.Single(driver.GetRunResult().Diagnostics);
-                Assert.Contains("explicit Handlers list", diagnostic.GetMessage());
-                Assert.Equal("c.Pipeline<Ping>(DispatchFamily." + family + ")", diagnostic.Location.SourceTree!.GetText().ToString(diagnostic.Location.SourceSpan));
+                foreach (var defaultComposition in new[] { false, true })
+                {
+                    var selection = useLocal ? "c.UseLocalHandlers(); " : "c.AddHandler<A>(); ";
+                    var body = selection + $"c.Pipeline<Ping>(DispatchFamily.{family});";
+                    var driver = BindLists(FamilyFixture(body, sync, isVoid: false, defaultComposition), "ZEN0028");
+                    var route = Assert.Single(Selection(driver).Pipelines);
+                    Assert.False(route.ExplicitHandlerOrder);
+                    Assert.Empty(route.Handlers); // A sorted candidate set cannot become a branch list.
+                    Assert.Null(route.ResultKind);
+                    var diagnostic = Assert.Single(driver.GetRunResult().Diagnostics);
+                    Assert.Contains("explicit Handlers list", diagnostic.GetMessage());
+                    Assert.Equal("c.Pipeline<Ping>(DispatchFamily." + family + ")", diagnostic.Location.SourceTree!.GetText().ToString(diagnostic.Location.SourceSpan));
 
-                // The list may occur later in the lambda; its declared B,A order is authoritative.
-                var explicitOrder = BindLists(FamilyFixture(body + $" c.Handlers<Ping>(DispatchFamily.{family},typeof(B),typeof(A));",
-                    sync, isVoid: false, defaultComposition), "ZEN0037");
-                var ordered = Assert.Single(Selection(explicitOrder).Pipelines);
-                Assert.True(ordered.ExplicitHandlerOrder);
-                Assert.Equal(new[] { "global::App.B", "global::App.A" }, ordered.Handlers.Select(h => h.Name));
-            }
+                    // The list may occur later in the lambda; its declared B,A order is authoritative.
+                    var explicitOrder = BindLists(FamilyFixture(body + $" c.Handlers<Ping>(DispatchFamily.{family},typeof(B),typeof(A));",
+                        sync, isVoid: false, defaultComposition), "ZEN0037");
+                    var ordered = Assert.Single(Selection(explicitOrder).Pipelines);
+                    Assert.True(ordered.ExplicitHandlerOrder);
+                    Assert.Equal(new[] { "global::App.B", "global::App.A" }, ordered.Handlers.Select(h => h.Name));
+                }
         }
     }
 
@@ -303,45 +303,45 @@ public sealed partial class GeneratorTests
     public void Wrapper_continuation_mode_matches_each_family_and_shape_while_sync_hooks_remain_legal(bool isVoid)
     {
         foreach (var sync in new[] { false, true })
-        foreach (var sendAll in new[] { false, true })
-        {
-            var family = sync ? (sendAll ? "SendAllSync" : "SendSync") : (sendAll ? "SendAllAsync" : "SendAsync");
-            var compatible = sync ? "SyncOpaque" : "Opaque";
-            var incompatible = sync ? "Opaque" : "SyncOpaque";
-            var required = sync ? "ISendContinuation" : "IAsyncSendContinuation";
-            string Body(string wrapper) => $"c.Handlers<Ping>(DispatchFamily.{family},typeof(A)); " +
-                $"c.Pipeline<Ping>(DispatchFamily.{family},Stage.Hook<Last>(),Stage.Wrapper<{wrapper}>());";
-            var driver = sendAll ? BindLists(FamilyFixture(Body(compatible), sync, isVoid),"ZEN0037") : BindAcceptedSendLists(FamilyFixture(Body(compatible), sync, isVoid));
-            var route = Assert.Single(Selection(driver).Pipelines);
-            Assert.Equal(isVoid ? FusionResultKind.Void : FusionResultKind.Response, route.ResultKind);
-            Assert.Equal(BoundCompletionKind.Synchronous, Assert.Single(route.Stages[0].Callbacks).Completion);
-            var callback = Assert.Single(route.Stages[1].Callbacks);
-            Assert.Equal(BoundCallbackPhase.Wrapper, callback.Phase);
-            Assert.Contains(required, callback.GenericConstraints);
-            Assert.Equal(sync ? BoundCompletionKind.Synchronous : BoundCompletionKind.ValueTask, callback.Completion);
-
-            var wrongSource = FamilyFixture(Body(incompatible), sync, isVoid);
-            var wrong = BindLists(wrongSource, "ZEN0025");
-            Assert.Contains(required, Assert.Single(wrong.GetRunResult().Diagnostics).GetMessage());
-            Assert.Empty(Assert.Single(Selection(wrong).Pipelines).Stages[1].Callbacks);
-            if (!sync && !sendAll && !isVoid)
+            foreach (var sendAll in new[] { false, true })
             {
-                var initial = Selection(wrong);
-                var diagnostic = Assert.Single(wrong.GetRunResult().Diagnostics);
-                var moved = Compilation("\n\n" + wrongSource);
-                wrong = wrong.RunGenerators(moved);
-                Assert.Equal(initial, Selection(wrong));
-                SelectionReason(wrong, IncrementalStepRunReason.Cached);
-                var current = Assert.Single(wrong.GetRunResult().Diagnostics);
-                Assert.Same(moved.SyntaxTrees[0], current.Location.SourceTree);
-                Assert.Equal(diagnostic.Location.SourceSpan.Start + 2, current.Location.SourceSpan.Start);
-            }
+                var family = sync ? (sendAll ? "SendAllSync" : "SendSync") : (sendAll ? "SendAllAsync" : "SendAsync");
+                var compatible = sync ? "SyncOpaque" : "Opaque";
+                var incompatible = sync ? "Opaque" : "SyncOpaque";
+                var required = sync ? "ISendContinuation" : "IAsyncSendContinuation";
+                string Body(string wrapper) => $"c.Handlers<Ping>(DispatchFamily.{family},typeof(A)); " +
+                    $"c.Pipeline<Ping>(DispatchFamily.{family},Stage.Hook<Last>(),Stage.Wrapper<{wrapper}>());";
+                var driver = sendAll ? BindLists(FamilyFixture(Body(compatible), sync, isVoid), "ZEN0037") : BindAcceptedSendLists(FamilyFixture(Body(compatible), sync, isVoid));
+                var route = Assert.Single(Selection(driver).Pipelines);
+                Assert.Equal(isVoid ? FusionResultKind.Void : FusionResultKind.Response, route.ResultKind);
+                Assert.Equal(BoundCompletionKind.Synchronous, Assert.Single(route.Stages[0].Callbacks).Completion);
+                var callback = Assert.Single(route.Stages[1].Callbacks);
+                Assert.Equal(BoundCallbackPhase.Wrapper, callback.Phase);
+                Assert.Contains(required, callback.GenericConstraints);
+                Assert.Equal(sync ? BoundCompletionKind.Synchronous : BoundCompletionKind.ValueTask, callback.Completion);
 
-            // S01 keeps both wrapper contracts ambiguous, even if this route has a matching one.
-            var dual = BindLists(FamilyFixture(Body("DualOpaque"), sync, isVoid), "ZEN0027");
-            Assert.Contains("same phase", Assert.Single(dual.GetRunResult().Diagnostics).GetMessage());
-            Assert.Empty(Assert.Single(Selection(dual).Pipelines).Stages[1].Callbacks);
-        }
+                var wrongSource = FamilyFixture(Body(incompatible), sync, isVoid);
+                var wrong = BindLists(wrongSource, "ZEN0025");
+                Assert.Contains(required, Assert.Single(wrong.GetRunResult().Diagnostics).GetMessage());
+                Assert.Empty(Assert.Single(Selection(wrong).Pipelines).Stages[1].Callbacks);
+                if (!sync && !sendAll && !isVoid)
+                {
+                    var initial = Selection(wrong);
+                    var diagnostic = Assert.Single(wrong.GetRunResult().Diagnostics);
+                    var moved = Compilation("\n\n" + wrongSource);
+                    wrong = wrong.RunGenerators(moved);
+                    Assert.Equal(initial, Selection(wrong));
+                    SelectionReason(wrong, IncrementalStepRunReason.Cached);
+                    var current = Assert.Single(wrong.GetRunResult().Diagnostics);
+                    Assert.Same(moved.SyntaxTrees[0], current.Location.SourceTree);
+                    Assert.Equal(diagnostic.Location.SourceSpan.Start + 2, current.Location.SourceSpan.Start);
+                }
+
+                // S01 keeps both wrapper contracts ambiguous, even if this route has a matching one.
+                var dual = BindLists(FamilyFixture(Body("DualOpaque"), sync, isVoid), "ZEN0027");
+                Assert.Contains("same phase", Assert.Single(dual.GetRunResult().Diagnostics).GetMessage());
+                Assert.Empty(Assert.Single(Selection(dual).Pipelines).Stages[1].Callbacks);
+            }
     }
 
     private static string FamilyFixture(string body, bool sync, bool isVoid, bool defaultComposition = false)
@@ -374,11 +374,11 @@ public sealed partial class GeneratorTests
             "public sealed class Missing : ISendRequestTransform<Ping> {}";
         var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source), out var output, out var diagnostics);
         Assert.Empty(diagnostics);
-        Assert.Equal("CS0535", Assert.Single(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error)).Id);
+        Assert.Equal("CS0535", Assert.Single(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error)).Id);
         Assert.True(Assert.Single(Selection(driver).Pipelines).Stages[0].CompilerOwnsError);
         source = ListFixture("c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(A));").Replace("[ZendiatorHandler] public sealed class A", "[ZendiatorHandler,ZendiatorHandler] public sealed class A");
         driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source), out output, out diagnostics);
         Assert.Empty(diagnostics);
-        Assert.Equal("CS0579", Assert.Single(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error)).Id);
+        Assert.Equal("CS0579", Assert.Single(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error)).Id);
     }
 }

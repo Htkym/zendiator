@@ -68,10 +68,16 @@ public sealed partial class GeneratorTests
         {
             File.WriteAllText(Path.Combine(folder, "input.cs"), source); File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
             foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
-            File.WriteAllText(Path.Combine(folder, "binding.json"), System.Text.Json.JsonSerializer.Serialize(new { emitted.Success, graph.IsValid, facts = graph.Facts,
+            File.WriteAllText(Path.Combine(folder, "binding.json"), System.Text.Json.JsonSerializer.Serialize(new
+            {
+                emitted.Success,
+                graph.IsValid,
+                facts = graph.Facts,
                 segments = graph.StreamWrapperSchedule!.Segments.Select(s => new { s.Descriptor.SourcePosition, s.Descriptor.HookPositions, sessionOwners = s.Cursor.Owners.Where(o => o.Kind == StreamOwnerKind.Session) }),
                 diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), inSource = d.Location.IsInSource }),
-                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }), productionEnabled = false }));
+                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
+                productionEnabled = false
+            }));
         }
         Assert.Empty(diagnostics); // This closed, same-item owned wrapper shape now connects publicly.
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));

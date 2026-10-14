@@ -23,10 +23,19 @@ public sealed partial class GeneratorTests
             foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
             File.WriteAllText(Path.Combine(folder, "compile.json"), System.Text.Json.JsonSerializer.Serialize(new
             {
-                shape, emitted.Success, composition = Selection(driver),
-                diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage(), inSource = d.Location.IsInSource,
-                    anchor = d.Location.IsInSource ? d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan) : null }),
-                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }), sources = generated.Select(f => f.HintName)
+                shape,
+                emitted.Success,
+                composition = Selection(driver),
+                diagnostics = diagnostics.Select(d => new
+                {
+                    d.Id,
+                    severity = d.Severity.ToString(),
+                    message = d.GetMessage(),
+                    inSource = d.Location.IsInSource,
+                    anchor = d.Location.IsInSource ? d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan) : null
+                }),
+                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
+                sources = generated.Select(f => f.HintName)
             }));
         }
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
@@ -117,11 +126,26 @@ public sealed partial class GeneratorTests
         var folder = PublicOpenOwnedFolder("public");
         if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), System.Text.Json.JsonSerializer.Serialize(new
         {
-            values, runtimeEnumerations = 1, publicReturnType = api.ReturnType.ToString(), currentType = finalType.ToString(), sourceType = payloadType.ToString(),
-            factoryDefinitions = factoryDefinitions.Select(t => t.ToString()), actualClosedFactories = actualFactories.Select(t => t.ToString()),
-            payloadIdentityPreserved = true, requestTokenCheckedByProbe = true, probe.Starts, probe.SourceEnumerations, probe.Moves, probe.Reads, probe.SourceDisposals,
-            ownedSessionDisposalsBeforeScope = 2, ownedSessionDisposalsAfterScope = probe.SessionDisposals,
-            borrowedFactoryDisposalsBeforeScope = 0, borrowedFactoryDisposalsAfterScope = probe.FactoryDisposals, eventsBeforeScope = beforeScope, events = probe.Events
+            values,
+            runtimeEnumerations = 1,
+            publicReturnType = api.ReturnType.ToString(),
+            currentType = finalType.ToString(),
+            sourceType = payloadType.ToString(),
+            factoryDefinitions = factoryDefinitions.Select(t => t.ToString()),
+            actualClosedFactories = actualFactories.Select(t => t.ToString()),
+            payloadIdentityPreserved = true,
+            requestTokenCheckedByProbe = true,
+            probe.Starts,
+            probe.SourceEnumerations,
+            probe.Moves,
+            probe.Reads,
+            probe.SourceDisposals,
+            ownedSessionDisposalsBeforeScope = 2,
+            ownedSessionDisposalsAfterScope = probe.SessionDisposals,
+            borrowedFactoryDisposalsBeforeScope = 0,
+            borrowedFactoryDisposalsAfterScope = probe.FactoryDisposals,
+            eventsBeforeScope = beforeScope,
+            events = probe.Events
         }));
     }
 

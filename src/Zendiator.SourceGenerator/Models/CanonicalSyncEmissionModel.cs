@@ -7,7 +7,7 @@ internal sealed record BoundSyncFactoryEmission(string FactoryName, string Contr
     public bool IsSourceDeclaration { get; init; }
 }
 internal sealed record BoundSyncHandlerEmission(string RequestName, string HandlerName, string ContractName, string MethodName, string? ResultName)
-{public bool RequestIsValueType{get;init;} public bool HandlerIsValueType{get;init;}}
+{ public bool RequestIsValueType { get; init; } public bool HandlerIsValueType { get; init; } }
 internal sealed record BoundSyncHookCallbackEmission(string ContractName, string MethodName);
 internal sealed record BoundSyncHookEmission(string HookName, BoundSyncHookCallbackEmission Before,
     BoundSyncHookCallbackEmission Success, BoundSyncHookCallbackEmission Exception, BoundSyncHookCallbackEmission Finally)
@@ -26,5 +26,5 @@ internal sealed record CanonicalSyncCompositionEmission(int Index, string Namesp
 }
 internal sealed record CanonicalSyncEmissionModel(EquatableArray<CanonicalSyncCompositionEmission> Compositions);
 internal sealed record CanonicalSyncCallSite(string Namespace, string? MarkerName, int Version, string Data, bool ExtensionForm)
-{public EquatableArray<string> ExternAliases{get;init;}}
+{ public EquatableArray<string> ExternAliases { get; init; } }
 internal sealed record CanonicalSyncInterceptorModel(EquatableArray<CanonicalSyncCallSite> CallSites);

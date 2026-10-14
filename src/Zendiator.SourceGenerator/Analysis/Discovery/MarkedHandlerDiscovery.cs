@@ -21,19 +21,19 @@ internal static class MarkedHandlerDiscovery
         var handler = compilation.GetTypeByMetadataName(ContractNames.Handler);
         var marker = handler?.ContainingAssembly.GetTypeByMetadataName(MarkerName);
         if (marker == null || context.TargetSymbol is not INamedTypeSymbol type) return null;
-        return BindType(compilation,type,marker,true,ct);
+        return BindType(compilation, type, marker, true, ct);
     }
 
     // Known external types are supplied by explicit configuration, never by assembly-wide scanning.
-    internal static Candidate? BindExplicitMetadata(Compilation compilation,INamedTypeSymbol type,CancellationToken ct)
+    internal static Candidate? BindExplicitMetadata(Compilation compilation, INamedTypeSymbol type, CancellationToken ct)
     {
-        if(type.Locations.Any(l=>l.IsInSource)||type.TypeKind is not (TypeKind.Class or TypeKind.Struct))return null;
-        var marker=compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly.GetTypeByMetadataName(MarkerName);
-        if(marker==null||type.GetAttributes().Count(a=>Same(a.AttributeClass,marker))>1)return null;
-        return BindType(compilation,type,marker,false,ct);
+        if (type.Locations.Any(l => l.IsInSource) || type.TypeKind is not (TypeKind.Class or TypeKind.Struct)) return null;
+        var marker = compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly.GetTypeByMetadataName(MarkerName);
+        if (marker == null || type.GetAttributes().Count(a => Same(a.AttributeClass, marker)) > 1) return null;
+        return BindType(compilation, type, marker, false, ct);
     }
 
-    private static Candidate? BindType(Compilation compilation,INamedTypeSymbol type,INamedTypeSymbol marker,bool markerRequired,CancellationToken ct)
+    private static Candidate? BindType(Compilation compilation, INamedTypeSymbol type, INamedTypeSymbol marker, bool markerRequired, CancellationToken ct)
     {
         var attributes = type.GetAttributes().Where(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, marker)).ToArray();
         if (markerRequired && attributes.Length == 0) return null;

@@ -29,21 +29,45 @@ public sealed partial class GeneratorTests
 
         void Reject(CanonicalStreamExecutionSchedule value) => Assert.Null(CanonicalStreamPrototypeProjection.Create(
             row with { Graph = row.Graph! with { StreamSchedule = value } }));
-        Reject(schedule with { Sites = new(schedule.Sites.Select(s => s.Id.Phase == StreamPhase.SourceMove
-            ? s with { Completion = BoundCompletionKind.Synchronous } : s)) });
-        Reject(schedule with { Flows = new(schedule.Flows.Select(f => f.Program == StreamProgram.Move ? f with
-        { Edges = new(f.Edges.Select(e => e.From.Phase == StreamPhase.SourceCurrent && e.Outcome == StreamOutcome.Success
-            ? e with { To = new(StreamProgram.Move, StreamPhase.CacheCurrent) } : e)) } : f)) });
-        Reject(schedule with { Transfers = new(schedule.Transfers.Select(t => t.At.Phase == StreamPhase.SourceCurrent
-            ? t with { Destination = "wrong/item" } : t)) });
-        Reject(schedule with { Awaits = new(schedule.Awaits.Select(a => a.Producer.Phase == StreamPhase.SourceMove
-            ? a with { ConfigureAwaitFalse = false } : a)) });
+        Reject(schedule with
+        {
+            Sites = new(schedule.Sites.Select(s => s.Id.Phase == StreamPhase.SourceMove
+            ? s with { Completion = BoundCompletionKind.Synchronous } : s))
+        });
+        Reject(schedule with
+        {
+            Flows = new(schedule.Flows.Select(f => f.Program == StreamProgram.Move ? f with
+            {
+                Edges = new(f.Edges.Select(e => e.From.Phase == StreamPhase.SourceCurrent && e.Outcome == StreamOutcome.Success
+                ? e with { To = new(StreamProgram.Move, StreamPhase.CacheCurrent) } : e))
+            } : f))
+        });
+        Reject(schedule with
+        {
+            Transfers = new(schedule.Transfers.Select(t => t.At.Phase == StreamPhase.SourceCurrent
+            ? t with { Destination = "wrong/item" } : t))
+        });
+        Reject(schedule with
+        {
+            Awaits = new(schedule.Awaits.Select(a => a.Producer.Phase == StreamPhase.SourceMove
+            ? a with { ConfigureAwaitFalse = false } : a))
+        });
         Reject(schedule with { Owners = new(schedule.Owners.Select(o => o.Id == "source" ? o with { Borrowed = true } : o)) });
-        Reject(schedule with { Flows = new(schedule.Flows.Select(f => f.Program == StreamProgram.Dispose ? f with
-        { Edges = new(f.Edges.Select(e => e.From.Phase == StreamPhase.DetachSource
-            ? e with { To = new(StreamProgram.Dispose, StreamPhase.SourcePresent) } : e)) } : f)) });
-        Reject(schedule with { Flows = new(schedule.Flows.Select(f => f.Program == StreamProgram.Move ? f with
-        { Edges = new(f.Edges.Select(e => e.From.Phase == StreamPhase.SourceGuard && e.Outcome == StreamOutcome.Success
-            ? e with { To = new(StreamProgram.Move, (StreamPhase)999) } : e)) } : f)) });
+        Reject(schedule with
+        {
+            Flows = new(schedule.Flows.Select(f => f.Program == StreamProgram.Dispose ? f with
+            {
+                Edges = new(f.Edges.Select(e => e.From.Phase == StreamPhase.DetachSource
+                ? e with { To = new(StreamProgram.Dispose, StreamPhase.SourcePresent) } : e))
+            } : f))
+        });
+        Reject(schedule with
+        {
+            Flows = new(schedule.Flows.Select(f => f.Program == StreamProgram.Move ? f with
+            {
+                Edges = new(f.Edges.Select(e => e.From.Phase == StreamPhase.SourceGuard && e.Outcome == StreamOutcome.Success
+                ? e with { To = new(StreamProgram.Move, (StreamPhase)999) } : e))
+            } : f))
+        });
     }
 }

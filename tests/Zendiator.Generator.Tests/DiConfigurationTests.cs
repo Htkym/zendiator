@@ -11,45 +11,45 @@ public sealed class DiConfigurationTests
     [Fact]
     public void Interception_connection_guard_fixes_message_and_location_for_unsupported_call_target()
     {
-        const string member="ZendiatorServiceCollectionExtensions.AddZendiator";
-        const string message="AddZendiator call cannot be connected to generated registration. Keep the call inside an ordinary method body.";
-        foreach(var parenthesized in new[]{true,false})
+        const string member = "ZendiatorServiceCollectionExtensions.AddZendiator";
+        const string message = "AddZendiator call cannot be connected to generated registration. Keep the call inside an ordinary method body.";
+        foreach (var parenthesized in new[] { true, false })
         {
-            var call=(parenthesized?"(("+member+"))":member)+"(services)";
-            var source=Head+"public static class Startup { public static IServiceCollection Register(IServiceCollection services)=>"+call+"; }";
-            var input=Compilation(source,"ConnectionGuard");var tree=input.SyntaxTrees.Single();
-            Assert.Empty(input.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));
-            var invocation=Assert.Single(tree.GetRoot().DescendantNodes().OfType<InvocationExpressionSyntax>());
-            var target=invocation.Expression;
-            if(parenthesized)
+            var call = (parenthesized ? "((" + member + "))" : member) + "(services)";
+            var source = Head + "public static class Startup { public static IServiceCollection Register(IServiceCollection services)=>" + call + "; }";
+            var input = Compilation(source, "ConnectionGuard"); var tree = input.SyntaxTrees.Single();
+            Assert.Empty(input.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+            var invocation = Assert.Single(tree.GetRoot().DescendantNodes().OfType<InvocationExpressionSyntax>());
+            var target = invocation.Expression;
+            if (parenthesized)
             {
-                target=Assert.IsType<ParenthesizedExpressionSyntax>(target).Expression;
-                target=Assert.IsType<ParenthesizedExpressionSyntax>(target).Expression;
+                target = Assert.IsType<ParenthesizedExpressionSyntax>(target).Expression;
+                target = Assert.IsType<ParenthesizedExpressionSyntax>(target).Expression;
             }
-            Assert.Equal(member,Assert.IsType<MemberAccessExpressionSyntax>(target).ToString());
-            var semantic=input.GetSemanticModel(tree);var method=Assert.IsAssignableFrom<IMethodSymbol>(semantic.GetSymbolInfo(invocation).Symbol);
-            Assert.Equal("AddZendiator",method.Name);Assert.Equal(MethodKind.Ordinary,method.MethodKind);
-            Assert.Equal("ZendiatorServiceCollectionExtensions",method.ContainingType.Name);
-            Assert.Equal("Zendiator.DependencyInjection",method.ContainingNamespace.ToDisplayString());
+            Assert.Equal(member, Assert.IsType<MemberAccessExpressionSyntax>(target).ToString());
+            var semantic = input.GetSemanticModel(tree); var method = Assert.IsAssignableFrom<IMethodSymbol>(semantic.GetSymbolInfo(invocation).Symbol);
+            Assert.Equal("AddZendiator", method.Name); Assert.Equal(MethodKind.Ordinary, method.MethodKind);
+            Assert.Equal("ZendiatorServiceCollectionExtensions", method.ContainingType.Name);
+            Assert.Equal("Zendiator.DependencyInjection", method.ContainingNamespace.ToDisplayString());
             Assert.True(SymbolEqualityComparer.Default.Equals(method.ContainingAssembly,
                 input.GetTypeByMetadataName("Zendiator.DependencyInjection.ZendiatorConfiguration")!.ContainingAssembly));
-            var location=semantic.GetInterceptableLocation(invocation);
-            var result=new GenerationAnalysis(System.Collections.Immutable.ImmutableArray<INamedTypeSymbol>.Empty,
-                System.Collections.Immutable.ImmutableArray.Create(invocation),input,CancellationToken.None).Generate();
-            if(parenthesized)
+            var location = semantic.GetInterceptableLocation(invocation);
+            var result = new GenerationAnalysis(System.Collections.Immutable.ImmutableArray<INamedTypeSymbol>.Empty,
+                System.Collections.Immutable.ImmutableArray.Create(invocation), input, CancellationToken.None).Generate();
+            if (parenthesized)
             {
-                Assert.Null(location);var diagnostic=Assert.Single(result.Diagnostics);
-                Assert.Equal("ZEN0020",diagnostic.Id);Assert.Equal(message,diagnostic.GetMessage());
-                Assert.Equal(DiagnosticSeverity.Error,diagnostic.Severity);
-                Assert.Same(tree,diagnostic.Location.SourceTree);
-                Assert.Equal(source.IndexOf(call,StringComparison.Ordinal),diagnostic.Location.SourceSpan.Start);
-                Assert.Equal(call.Length,diagnostic.Location.SourceSpan.Length);
-                Assert.Equal(call,tree.GetText().ToString(diagnostic.Location.SourceSpan));
-                Assert.Null(result.Model);Assert.Null(result.Target);
+                Assert.Null(location); var diagnostic = Assert.Single(result.Diagnostics);
+                Assert.Equal("ZEN0020", diagnostic.Id); Assert.Equal(message, diagnostic.GetMessage());
+                Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+                Assert.Same(tree, diagnostic.Location.SourceTree);
+                Assert.Equal(source.IndexOf(call, StringComparison.Ordinal), diagnostic.Location.SourceSpan.Start);
+                Assert.Equal(call.Length, diagnostic.Location.SourceSpan.Length);
+                Assert.Equal(call, tree.GetText().ToString(diagnostic.Location.SourceSpan));
+                Assert.Null(result.Model); Assert.Null(result.Target);
             }
             else
             {
-                Assert.NotNull(location);Assert.Empty(result.Diagnostics);Assert.NotNull(result.Model);Assert.NotNull(result.Target);
+                Assert.NotNull(location); Assert.Empty(result.Diagnostics); Assert.NotNull(result.Model); Assert.NotNull(result.Target);
             }
         }
     }
@@ -417,7 +417,7 @@ public sealed class DiConfigurationTests
     public void Handler_factory_entry_recording_copies_factory_identity_and_freezes_authoritative_entries()
     {
         var configuration = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
-        var rest = new[] { HandlerEntry.Session<string,Uri>(), HandlerEntry.Service<Guid>() };
+        var rest = new[] { HandlerEntry.Session<string, Uri>(), HandlerEntry.Service<Guid>() };
         configuration.Handlers<object>(DispatchFamily.SendAllAsync, typeof(int), rest);
         rest[0] = HandlerEntry.Service<DateTime>();
         var snapshot = configuration.Snapshot(); var entries = snapshot.RouteHandlers[0].Handlers;
@@ -446,10 +446,10 @@ public sealed class DiConfigurationTests
         var plain = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
         plain.Handlers<object>(DispatchFamily.SendAsync, typeof(object));
         Assert.Equal(plain.Snapshot().GetFingerprint(), HandlerFingerprint(HandlerEntry.Service<object>()));
-        Assert.NotEqual(HandlerFingerprint(HandlerEntry.Session<object,string>()), HandlerFingerprint(HandlerEntry.Session<object,Uri>()));
-        Assert.NotEqual(HandlerFingerprint(HandlerEntry.Service<object>()), HandlerFingerprint(HandlerEntry.Session<object,string>()));
-        Assert.NotEqual(StageFingerprint(Stage.Hook<object,string>()), StageFingerprint(Stage.Hook<object,Uri>()));
-        Assert.NotEqual(StageFingerprint(Stage.Hook<object>()), StageFingerprint(Stage.Hook<object,string>()));
+        Assert.NotEqual(HandlerFingerprint(HandlerEntry.Session<object, string>()), HandlerFingerprint(HandlerEntry.Session<object, Uri>()));
+        Assert.NotEqual(HandlerFingerprint(HandlerEntry.Service<object>()), HandlerFingerprint(HandlerEntry.Session<object, string>()));
+        Assert.NotEqual(StageFingerprint(Stage.Hook<object, string>()), StageFingerprint(Stage.Hook<object, Uri>()));
+        Assert.NotEqual(StageFingerprint(Stage.Hook<object>()), StageFingerprint(Stage.Hook<object, string>()));
     }
 
     [Fact]

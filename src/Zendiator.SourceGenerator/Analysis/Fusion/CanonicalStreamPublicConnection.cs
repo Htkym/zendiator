@@ -55,10 +55,11 @@ internal static class CanonicalStreamPublicConnection
             var registration = new CanonicalSyncCompositionEmission(i, c.GeneratedNamespace, c.MarkerName, c.UseLocalHandlers,
                 new(h.RequestName, h.HandlerName, h.ContractName, h.MethodName, h.ItemName),
                 factory == null ? null : new(factory.FactoryName, factory.ContractName, factory.MethodName, factory.CleanupContractName)
-                    { FactoryIsValueType = factory.FactoryIsValueType, IsSourceDeclaration = factory.IsSourceDeclaration },
+                { FactoryIsValueType = factory.FactoryIsValueType, IsSourceDeclaration = factory.IsSourceDeclaration },
                 route.HasEmptyPipeline, route.PipelineFamily, c.MicrosoftDiProviderName ?? "")
             {
-                ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes,
+                ExplicitHandlerTypes = c.ExplicitHandlerTypes,
+                CatalogMarkerTypes = c.CatalogMarkerTypes,
                 ExternAliases = c.ExternAliases,
                 // Preserve declared order across segments; a wrapper is a registration stage too.
                 RegistrationStages = new(route.Stages.Select(stage => new RegistrationStageEmission(
@@ -66,7 +67,7 @@ internal static class CanonicalStreamPublicConnection
                     stage.Sessions.Count == 1 ? CanonicalCapabilityEmissionNormalizer.Factory(stage.Sessions[0], false)!.FactoryName : null)))
             };
             output.Add(new(registration, prototype?.ClassName ?? canonical!.ClassName)
-                { Generic = generic, OpenRegistration = open, FinalItemName = canonical?.ItemFlow?.Final.Name, DeclaredStages = route.StreamDeclaredStages });
+            { Generic = generic, OpenRegistration = open, FinalItemName = canonical?.ItemFlow?.Final.Name, DeclaredStages = route.StreamDeclaredStages });
         }
         return new(new(output));
     }
@@ -108,8 +109,10 @@ internal static class CanonicalStreamPublicConnection
             outer.Id == 1 && outer.Upstream == 0 && outer.Wrapper is { WrapperIsValueType: false, Completion: BoundCompletionKind.Enumerable } &&
             outer.WrapperFactory is { AwaitAcquire: false, CleanupContractName: not null, FactoryIsValueType: false } &&
             new[] { inner, outer }.All(segment => segment.Hooks.Count == 1 && segment.Hooks[0] is
-                { Phase: BoundCallbackPhase.Map, Completion: BoundCompletionKind.Synchronous, HookIsValueType: false,
-                  Factory: { AwaitAcquire: false, CleanupContractName: not null, FactoryIsValueType: false } });
+            {
+                Phase: BoundCallbackPhase.Map, Completion: BoundCompletionKind.Synchronous, HookIsValueType: false,
+                Factory: { AwaitAcquire: false, CleanupContractName: not null, FactoryIsValueType: false }
+            });
     }
 
     private static bool ClosedItemChangeShape(CanonicalStreamFallbackModel model)
@@ -139,8 +142,10 @@ internal static class CanonicalStreamPublicConnection
             outer.Wrapper is { WrapperIsValueType: false, Completion: BoundCompletionKind.Enumerable } &&
             outer.WrapperFactory is { AwaitAcquire: false, CleanupContractName: not null, FactoryIsValueType: false } &&
             new[] { inner, outer }.All(segment => segment.Hooks.Count == 1 && segment.Hooks[0] is
-                { Phase: BoundCallbackPhase.Map, HookIsValueType: false,
-                  Factory: { AwaitAcquire: false, CleanupContractName: not null, FactoryIsValueType: false } }) &&
+            {
+                Phase: BoundCallbackPhase.Map, HookIsValueType: false,
+                Factory: { AwaitAcquire: false, CleanupContractName: not null, FactoryIsValueType: false }
+            }) &&
             inner.Hooks[0].Completion == BoundCompletionKind.Synchronous && outer.Hooks[0].Completion == BoundCompletionKind.ValueTask &&
             flow.Stages[0].Input.Identity == flow.Source.Identity &&
             flow.Stages.All(stage => stage.Output.Identity == flow.Final.Identity) &&
@@ -156,8 +161,10 @@ internal static class CanonicalStreamPublicConnection
         return segment.Id == 0 && segment.Upstream == null && segment.Wrapper == null && segment.WrapperFactory == null &&
             segment.SourceItemName == flow.Source.Name && segment.OutputItemName == flow.Final.Name &&
             segment.Hooks.Count == 1 && segment.Hooks[0] is
-                { Phase: BoundCallbackPhase.Map, Completion: BoundCompletionKind.Synchronous, HookIsValueType: false,
-                  Factory: { AwaitAcquire: false, CleanupContractName: not null, FactoryIsValueType: false } } &&
+            {
+                Phase: BoundCallbackPhase.Map, Completion: BoundCompletionKind.Synchronous, HookIsValueType: false,
+                Factory: { AwaitAcquire: false, CleanupContractName: not null, FactoryIsValueType: false }
+            } &&
             flow.Stages[0].Input.Identity == flow.Source.Identity && flow.Stages[0].Output.Identity == flow.Final.Identity;
     }
 

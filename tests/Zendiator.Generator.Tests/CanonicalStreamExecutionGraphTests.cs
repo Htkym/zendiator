@@ -29,7 +29,8 @@ public sealed partial class GeneratorTests
         }
         """;
     private static CanonicalStreamExecutionSchedule ChangeStreamControl(CanonicalStreamExecutionSchedule schedule, StreamProgram program,
-        Func<StreamControlEdge, StreamControlEdge?> edit) => schedule with {
+        Func<StreamControlEdge, StreamControlEdge?> edit) => schedule with
+        {
             Flows = new(schedule.Flows.Select(f => f.Program == program ? f with { Edges = new(f.Edges.Select(edit).Where(e => e != null).Select(e => e!)) } : f))
         };
     private static CanonicalStreamExecutionSchedule Retarget(CanonicalStreamExecutionSchedule schedule, StreamProgram program,

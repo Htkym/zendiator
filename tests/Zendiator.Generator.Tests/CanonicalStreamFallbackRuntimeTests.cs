@@ -125,8 +125,13 @@ public sealed class CanonicalStreamFallbackProbe
         public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken token = default)
         { _token = token; p.Record("Get", request, token, null, true, start); if (p.GetEnumeratorError != null) throw p.GetEnumeratorError; return this; }
         public T Current
-        { get { p.Reads++; var value = Value<T>(p.Input[_index]); p.Record("Current", request, _token, value, true, start);
-            p.EmitCanonical("InnerCurrent", "H", request, _token, _index, output: value); return value; } }
+        {
+            get
+            {
+                p.Reads++; var value = Value<T>(p.Input[_index]); p.Record("Current", request, _token, value, true, start);
+                p.EmitCanonical("InnerCurrent", "H", request, _token, _index, output: value); return value;
+            }
+        }
         public ValueTask<bool> MoveNextAsync()
         {
             p.Moves++; _index++; p.Record("Move", request, _token, null, true, start);
@@ -250,8 +255,13 @@ public sealed partial class GeneratorTests
                 if (forced != null) File.WriteAllText(Path.Combine(folder, forced.HintName), forced.Source);
                 File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
                 File.WriteAllText(Path.Combine(folder, "compile.json"), System.Text.Json.JsonSerializer.Serialize(new
-                { emitted.Success, forcedCanonicalForComparison = forced != null, candidateOnly = true, productionEnabled = false,
-                    diagnostics = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }) }));
+                {
+                    emitted.Success,
+                    forcedCanonicalForComparison = forced != null,
+                    candidateOnly = true,
+                    productionEnabled = false,
+                    diagnostics = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() })
+                }));
             }
             Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); bytes.Position = 0;
             var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
@@ -271,8 +281,17 @@ public sealed partial class GeneratorTests
         Action<string, object?, CancellationToken>? observe = null)
     {
         using var api = new CancellationTokenSource(); using var replacement = new CancellationTokenSource();
-        var p = new CanonicalStreamFallbackProbe { WrapperMode = wrapperMode, ReplacementToken = replacement.Token, ApiToken = api.Token,
-            Pending = pending, PendingFailure = failure, Context = context, Observe = observe, Input = pending || wrapperMode == "two-open" ? [1] : [-1, 1, 2] };
+        var p = new CanonicalStreamFallbackProbe
+        {
+            WrapperMode = wrapperMode,
+            ReplacementToken = replacement.Token,
+            ApiToken = api.Token,
+            Pending = pending,
+            PendingFailure = failure,
+            Context = context,
+            Observe = observe,
+            Input = pending || wrapperMode == "two-open" ? [1] : [-1, 1, 2]
+        };
         var request = Activator.CreateInstance(f.Request, [1])!; p.Outer = request;
         var before = CanonicalStreamFallbackProbe.Ambient.Value; CanonicalStreamFallbackProbe.Ambient.Value = "caller";
         var collection = new ServiceCollection(); var roles = f.Wrapper ? new[] { "H", "F1", "W", "F2" } : new[] { "H", "F1", "Map", "F2" };
@@ -333,7 +352,8 @@ public sealed partial class GeneratorTests
     { Assert.Equal(expected.Values, actual.Values); Assert.Equal(expected.Trace, actual.Trace); Assert.Equal(expected with { Values = actual.Values, Trace = actual.Trace }, actual); }
 
     [Theory]
-    [InlineData("long")] [InlineData("string")]
+    [InlineData("long")]
+    [InlineData("string")]
     public async Task Stream_fallback_closed_item_representatives_match_reference_and_selected_context(string shape)
     {
         var f = FallbackFixtureFor(shape);
@@ -360,7 +380,11 @@ public sealed partial class GeneratorTests
             Array.FindIndex(canonical.Trace, t => t.StartsWith("F1:1:-2:", StringComparison.Ordinal)));
     }
     [Theory]
-    [InlineData("empty")] [InlineData("alternative")] [InlineData("two-open")] [InlineData("direct")] [InlineData("early-break")]
+    [InlineData("empty")]
+    [InlineData("alternative")]
+    [InlineData("two-open")]
+    [InlineData("direct")]
+    [InlineData("early-break")]
     public async Task Stream_fallback_opaque_wrapper_representatives_match_reference_and_preserve_ownership(string mode)
     {
         var f = FallbackFixtureFor("wrapper"); Assert.Null(f.Fused);
@@ -374,7 +398,8 @@ public sealed partial class GeneratorTests
         if (mode == "early-break") { Assert.Equal(new[] { "1" }, canonical.Values); Assert.Equal(2, canonical.Moves); }
     }
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Stream_fallback_real_pending_results_consume_once_and_keep_cleanup_error_priority(bool failure)
     {
         var f = FallbackFixtureFor("int");

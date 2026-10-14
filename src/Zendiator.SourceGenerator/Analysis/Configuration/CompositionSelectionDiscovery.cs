@@ -78,8 +78,8 @@ internal static class CompositionSelectionDiscovery
             var selected = new Dictionary<INamedTypeSymbol, SelectedHandlerModel>(SymbolEqualityComparer.Default);
             var explicitTypes = new HashSet<string>(StringComparer.Ordinal);
             var explicitHandlerNames = new List<string>();
-            var catalogMarkerNames=new List<string>();
-            var catalogAssemblies=new Dictionary<IAssemblySymbol,string>(SymbolEqualityComparer.Default);
+            var catalogMarkerNames = new List<string>();
+            var catalogAssemblies = new Dictionary<IAssemblySymbol, string>(SymbolEqualityComparer.Default);
             var lists = new CompositionListBinding(compilation, semantic, marked, Select, ct);
             if (explicitDefault) SelectLocal(); // The new default composition has implicit local membership.
             var parameter = lambda switch
@@ -111,15 +111,15 @@ internal static class CompositionSelectionDiscovery
                     continue;
                 }
                 if (operation.Name == "UseLocalHandlers" && call.ArgumentList.Arguments.Count == 0) { useLocalHandlers = true; SelectLocal(); }
-                else if(operation.Name=="UseCatalogFrom"&&operation.Arity==1&&call.ArgumentList.Arguments.Count==0&&operation.TypeArguments[0] is INamedTypeSymbol catalogMarker)
+                else if (operation.Name == "UseCatalogFrom" && operation.Arity == 1 && call.ArgumentList.Arguments.Count == 0 && operation.TypeArguments[0] is INamedTypeSymbol catalogMarker)
                 {
-                    var anchor="catalog:"+ordinal;lists.Sources.Add(anchor,call.GetLocation());var assembly=catalogMarker.ContainingAssembly;
-                    if(catalogAssemblies.TryGetValue(assembly,out var original))lists.Facts.Add(new("DuplicateCatalogSelection",anchor,"DuplicateCatalogSelection: "+assembly.Identity,original));
+                    var anchor = "catalog:" + ordinal; lists.Sources.Add(anchor, call.GetLocation()); var assembly = catalogMarker.ContainingAssembly;
+                    if (catalogAssemblies.TryGetValue(assembly, out var original)) lists.Facts.Add(new("DuplicateCatalogSelection", anchor, "DuplicateCatalogSelection: " + assembly.Identity, original));
                     else
                     {
-                        catalogAssemblies.Add(assembly,anchor);catalogMarkerNames.Add(Name(catalogMarker));
-                        foreach(var candidate in GeneratedHandlerCatalog.Read(compilation,assembly,ct,message=>lists.Facts.Add(new("CatalogError",anchor,assembly.Identity+": "+message))))
-                            selected[candidate.Symbol]=new(MarkedHandlerDiscovery.Identity(candidate.Symbol),candidate.Model);
+                        catalogAssemblies.Add(assembly, anchor); catalogMarkerNames.Add(Name(catalogMarker));
+                        foreach (var candidate in GeneratedHandlerCatalog.Read(compilation, assembly, ct, message => lists.Facts.Add(new("CatalogError", anchor, assembly.Identity + ": " + message))))
+                            selected[candidate.Symbol] = new(MarkedHandlerDiscovery.Identity(candidate.Symbol), candidate.Model);
                     }
                 }
                 else if (operation.Name == "AddHandler")
@@ -144,14 +144,22 @@ internal static class CompositionSelectionDiscovery
                 else errors.Add($"Composition selection operation {operation.Name} is not connected yet.");
             }
             var pipelines = lists.Bind(selected.Keys);
-            if(lists.Facts.Any(f=>f.Anchor.StartsWith("catalog:",StringComparison.Ordinal)))lists.Facts.RemoveAll(f=>f.Key=="IncompleteExecutionContract");
+            if (lists.Facts.Any(f => f.Anchor.StartsWith("catalog:", StringComparison.Ordinal))) lists.Facts.RemoveAll(f => f.Key == "IncompleteExecutionContract");
             if (generatedNamespace != null && GeneratedTypeConflict(compilation, generatedNamespace)) generatedNamespace = null;
             var model = new CompositionSelectionModel(identity, key,
                 new(selected.Values.OrderBy(h => h.Identity, StringComparer.Ordinal)), new(errors), compilerOwned,
-                pipelines, new(lists.Facts)) { GeneratedNamespace = generatedNamespace, MarkerName = markerName,
-                    MicrosoftDiProviderName = compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.ServiceProvider") is { TypeKind: TypeKind.Class } provider &&
+                pipelines, new(lists.Facts))
+            {
+                GeneratedNamespace = generatedNamespace,
+                MarkerName = markerName,
+                MicrosoftDiProviderName = compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.ServiceProvider") is { TypeKind: TypeKind.Class } provider &&
                         provider.ContainingAssembly.Identity.Name == "Microsoft.Extensions.DependencyInjection" && provider.Locations.All(l => !l.IsInSource) ? Name(provider) : null,
-                    UseLocalHandlers = useLocalHandlers, HasExplicitSelection = hasExplicitSelection, ExplicitHandlerTypes = new(explicitHandlerNames), CatalogMarkerTypes = new(catalogMarkerNames), ExternAliases = CanonicalSymbolName.Aliases(compilation) };
+                UseLocalHandlers = useLocalHandlers,
+                HasExplicitSelection = hasExplicitSelection,
+                ExplicitHandlerTypes = new(explicitHandlerNames),
+                CatalogMarkerTypes = new(catalogMarkerNames),
+                ExternAliases = CanonicalSymbolName.Aliases(compilation)
+            };
             result.Add(new(model, invocation, lists.Sources.ToImmutableDictionary(StringComparer.Ordinal)));
 
             void SelectLocal()
@@ -161,7 +169,7 @@ internal static class CompositionSelectionDiscovery
             void Select(INamedTypeSymbol type)
             {
                 var candidate = marked.FirstOrDefault(c => Same(c.Symbol, type.OriginalDefinition)) ??
-                    MarkedHandlerDiscovery.BindExplicitMetadata(compilation,type,ct);
+                    MarkedHandlerDiscovery.BindExplicitMetadata(compilation, type, ct);
                 if (candidate == null)
                 {
                     errors.Add($"Handler {Name(type)} requires a source ZendiatorHandler marker or a supported explicitly supplied metadata type.");
@@ -193,9 +201,9 @@ internal static class CompositionSelectionDiscovery
     internal static void Report(SourceProductionContext context, CompositionSelectionCatalog catalog, ImmutableArray<Binding> current,
         CanonicalExecutionGraphCatalog execution, CanonicalSyncEmissionModel canonicalSync, CanonicalSyncInterceptorModel syncCallSites,
         CanonicalAsyncEmissionModel canonicalAsync, CanonicalSyncInterceptorModel asyncCallSites,
-        CanonicalWrapperEmissionModel wrappers,CanonicalSyncInterceptorModel wrapperCallSites,
-        CanonicalCapabilityEmissionModel capabilities,CanonicalSyncInterceptorModel capabilityCallSites,
-        CanonicalMultiEmissionModel multi,CanonicalSyncInterceptorModel multiCallSites,
+        CanonicalWrapperEmissionModel wrappers, CanonicalSyncInterceptorModel wrapperCallSites,
+        CanonicalCapabilityEmissionModel capabilities, CanonicalSyncInterceptorModel capabilityCallSites,
+        CanonicalMultiEmissionModel multi, CanonicalSyncInterceptorModel multiCallSites,
         CanonicalStreamConnectionCatalog streams, CanonicalStreamPublicModel streamPublic, CanonicalSyncInterceptorModel streamPublicSites)
     {
         for (var index = 0; index < catalog.Compositions.Count; index++)
@@ -223,7 +231,7 @@ internal static class CompositionSelectionDiscovery
                     {
                         var streamEnabled = streamPublic.Compositions.FirstOrDefault(c => c.Registration.Index == index);
                         if (streamEnabled != null && CanonicalStreamPublicConnection.IsConnected(streamEnabled, streamPublicSites)) continue;
-                        if(multi.Compositions.Any(c=>c.Index==index)&&multiCallSites.CallSites.Any(s=>s.Namespace==composition.GeneratedNamespace&&s.MarkerName==composition.MarkerName))continue;
+                        if (multi.Compositions.Any(c => c.Index == index) && multiCallSites.CallSites.Any(s => s.Namespace == composition.GeneratedNamespace && s.MarkerName == composition.MarkerName)) continue;
                         var enabled = canonicalSync.Compositions.FirstOrDefault(c => c.Index == index);
                         if (enabled != null &&
                             syncCallSites.CallSites.Any(s => s.Namespace == enabled.Namespace && s.MarkerName == enabled.MarkerName))
@@ -231,10 +239,10 @@ internal static class CompositionSelectionDiscovery
                         var asyncEnabled = canonicalAsync.Compositions.FirstOrDefault(c => c.Index == index);
                         if (asyncEnabled != null && asyncCallSites.CallSites.Any(s => s.Namespace == asyncEnabled.Namespace && s.MarkerName == asyncEnabled.MarkerName))
                             continue;
-                        var wrapperEnabled=wrappers.Compositions.FirstOrDefault(c=>c.Registration.Index==index);
-                        if(wrapperEnabled!=null&&wrapperCallSites.CallSites.Any(s=>s.Namespace==wrapperEnabled.Registration.Namespace&&s.MarkerName==wrapperEnabled.Registration.MarkerName))continue;
-                        var capabilityEnabled=capabilities.Compositions.FirstOrDefault(c=>c.Registration.Index==index);
-                        if(capabilityEnabled!=null&&capabilityCallSites.CallSites.Any(s=>s.Namespace==capabilityEnabled.Registration.Namespace&&s.MarkerName==capabilityEnabled.Registration.MarkerName))continue;
+                        var wrapperEnabled = wrappers.Compositions.FirstOrDefault(c => c.Registration.Index == index);
+                        if (wrapperEnabled != null && wrapperCallSites.CallSites.Any(s => s.Namespace == wrapperEnabled.Registration.Namespace && s.MarkerName == wrapperEnabled.Registration.MarkerName)) continue;
+                        var capabilityEnabled = capabilities.Compositions.FirstOrDefault(c => c.Registration.Index == index);
+                        if (capabilityEnabled != null && capabilityCallSites.CallSites.Any(s => s.Namespace == capabilityEnabled.Registration.Namespace && s.MarkerName == capabilityEnabled.Registration.MarkerName)) continue;
                         var graph = execution.Compositions[index].FirstOrDefault(g => g.Contract.Anchor == fact.Anchor);
                         if (graph != null)
                             message = graph.IsValid

@@ -13,8 +13,10 @@ public sealed partial class GeneratorTests
         int NativeMovePendingReturns, int NativeDisposePendingReturns, string Error, bool Faulted, bool Canceled);
 
     [Theory]
-    [InlineData("canonical", "sync")] [InlineData("canonical", "pending")]
-    [InlineData("canonical", "pending-failure")] [InlineData("fused", "pending")]
+    [InlineData("canonical", "sync")]
+    [InlineData("canonical", "pending")]
+    [InlineData("canonical", "pending-failure")]
+    [InlineData("fused", "pending")]
     public async Task Stream_context_native_producer_factory_current_callback_and_caller_boundaries_match(string backend, string profile)
     {
         var fixture = FallbackFixtureFor(backend == "fused" ? "int" : "long");
@@ -29,7 +31,7 @@ public sealed partial class GeneratorTests
         {
             var folder = Path.Combine(evidence, "stream-native-context"); Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, backend + "-" + profile + ".json"), System.Text.Json.JsonSerializer.Serialize(new
-                { backend, profile, reference, generated, candidateOnly = true, productionEnabled = false, nativeProducer = "user async helper forwarded by source;owns C# async boundary" }));
+            { backend, profile, reference, generated, candidateOnly = true, productionEnabled = false, nativeProducer = "user async helper forwarded by source;owns C# async boundary" }));
         }
     }
     private static async Task<NativeContextResult> ObserveNativeContext<T>(FallbackFixture f, string backend, string profile)

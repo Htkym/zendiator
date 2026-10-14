@@ -160,21 +160,31 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData(false, "outer-missing-before")] [InlineData(true, "outer-missing-before")]
-    [InlineData(false, "inner-missing-finally")] [InlineData(true, "inner-missing-finally")]
-    [InlineData(false, "third-hook")] [InlineData(true, "third-hook")]
-    [InlineData(false, "handler-owned")] [InlineData(true, "handler-owned")]
-    [InlineData(false, "handler-borrowed")] [InlineData(true, "handler-borrowed")]
-    [InlineData(false, "hook-owned")] [InlineData(true, "hook-owned")]
-    [InlineData(false, "hook-borrowed")] [InlineData(true, "hook-borrowed")]
-    [InlineData(false, "wrapper")] [InlineData(true, "wrapper")]
-    [InlineData(false, "external")] [InlineData(true, "external")]
-    [InlineData(false, "struct")] [InlineData(true, "struct")]
+    [InlineData(false, "outer-missing-before")]
+    [InlineData(true, "outer-missing-before")]
+    [InlineData(false, "inner-missing-finally")]
+    [InlineData(true, "inner-missing-finally")]
+    [InlineData(false, "third-hook")]
+    [InlineData(true, "third-hook")]
+    [InlineData(false, "handler-owned")]
+    [InlineData(true, "handler-owned")]
+    [InlineData(false, "handler-borrowed")]
+    [InlineData(true, "handler-borrowed")]
+    [InlineData(false, "hook-owned")]
+    [InlineData(true, "hook-owned")]
+    [InlineData(false, "hook-borrowed")]
+    [InlineData(true, "hook-borrowed")]
+    [InlineData(false, "wrapper")]
+    [InlineData(true, "wrapper")]
+    [InlineData(false, "external")]
+    [InlineData(true, "external")]
+    [InlineData(false, "struct")]
+    [InlineData(true, "struct")]
     public void Unsupported_two_Hook_shapes_keep_ZEN0037_and_emit_no_backend(bool isVoid, string shape)
     {
         var source = NestedHookBackendSource(isVoid, shape);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "UnsupportedNestedHook_" + shape + isVoid), out var output, out var diagnostics);
-        AssertAcceptedSendEmission(driver,diagnostics,BoundDispatchFamily.SendSync,isVoid);
+        AssertAcceptedSendEmission(driver, diagnostics, BoundDispatchFamily.SendSync, isVoid);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
         WriteNestedHookEvidence("nested-hook-boundaries", (isVoid ? "void-" : "response-") + shape,
@@ -199,7 +209,7 @@ public sealed partial class GeneratorTests
         Assert.NotEqual(original, CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
         var capability = ordered.ReplaceSyntaxTree(ordered.SyntaxTrees.Single(), CSharpSyntaxTree.ParseText(NestedHookBackendSource(false, "inner-missing-finally"), SyncParseOptions));
         driver = driver.RunGenerators(capability);
-        AssertAcceptedSendEmission(driver,driver.GetRunResult().Diagnostics,BoundDispatchFamily.SendSync,false);
-        Assert.NotEqual(original,CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
+        AssertAcceptedSendEmission(driver, driver.GetRunResult().Diagnostics, BoundDispatchFamily.SendSync, false);
+        Assert.NotEqual(original, CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
     }
 }

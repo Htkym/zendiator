@@ -211,7 +211,7 @@ public sealed partial class GeneratorTests
     private static GeneratorDriver Driver() => CSharpGeneratorDriver.Create([new ZendiatorGenerator().AsSourceGenerator()],
         parseOptions: SyncParseOptions, driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, true));
     private static string LegacySource(GeneratorDriverRunResult result) =>
-        Assert.Single(result.Results.Single().GeneratedSources, s=>s.HintName=="Zendiator.g.cs").SourceText.ToString();
+        Assert.Single(result.Results.Single().GeneratedSources, s => s.HintName == "Zendiator.g.cs").SourceText.ToString();
 
     private static GeneratorDriverRunResult Run(CSharpCompilation input, bool success, bool emit = false)
     {
@@ -1208,9 +1208,9 @@ public sealed partial class GeneratorTests
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
         Assert.Contains("global::App.Handler", LegacySource(driver.GetRunResult()));
         var run = driver.GetRunResult().Results.Single();
-        if (run.TrackedSteps.TryGetValue("MarkedHandlerModel",out var steps))
-            Assert.Empty(Assert.IsType<MarkedHandlerCatalog>(Assert.Single(steps.SelectMany(s=>s.Outputs)).Value).Handlers);
-        else Assert.DoesNotContain(run.GeneratedSources,s=>s.HintName=="Zendiator.GeneratedCatalog.g.cs");
+        if (run.TrackedSteps.TryGetValue("MarkedHandlerModel", out var steps))
+            Assert.Empty(Assert.IsType<MarkedHandlerCatalog>(Assert.Single(steps.SelectMany(s => s.Outputs)).Value).Handlers);
+        else Assert.DoesNotContain(run.GeneratedSources, s => s.HintName == "Zendiator.GeneratedCatalog.g.cs");
     }
 
     [Fact]
@@ -1301,8 +1301,8 @@ public sealed partial class GeneratorTests
         var producer = Run(Compilation(Head.Replace("[GenerateZendiator] public sealed partial class Zendiator;", "") + Request + handler), true);
         Assert.Empty(producer.Diagnostics);
         var catalog = Assert.Single(producer.Results.Single().GeneratedSources);
-        Assert.Equal("Zendiator.GeneratedCatalog.g.cs",catalog.HintName);
-        Assert.Contains("typeof(global::App.Handler)",catalog.SourceText.ToString());
+        Assert.Equal("Zendiator.GeneratedCatalog.g.cs", catalog.HintName);
+        Assert.Contains("typeof(global::App.Handler)", catalog.SourceText.ToString());
         var source = Head + Request + Handler + handler.Replace("class Handler", "class Marked").Replace("[ZendiatorHandler]", "[ZendiatorHandler, ZendiatorHandler]") +
             SelectedComposition.Replace("c.AddHandler<Handler>()", "c.AddHandler<Marked>()");
         var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source), out var output, out var diagnostics);

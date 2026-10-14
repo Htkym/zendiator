@@ -29,11 +29,22 @@ public sealed partial class GeneratorTests
             File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
             File.WriteAllText(Path.Combine(folder, "connection.json"), System.Text.Json.JsonSerializer.Serialize(new
             {
-                label, suppress, candidateOnly = !publicConnected, productionEnabled = publicConnected, emitted.Success,
+                label,
+                suppress,
+                candidateOnly = !publicConnected,
+                productionEnabled = publicConnected,
+                emitted.Success,
                 connections = StreamConnections(driver).Routes.Select(r => new { r.RouteKey, r.Anchor, kind = r.Kind.ToString(), r.Reason, hint = r.Candidate?.HintName ?? r.Canonical?.HintName }),
-                generatorDiagnostics = diagnostics.Select(d => new { d.Id, d.IsSuppressed, message = d.GetMessage(),
-                    start = d.Location.SourceSpan.Start, length = d.Location.SourceSpan.Length,
-                    source = d.Location.SourceTree?.GetText().ToString(d.Location.SourceSpan), additional = d.AdditionalLocations.Select(l => l.SourceSpan.ToString()) }),
+                generatorDiagnostics = diagnostics.Select(d => new
+                {
+                    d.Id,
+                    d.IsSuppressed,
+                    message = d.GetMessage(),
+                    start = d.Location.SourceSpan.Start,
+                    length = d.Location.SourceSpan.Length,
+                    source = d.Location.SourceTree?.GetText().ToString(d.Location.SourceSpan),
+                    additional = d.AdditionalLocations.Select(l => l.SourceSpan.ToString())
+                }),
                 compilerDiagnostics = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
                 files = files.Select(f => f.HintName)
             }));
@@ -68,7 +79,9 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData("order")] [InlineData("wrapper")] [InlineData("item")]
+    [InlineData("order")]
+    [InlineData("wrapper")]
+    [InlineData("item")]
     public void Stream_connection_canonical_valid_shape_emits_new_contract_without_selecting_reference_or_legacy(string shape)
     {
         var source = shape == "order" ? StreamGraphFixture("Stage.Hook<DoubleItem>(),Stage.Hook<Positive>(),Stage.Hook<Small>()") :
@@ -142,7 +155,8 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Stream_connection_diagnostic_suppression_keeps_same_fused_or_canonical_semantics(bool canonical)
     {
         var source = canonical ? StreamGraphFixture("Stage.Hook<DoubleItem>(),Stage.Hook<Positive>(),Stage.Hook<Small>()") : StreamGraphFixture();

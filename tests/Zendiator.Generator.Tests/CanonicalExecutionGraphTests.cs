@@ -34,8 +34,11 @@ public sealed partial class GeneratorTests
     private static void GraphReason(GeneratorDriver driver, IncrementalStepRunReason expected) =>
         Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalExecutionGraphModel"].SelectMany(s => s.Outputs), o => Assert.Equal(expected, o.Reason));
     private static CanonicalSendExecutionSchedule ChangeControl(CanonicalSendExecutionSchedule schedule, string owner, Func<SendControlEdge, SendControlEdge?> change) =>
-        schedule with { ControlFlows = new(schedule.ControlFlows.Select(f => f.Owner == owner
-            ? f with { Edges = new(f.Edges.Select(change).Where(e => e != null).Select(e => e!)) } : f)) };
+        schedule with
+        {
+            ControlFlows = new(schedule.ControlFlows.Select(f => f.Owner == owner
+            ? f with { Edges = new(f.Edges.Select(change).Where(e => e != null).Select(e => e!)) } : f))
+        };
 
     [Theory]
     [InlineData(false, false, false)]
@@ -112,11 +115,15 @@ public sealed partial class GeneratorTests
         var state = Assert.Single(schedule.States, s => s.Owner == Scope(0, 0));
         Assert.True(state.BeforeFailureKeepsInput);
         Assert.True(state.BeforeSuccessSavesReturnedRequest);
-        Assert.Contains(CanonicalSendGraphValidator.Validate(graph.Contract, schedule with {
-            Sites = new(schedule.Sites.Select(s => s == cleanup ? s with { Failure = SendFailureDisposition.ObserveCurrentOnceThenFinally } : s)) }),
+        Assert.Contains(CanonicalSendGraphValidator.Validate(graph.Contract, schedule with
+        {
+            Sites = new(schedule.Sites.Select(s => s == cleanup ? s with { Failure = SendFailureDisposition.ObserveCurrentOnceThenFinally } : s))
+        }),
             f => f.Reason == "SiteContractMismatch:Finally");
-        Assert.Contains(CanonicalSendGraphValidator.Validate(graph.Contract, schedule with {
-            States = new(schedule.States.Select(s => s == state ? s with { BeforeFailureKeepsInput = false } : s)) }), f => f.Reason == "MissingState");
+        Assert.Contains(CanonicalSendGraphValidator.Validate(graph.Contract, schedule with
+        {
+            States = new(schedule.States.Select(s => s == state ? s with { BeforeFailureKeepsInput = false } : s))
+        }), f => f.Reason == "MissingState");
     }
 
     [Fact]
@@ -187,7 +194,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Actual_frontend_edits_invalidate_graph_capability_order_constraints_and_handler_family_while_trivia_refreshes_locations()
     {
-        var source = GraphFixture(all:true); // Keep location/cache coverage on the still-unsupported SendAll family.
+        var source = GraphFixture(all: true); // Keep location/cache coverage on the still-unsupported SendAll family.
         var driver = BindLists(source, "ZEN0037");
         var original = Graph(driver);
         var diagnostic = Assert.Single(driver.GetRunResult().Diagnostics);
@@ -330,13 +337,23 @@ public sealed partial class GeneratorTests
     public void Unknown_async_hook_completion_is_rejected_at_ir_boundary_even_without_single_consumption_flag(int completion)
     {
         var graph = Graph(BindAcceptedSendLists(GraphFixture()));
-        var malformed = graph.Contract with { Stages = new(graph.Contract.Stages.Select((s, i) => i == 0 ? s with {
-            Callbacks = new(s.Callbacks.Select(c => c.Phase == BoundCallbackPhase.Finally ? c with { Completion = (BoundCompletionKind)completion, RequiresSingleConsumption = false } : c)) } : s)) };
+        var malformed = graph.Contract with
+        {
+            Stages = new(graph.Contract.Stages.Select((s, i) => i == 0 ? s with
+            {
+                Callbacks = new(s.Callbacks.Select(c => c.Phase == BoundCallbackPhase.Finally ? c with { Completion = (BoundCompletionKind)completion, RequiresSingleConsumption = false } : c))
+            } : s))
+        };
         var result = CanonicalExecutionGraphNormalizer.Create(malformed);
         Assert.Null(result.Schedule);
         Assert.Contains(result.Facts, f => f.Reason == "CallbackCompletionUnavailable");
-        var wrongFlag = graph.Contract with { Stages = new(graph.Contract.Stages.Select((s, i) => i == 0 ? s with {
-            Callbacks = new(s.Callbacks.Select(c => c.Completion == BoundCompletionKind.ValueTask ? c with { RequiresSingleConsumption = false } : c)) } : s)) };
+        var wrongFlag = graph.Contract with
+        {
+            Stages = new(graph.Contract.Stages.Select((s, i) => i == 0 ? s with
+            {
+                Callbacks = new(s.Callbacks.Select(c => c.Completion == BoundCompletionKind.ValueTask ? c with { RequiresSingleConsumption = false } : c))
+            } : s))
+        };
         Assert.Contains(CanonicalExecutionGraphNormalizer.Create(wrongFlag).Facts, f => f.Reason == "SingleConsumptionContractMismatch");
     }
 
@@ -399,12 +416,17 @@ public sealed partial class GeneratorTests
         var last = Point("operation", Site(1, -1, SendExecutionPhase.BranchStart));
         var returned = Point("operation", Site(-1, -1, SendExecutionPhase.OperationReturn));
         var commit = Point("operation", Site(-1, -1, SendExecutionPhase.DestinationCommit));
-        var bad = schedule with { ControlFlows = new(schedule.ControlFlows.Select(f => f.Owner != "operation" ? f : f with {
-            Edges = new(f.Edges.Where(e => e.From != returned).Select(e =>
-                    e.From == last && e.Outcome == SendControlOutcome.Success && e.Predicate == SendControlPredicate.SpanDestination ? e with { To = returned } :
-                    e.From == commit ? e with { To = Exit("operation", true) } : e)
+        var bad = schedule with
+        {
+            ControlFlows = new(schedule.ControlFlows.Select(f => f.Owner != "operation" ? f : f with
+            {
+                Edges = new(f.Edges.Where(e => e.From != returned).Select(e =>
+                        e.From == last && e.Outcome == SendControlOutcome.Success && e.Predicate == SendControlPredicate.SpanDestination ? e with { To = returned } :
+                        e.From == commit ? e with { To = Exit("operation", true) } : e)
                 .Append(new(returned, commit, SendControlOutcome.Always, SendControlPredicate.SpanDestination))
-                .Append(new(returned, Exit("operation", true), SendControlOutcome.Always, SendControlPredicate.NoSpanDestination))) })) };
+                .Append(new(returned, Exit("operation", true), SendControlOutcome.Always, SendControlPredicate.NoSpanDestination)))
+            }))
+        };
         Assert.Equal(schedule.Orders, bad.Orders);
         var facts = CanonicalSendControlValidator.Validate(graph.Contract, bad);
         Assert.Contains(facts, f => f.Reason == "ReturnNotDominatedByDestinationCommit");

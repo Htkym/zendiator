@@ -65,7 +65,7 @@ internal static class CanonicalSendSessionBuilder
                     if (!callbackSession) Add(i, SendExecutionPhase.ResolveSessionFactory, producer: binding.FactoryServiceType);
                     Add(i, SendExecutionPhase.AcquireSession, binding.Acquire, SendFailureDisposition.UnwindAcquiredSessionsThenOuter);
                     calls.Add(new(Id(i, SendExecutionPhase.AcquireSession), callbackSession ? Service(b, s) + "/resolved" : resource + "/factory/resolved", resource + "/factory-result", true, true, false)
-                        { RequestSlot = state.InputRequestSlot, TokenSlot = state.StartTokenSlot });
+                    { RequestSlot = state.InputRequestSlot, TokenSlot = state.StartTokenSlot });
                     if (callbackSession) Add(i, SendExecutionPhase.ValidateSessionResult);
                     Add(i, SendExecutionPhase.CommitSession); Add(i, SendExecutionPhase.DetachSession);
                     var phases = callbackSession
@@ -123,8 +123,17 @@ internal static class CanonicalSendSessionBuilder
                     }
                 }
             }
-        return schedule with { Sites = new(sites), Orders = new(orders), Owners = new(owners), Awaits = new(awaits),
-            ControlFlows = new(flows), SessionTransfers = new(transfers), SessionCalls = new(calls),
-            ServiceResolutions = new(resolutions), CallbackReceivers = new(receivers) };
+        return schedule with
+        {
+            Sites = new(sites),
+            Orders = new(orders),
+            Owners = new(owners),
+            Awaits = new(awaits),
+            ControlFlows = new(flows),
+            SessionTransfers = new(transfers),
+            SessionCalls = new(calls),
+            ServiceResolutions = new(resolutions),
+            CallbackReceivers = new(receivers)
+        };
     }
 }

@@ -50,8 +50,8 @@ internal static class StageContractBinding
         BoundWrapperEmission? wrapperEmission = null;
         BoundStreamHookEmission? streamEmission = null;
         BoundStreamStageItems? streamItems = null;
-        var capabilityCalls = new Dictionary<BoundCallbackPhase,CapabilityCallbackEmission>();
-        CapabilityCallbackEmission? Capability(BoundCallbackPhase phase)=>capabilityCalls.TryGetValue(phase,out var value)?value:null;
+        var capabilityCalls = new Dictionary<BoundCallbackPhase, CapabilityCallbackEmission>();
+        CapabilityCallbackEmission? Capability(BoundCallbackPhase phase) => capabilityCalls.TryGetValue(phase, out var value) ? value : null;
         var compilerOwned = false;
         void Reject(string key, string message) => facts.Add(new(key, anchor, message));
         if (type.TypeKind == TypeKind.Error) { compilerOwned = true; return Value(); }
@@ -117,11 +117,11 @@ internal static class StageContractBinding
             var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
             var implementation = members.Length == 1 ? type.FindImplementationForInterfaceMember(members[0]) as IMethodSymbol : null;
             if (implementation == null) { compilerOwned = true; continue; }
-            if (role.Wrapper) wrapperEmission = new(Name(type),Name(contract),members[0].Name,role.Completion);
+            if (role.Wrapper) wrapperEmission = new(Name(type), Name(contract), members[0].Name, role.Completion);
             if (role.Stream && !role.Wrapper && (role.Completion is BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask))
                 streamEmission = new(Name(type), Name(contract), members[0].Name, role.Phase, type.IsValueType, role.Completion)
                 { InputItemName = typedStream ? streamItems?.Input.Name : null, OutputItemName = typedStream ? streamItems?.Output.Name : null };
-            if(!role.Wrapper&&!role.Stream)capabilityCalls[role.Phase]=new(Name(contract),members[0].Name,role.Completion);
+            if (!role.Wrapper && !role.Stream) capabilityCalls[role.Phase] = new(Name(contract), members[0].Name, role.Completion);
             if (role.Completion == BoundCompletionKind.Synchronous)
                 syncCallbacks[role.Phase] = new(Name(contract), members[0].Name);
             else if (role.Completion == BoundCompletionKind.ValueTask)
@@ -148,27 +148,29 @@ internal static class StageContractBinding
                 kind == FusionStageKind.Wrapper && callbacks.Count == 1 && wrapperEmission != null
                     ? wrapperEmission with { WrapperIsValueType = type.IsValueType } : null,
             SyncEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.SendSync &&
-                kind == FusionStageKind.Hook && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type,compilation.Assembly) &&
+                kind == FusionStageKind.Hook && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly) &&
                 callbacks.Count == 4 && syncCallbacks.Count == 4 &&
                 syncCallbacks.ContainsKey(BoundCallbackPhase.Before) && syncCallbacks.ContainsKey(BoundCallbackPhase.Success) &&
                 syncCallbacks.ContainsKey(BoundCallbackPhase.Exception) && syncCallbacks.ContainsKey(BoundCallbackPhase.Finally)
                     ? new(Name(type), syncCallbacks[BoundCallbackPhase.Before], syncCallbacks[BoundCallbackPhase.Success],
-                        syncCallbacks[BoundCallbackPhase.Exception], syncCallbacks[BoundCallbackPhase.Finally]) { HookIsValueType=type.IsValueType } : null,
+                        syncCallbacks[BoundCallbackPhase.Exception], syncCallbacks[BoundCallbackPhase.Finally])
+                    { HookIsValueType = type.IsValueType } : null,
             AsyncEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.SendAsync &&
-                kind == FusionStageKind.Hook && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type,compilation.Assembly) &&
+                kind == FusionStageKind.Hook && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly) &&
                 callbacks.Count == 4 && asyncCallbacks.Count == 4 &&
                 asyncCallbacks.ContainsKey(BoundCallbackPhase.Before) && asyncCallbacks.ContainsKey(BoundCallbackPhase.Success) &&
                 asyncCallbacks.ContainsKey(BoundCallbackPhase.Exception) && asyncCallbacks.ContainsKey(BoundCallbackPhase.Finally)
                     ? new(Name(type), asyncCallbacks[BoundCallbackPhase.Before], asyncCallbacks[BoundCallbackPhase.Success],
-                        asyncCallbacks[BoundCallbackPhase.Exception], asyncCallbacks[BoundCallbackPhase.Finally]) { HookIsValueType=type.IsValueType } : null,
+                        asyncCallbacks[BoundCallbackPhase.Exception], asyncCallbacks[BoundCallbackPhase.Finally])
+                    { HookIsValueType = type.IsValueType } : null,
             WrapperEmission = facts.Count == before && !compilerOwned && kind == FusionStageKind.Wrapper &&
-                (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type,compilation.Assembly) &&
+                (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly) &&
                 callbacks.Count == 1
-                    ? wrapperEmission! with { WrapperIsValueType=type.IsValueType } : null,
-            Capabilities = facts.Count==before&&!compilerOwned&&kind==FusionStageKind.Hook&&
-                (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync)&&type.TypeKind is (TypeKind.Class or TypeKind.Struct)&&compilation.IsSymbolAccessibleWithin(type,compilation.Assembly)&&
-                capabilityCalls.Count>0&&capabilityCalls.Count<=4
-                    ?new(Name(type),Capability(BoundCallbackPhase.Before),Capability(BoundCallbackPhase.Success),Capability(BoundCallbackPhase.Exception),Capability(BoundCallbackPhase.Finally)){HookIsValueType=type.IsValueType}:null
+                    ? wrapperEmission! with { WrapperIsValueType = type.IsValueType } : null,
+            Capabilities = facts.Count == before && !compilerOwned && kind == FusionStageKind.Hook &&
+                (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly) &&
+                capabilityCalls.Count > 0 && capabilityCalls.Count <= 4
+                    ? new(Name(type), Capability(BoundCallbackPhase.Before), Capability(BoundCallbackPhase.Success), Capability(BoundCallbackPhase.Exception), Capability(BoundCallbackPhase.Finally)) { HookIsValueType = type.IsValueType } : null
         };
     }
 

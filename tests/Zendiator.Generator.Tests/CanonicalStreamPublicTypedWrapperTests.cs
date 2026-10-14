@@ -53,10 +53,19 @@ public sealed partial class GeneratorTests
             foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
             File.WriteAllText(Path.Combine(folder, "compile.json"), System.Text.Json.JsonSerializer.Serialize(new
             {
-                shape, emitted.Success, composition = Selection(driver),
-                diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage(), inSource = d.Location.IsInSource,
-                    anchor = d.Location.IsInSource ? d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan) : null }),
-                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }), sources = generated.Select(f => f.HintName)
+                shape,
+                emitted.Success,
+                composition = Selection(driver),
+                diagnostics = diagnostics.Select(d => new
+                {
+                    d.Id,
+                    severity = d.Severity.ToString(),
+                    message = d.GetMessage(),
+                    inSource = d.Location.IsInSource,
+                    anchor = d.Location.IsInSource ? d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan) : null
+                }),
+                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
+                sources = generated.Select(f => f.HintName)
             }));
         }
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
@@ -128,15 +137,33 @@ public sealed partial class GeneratorTests
         var folder = PublicTypedWrapperFolder("public");
         if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), System.Text.Json.JsonSerializer.Serialize(new
         {
-            values, finalItem = final.FullName, itemBytes = 128, runtimeEnumerations = 1, innerEnumerations = 1,
-            publicReturnType = api.ReturnType.ToString(), cursorFields = cursors.Select(t => new { cursor = t.Name,
+            values,
+            finalItem = final.FullName,
+            itemBytes = 128,
+            runtimeEnumerations = 1,
+            innerEnumerations = 1,
+            publicReturnType = api.ReturnType.ToString(),
+            cursorFields = cursors.Select(t => new
+            {
+                cursor = t.Name,
                 current = t.GetField("_current", BindingFlags.NonPublic | BindingFlags.Instance)!.FieldType.ToString(),
-                source = t.GetField("_source", BindingFlags.NonPublic | BindingFlags.Instance)!.FieldType.ToString() }),
-            probe.Starts, probe.Moves, probe.Reads, probe.SourceEnumerations, probe.SourceDisposals,
-            created = probe.Created.Select(c => c.Role + ":" + c.Id), distinctSessionInstances = 4,
-            sessionDisposalsBeforeScope = 4, sessionDisposalsAfterScope = probe.SessionDisposals,
-            borrowedFactoryDisposalsBeforeScope = 0, borrowedFactoryDisposalsAfterScope = probe.FactoryDisposals,
-            typedConsumerNoObjectItemAdapter = true, requestTokenCheckedByProbe = true, eventsBeforeScope = beforeScope, events = probe.Events
+                source = t.GetField("_source", BindingFlags.NonPublic | BindingFlags.Instance)!.FieldType.ToString()
+            }),
+            probe.Starts,
+            probe.Moves,
+            probe.Reads,
+            probe.SourceEnumerations,
+            probe.SourceDisposals,
+            created = probe.Created.Select(c => c.Role + ":" + c.Id),
+            distinctSessionInstances = 4,
+            sessionDisposalsBeforeScope = 4,
+            sessionDisposalsAfterScope = probe.SessionDisposals,
+            borrowedFactoryDisposalsBeforeScope = 0,
+            borrowedFactoryDisposalsAfterScope = probe.FactoryDisposals,
+            typedConsumerNoObjectItemAdapter = true,
+            requestTokenCheckedByProbe = true,
+            eventsBeforeScope = beforeScope,
+            events = probe.Events
         }));
     }
 

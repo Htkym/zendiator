@@ -78,14 +78,17 @@ internal static class SessionFactoryContractBinding
             cleanupContractName = Name(contract);
         }
         return (new(Identity(factory), Identity(session), acquire, selected.Ownership, cleanup)
-            { SuppliesCallbackReceiver = true, FactoryHierarchy = StageContractBinding.DescribeHierarchy(factory),
-                SyncEmission = family == BoundDispatchFamily.SendSync && factory.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(factory,compilation.Assembly)
+        {
+            SuppliesCallbackReceiver = true,
+            FactoryHierarchy = StageContractBinding.DescribeHierarchy(factory),
+            SyncEmission = family == BoundDispatchFamily.SendSync && factory.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(factory, compilation.Assembly)
                     ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name, cleanupContractName)
-                        { FactoryIsValueType = factory.IsValueType, IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource) } : null,
-                AsyncEmission = family is (BoundDispatchFamily.SendAsync or BoundDispatchFamily.Stream) && factory.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(factory,compilation.Assembly)
+                    { FactoryIsValueType = factory.IsValueType, IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource) } : null,
+            AsyncEmission = family is (BoundDispatchFamily.SendAsync or BoundDispatchFamily.Stream) && factory.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(factory, compilation.Assembly)
                     ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name,
                         cleanupContractName, selected.Completion == BoundCompletionKind.ValueTask)
-                        { FactoryIsValueType = factory.IsValueType, IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource) } : null }, false);
+                    { FactoryIsValueType = factory.IsValueType, IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource) } : null
+        }, false);
     }
 
     private static BoundCallbackModel? Callback(INamedTypeSymbol type, INamedTypeSymbol contract,

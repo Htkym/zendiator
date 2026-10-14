@@ -28,9 +28,10 @@ internal static class CanonicalStreamWrapperBuilder
         {
             var source = sourcePosition < 0 ? route.Handlers[0].Callback! : route.Stages[sourcePosition].Callbacks[0];
             var contract = new StreamSegmentContract(route.Anchor, sourcePosition < 0 ? StreamSourceKind.Handler : StreamSourceKind.Wrapper,
-                source, new(hooks.Select(i => route.Stages[i]))) {
-                    SourceSessions = sourcePosition < 0 ? route.Handlers[0].Sessions : route.Stages[sourcePosition].Sessions
-                };
+                source, new(hooks.Select(i => route.Stages[i])))
+            {
+                SourceSessions = sourcePosition < 0 ? route.Handlers[0].Sessions : route.Stages[sourcePosition].Sessions
+            };
             var descriptor = new StreamSegmentDescriptor(Segment(sourcePosition), sourcePosition, new(hooks), upstream, contract);
             segments.Add(new(descriptor, CanonicalStreamScheduleBuilder.Build(contract)));
         }
@@ -118,7 +119,8 @@ internal static class CanonicalStreamWrapperBuilder
         Transfer(delegated, StreamWrapperPhase.AssignOwner, "acquired/upstream-cursor", "Consumer/owned-cursor");
         calls.Add(new(Site(delegated, StreamWrapperPhase.AcquireCursor), null, input, StreamProgram.GetEnumerator, StreamMultiplicity.EachAcquiredCursor));
         return new(position, input, output, StreamMultiplicity.ZeroOrMore, StreamMultiplicity.ZeroOrMore,
-            true, true, true, true, false, false, new(flows), new(transfers), new(owners), new(awaits)) { Calls = new(calls) };
+            true, true, true, true, false, false, new(flows), new(transfers), new(owners), new(awaits))
+        { Calls = new(calls) };
         void Flow(StreamWrapperProgram program, StreamWrapperPhase entry, IEnumerable<StreamWrapperEdge> edges) => flows.Add(new(program, Site(program, entry), new(edges)));
         void Transfer(StreamWrapperProgram program, StreamWrapperPhase phase, string from, string to, StreamWrapperOutcome outcome = StreamWrapperOutcome.Always) => transfers.Add(new(from, to, Site(program, phase), outcome));
     }

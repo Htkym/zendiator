@@ -10,7 +10,7 @@ internal static class CanonicalSyncSourceEmitter
     {
         if (model.Compositions.Count == 0) return "";
         var b = Header();
-        b.Append(CanonicalSymbolName.Declarations(model.Compositions.SelectMany(c=>c.ExternAliases)));
+        b.Append(CanonicalSymbolName.Declarations(model.Compositions.SelectMany(c => c.ExternAliases)));
         foreach (var c in model.Compositions)
         {
             var h = c.Handler;
@@ -32,7 +32,7 @@ internal static class CanonicalSyncSourceEmitter
                         }
                         public {{result}} Send({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default)
                         {
-                            {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull(request);")}}
+                            {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
                             cancellationToken.ThrowIfCancellationRequested();
                 """);
             if (c.Hooks.Count != 0)
@@ -94,7 +94,7 @@ internal static class CanonicalSyncSourceEmitter
                     try
                     {
                         saved = (({{hook.Before.ContractName}})hook).{{hook.Before.MethodName}}(saved, cancellationToken);
-                        {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull(saved"+(c.Factory==null?"":", \"request\"")+");")}}
+                        {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(saved" + (c.Factory == null ? "" : ", \"request\"") + ");")}}
                         cancellationToken.ThrowIfCancellationRequested();
                         {{handlerCall}}
                         {{(h.ResultName == null ? "" : "response = ")}}(({{hook.Success.ContractName}})hook).{{hook.Success.MethodName}}(saved, {{(h.ResultName == null ? "" : "response, ")}}cancellationToken);
@@ -157,7 +157,7 @@ internal static class CanonicalSyncSourceEmitter
                     try
                     {
                         savedOuter = (({{outer.Before.ContractName}})outer).{{outer.Before.MethodName}}(savedOuter, cancellationToken);
-                        {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull(savedOuter, \"request\");")}}
+                        {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(savedOuter, \"request\");")}}
                         cancellationToken.ThrowIfCancellationRequested();
                         var inner = {{CanonicalServiceResolution.Emit(inner.HookName, inner.HookIsValueType)}};
                         var savedInner = savedOuter;
@@ -167,7 +167,7 @@ internal static class CanonicalSyncSourceEmitter
                         try
                         {
                             savedInner = (({{inner.Before.ContractName}})inner).{{inner.Before.MethodName}}(savedInner, cancellationToken);
-                            {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType,"global::System.ArgumentNullException.ThrowIfNull(savedInner, \"saved\");")}}
+                            {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(savedInner, \"saved\");")}}
                             cancellationToken.ThrowIfCancellationRequested();
                             var handler = {{CanonicalServiceResolution.Emit(h.HandlerName, h.HandlerIsValueType)}};
                             {{(h.ResultName == null ? "" : "response = ")}}(({{h.ContractName}})handler).{{h.MethodName}}(savedInner, cancellationToken);
@@ -220,8 +220,8 @@ internal static class CanonicalSyncSourceEmitter
                         var expected = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
             """);
         if (c.UseLocalHandlers) b.AppendLine("            expected.UseLocalHandlers();");
-        foreach(var marker in c.CatalogMarkerTypes)b.AppendLine("            expected.UseCatalogFrom<"+marker+">();");
-        foreach(var type in c.ExplicitHandlerTypes)b.AppendLine("            expected.AddHandler(typeof("+type+"));");
+        foreach (var marker in c.CatalogMarkerTypes) b.AppendLine("            expected.UseCatalogFrom<" + marker + ">();");
+        foreach (var type in c.ExplicitHandlerTypes) b.AppendLine("            expected.AddHandler(typeof(" + type + "));");
         if (open != null)
         {
             var handlerEntry = open.HandlerFactoryDefinitionName == null ? "typeof(" + open.HandlerDefinitionName + ")" :
@@ -236,17 +236,17 @@ internal static class CanonicalSyncSourceEmitter
         }
         else
         {
-        var entry = c.Factory == null ? $$"""typeof({{h.HandlerName}})""" :
-            $$"""global::Zendiator.HandlerEntry.Session<{{h.HandlerName}}, {{c.Factory.FactoryName}}>()""";
-        b.AppendLine($$"""            expected.Handlers<{{h.RequestName}}>(global::Zendiator.DispatchFamily.{{family}}, {{entry}});""");
-        if (streamFinalItemName != null)
-            b.AppendLine($$"""            expected.StreamPipeline<{{h.RequestName}}, {{streamFinalItemName}}>({{string.Join(", ", streamDeclaredStages.Select(stage => "global::Zendiator.Stage." + stage.Kind + "(typeof(" + stage.TypeName + ")" + (stage.FactoryName == null ? "" : ", typeof(" + stage.FactoryName + ")") + ")"))}});""");
-        else if (c.RegistrationStages.Count != 0)
-            b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + family + ", ")}}{{string.Join(", ",c.RegistrationStages.Select(stage=>"global::Zendiator.Stage."+stage.Kind+"<"+stage.TypeName+(stage.FactoryName==null?"":", "+stage.FactoryName)+">()"))}});""");
-        else if (c.Hooks.Count != 0)
-            b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + family + ", ")}}{{string.Join(", ", c.Hooks.Select(hook => hook.Factory == null ? "global::Zendiator.Stage.Hook<" + hook.HookName + ">()" : "global::Zendiator.Stage.Hook<" + hook.HookName + ", " + hook.Factory.FactoryName + ">()"))}});""");
-        else if (c.HasEmptyPipeline)
-            b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + family)}});""");
+            var entry = c.Factory == null ? $$"""typeof({{h.HandlerName}})""" :
+                $$"""global::Zendiator.HandlerEntry.Session<{{h.HandlerName}}, {{c.Factory.FactoryName}}>()""";
+            b.AppendLine($$"""            expected.Handlers<{{h.RequestName}}>(global::Zendiator.DispatchFamily.{{family}}, {{entry}});""");
+            if (streamFinalItemName != null)
+                b.AppendLine($$"""            expected.StreamPipeline<{{h.RequestName}}, {{streamFinalItemName}}>({{string.Join(", ", streamDeclaredStages.Select(stage => "global::Zendiator.Stage." + stage.Kind + "(typeof(" + stage.TypeName + ")" + (stage.FactoryName == null ? "" : ", typeof(" + stage.FactoryName + ")") + ")"))}});""");
+            else if (c.RegistrationStages.Count != 0)
+                b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + family + ", ")}}{{string.Join(", ", c.RegistrationStages.Select(stage => "global::Zendiator.Stage." + stage.Kind + "<" + stage.TypeName + (stage.FactoryName == null ? "" : ", " + stage.FactoryName) + ">()"))}});""");
+            else if (c.Hooks.Count != 0)
+                b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + family + ", ")}}{{string.Join(", ", c.Hooks.Select(hook => hook.Factory == null ? "global::Zendiator.Stage.Hook<" + hook.HookName + ">()" : "global::Zendiator.Stage.Hook<" + hook.HookName + ", " + hook.Factory.FactoryName + ">()"))}});""");
+            else if (c.HasEmptyPipeline)
+                b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + family)}});""");
         }
         b.AppendLine("""
                         if (snapshot.GetFingerprint() != expected.Snapshot().GetFingerprint())
@@ -275,7 +275,7 @@ internal static class CanonicalSyncSourceEmitter
     {
         if (model.CallSites.Count == 0) return "";
         var b = Header();
-        b.Append(CanonicalSymbolName.Declarations(model.CallSites.SelectMany(c=>c.ExternAliases)));
+        b.Append(CanonicalSymbolName.Declarations(model.CallSites.SelectMany(c => c.ExternAliases)));
         b.AppendLine($$"""
             namespace System.Runtime.CompilerServices
             {

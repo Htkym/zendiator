@@ -32,7 +32,7 @@ public sealed class CanonicalAsyncWrapperProbe
         Event("Map", "Map", input: item); MapEntered.TrySetResult(); return MapGate.Task;
     }
     public void Wrap(object request, CancellationToken token) { Check(request, token); Event("Wrap", "W"); }
-    public IAsyncEnumerable<int> ObserveOpen<R,N>(R request, N upstream, CancellationToken token) where N : IStreamUpstream<R,int>
+    public IAsyncEnumerable<int> ObserveOpen<R, N>(R request, N upstream, CancellationToken token) where N : IStreamUpstream<R, int>
     { Check(request!, token); Opens++; Event("UpstreamOpen", "W"); return new Tracked(this, upstream.Open(request, token), "Upstream"); }
     public IAsyncEnumerable<int> ObserveWrapper(IAsyncEnumerable<int> source) => new Tracked(this, source, "Wrapper");
     public int Replace(object request, int item, CancellationToken token)

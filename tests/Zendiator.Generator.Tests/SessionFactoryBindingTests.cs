@@ -47,7 +47,7 @@ public sealed partial class GeneratorTests
         string family, bool owned, bool asyncFactory, bool wrapper)
     {
         var source = SessionFactoryFixture(family, owned, asyncFactory, wrapper);
-        var driver = family is "SendSync" or "SendAsync" ? BindAcceptedSendLists(source) : BindLists(source,"ZEN0037");
+        var driver = family is "SendSync" or "SendAsync" ? BindAcceptedSendLists(source) : BindLists(source, "ZEN0037");
         var stage = Assert.Single(Assert.Single(Selection(driver).Pipelines).Stages);
         var session = Assert.Single(stage.Sessions);
         Assert.True(session.SuppliesCallbackReceiver);

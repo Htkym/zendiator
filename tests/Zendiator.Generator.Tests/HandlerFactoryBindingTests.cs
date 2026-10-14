@@ -39,7 +39,7 @@ public sealed partial class GeneratorTests
         string family, bool owned, bool asyncFactory, bool isVoid)
     {
         var source = HandlerFactoryFixture(family, owned, asyncFactory, isVoid);
-        var driver = family is "SendSync" or "SendAsync" ? BindAcceptedSendLists(source) : BindLists(source,"ZEN0037");
+        var driver = family is "SendSync" or "SendAsync" ? BindAcceptedSendLists(source) : BindLists(source, "ZEN0037");
         var route = Assert.Single(Selection(driver).Pipelines);
         var handler = route.Handlers[0]; var session = Assert.Single(handler.Sessions);
         Assert.Equal(handler.Type, session.ResourceType);
@@ -90,7 +90,8 @@ public sealed partial class GeneratorTests
     public void Public_Handler_factory_rejects_unmarked_mismatch_implicit_ownership_and_nonliteral_entry_without_DI_fallback(string mutation, string diagnostic)
     {
         var source = HandlerFactoryFixture(mutation is "async-on-sync" or "missing-sync-cleanup" ? "SendSync" : "SendAsync", asyncFactory: mutation == "async-on-sync");
-        source = mutation switch {
+        source = mutation switch
+        {
             "missing-marker" => source.Replace("[ZendiatorHandler] public sealed partial class A", "public sealed partial class A")
                 .Replace("public sealed class Handler :", "public abstract class Handler :"),
             "wrong-request" => source.Replace("IOwnedSessionFactory<Ping,A>", "IOwnedSessionFactory<Other,A>")

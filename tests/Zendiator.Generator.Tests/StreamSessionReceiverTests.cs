@@ -49,13 +49,15 @@ public sealed partial class GeneratorTests
         var receiver = Assert.Single(schedule.CallbackReceivers);
         Assert.Equal(Session(position) + "/live", receiver.Receiver);
         Assert.Equal(wrapper ? StreamPhase.WrapperFactory : StreamPhase.Map, receiver.At.Phase);
-        Assert.All(schedule.SessionCalls.Where(c => c.At.Phase == StreamPhase.AcquireSession), c => {
+        Assert.All(schedule.SessionCalls.Where(c => c.At.Phase == StreamPhase.AcquireSession), c =>
+        {
             Assert.Equal(StreamProgram.Move, c.At.Program);
             Assert.Equal(resolution.ResultSlot, c.Receiver);
             Assert.Equal("cursor/request", c.RequestSlot); Assert.Equal("cursor/start-token", c.TokenSlot);
         });
         Assert.Equal(owned ? 2 : 0, schedule.SessionCalls.Count(c => c.At.Phase == StreamPhase.CleanupSession));
-        Assert.All(schedule.Owners.Where(o => o.Kind == StreamOwnerKind.Service), o => {
+        Assert.All(schedule.Owners.Where(o => o.Kind == StreamOwnerKind.Service), o =>
+        {
             Assert.True(o.Borrowed); Assert.Equal(StreamCleanup.None, o.Cleanup);
         });
         Assert.Contains(inspection.Paths, p => p.Program == StreamProgram.Dispose && !p.Started && p.Terminal == StreamPhase.DisposeSuccess &&
@@ -115,7 +117,8 @@ public sealed partial class GeneratorTests
     {
         var (_, contract, original) = StreamSessionGraph(SessionFactoryFixture("Stream", asyncFactory: true));
         var resource = Session(0);
-        var candidate = mutation switch {
+        var candidate = mutation switch
+        {
             "factory-receiver" => original with { CallbackReceivers = new(original.CallbackReceivers.Select(c => c with { Receiver = Service(0) + "/resolved" })) },
             "factory-result-receiver" => original with { CallbackReceivers = new(original.CallbackReceivers.Select(c => c with { Receiver = resource + "/factory-result" })) },
             "body-token" => original with { CallbackReceivers = new(original.CallbackReceivers.Select(c => c with { TokenSlot = "source/token" })) },
@@ -143,7 +146,8 @@ public sealed partial class GeneratorTests
     public void Metadata_preserving_Stream_CFG_rejects_premature_transfer_cleanup_and_skipped_partial_recovery(string mutation, string reason)
     {
         var (_, contract, original) = StreamSessionGraph(SessionFactoryFixture("Stream", asyncFactory: true));
-        var candidate = mutation switch {
+        var candidate = mutation switch
+        {
             "skip-validation" => Retarget(original, StreamProgram.Move, StreamPhase.AcquireSession, StreamOutcome.Success, StreamPhase.CommitSession, 0, 0),
             "skip-startup-cleanup" => Retarget(original, StreamProgram.Move, StreamPhase.SourceFactory, StreamOutcome.Failure, StreamPhase.EndFailure),
             "release-on-false" => Retarget(original, StreamProgram.Move, StreamPhase.EndFalse, StreamOutcome.Always, StreamPhase.StartupDetachLink),
@@ -160,10 +164,14 @@ public sealed partial class GeneratorTests
         var (_, contract, original) = StreamSessionGraph(SessionFactoryFixture("Stream", owned: false));
         var cleanup = Id(StreamProgram.Dispose, StreamPhase.CleanupSession, 0);
         var candidate = Retarget(original, StreamProgram.Dispose, StreamPhase.DisposeSource, StreamOutcome.Success, StreamPhase.CleanupSession, toStage: 0);
-        candidate = candidate with {
+        candidate = candidate with
+        {
             SessionCalls = new(candidate.SessionCalls.Append(new(cleanup, Session(0) + "/detached", null, null, null))),
-            Flows = new(candidate.Flows.Select(f => f.Program != StreamProgram.Dispose ? f : f with { Edges = new(f.Edges.Append(
-                new StreamControlEdge(cleanup, Id(StreamProgram.Dispose, StreamPhase.LinkPresent), StreamOutcome.Always))) }))
+            Flows = new(candidate.Flows.Select(f => f.Program != StreamProgram.Dispose ? f : f with
+            {
+                Edges = new(f.Edges.Append(
+                new StreamControlEdge(cleanup, Id(StreamProgram.Dispose, StreamPhase.LinkPresent), StreamOutcome.Always)))
+            }))
         };
         Assert.Contains(CanonicalStreamSessionValidator.Inspect(contract, candidate).Facts, f => f.Reason == "BorrowedStreamSessionDisposedByOperation");
     }

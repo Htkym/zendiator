@@ -54,7 +54,8 @@ internal static class CanonicalAsyncEmissionNormalizer
             }
             else if (h.ServiceOwnership != FusionOwnership.BorrowedService) continue;
             output.Add(new(i, c.GeneratedNamespace, c.MarkerName, c.UseLocalHandlers, h.AsyncEmission, factory,
-                route.HasEmptyPipeline, route.PipelineFamily, c.MicrosoftDiProviderName??"") { Hooks = new(hooks), ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes, ExternAliases=c.ExternAliases });
+                route.HasEmptyPipeline, route.PipelineFamily, c.MicrosoftDiProviderName ?? "")
+            { Hooks = new(hooks), ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes, ExternAliases = c.ExternAliases });
         }
         return new(new(output));
     }
@@ -71,15 +72,17 @@ internal static class CanonicalAsyncEmissionNormalizer
 
     // Registration and call-site binding only need callable names; no synchronous body is reused.
     internal static CanonicalSyncCompositionEmission Registration(CanonicalAsyncCompositionEmission c) => new(c.Index, c.Namespace, c.MarkerName, c.UseLocalHandlers,
-        new(c.Handler.RequestName, c.Handler.HandlerName, c.Handler.ContractName, c.Handler.MethodName, c.Handler.ResultName){RequestIsValueType=c.Handler.RequestIsValueType,HandlerIsValueType=c.Handler.HandlerIsValueType},
-        c.Factory == null ? null : new(c.Factory.FactoryName, c.Factory.ContractName, c.Factory.MethodName, c.Factory.CleanupContractName){FactoryIsValueType=c.Factory.FactoryIsValueType},
-        c.HasEmptyPipeline, c.PipelineFamily, c.MicrosoftDiProviderName??"")
+        new(c.Handler.RequestName, c.Handler.HandlerName, c.Handler.ContractName, c.Handler.MethodName, c.Handler.ResultName) { RequestIsValueType = c.Handler.RequestIsValueType, HandlerIsValueType = c.Handler.HandlerIsValueType },
+        c.Factory == null ? null : new(c.Factory.FactoryName, c.Factory.ContractName, c.Factory.MethodName, c.Factory.CleanupContractName) { FactoryIsValueType = c.Factory.FactoryIsValueType },
+        c.HasEmptyPipeline, c.PipelineFamily, c.MicrosoftDiProviderName ?? "")
     {
-        ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes, ExternAliases=c.ExternAliases,
+        ExplicitHandlerTypes = c.ExplicitHandlerTypes,
+        CatalogMarkerTypes = c.CatalogMarkerTypes,
+        ExternAliases = c.ExternAliases,
         Hooks = new(c.Hooks.Select(h => new BoundSyncHookEmission(h.HookName,
             new(h.Before.ContractName, h.Before.MethodName), new(h.Success.ContractName, h.Success.MethodName),
             new(h.Exception.ContractName, h.Exception.MethodName), new(h.Finally.ContractName, h.Finally.MethodName))
-        { HookIsValueType=h.HookIsValueType, Factory = h.Factory == null ? null : new(h.Factory.FactoryName, h.Factory.ContractName, h.Factory.MethodName, h.Factory.CleanupContractName){FactoryIsValueType=h.Factory.FactoryIsValueType} }))
+        { HookIsValueType = h.HookIsValueType, Factory = h.Factory == null ? null : new(h.Factory.FactoryName, h.Factory.ContractName, h.Factory.MethodName, h.Factory.CleanupContractName) { FactoryIsValueType = h.Factory.FactoryIsValueType } }))
     };
 
     internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalAsyncEmissionModel model, ImmutableArray<CompositionSelectionDiscovery.Binding> current,

@@ -110,8 +110,8 @@ public sealed class ZendiatorConfiguration
     public void UseCatalogFrom<TMarker>()
     {
         ThrowIfFrozen();
-        var marker=typeof(TMarker);
-        if(_catalogMarkers.Any(type=>type.Assembly==marker.Assembly))throw new InvalidOperationException("The same catalog is selected more than once.");
+        var marker = typeof(TMarker);
+        if (_catalogMarkers.Any(type => type.Assembly == marker.Assembly)) throw new InvalidOperationException("The same catalog is selected more than once.");
         _catalogMarkers.Add(marker);
     }
 

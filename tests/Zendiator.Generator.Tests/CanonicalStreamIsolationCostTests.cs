@@ -80,9 +80,14 @@ public sealed partial class GeneratorTests
             Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, "one-shape.json"), JsonSerializer.Serialize(new
             {
-                reference, canonical, fused, isolated,
+                reference,
+                canonical,
+                fused,
+                isolated,
                 contractRelation = "different ambient contracts;isolation reproduction model,not literal 0.4.0",
-                candidateOnly = true, productionEnabled = false, sameContractPerformanceGate = false
+                candidateOnly = true,
+                productionEnabled = false,
+                sameContractPerformanceGate = false
             }));
         }
         // Off by default. BOCCHI must approve this fixed, different-contract cost proposal.
@@ -226,11 +231,19 @@ public sealed partial class GeneratorTests
                         checksum, ticks, ticks * (1_000_000_000d / Stopwatch.Frequency) / 512, bytes, bytes / 512d));
                 }
             }
-            return new { rows, warmupEnumerationsPerContract = 64, measuredEnumerationsPerContract = 2048,
-                stopwatchFrequency = Stopwatch.Frequency, framework = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
-                runtimeVersion = Environment.Version.ToString(), sdk = "record external dotnet --info", traceRecording = false,
+            return new
+            {
+                rows,
+                warmupEnumerationsPerContract = 64,
+                measuredEnumerationsPerContract = 2048,
+                stopwatchFrequency = Stopwatch.Frequency,
+                framework = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+                runtimeVersion = Environment.Version.ToString(),
+                sdk = "record external dotnet --info",
+                traceRecording = false,
                 allocationScope = "current thread;all completions asserted synchronous;DI/services/source/enumerators included",
-                interpretation = "different contracts;small local isolation reproduction cost,no throughput/adoption/baseline claim" };
+                interpretation = "different contracts;small local isolation reproduction cost,no throughput/adoption/baseline claim"
+            };
         }
         finally { CanonicalStreamFallbackProbe.Ambient.Value = saved; SynchronizationContext.SetSynchronizationContext(savedContext); }
     }

@@ -115,8 +115,14 @@ internal static class CanonicalStreamSessionValidator
                         var sequence = Enumerable.Reverse(positions).ToArray();
                         Need(life.Acquired.SequenceEqual(sequence.Take(life.Acquired.Length)) && life.Acquired.Length < sequence.Length && sequence[life.Acquired.Length] == id.Stage,
                             "StreamSessionStartupOrderMismatch");
-                        next = next with { Life = next.Life with { Acquired = next.Life.Acquired.Add(id.Stage),
-                            HookCache = id.Stage < 0 ? next.Life.HookCache : next.Life.HookCache + "|" + id.Stage + "|" } };
+                        next = next with
+                        {
+                            Life = next.Life with
+                            {
+                                Acquired = next.Life.Acquired.Add(id.Stage),
+                                HookCache = id.Stage < 0 ? next.Life.HookCache : next.Life.HookCache + "|" + id.Stage + "|"
+                            }
+                        };
                         if (Sessions(contract, id.Stage)[0].Ownership == FusionOwnership.OwnedSession) next = next with { Expected = next.Expected.Add(id.Stage) };
                     }
                     if (phase == sourceFactory || phase is StreamPhase.Filter or StreamPhase.Map)
@@ -238,15 +244,20 @@ internal static class CanonicalStreamSessionValidator
         IEnumerable<(StreamOutcome Outcome, bool Canceled, bool Null)> Outcomes(State state)
         {
             var id = state.At; var life = state.Life;
-            bool? decision = id.Phase switch {
-                StreamPhase.Stopped => life.Ended || life.Disposed, StreamPhase.Started => life.Started,
+            bool? decision = id.Phase switch
+            {
+                StreamPhase.Stopped => life.Ended || life.Disposed,
+                StreamPhase.Started => life.Started,
                 StreamPhase.HookCached => life.HookCache.Contains("|" + id.Stage + "|"),
                 StreamPhase.SourcePresent => Read(life, "dispose/source") != null,
                 StreamPhase.SessionPresent => Read(life, Session(id.Stage) + "/detached") != null,
                 StreamPhase.StartupLinkPresent => Read(life, "startup/linked-token") != null,
                 StreamPhase.LinkPresent => Read(life, "dispose/linked-token") != null,
-                StreamPhase.AlreadyDisposed => life.Disposed, StreamPhase.DisposeResult => state.Error != null,
-                StreamPhase.CurrentGuard => life.Cache && !life.Ended && !life.Disposed, _ => null };
+                StreamPhase.AlreadyDisposed => life.Disposed,
+                StreamPhase.DisposeResult => state.Error != null,
+                StreamPhase.CurrentGuard => life.Cache && !life.Ended && !life.Disposed,
+                _ => null
+            };
             if (decision != null) { yield return (decision.Value ? StreamOutcome.True : StreamOutcome.False, false, false); yield break; }
             if (id.Phase == StreamPhase.ValidateSessionResult) { yield return (Read(life, Session(id.Stage) + "/factory-result") == null ? StreamOutcome.Failure : StreamOutcome.Success, false, false); yield break; }
             if (id.Phase is StreamPhase.SourceMove or StreamPhase.Filter)

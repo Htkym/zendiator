@@ -84,8 +84,14 @@ public sealed partial class GeneratorTests
         var reference = RunHookSessionScenario(owned, isVoid, scenario, golden, fixture);
         var generated = RunHookSessionScenario(owned, isVoid, scenario, golden, fixture, generated: true);
         Assert.Equal(reference, generated);
-        WriteNestedHookEvidence("hook-session-differential", owned + "-" + isVoid + "-" + scenario, new {
-            owned, isVoid, scenario, golden, reference = JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated)
+        WriteNestedHookEvidence("hook-session-differential", owned + "-" + isVoid + "-" + scenario, new
+        {
+            owned,
+            isVoid,
+            scenario,
+            golden,
+            reference = JsonSerializer.Deserialize<JsonElement>(reference),
+            generated = JsonSerializer.Deserialize<JsonElement>(generated)
         });
     }
     [Theory]
@@ -96,26 +102,31 @@ public sealed partial class GeneratorTests
         var reference = RunHookSessionLifetimes(owned, isVoid, lifetime, fixture);
         var generated = RunHookSessionLifetimes(owned, isVoid, lifetime, fixture, generated: true);
         Assert.Equal(reference, generated);
-        WriteNestedHookEvidence("hook-session-differential-lifetimes", owned + "-" + isVoid + "-" + lifetime, new {
-            owned, isVoid, lifetime = lifetime.ToString(), reference = JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated)
+        WriteNestedHookEvidence("hook-session-differential-lifetimes", owned + "-" + isVoid + "-" + lifetime, new
+        {
+            owned,
+            isVoid,
+            lifetime = lifetime.ToString(),
+            reference = JsonSerializer.Deserialize<JsonElement>(reference),
+            generated = JsonSerializer.Deserialize<JsonElement>(generated)
         });
     }
 
-    public sealed class ExternalResponseSessionHook<R,T> : ISendRequestTransform<R>, ISendResponseTransform<R,T>, ISendExceptionObserver<R>, ISendFinallyObserver<R>, IDisposable
+    public sealed class ExternalResponseSessionHook<R, T> : ISendRequestTransform<R>, ISendResponseTransform<R, T>, ISendExceptionObserver<R>, ISendFinallyObserver<R>, IDisposable
     {
-        public R Before(R request,CancellationToken token)=>request;
-        public T After(R request,T response,CancellationToken token)=>response;
-        public void OnException(R request,Exception error,CancellationToken token){}
-        public void Finally(R request,SendExitInfo exit,CancellationToken token){}
-        public void Dispose(){}
+        public R Before(R request, CancellationToken token) => request;
+        public T After(R request, T response, CancellationToken token) => response;
+        public void OnException(R request, Exception error, CancellationToken token) { }
+        public void Finally(R request, SendExitInfo exit, CancellationToken token) { }
+        public void Dispose() { }
     }
     public sealed class ExternalVoidSessionHook<R> : ISendRequestTransform<R>, ISendSuccessObserver<R>, ISendExceptionObserver<R>, ISendFinallyObserver<R>, IDisposable
     {
-        public R Before(R request,CancellationToken token)=>request;
-        public void After(R request,CancellationToken token){}
-        public void OnException(R request,Exception error,CancellationToken token){}
-        public void Finally(R request,SendExitInfo exit,CancellationToken token){}
-        public void Dispose(){}
+        public R Before(R request, CancellationToken token) => request;
+        public void After(R request, CancellationToken token) { }
+        public void OnException(R request, Exception error, CancellationToken token) { }
+        public void Finally(R request, SendExitInfo exit, CancellationToken token) { }
+        public void Dispose() { }
     }
     public static IEnumerable<object[]> HookSessionBackendBoundaries()
     {
@@ -156,27 +167,34 @@ public sealed partial class GeneratorTests
             if (owned) source = source.Replace("ISendFinallyObserver<Ping>,IDisposable where", "ISendFinallyObserver<Ping>,IDisposable,IAsyncDisposable where")
                 .Replace("void IDisposable.Dispose()=>_probe.Release(this);", "void IDisposable.Dispose()=>_probe.Release(this); public ValueTask DisposeAsync(){ _probe.Release(this); return default; }");
         }
-        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"HookSessionBoundary" + Guid.NewGuid()),out var output,out var diagnostics);
-        Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        AssertAcceptedSendEmission(driver,diagnostics,shape=="async"?BoundDispatchFamily.SendAsync:BoundDispatchFamily.SendSync,isVoid);
-        var generatedCount=driver.GetRunResult().Results.Single().GeneratedSources.Length;
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "HookSessionBoundary" + Guid.NewGuid()), out var output, out var diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        AssertAcceptedSendEmission(driver, diagnostics, shape == "async" ? BoundDispatchFamily.SendAsync : BoundDispatchFamily.SendSync, isVoid);
+        var generatedCount = driver.GetRunResult().Results.Single().GeneratedSources.Length;
         AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
-        WriteNestedHookEvidence("hook-session-boundaries",owned + "-" + isVoid + "-" + shape,new { owned,isVoid,shape,source,
-            diagnostics=diagnostics.Select(d=>new { d.Id,message=d.GetMessage() }),generatedSources=generatedCount });
+        WriteNestedHookEvidence("hook-session-boundaries", owned + "-" + isVoid + "-" + shape, new
+        {
+            owned,
+            isVoid,
+            shape,
+            source,
+            diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }),
+            generatedSources = generatedCount
+        });
     }
 
     [Fact]
     public void Hook_session_body_edits_cache_emission_but_ownership_changes_invalidate_cleanup()
     {
-        var source = HookSessionBackendSource(true,false,dispatch:false);
-        var driver = SyncDriver().RunGenerators(SyncCompilation(source,"HookSessionIncremental"));
+        var source = HookSessionBackendSource(true, false, dispatch: false);
+        var driver = SyncDriver().RunGenerators(SyncCompilation(source, "HookSessionIncremental"));
         var first = CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
-        driver = driver.RunGenerators(SyncCompilation(source.Replace("return _probe.Core.After(request,response,token);","return _probe.Core.After(request,response,token)+0;"),"HookSessionIncremental"));
-        Assert.Equal(first,CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
-        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalRouteOutputFile"].SelectMany(s=>s.Outputs),o=>Assert.True(o.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
-        driver = driver.RunGenerators(SyncCompilation(HookSessionBackendSource(false,false,dispatch:false),"HookSessionIncremental"));
+        driver = driver.RunGenerators(SyncCompilation(source.Replace("return _probe.Core.After(request,response,token);", "return _probe.Core.After(request,response,token)+0;"), "HookSessionIncremental"));
+        Assert.Equal(first, CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
+        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalRouteOutputFile"].SelectMany(s => s.Outputs), o => Assert.True(o.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
+        driver = driver.RunGenerators(SyncCompilation(HookSessionBackendSource(false, false, dispatch: false), "HookSessionIncremental"));
         var borrowed = CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
-        Assert.NotEqual(first,borrowed); Assert.Contains("var detached = hook;",first); Assert.DoesNotContain("var detached = hook;",borrowed);
-        WriteNestedHookEvidence("hook-session-incremental","ownership",new { bodyCached=true,ownershipChangesCleanup=true });
+        Assert.NotEqual(first, borrowed); Assert.Contains("var detached = hook;", first); Assert.DoesNotContain("var detached = hook;", borrowed);
+        WriteNestedHookEvidence("hook-session-incremental", "ownership", new { bodyCached = true, ownershipChangesCleanup = true });
     }
 }

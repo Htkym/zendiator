@@ -17,7 +17,7 @@ internal sealed class RequiredStreamExecutionContract
     internal readonly List<StreamCallbackReceiver> CallbackReceivers = new();
 
     internal static RequiredStreamExecutionContract Derive(BoundPipelineModel route) => Derive(new StreamSegmentContract(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages)
-        { SourceSessions = route.Handlers[0].Sessions });
+    { SourceSessions = route.Handlers[0].Sessions });
 
     internal static RequiredStreamExecutionContract Derive(StreamSegmentContract contract)
     {
@@ -97,12 +97,14 @@ internal sealed class RequiredStreamExecutionContract
                 var id = Id(program, phase, stage);
                 var owner = program == StreamProgram.Create ? "envelope" : phase is StreamPhase.SourceMove or StreamPhase.SourceCurrent or StreamPhase.DisposeSource ? "source" :
                     phase is StreamPhase.StartupDisposeLink or StreamPhase.DisposeLink ? "linked-token" : "cursor";
-                string? producer = phase switch {
+                string? producer = phase switch
+                {
                     StreamPhase.SourceFactory or StreamPhase.WrapperFactory => contract.Callback.Implementation,
                     StreamPhase.Filter or StreamPhase.Map => contract.Hooks[stage].Callbacks[0].Implementation,
                     StreamPhase.SourceMove => "IAsyncEnumerator.MoveNextAsync",
                     StreamPhase.SourceCurrent => "IAsyncEnumerator.Current",
-                    StreamPhase.DisposeSource => "IAsyncDisposable.DisposeAsync", _ => null
+                    StreamPhase.DisposeSource => "IAsyncDisposable.DisposeAsync",
+                    _ => null
                 };
                 required.Sites.Add(new(id, stage < 0 ? contract.Anchor : contract.Hooks[stage].Anchor, owner,
                     phase is StreamPhase.SourceMove or StreamPhase.DisposeSource ? BoundCompletionKind.ValueTask :

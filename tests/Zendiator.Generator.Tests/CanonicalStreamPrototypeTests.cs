@@ -131,7 +131,9 @@ public sealed partial class GeneratorTests
             File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
             File.WriteAllText(Path.Combine(folder, "compile.json"), System.Text.Json.JsonSerializer.Serialize(new
             {
-                emitted.Success, candidateOnly = true, productionEnabled = false,
+                emitted.Success,
+                candidateOnly = true,
+                productionEnabled = false,
                 compilerDiagnostics = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
                 generatorDiagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() })
             }));
@@ -180,7 +182,11 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData("normal")] [InlineData("drop")] [InlineData("mask")] [InlineData("cancel")] [InlineData("context")]
+    [InlineData("normal")]
+    [InlineData("drop")]
+    [InlineData("mask")]
+    [InlineData("cancel")]
+    [InlineData("context")]
     public async Task Stream_generated_candidate_matches_selected_reference_observations(string profile)
     {
         var observations = new List<(int[] Values, string[] Trace, int Moves, int Reads, int Disposals, int Effects, bool Canceled, bool Faulted)>();
@@ -189,8 +195,14 @@ public sealed partial class GeneratorTests
             var before = CanonicalStreamPrototypeProbe.Ambient.Value; CanonicalStreamPrototypeProbe.Ambient.Value = "caller";
             using var cancellation = new CancellationTokenSource();
             var map = new FormatException("map"); var cleanup = new InvalidOperationException("cleanup");
-            var probe = new CanonicalStreamPrototypeProbe { Input = profile == "drop" ? [-2, -1] : [-1, 1, 2], Context = profile == "context",
-                MapError = profile == "mask" ? map : null, CleanupError = profile == "mask" ? cleanup : null, CancelInFirst = profile == "cancel" ? cancellation : null };
+            var probe = new CanonicalStreamPrototypeProbe
+            {
+                Input = profile == "drop" ? [-2, -1] : [-1, 1, 2],
+                Context = profile == "context",
+                MapError = profile == "mask" ? map : null,
+                CleanupError = profile == "mask" ? cleanup : null,
+                CancelInFirst = profile == "cancel" ? cancellation : null
+            };
             var (services, cursor) = PrototypeCursor(probe, generated, cancellation.Token); using var provider = services;
             var values = new List<int>(); bool canceled = false, faulted = false;
             try
@@ -217,9 +229,14 @@ public sealed partial class GeneratorTests
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence))
             File.WriteAllText(Path.Combine(evidence, "stream-prototype", "observations-" + profile + ".json"),
-                System.Text.Json.JsonSerializer.Serialize(new { profile, candidateOnly = true, productionEnabled = false,
+                System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    profile,
+                    candidateOnly = true,
+                    productionEnabled = false,
                     reference = new { expected.Values, expected.Trace, expected.Moves, expected.Reads, expected.Disposals, expected.Effects, expected.Canceled, expected.Faulted },
-                    candidate = new { actual.Values, actual.Trace, actual.Moves, actual.Reads, actual.Disposals, actual.Effects, actual.Canceled, actual.Faulted } }));
+                    candidate = new { actual.Values, actual.Trace, actual.Moves, actual.Reads, actual.Disposals, actual.Effects, actual.Canceled, actual.Faulted }
+                }));
         Assert.Equal(expected.Values, actual.Values); Assert.Equal(expected.Trace, actual.Trace);
         Assert.Equal((expected.Moves, expected.Reads, expected.Disposals, expected.Effects, expected.Canceled, expected.Faulted),
             (actual.Moves, actual.Reads, actual.Disposals, actual.Effects, actual.Canceled, actual.Faulted));
@@ -227,7 +244,8 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Stream_generated_candidate_matches_real_pending_Move_or_Dispose_single_consumption(bool disposing)
     {
         foreach (var generated in new[] { false, true })

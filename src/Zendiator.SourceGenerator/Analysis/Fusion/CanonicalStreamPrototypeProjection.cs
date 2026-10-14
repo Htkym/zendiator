@@ -42,6 +42,7 @@ internal static class CanonicalStreamPrototypeProjection
         if (lowering == null) return null;
         return new(composition.GeneratedNamespace, "__ZendiatorStreamPrototype_" + id,
             "Zendiator.StreamPrototype." + id + ".g.cs", schedule, cleanup, call,
-            new(route.Stages.Select(s => s.StreamEmission!)), lowering.Value.Item, lowering.Value.Cleanup) { Generic = route.StreamGeneric };
+            new(route.Stages.Select(s => s.StreamEmission!)), lowering.Value.Item, lowering.Value.Cleanup)
+        { Generic = route.StreamGeneric };
     }
 }

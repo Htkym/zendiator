@@ -36,7 +36,10 @@ public sealed class CanonicalContractRegressionTests
     }
 
     [Theory]
-    [InlineData(0)] [InlineData(1)] [InlineData(16)] [InlineData(1024)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(16)]
+    [InlineData(1024)]
     public async Task Stream_lengths_cache_Current_and_cleanup_once(int count)
     {
         var events = new ContractEvents("Stream", 1); var source = new Source(events, count); var starts = 0;
@@ -52,7 +55,11 @@ public sealed class CanonicalContractRegressionTests
     }
 
     [Theory]
-    [InlineData(0)] [InlineData(1)] [InlineData(2)] [InlineData(3)] [InlineData(4)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
     public async Task Token_identity_and_link_ownership(int mode)
     {
         using var apiSource = new CancellationTokenSource(); using var enumSource = new CancellationTokenSource();
@@ -69,7 +76,10 @@ public sealed class CanonicalContractRegressionTests
     }
 
     [Theory]
-    [InlineData("factory")] [InlineData("get")] [InlineData("move")] [InlineData("current")]
+    [InlineData("factory")]
+    [InlineData("get")]
+    [InlineData("move")]
+    [InlineData("current")]
     public async Task Startup_failure_has_no_retry_and_disposes_only_acquired_inner(string phase)
     {
         var events = new ContractEvents("Stream", 1); var source = new Source(events, 1); var error = new FormatException(phase); var starts = 0;
@@ -92,7 +102,8 @@ public sealed class CanonicalContractRegressionTests
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Pending_move_and_cleanup_failure_release_linked_owner(bool cancellation)
     {
         using var api = new CancellationTokenSource(); using var enumeration = new CancellationTokenSource();
@@ -121,7 +132,8 @@ public sealed class CanonicalContractRegressionTests
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Unstarted_and_early_break_do_not_prefetch(bool earlyBreak)
     {
         var starts = 0; var source = new Source(new("Stream", 1), 16);
@@ -154,7 +166,10 @@ public sealed class CanonicalContractRegressionTests
     }
 
     [Theory]
-    [InlineData(0)] [InlineData(1)] [InlineData(3)] [InlineData(5)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(3)]
+    [InlineData(5)]
     public void Sync_send_has_nested_unwind_and_saved_stage_requests(int depth)
     {
         var events = new ContractEvents("SendSync", 13, 2); var saved = new List<Request>();
@@ -174,7 +189,13 @@ public sealed class CanonicalContractRegressionTests
     }
 
     [Theory]
-    [InlineData("guard")] [InlineData("factory")] [InlineData("before")] [InlineData("handler")] [InlineData("after")] [InlineData("observer")] [InlineData("finally")]
+    [InlineData("guard")]
+    [InlineData("factory")]
+    [InlineData("before")]
+    [InlineData("handler")]
+    [InlineData("after")]
+    [InlineData("observer")]
+    [InlineData("finally")]
     public async Task Async_failure_respects_entered_and_exception_replacement(string phase)
     {
         using var cancellation = new CancellationTokenSource(); var events = new ContractEvents("SendAsync", 1);
@@ -203,7 +224,10 @@ public sealed class CanonicalContractRegressionTests
     }
 
     [Theory]
-    [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
     public async Task Async_hook_and_handler_suspension_consume_sources_once(bool hookPending, bool handlerPending)
     {
         var before = new ContractOnce<Request>(); var handler = new ContractOnce<int>(); var reached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -217,7 +241,8 @@ public sealed class CanonicalContractRegressionTests
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Callback_context_preserves_native_async_boundary_and_caller(bool suspend)
     {
         var prior = ContractEvents.Ambient.Value; ContractEvents.Ambient.Value = "caller";
@@ -284,14 +309,16 @@ public sealed class CanonicalContractRegressionTests
         using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true }); var scope = provider.CreateScope();
         Borrowed? borrowed = null; var state = new List<Source>();
         var stream = CanonicalControl.Stream(new Request(1), (_, _) => { borrowed = scope.ServiceProvider.GetRequiredService<Borrowed>(); var s = new Source(new("Stream", state.Count + 1), 1); state.Add(s); return s; });
-        Assert.Equal(0, calls); await foreach (var _ in stream) { } await foreach (var _ in stream) { }
+        Assert.Equal(0, calls); await foreach (var _ in stream) { }
+        await foreach (var _ in stream) { }
         Assert.Equal(1, calls); Assert.Equal(0, borrowed!.Disposals); Assert.All(state, s => Assert.Equal(1, s.Disposals));
         scope.Dispose(); Assert.Equal(1, borrowed.Disposals); var cursor = stream.GetAsyncEnumerator();
         await Assert.ThrowsAsync<ObjectDisposedException>(async () => await cursor.MoveNextAsync()); await cursor.DisposeAsync(); Assert.Equal(2, state.Count);
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Async_dispose_is_single_consumption_even_after_cancellation_or_failure(bool fail)
     {
         using var api = new CancellationTokenSource(); using var enumeration = new CancellationTokenSource();
@@ -307,7 +334,8 @@ public sealed class CanonicalContractRegressionTests
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Span_does_not_commit_on_After_or_Finally_failure(bool inFinally)
     {
         var error = new FormatException("unwind"); var destination = new[] { -1, -1 }; var entered = 0;
@@ -376,13 +404,16 @@ public sealed class CanonicalContractRegressionTests
         var values = new List<Borrowed>(); var services = new ServiceCollection(); services.AddTransient(_ => { var service = new Borrowed(); values.Add(service); return service; });
         using var provider = services.BuildServiceProvider(); var scope = provider.CreateScope(); var sources = new List<Source>();
         var stream = CanonicalControl.Stream(new Request(1), (_, _) => { _ = scope.ServiceProvider.GetRequiredService<Borrowed>(); var source = new Source(new("Stream", sources.Count + 1), 1); sources.Add(source); return source; });
-        await foreach (var _ in stream) { } await foreach (var _ in stream) { }
+        await foreach (var _ in stream) { }
+        await foreach (var _ in stream) { }
         Assert.Equal(2, values.Count); Assert.NotSame(values[0], values[1]); Assert.All(values, v => Assert.Equal(0, v.Disposals));
         Assert.All(sources, s => Assert.Equal(1, s.Disposals)); scope.Dispose(); Assert.All(values, v => Assert.Equal(1, v.Disposals));
     }
 
     [Theory]
-    [InlineData(0)] [InlineData(1)] [InlineData(2)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
     public async Task Opaque_wrapper_next_count_request_token_and_child_state_are_preserved(int repetitions)
     {
         using var originalToken = new CancellationTokenSource(); using var replacementToken = new CancellationTokenSource();
@@ -431,7 +462,11 @@ public sealed class CanonicalContractRegressionTests
     }
 
     [Theory]
-    [InlineData("throw")] [InlineData("fault")] [InlineData("cancel")] [InlineData("pending")] [InlineData("success")]
+    [InlineData("throw")]
+    [InlineData("fault")]
+    [InlineData("cancel")]
+    [InlineData("pending")]
+    [InlineData("success")]
     public async Task Non_generic_ValueTask_observation_preserves_status_and_single_consumption(string mode)
     {
         using var cancellation = new CancellationTokenSource(); if (mode == "cancel") cancellation.Cancel();

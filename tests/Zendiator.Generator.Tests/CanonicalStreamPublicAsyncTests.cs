@@ -52,8 +52,16 @@ public sealed partial class GeneratorTests
             foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
             File.WriteAllText(Path.Combine(folder, "compile.json"), System.Text.Json.JsonSerializer.Serialize(new
             {
-                shape, emitted.Success, diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage(),
-                    inSource = d.Location.IsInSource, anchor = d.Location.IsInSource ? d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan) : null }),
+                shape,
+                emitted.Success,
+                diagnostics = diagnostics.Select(d => new
+                {
+                    d.Id,
+                    severity = d.Severity.ToString(),
+                    message = d.GetMessage(),
+                    inSource = d.Location.IsInSource,
+                    anchor = d.Location.IsInSource ? d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan) : null
+                }),
                 compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
                 sources = generated.Select(f => f.HintName)
             }));
@@ -149,10 +157,22 @@ public sealed partial class GeneratorTests
             var folder = PublicAsyncFolder(profile);
             if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), System.Text.Json.JsonSerializer.Serialize(new
             {
-                profile, values, initiallyCompleted, canceled = move.IsCanceled, faulted = move.IsFaulted,
-                probe.Starts, probe.Moves, probe.Reads, probe.Disposals, probe.LastCalls,
-                firstConsumptions = probe.FirstGate.Consumptions, mapConsumptions = probe.MapGate.Consumptions,
-                borrowedDisposalsBeforeScope = 0, borrowedDisposalsAfterScope = probe.BorrowedDisposals, eventsBeforeScope = beforeScope, events = events.Snapshot()
+                profile,
+                values,
+                initiallyCompleted,
+                canceled = move.IsCanceled,
+                faulted = move.IsFaulted,
+                probe.Starts,
+                probe.Moves,
+                probe.Reads,
+                probe.Disposals,
+                probe.LastCalls,
+                firstConsumptions = probe.FirstGate.Consumptions,
+                mapConsumptions = probe.MapGate.Consumptions,
+                borrowedDisposalsBeforeScope = 0,
+                borrowedDisposalsAfterScope = probe.BorrowedDisposals,
+                eventsBeforeScope = beforeScope,
+                events = events.Snapshot()
             }));
         }
         // Same async callbacks behind an opaque wrapper remain internal; no extra runtime matrix.

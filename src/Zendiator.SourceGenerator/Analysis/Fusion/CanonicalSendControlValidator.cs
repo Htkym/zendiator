@@ -103,8 +103,11 @@ internal static class CanonicalSendControlValidator
                     if (edges[state.Point].Any(e => !outcomes.Contains(e.Outcome))) Reject("UnexpectedControlOutcome");
                     foreach (var outcome in outcomes)
                     {
-                        var next = state with { Failed = state.Failed || outcome == SendControlOutcome.Failure,
-                            FirstFailure = outcome == SendControlOutcome.Failure ? state.FirstFailure ?? phase : state.FirstFailure };
+                        var next = state with
+                        {
+                            Failed = state.Failed || outcome == SendControlOutcome.Failure,
+                            FirstFailure = outcome == SendControlOutcome.Failure ? state.FirstFailure ?? phase : state.FirstFailure
+                        };
                         if (phase == SendExecutionPhase.Before) next = next with { BeforeSucceeded = outcome == SendControlOutcome.Success };
                         if (phase is SendExecutionPhase.InvokeInner or SendExecutionPhase.InvokeHandler or SendExecutionPhase.InvokeWrapper or SendExecutionPhase.NextCall)
                             next = next with { InvocationCompleted = true, InvocationSucceeded = outcome == SendControlOutcome.Success };
@@ -115,8 +118,14 @@ internal static class CanonicalSendControlValidator
                             next = next with { ValidatedSessions = next.ValidatedSessions.Add(state.Point.Site!.Session) };
                         if (outcome == SendControlOutcome.Success)
                         {
-                            var bit = phase switch { SendExecutionPhase.ArgumentGuard => 1, SendExecutionPhase.CancellationGuard => 2,
-                                SendExecutionPhase.Resolve => 4, SendExecutionPhase.DestinationGuard => 8, _ => 0 };
+                            var bit = phase switch
+                            {
+                                SendExecutionPhase.ArgumentGuard => 1,
+                                SendExecutionPhase.CancellationGuard => 2,
+                                SendExecutionPhase.Resolve => 4,
+                                SendExecutionPhase.DestinationGuard => 8,
+                                _ => 0
+                            };
                             next = next with { Guards = next.Guards | bit };
                             if (contract.Operation && phase == SendExecutionPhase.BranchStart) next = next with { NextBranch = next.NextBranch + 1 };
                         }
@@ -288,9 +297,14 @@ internal static class CanonicalSendControlValidator
 
     private static bool Predicate(SendControlPredicate predicate, bool failed, bool span, bool present) => predicate switch
     {
-        SendControlPredicate.Any => true, SendControlPredicate.HasFailure => failed, SendControlPredicate.NoFailure => !failed,
-        SendControlPredicate.SpanDestination => span, SendControlPredicate.NoSpanDestination => !span,
-        SendControlPredicate.SessionPresent => present, SendControlPredicate.SessionAbsent => !present, _ => false
+        SendControlPredicate.Any => true,
+        SendControlPredicate.HasFailure => failed,
+        SendControlPredicate.NoFailure => !failed,
+        SendControlPredicate.SpanDestination => span,
+        SendControlPredicate.NoSpanDestination => !span,
+        SendControlPredicate.SessionPresent => present,
+        SendControlPredicate.SessionAbsent => !present,
+        _ => false
     };
 
     private static IEnumerable<Contract> DeriveContracts(BoundPipelineModel route)

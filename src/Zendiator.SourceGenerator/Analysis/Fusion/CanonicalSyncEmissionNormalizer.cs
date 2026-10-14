@@ -59,7 +59,8 @@ internal static class CanonicalSyncEmissionNormalizer
             }
             else if (handler.ServiceOwnership != FusionOwnership.BorrowedService) continue;
             output.Add(new(i, composition.GeneratedNamespace, composition.MarkerName, composition.UseLocalHandlers,
-                handler.SyncEmission, factory, route.HasEmptyPipeline, route.PipelineFamily, composition.MicrosoftDiProviderName??"") { Hooks = new(hooks), ExplicitHandlerTypes = composition.ExplicitHandlerTypes, CatalogMarkerTypes = composition.CatalogMarkerTypes, ExternAliases=composition.ExternAliases });
+                handler.SyncEmission, factory, route.HasEmptyPipeline, route.PipelineFamily, composition.MicrosoftDiProviderName ?? "")
+            { Hooks = new(hooks), ExplicitHandlerTypes = composition.ExplicitHandlerTypes, CatalogMarkerTypes = composition.CatalogMarkerTypes, ExternAliases = composition.ExternAliases });
         }
         return new(new(output));
     }
@@ -85,7 +86,7 @@ internal static class CanonicalSyncEmissionNormalizer
             var semantic = compilation.GetSemanticModel(invocation.SyntaxTree);
             var location = semantic.GetInterceptableLocation(invocation, ct);
             if (location != null && semantic.GetSymbolInfo(invocation, ct).Symbol is IMethodSymbol method)
-                output.Add(new(composition.Namespace, composition.MarkerName, location.Version, location.Data, method.ReducedFrom != null){ExternAliases=composition.ExternAliases});
+                output.Add(new(composition.Namespace, composition.MarkerName, location.Version, location.Data, method.ReducedFrom != null) { ExternAliases = composition.ExternAliases });
         }
         return new(new(output));
     }

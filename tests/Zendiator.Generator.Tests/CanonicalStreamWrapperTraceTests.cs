@@ -45,15 +45,33 @@ public sealed partial class GeneratorTests
     private static async Task RunWrapperTrace(string? id)
     {
         if (!string.IsNullOrEmpty(id) && id != WrapperTraceProfile) throw new ArgumentException("Choose the single fixed wrapper profile.", nameof(id));
-        WriteWrapperTraceArtifact("profile.json", new { id = WrapperTraceProfile, cases = 1, input = new[] { 1, 2 },
-            outerEnumerationsPerSeries = 2, opensPerOuter = 2, series = new[] { "reference", "canonical" },
-            savedBeforeEnumerating = true, sameReplacementRequestWithinOuter = true, distinctReplacementTokens = true,
-            candidateOnly = true, productionEnabled = false, performanceMeasurements = 0 });
+        WriteWrapperTraceArtifact("profile.json", new
+        {
+            id = WrapperTraceProfile,
+            cases = 1,
+            input = new[] { 1, 2 },
+            outerEnumerationsPerSeries = 2,
+            opensPerOuter = 2,
+            series = new[] { "reference", "canonical" },
+            savedBeforeEnumerating = true,
+            sameReplacementRequestWithinOuter = true,
+            distinctReplacementTokens = true,
+            candidateOnly = true,
+            productionEnabled = false,
+            performanceMeasurements = 0
+        });
         var f = FallbackFixtureFor("wrapper-trace"); Assert.Null(f.Fused);
         var reference = await RunWrapperTraceBranch(f, "reference");
         var canonical = await RunWrapperTraceBranch(f, "canonical");
-        WriteWrapperTraceArtifact("comparison.json", new { profile = WrapperTraceProfile, reference, canonical,
-            candidateOnly = true, productionEnabled = false, fusedAcrossWrapper = false });
+        WriteWrapperTraceArtifact("comparison.json", new
+        {
+            profile = WrapperTraceProfile,
+            reference,
+            canonical,
+            candidateOnly = true,
+            productionEnabled = false,
+            fusedAcrossWrapper = false
+        });
         Assert.Equal(reference.Values.Length, canonical.Values.Length);
         for (var i = 0; i < reference.Values.Length; i++) Assert.Equal(reference.Values[i], canonical.Values[i]);
         Assert.Equal(reference.Events, canonical.Events); Assert.Equal(reference.Operations, canonical.Operations);
@@ -115,8 +133,19 @@ public sealed partial class GeneratorTests
         }
         finally
         {
-            WriteWrapperTraceArtifact(backend + ".json", new { profile = WrapperTraceProfile, backend, complete, values,
-                events = p.Snapshot(), operations, p.Starts, p.Moves, p.Reads, p.Disposals });
+            WriteWrapperTraceArtifact(backend + ".json", new
+            {
+                profile = WrapperTraceProfile,
+                backend,
+                complete,
+                values,
+                events = p.Snapshot(),
+                operations,
+                p.Starts,
+                p.Moves,
+                p.Reads,
+                p.Disposals
+            });
         }
     }
     private static void CheckWrapperTrace(WrapperTraceResult result)

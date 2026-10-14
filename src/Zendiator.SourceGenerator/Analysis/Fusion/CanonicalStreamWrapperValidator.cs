@@ -152,13 +152,15 @@ internal static class CanonicalStreamWrapperValidator
             }
         }
     }
-    private static StreamWrapperOutcome[] Outcomes(StreamWrapperSite id, State s) => id.Phase switch {
+    private static StreamWrapperOutcome[] Outcomes(StreamWrapperSite id, State s) => id.Phase switch
+    {
         StreamWrapperPhase.OutputChoice => s.Opens == 0 ? new[] { StreamWrapperOutcome.Alternative, StreamWrapperOutcome.Failure } : AllOutcomes(id.Phase),
         StreamWrapperPhase.UseChoice => s.Failure ? new[] { StreamWrapperOutcome.Finish, StreamWrapperOutcome.Recover } : new[] { StreamWrapperOutcome.Continue, StreamWrapperOutcome.Finish },
         StreamWrapperPhase.ReleaseResult => new[] { s.Failure ? StreamWrapperOutcome.Failure : StreamWrapperOutcome.Success },
         _ => AllOutcomes(id.Phase)
     };
-    private static bool ExitValid(StreamWrapperSite id, State s) => id.Phase switch {
+    private static bool ExitValid(StreamWrapperSite id, State s) => id.Phase switch
+    {
         StreamWrapperPhase.DirectReturn => s.Begun && s.OutputAllowed && s.Opens > 0 && !s.OpenAllowed && !s.Acquired && !s.Failure,
         StreamWrapperPhase.AlternativeReturn => s.Begun && s.OutputAllowed && !s.OpenAllowed && !s.Acquired && !s.Failure,
         StreamWrapperPhase.WrapperFailure => s.Begun && s.OutputAllowed && s.Failure,
@@ -170,7 +172,8 @@ internal static class CanonicalStreamWrapperValidator
         StreamWrapperPhase.ReleaseFailure => s.ReleaseStarted && s.Detached && s.Disposed && !s.Assigned && s.Failure,
         _ => false
     };
-    private static StreamWrapperOutcome[] AllOutcomes(StreamWrapperPhase phase) => phase switch {
+    private static StreamWrapperOutcome[] AllOutcomes(StreamWrapperPhase phase) => phase switch
+    {
         StreamWrapperPhase.DirectReturn or StreamWrapperPhase.AlternativeReturn or StreamWrapperPhase.WrapperFailure or StreamWrapperPhase.ArgumentFailure or
             StreamWrapperPhase.EnumerableReturn or StreamWrapperPhase.CursorReturn or StreamWrapperPhase.AcquireFailure or StreamWrapperPhase.ReleaseSuccess or StreamWrapperPhase.ReleaseFailure => Array.Empty<StreamWrapperOutcome>(),
         StreamWrapperPhase.OpenChoice => new[] { StreamWrapperOutcome.Zero, StreamWrapperOutcome.More },

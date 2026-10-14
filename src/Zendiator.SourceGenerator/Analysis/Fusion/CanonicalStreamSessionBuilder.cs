@@ -114,8 +114,18 @@ internal static class CanonicalStreamSessionBuilder
         transfers.Add(new("null", "cursor/source", Id(StreamProgram.Dispose, StreamPhase.DetachSource), StreamOutcome.Always));
         transfers.Add(new("null", "cursor/linked-token", Id(StreamProgram.Dispose, StreamPhase.DetachLink), StreamOutcome.Always));
         flows = flows.Select(f => f.Program == StreamProgram.Move ? f with { Edges = new(move) } : f.Program == StreamProgram.Dispose ? f with { Edges = new(dispose) } : f).ToList();
-        return schedule with { Sites = new(sites), Flows = new(flows), Owners = new(owners), Awaits = new(awaits), Transfers = new(transfers), Failures = new(failures),
-            ServiceResolutions = new(resolutions), SessionCalls = new(calls), CallbackReceivers = new(receivers) };
+        return schedule with
+        {
+            Sites = new(sites),
+            Flows = new(flows),
+            Owners = new(owners),
+            Awaits = new(awaits),
+            Transfers = new(transfers),
+            Failures = new(failures),
+            ServiceResolutions = new(resolutions),
+            SessionCalls = new(calls),
+            CallbackReceivers = new(receivers)
+        };
 
         void Add(StreamProgram program, StreamPhase phase, int position, BoundCallbackModel? callback = null)
         {
