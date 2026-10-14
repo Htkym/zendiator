@@ -340,7 +340,7 @@ public sealed partial class GeneratorTests
             "namespace App { public sealed class HandlerFactory<T> : "+(handlerOwned?"IOwnedSessionFactory":"IBorrowedSessionFactory")+"<Ping,Handler<T>> where T:class { public Handler<T> Create(Ping request,CancellationToken token)=>throw new NotImplementedException(); } }";
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"MixedBoundary"+Guid.NewGuid()),out var output,out var diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.Empty(diagnostics);
-        Assert.Equal(2,driver.GetRunResult().Results.Single().GeneratedSources.Count(s=>s.HintName!="Zendiator.GeneratedCatalog.g.cs"));
-        WriteNestedHookEvidence("mixed-session-boundaries",hookOwned+"-"+handlerOwned+"-"+isVoid,new{hookOwned,handlerOwned,isVoid,source,diagnostics=diagnostics.Select(d=>new{d.Id,message=d.GetMessage()}),generatedSources=2});
+        AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
+        WriteNestedHookEvidence("mixed-session-boundaries",hookOwned+"-"+handlerOwned+"-"+isVoid,new{hookOwned,handlerOwned,isVoid,source,diagnostics=diagnostics.Select(d=>new{d.Id,message=d.GetMessage()}),generatedRoutes=1,sharedCompositions=1,interceptors=1});
     }
 }

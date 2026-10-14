@@ -96,7 +96,13 @@ public sealed partial class GeneratorTests
                 Assert.DoesNotContain(generated, s => s.HintName.StartsWith("Zendiator.Stream", StringComparison.Ordinal));
                 continue;
             }
-            Assert.Empty(diagnostics); // Same-item borrowed async F1/Map/F2 now connects closed and open routes.
+            // A closed request with only the open Handler member proves internal closure, not public membership.
+            if (id is "closed-explicit" or "closed-inferred")
+            {
+                Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
+                Assert.DoesNotContain(generated, s => s.HintName.StartsWith("Zendiator.Canonical.Stream.Public.", StringComparison.Ordinal));
+            }
+            else Assert.Empty(diagnostics);
             Assert.Equal(id == "open-constrained", route.StreamGeneric != null);
             if (id == "open-constrained") Assert.Equal(" where __ZendiatorType0 : class, new()", route.StreamGeneric!.TypeConstraints);
             Assert.Equal(3, route.Stages.Count);

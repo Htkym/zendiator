@@ -74,7 +74,7 @@ public sealed partial class GeneratorTests
     {
         var source=AsyncMixedSource(key.Hook,key.Handler,key.Void);var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"AsyncMixed_"+Guid.NewGuid().ToString("N")),out var output,out var diagnostics);
         Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        using var bytes=new MemoryStream();var emitted=output.Emit(bytes);Assert.True(emitted.Success,string.Join("\n",emitted.Diagnostics));var sources=driver.GetRunResult().Results.Single().GeneratedSources;Assert.Equal(2,sources.Count(s=>s.HintName!="Zendiator.GeneratedCatalog.g.cs"));
+        using var bytes=new MemoryStream();var emitted=output.Emit(bytes);Assert.True(emitted.Success,string.Join("\n",emitted.Diagnostics));var sources=driver.GetRunResult().Results.Single().GeneratedSources;AssertCanonicalOutputRoles(sources);
         var evidence=Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");if(!string.IsNullOrEmpty(evidence))
         {
             var folder=Path.Combine(evidence,"async-mixed-"+key.Hook+"-"+key.Handler+"-"+key.Void);Directory.CreateDirectory(folder);File.WriteAllText(Path.Combine(folder,"input.cs"),source);
@@ -207,9 +207,9 @@ public sealed partial class GeneratorTests
         var source=AsyncMixedSource("direct","async-owned",false).Replace("Stage.Hook<Hook<OuterTag>>()","Stage.Hook<Hook<OuterTag>>(),Stage.Hook<Hook<InnerTag>>()");
         var start=source.IndexOf("public static object Dispatch",StringComparison.Ordinal);source=source.Remove(start,source.IndexOf(';',start)-start+1);
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"MixedUnsupported"),out var output,out var diagnostics);
-        Assert.Equal("ZEN0037",Assert.Single(diagnostics).Id);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));
-        Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.StartsWith("Zendiator.Canonical",StringComparison.Ordinal));
-        WriteNestedHookEvidence("async-mixed-boundary","two-hooks",new{source,diagnostics=diagnostics.Select(d=>new{d.Id,message=d.GetMessage()}),generatedExecution=false});
+        AssertAcceptedSendEmission(driver,diagnostics,global::Zendiator.SourceGenerator.BoundDispatchFamily.SendAsync,false);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));
+        AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
+        WriteNestedHookEvidence("async-mixed-boundary","two-hooks",new{source,diagnostics=diagnostics.Select(d=>new{d.Id,message=d.GetMessage()}),generatedExecution=true});
     }
     [Theory][InlineData("direct",false)][InlineData("async-owned",true)][InlineData("two",false)]
     public void Async_mixed_sessions_preserve_existing_Hook_generation_only(string mode,bool isVoid)=>HookAsyncFixture(mode,isVoid);

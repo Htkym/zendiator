@@ -22,7 +22,7 @@ public sealed partial class GeneratorTests
         var data=CatalogProducerBytes(source,"invalid-"+shape,assemblyName,false);var reference=MetadataReference.CreateFromImage(data);
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(CatalogConsumerRegistration(),consumerName).AddReferences(reference),out var output,out var diagnostics);
         Assert.All(diagnostics,d=>Assert.Equal("ZEN0035",d.Id));var diagnostic=Assert.Single(diagnostics,d=>d.GetMessage().Contains(reason,StringComparison.Ordinal));Assert.Contains("UseCatalogFrom",diagnostic.Location.SourceTree!.GetText().ToString(diagnostic.Location.SourceSpan));
-        Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.Contains("Canonical"));
+        Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
         CatalogEvidence("catalog-boundaries",shape,new{shape,reason,diagnostic=diagnostic.GetMessage(),importLocation=diagnostic.Location.SourceSpan.ToString(),generatedExecution=false});
     }
     [Fact]
@@ -30,7 +30,7 @@ public sealed partial class GeneratorTests
     {
         var f=CatalogRuntimeFixture(true,false);var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(CatalogConsumerRegistration(true),"CatalogDuplicate_"+Guid.NewGuid().ToString("N")).AddReferences(f.Reference),out var output,out var diagnostics);
         var d=Assert.Single(diagnostics);Assert.Contains("DuplicateCatalogSelection",d.GetMessage());Assert.Single(d.AdditionalLocations);Assert.Contains("UseCatalogFrom<App.Ping>",d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan));Assert.Contains("UseCatalogFrom<App.CatalogMarker>",d.AdditionalLocations[0].SourceTree!.GetText().ToString(d.AdditionalLocations[0].SourceSpan));
-        Assert.Empty(output.GetDiagnostics().Where(x=>x.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.Contains("Canonical"));
+        Assert.Empty(output.GetDiagnostics().Where(x=>x.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
         var configuration=new Zendiator.DependencyInjection.ZendiatorConfiguration();configuration.UseCatalogFrom<string>();Assert.Throws<InvalidOperationException>(()=>configuration.UseCatalogFrom<object>());var snapshot=configuration.Snapshot();Assert.Single(snapshot.CatalogMarkers);Assert.Throws<InvalidOperationException>(()=>configuration.UseCatalogFrom<GeneratorTests>());
         CatalogEvidence("catalog-boundaries","selection",new{second=d.Location.SourceSpan.ToString(),original=d.AdditionalLocations[0].SourceSpan.ToString(),runtimeDuplicateAndFreeze=true});
     }
@@ -38,7 +38,7 @@ public sealed partial class GeneratorTests
     public void Catalog_v1_no_friend_does_not_emit_internal_receiver_route()
     {
         var f=CatalogRuntimeFixture(true,true);var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(CatalogConsumerRegistration(),"CatalogDenied_"+Guid.NewGuid().ToString("N")).AddReferences(f.Reference),out var output,out var diagnostics);
-        Assert.Contains(output.GetDiagnostics(),d=>d.Id=="CS0122");Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources,s=>s.HintName.Contains("Canonical"));
+        Assert.Contains(output.GetDiagnostics(),d=>d.Id=="CS0122");AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
         CatalogEvidence("catalog-boundaries","no-friend",new{compilerOwnsAccessibility=true,generatedExecution=false,diagnostics=diagnostics.Select(d=>d.GetMessage())});
     }
     [Fact]

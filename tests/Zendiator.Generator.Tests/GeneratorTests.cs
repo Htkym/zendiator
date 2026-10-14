@@ -206,10 +206,12 @@ public sealed partial class GeneratorTests
     private static readonly MetadataReference[] References = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
         .Select(p => MetadataReference.CreateFromFile(p)).ToArray();
     private static CSharpCompilation Compilation(string source, string name = "Test") => CSharpCompilation.Create(name,
-        [CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Preview))], References,
+        [CSharpSyntaxTree.ParseText(source, SyncParseOptions)], References,
         new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
     private static GeneratorDriver Driver() => CSharpGeneratorDriver.Create([new ZendiatorGenerator().AsSourceGenerator()],
-        parseOptions: new CSharpParseOptions(LanguageVersion.Preview), driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, true));
+        parseOptions: SyncParseOptions, driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, true));
+    private static string LegacySource(GeneratorDriverRunResult result) =>
+        Assert.Single(result.Results.Single().GeneratedSources, s=>s.HintName=="Zendiator.g.cs").SourceText.ToString();
 
     private static GeneratorDriverRunResult Run(CSharpCompilation input, bool success, bool emit = false)
     {
@@ -918,13 +920,13 @@ public sealed partial class GeneratorTests
         var first = Source(driver);
         Assert.Equal(first, Source(Driver().RunGenerators(input)));
 
-        input = input.AddSyntaxTrees(CSharpSyntaxTree.ParseText("namespace Other { class Unrelated {} }", new CSharpParseOptions(LanguageVersion.Preview)));
+        input = input.AddSyntaxTrees(CSharpSyntaxTree.ParseText("namespace Other { class Unrelated {} }", SyncParseOptions));
         driver = driver.RunGenerators(input);
         Assert.Equal(first, Source(driver));
         AssertEmission(driver, IncrementalStepRunReason.Cached);
 
         var bodyEdit = input.ReplaceSyntaxTree(input.SyntaxTrees[0], CSharpSyntaxTree.ParseText(
-            Head + Request + Handler.Replace("new(1)", "new(2)"), new CSharpParseOptions(LanguageVersion.Preview)));
+            Head + Request + Handler.Replace("new(1)", "new(2)"), SyncParseOptions));
         driver = driver.RunGenerators(bodyEdit);
         Assert.Equal(first, Source(driver));
         AssertEmission(driver, IncrementalStepRunReason.Cached);
@@ -991,7 +993,7 @@ public sealed partial class GeneratorTests
         var initial = driver.GetRunResult().GeneratedTrees.Single().ToString();
 
         input = input.AddSyntaxTrees(CSharpSyntaxTree.ParseText("namespace Other { class Unrelated {} }",
-            new CSharpParseOptions(LanguageVersion.Preview)));
+            SyncParseOptions));
         driver = driver.RunGenerators(input);
         Assert.Equal(normalized, Normalized(driver));
         AssertNormalizedReason(driver, IncrementalStepRunReason.Cached);
@@ -1162,19 +1164,19 @@ public sealed partial class GeneratorTests
             }
             """ + SelectedComposition.Replace("c.AddHandler<Handler>()", "c.AddHandler(typeof(Marked<>))");
         const string foreign = "namespace Foreign { public sealed class ZendiatorHandlerAttribute : System.Attribute {} }";
-        var input = Compilation(source).AddSyntaxTrees(CSharpSyntaxTree.ParseText(foreign, new CSharpParseOptions(LanguageVersion.Preview)));
+        var input = Compilation(source).AddSyntaxTrees(CSharpSyntaxTree.ParseText(foreign, SyncParseOptions));
         var driver = Driver().RunGenerators(input);
         var model = Catalog(driver);
         var handler = Assert.Single(model.Handlers);
         Assert.Equal("global::App.Marked<T>", handler.Name);
         Assert.Contains("Base<T>", Assert.Single(handler.Contracts).Implementation);
         Assert.Equal("ZEN0035", Assert.Single(driver.GetRunResult().Diagnostics).Id);
-        var generated = Assert.Single(driver.GetRunResult().GeneratedTrees).ToString();
+        var generated = LegacySource(driver.GetRunResult());
         Assert.Contains("global::App.Unmarked", generated);
         Assert.DoesNotContain("global::App.Marked", generated);
 
         var edited = Compilation(source.Replace("where T : class", "where T : notnull"))
-            .AddSyntaxTrees(CSharpSyntaxTree.ParseText(foreign, new CSharpParseOptions(LanguageVersion.Preview)));
+            .AddSyntaxTrees(CSharpSyntaxTree.ParseText(foreign, SyncParseOptions));
         driver = driver.RunGenerators(edited);
         Assert.NotEqual(model, Catalog(driver));
         Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["MarkedHandlerModel"].SelectMany(s => s.Outputs),
@@ -1200,14 +1202,15 @@ public sealed partial class GeneratorTests
         var attributeNamespace = identicalMetadataName ? "Zendiator" : "Foreign";
         var source = Head + Request + Handler.Replace("public sealed class Handler", $"[global::{attributeNamespace}.ZendiatorHandler] public sealed class Handler");
         var attribute = CSharpSyntaxTree.ParseText($"namespace {attributeNamespace} {{ public sealed class ZendiatorHandlerAttribute : System.Attribute {{}} }}",
-            new CSharpParseOptions(LanguageVersion.Preview));
+            SyncParseOptions);
         var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source).AddSyntaxTrees(attribute), out var output, out var diagnostics);
         Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
-        Assert.Contains("global::App.Handler", Assert.Single(driver.GetRunResult().GeneratedTrees).ToString());
-        var catalog = Assert.IsType<MarkedHandlerCatalog>(Assert.Single(driver.GetRunResult().Results.Single()
-            .TrackedSteps["MarkedHandlerModel"].SelectMany(s => s.Outputs)).Value);
-        Assert.Empty(catalog.Handlers);
+        Assert.Contains("global::App.Handler", LegacySource(driver.GetRunResult()));
+        var run = driver.GetRunResult().Results.Single();
+        if (run.TrackedSteps.TryGetValue("MarkedHandlerModel",out var steps))
+            Assert.Empty(Assert.IsType<MarkedHandlerCatalog>(Assert.Single(steps.SelectMany(s=>s.Outputs)).Value).Handlers);
+        else Assert.DoesNotContain(run.GeneratedSources,s=>s.HintName=="Zendiator.GeneratedCatalog.g.cs");
     }
 
     [Fact]
@@ -1222,7 +1225,7 @@ public sealed partial class GeneratorTests
             driver = driver.RunGeneratorsAndUpdateCompilation(input, out var output, out var diagnostics);
             Assert.Empty(diagnostics);
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
-            var generated = Assert.Single(driver.GetRunResult().GeneratedTrees).ToString();
+            var generated = LegacySource(driver.GetRunResult());
             Assert.Contains("global::App.Handler", generated);
             Assert.Equal(!marked, generated.Contains("global::App.ExtraHandler"));
             if (original == null) original = generated;
@@ -1265,7 +1268,7 @@ public sealed partial class GeneratorTests
         Assert.Equal(3, diagnostics.Length);
         Assert.All(diagnostics, d => Assert.Equal("ZEN0035", d.Id));
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error && d.Id != "ZEN0035"));
-        var generated = Assert.Single(driver.GetRunResult().GeneratedTrees).ToString();
+        var generated = LegacySource(driver.GetRunResult());
         Assert.Contains("global::App.Handler", generated);
         foreach (var name in new[] { "A", "B", "C" }) Assert.DoesNotContain("global::App." + name, generated);
         var selections = Selections(driver);
@@ -1297,13 +1300,15 @@ public sealed partial class GeneratorTests
         var handler = Handler.Replace("public sealed class Handler", "[ZendiatorHandler] public sealed class Handler");
         var producer = Run(Compilation(Head.Replace("[GenerateZendiator] public sealed partial class Zendiator;", "") + Request + handler), true);
         Assert.Empty(producer.Diagnostics);
-        Assert.Empty(producer.GeneratedTrees);
+        var catalog = Assert.Single(producer.Results.Single().GeneratedSources);
+        Assert.Equal("Zendiator.GeneratedCatalog.g.cs",catalog.HintName);
+        Assert.Contains("typeof(global::App.Handler)",catalog.SourceText.ToString());
         var source = Head + Request + Handler + handler.Replace("class Handler", "class Marked").Replace("[ZendiatorHandler]", "[ZendiatorHandler, ZendiatorHandler]") +
             SelectedComposition.Replace("c.AddHandler<Handler>()", "c.AddHandler<Marked>()");
         var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source), out var output, out var diagnostics);
         Assert.Empty(diagnostics);
         Assert.Equal("CS0579", Assert.Single(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error)).Id);
-        Assert.Contains("global::App.Handler", Assert.Single(driver.GetRunResult().GeneratedTrees).ToString());
+        Assert.Contains("global::App.Handler", LegacySource(driver.GetRunResult()));
     }
 
     [Fact]
@@ -1349,7 +1354,7 @@ public sealed partial class GeneratorTests
             var requestName = "ParallelPing" + index;
             var input = Compilation((Head + Request + Handler).Replace("Ping", requestName));
             var driver = CSharpGeneratorDriver.Create([generator.AsSourceGenerator()],
-                parseOptions: new CSharpParseOptions(LanguageVersion.Preview));
+                parseOptions: SyncParseOptions);
             var result = driver.RunGeneratorsAndUpdateCompilation(input, out var output, out var diagnostics).GetRunResult();
             Assert.Empty(diagnostics);
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));

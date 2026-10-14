@@ -1,3 +1,4 @@
+using Zendiator.SourceGenerator;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Reflection;
@@ -233,28 +234,26 @@ public sealed partial class GeneratorTests
     {
         var source = SingleHookBackendSource(isVoid, shape);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "UnsupportedHook_" + shape + isVoid), out var output, out var diagnostics);
-        if (shape is "two-hooks" or "hook-owned" or "handler-owned") Assert.Empty(diagnostics);
-        else Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
+        // Partial callbacks, struct/metadata receivers, sessions and opaque wrappers are accepted Send shapes.
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        var sources = driver.GetRunResult().Results.Single().GeneratedSources;
-        if (shape is "two-hooks" or "hook-owned" or "handler-owned") Assert.Equal(2,sources.Count(s=>s.HintName!="Zendiator.GeneratedCatalog.g.cs"));
-        else Assert.DoesNotContain(sources, s => s.HintName.StartsWith("Zendiator.Canonical", StringComparison.Ordinal));
+        AssertAcceptedSendEmission(driver,diagnostics,BoundDispatchFamily.SendSync,isVoid);
     }
 
     [Fact]
-    public void Enabled_single_Hook_body_edits_cache_callable_source_but_capability_changes_remove_backend()
+    public void Enabled_single_Hook_body_edits_cache_callable_source_and_capability_changes_update_route()
     {
         var source = SingleHookBackendSource(false);
         var before = SyncCompilation(source, "HookIncremental"); var driver = SyncDriver().RunGenerators(before);
+        var original = CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
         Assert.Empty(driver.GetRunResult().Diagnostics);
         var body = before.ReplaceSyntaxTree(before.SyntaxTrees.Single(), CSharpSyntaxTree.ParseText(source.Replace("_probe.Before(request,token)!", "_probe.Before(request, token)!"), SyncParseOptions));
         driver = driver.RunGenerators(body);
         Assert.Empty(driver.GetRunResult().Diagnostics);
-        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalSyncSourceEmission"].SelectMany(s => s.Outputs),
+        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalRouteOutputFile"].SelectMany(s => s.Outputs),
             output => Assert.True(output.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
         var capability = body.ReplaceSyntaxTree(body.SyntaxTrees.Single(), CSharpSyntaxTree.ParseText(SingleHookBackendSource(false, "missing-before"), SyncParseOptions));
         driver = driver.RunGenerators(capability);
-        Assert.Equal("ZEN0037", Assert.Single(driver.GetRunResult().Diagnostics).Id);
-        Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.Canonical", StringComparison.Ordinal));
+        AssertAcceptedSendEmission(driver,driver.GetRunResult().Diagnostics,BoundDispatchFamily.SendSync,false);
+        Assert.NotEqual(original,CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
     }
 }

@@ -38,7 +38,8 @@ public sealed partial class GeneratorTests
     public void Public_marked_Handler_factory_binds_explicit_contract_and_existing_Send_or_Stream_receiver_graph(
         string family, bool owned, bool asyncFactory, bool isVoid)
     {
-        var driver = BindLists(HandlerFactoryFixture(family, owned, asyncFactory, isVoid), "ZEN0037");
+        var source = HandlerFactoryFixture(family, owned, asyncFactory, isVoid);
+        var driver = family is "SendSync" or "SendAsync" ? BindAcceptedSendLists(source) : BindLists(source,"ZEN0037");
         var route = Assert.Single(Selection(driver).Pipelines);
         var handler = route.Handlers[0]; var session = Assert.Single(handler.Sessions);
         Assert.Equal(handler.Type, session.ResourceType);
@@ -119,7 +120,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Handler_factory_body_edits_cache_but_ownership_completion_and_constraints_invalidate_binding()
     {
-        var source = HandlerFactoryFixture(); var driver = BindLists(source, "ZEN0037"); var original = Selection(driver);
+        var source = HandlerFactoryFixture(); var driver = BindAcceptedSendLists(source); var original = Selection(driver);
         driver = driver.RunGenerators(Compilation(source.Replace(".Create(Ping r,CancellationToken c)=>new();", ".Create(Ping r,CancellationToken c)=>throw new Exception();")));
         Assert.Equal(original, Selection(driver)); SelectionReason(driver, IncrementalStepRunReason.Cached);
         foreach (var changed in new[] { HandlerFactoryFixture(owned: false), HandlerFactoryFixture(asyncFactory: true), source.Replace("where T:class", "where T:notnull") })

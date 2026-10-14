@@ -23,11 +23,21 @@ public sealed partial class GeneratorTests
         if(!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR"))){var p=Path.Combine(CatalogArtifactRoot,"identity-producers",name);Directory.CreateDirectory(p);File.WriteAllText(Path.Combine(p,"input.cs"),source);File.WriteAllBytes(Path.Combine(p,"producer.dll"),bytes.ToArray());}
         return bytes.ToArray();
     }
-    private static Assembly IdentityConsumer(string source,IEnumerable<MetadataReference> references,string fixture,out string body)
+    private static Assembly IdentityConsumer(string source,IEnumerable<MetadataReference> references,string fixture,out string body,params (string Request,string Handler)[] identities)
     {
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"IdentityConsumer_"+Guid.NewGuid().ToString("N")).AddReferences(references),out var output,out var diagnostics);
         Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));using var bytes=new MemoryStream();var emitted=output.Emit(bytes);Assert.True(emitted.Success,string.Join("\n",emitted.Diagnostics));var generated=driver.GetRunResult().Results.Single().GeneratedSources;
-        body=generated.Single(s=>s.HintName.StartsWith("Zendiator.Canonical.",StringComparison.Ordinal)&&!s.HintName.Contains("Interceptor",StringComparison.Ordinal)).SourceText.ToString();
+        if(identities.Length==0) body=CanonicalDispatchSource(generated);
+        else
+        {
+            AssertCanonicalOutputRoles(generated,routes:identities.Length);
+            foreach(var identity in identities)
+            {
+                var route=Assert.Single(generated,s=>IsCanonicalRoute(s)&&s.SourceText.ToString().Contains("Send("+identity.Request+" request",StringComparison.Ordinal));
+                Assert.Contains(identity.Handler,route.SourceText.ToString());
+            }
+            body=string.Concat(generated.Where(IsCanonicalRoute).Select(s=>s.SourceText.ToString()))+CanonicalCompositionSource(generated);
+        }
         if(!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR"))){var p=Path.Combine(CatalogArtifactRoot,"generated-artifacts",fixture);Directory.CreateDirectory(p);File.WriteAllText(Path.Combine(p,"input.cs"),source);foreach(var s in generated)File.WriteAllText(Path.Combine(p,s.HintName),s.SourceText.ToString());File.WriteAllBytes(Path.Combine(p,"generated.dll"),bytes.ToArray());File.WriteAllText(Path.Combine(p,"compile.json"),JsonSerializer.Serialize(new{emitted.Success,productionEnabled=true,candidateOnly=false,warnings=0,errors=0,generatorErrors=0}));}
         bytes.Position=0;return AssemblyLoadContext.Default.LoadFromStream(bytes);
     }
@@ -48,7 +58,7 @@ public sealed partial class GeneratorTests
         var source=IdentityRegistration("extern alias "+alias+";extern alias "+rightAlias+";",config);
         var compilation=SyncCompilation(source,"IdentityShape").AddReferences(refs);var left=(IAssemblySymbol)compilation.GetAssemblyOrModuleSymbol(refs[0])!;var right=(IAssemblySymbol)compilation.GetAssemblyOrModuleSymbol(refs[1])!;
         Assert.NotEqual(MarkedHandlerDiscovery.RegistrationIdentity(left.GetTypeByMetadataName("Twins.Ping")!,compilation),MarkedHandlerDiscovery.RegistrationIdentity(right.GetTypeByMetadataName("Twins.Ping")!,compilation));
-        var assembly=IdentityConsumer(source,refs,"identity-alias-"+(shared?"shared":keyword.ToString()),out var body);Assert.Contains("extern alias "+alias+";",body);Assert.Contains(alias+"::Twins.Ping",body);Assert.Contains(rightAlias+"::Twins.Ping",body);if(shared){Assert.DoesNotContain("a::Twins.",body);Assert.Contains("z::Twins.Handler",body);Assert.Contains("b::Twins.Handler",body);}
+        var assembly=IdentityConsumer(source,refs,"identity-alias-"+(shared?"shared":keyword.ToString()),out var body,(alias+"::Twins.Ping",alias+"::Twins.Handler"),(rightAlias+"::Twins.Ping",rightAlias+"::Twins.Handler"));Assert.Contains("extern alias "+alias+";",body);Assert.Contains(alias+"::Twins.Ping",body);Assert.Contains(rightAlias+"::Twins.Ping",body);if(shared){Assert.DoesNotContain("a::Twins.",body);Assert.Contains("z::Twins.Handler",body);Assert.Contains("b::Twins.Handler",body);}
         IServiceCollection services=new ServiceCollection();assembly.GetType("Consumer.Bridge")!.GetMethod("Register")!.Invoke(null,[services]);using var provider=services.BuildServiceProvider();var mediator=provider.GetRequiredService(assembly.GetType("Consumer.Generated.Reads.Zendiator")!);
         foreach(var pair in new[]{(aa,11),(ba,12)}){var request=Activator.CreateInstance(pair.Item1.GetType("Twins.Ping")!,[10])!;Assert.Equal(pair.Item2,mediator.GetType().GetMethod("Send",[request.GetType(),typeof(CancellationToken)])!.Invoke(mediator,[request,CancellationToken.None]));Assert.Single(services,d=>d.ServiceType==pair.Item1.GetType("Twins.Handler"));}
         CatalogEvidence("identity-observations","aliases-"+(shared?"shared":keyword.ToString()),new{keyword,shared,distinctAssemblyIdentity=true,routes=2,descriptors=2,results=new[]{11,12},selectedAliases=new[]{alias,rightAlias}});

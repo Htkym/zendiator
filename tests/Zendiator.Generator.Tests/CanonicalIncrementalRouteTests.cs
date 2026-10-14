@@ -56,7 +56,10 @@ public sealed partial class GeneratorTests
     {
         var source=IncrementalRouteSource.Replace("c.Handlers<A>(DispatchFamily.SendSync,typeof(HA));","").Replace("c.Handlers<B>(DispatchFamily.SendSync,typeof(HB));","c.Handlers<B>(DispatchFamily.SendSync,typeof(HB));c.Pipeline<B>(DispatchFamily.SendSync,Stage.Hook<Bad>());")+"namespace Fine{public sealed class Bad:IAsyncSendRequestTransform<B>{public ValueTask<B> BeforeAsync(B r,CancellationToken t)=>new(r);}}";
         var driver=IncrementalRouteRun(SyncDriver(),source,"location-before",errors:true);var initial=Assert.Single(driver.GetRunResult().Diagnostics);var moved="\n\n"+source;driver=IncrementalRouteRun(driver,moved,"location-after",errors:true);var current=Assert.Single(driver.GetRunResult().Diagnostics);Assert.Equal(initial.Id,current.Id);Assert.Equal(initial.Location.SourceSpan.Start+2,current.Location.SourceSpan.Start);Assert.StartsWith("\n\n",current.Location.SourceTree!.GetText().ToString());
-        Assert.All(RouteReasons(driver,"CanonicalRouteSourceEntry").Values,r=>Assert.Equal(IncrementalStepRunReason.Cached,r));CatalogEvidence("incremental-route-observations","locations",new{spanDelta=2,diagnosticLocationRefreshed=true,templateCached=true});
+        var run=driver.GetRunResult().Results.Single();
+        AssertNoCanonicalOutput(run.GeneratedSources);
+        if(run.TrackedSteps.TryGetValue("CanonicalRouteSourceEntry",out var steps)) Assert.Empty(steps.SelectMany(s=>s.Outputs));
+        CatalogEvidence("incremental-route-observations","locations",new{spanDelta=2,diagnosticLocationRefreshed=true,invalidCompositionHasNoTemplateOutput=true});
     }
     [Fact]
     public void Incremental_route_multiple_compositions_keep_unrelated_composition_cached()
@@ -70,14 +73,22 @@ public sealed partial class GeneratorTests
         =>Assert.Single(sources,s=>IsCanonicalRoute(s)&&(request==null||s.SourceText.ToString().Contains("global::"+request+" request",StringComparison.Ordinal))).SourceText.ToString();
     private static string CanonicalCompositionSource(IEnumerable<GeneratedSourceResult> sources)
         =>Assert.Single(sources,IsCanonicalComposition).SourceText.ToString();
-    private static void AssertCanonicalOutputRoles(IEnumerable<GeneratedSourceResult> sources,int routes=1,int compositions=1,int interceptors=1)
+    private static string CanonicalDispatchSource(IEnumerable<GeneratedSourceResult> sources)
+        =>CanonicalRouteSource(sources)+CanonicalCompositionSource(sources);
+    private static void AssertCanonicalOutputRoles(IEnumerable<GeneratedSourceResult> sources,int routes=1,int compositions=1,int interceptors=1,bool legacy=false)
     {
         var files=sources.ToArray();var execution=files.Where(IsCanonicalRoute).ToArray();var shared=files.Where(IsCanonicalComposition).ToArray();
         Assert.Equal(routes,execution.Length);Assert.Equal(compositions,shared.Length);
         Assert.Equal(interceptors,files.Count(s=>s.HintName.EndsWith(".Interceptors.g.cs",StringComparison.Ordinal)));
+        var catalogs=files.Where(s=>s.HintName=="Zendiator.GeneratedCatalog.g.cs").ToArray();
+        Assert.InRange(catalogs.Length,0,1);
+        Assert.All(catalogs,s=>{Assert.Contains("ZendiatorGeneratedCatalogAttribute",s.SourceText.ToString());Assert.Contains("ZendiatorHandlerExportAttribute",s.SourceText.ToString());});
         Assert.All(execution,s=>{Assert.Contains("partial interface IZendiator",s.SourceText.ToString());Assert.DoesNotContain("ZendiatorGeneratedRegistrar",s.SourceText.ToString());});
         Assert.All(shared,s=>{Assert.Contains("ZendiatorGeneratedRegistrar",s.SourceText.ToString());Assert.DoesNotContain("interface IZendiator",s.SourceText.ToString());});
-        Assert.All(files,s=>Assert.True(IsCanonicalRoute(s)||IsCanonicalComposition(s)||s.HintName.EndsWith(".Interceptors.g.cs",StringComparison.Ordinal)||s.HintName=="Zendiator.GeneratedCatalog.g.cs",s.HintName));
+        var legacyFiles=files.Where(s=>s.HintName=="Zendiator.g.cs").ToArray();
+        Assert.Equal(legacy?1:0,legacyFiles.Length);
+        Assert.All(legacyFiles,s=>Assert.Contains("partial class Zendiator",s.SourceText.ToString()));
+        Assert.All(files,s=>Assert.True((legacy&&s.HintName=="Zendiator.g.cs")||IsCanonicalRoute(s)||IsCanonicalComposition(s)||s.HintName.EndsWith(".Interceptors.g.cs",StringComparison.Ordinal)||s.HintName=="Zendiator.GeneratedCatalog.g.cs",s.HintName));
     }
     private static void AssertNoCanonicalOutput(IEnumerable<GeneratedSourceResult> sources)
         =>Assert.DoesNotContain(sources,s=>IsCanonicalRoute(s)||IsCanonicalComposition(s));

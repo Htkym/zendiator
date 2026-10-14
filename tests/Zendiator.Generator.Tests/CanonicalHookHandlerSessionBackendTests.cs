@@ -1,3 +1,4 @@
+using Zendiator.SourceGenerator;
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
@@ -92,8 +93,8 @@ public sealed partial class GeneratorTests
         }
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"HookHandlerBoundary"+Guid.NewGuid()),out var output,out var diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        if(shape=="hook-owned")Assert.Empty(diagnostics);else Assert.Equal("ZEN0037",Assert.Single(diagnostics).Id);
-        var generatedCount=driver.GetRunResult().Results.Single().GeneratedSources.Length;Assert.Equal(shape=="hook-owned"?2:0,generatedCount);
+        AssertAcceptedSendEmission(driver,diagnostics,shape=="async"?BoundDispatchFamily.SendAsync:BoundDispatchFamily.SendSync,isVoid);
+        var generatedCount=driver.GetRunResult().Results.Single().GeneratedSources.Length;AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
         WriteNestedHookEvidence("hook-handler-session-boundaries",owned+"-"+isVoid+"-"+shape,new{owned,isVoid,shape,source,diagnostics=diagnostics.Select(d=>new{d.Id,message=d.GetMessage()}),generatedSources=generatedCount});
     }
     [Fact]

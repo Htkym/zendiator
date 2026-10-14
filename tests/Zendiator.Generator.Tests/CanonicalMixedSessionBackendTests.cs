@@ -1,3 +1,4 @@
+using Zendiator.SourceGenerator;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.CodeAnalysis;
@@ -113,9 +114,9 @@ public sealed partial class GeneratorTests
                 .Replace("void IDisposable.Dispose()=>_probe.Handler.Release(this,_request,_token);","void IDisposable.Dispose()=>_probe.Handler.Release(this,_request,_token); public ValueTask DisposeAsync(){((IDisposable)this).Dispose();return default;}");
         }
         var driver=SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source,"MixedUnproved"+Guid.NewGuid()),out var output,out var diagnostics);
-        Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));Assert.Equal("ZEN0037",Assert.Single(diagnostics).Id);
-        Assert.Empty(driver.GetRunResult().Results.Single().GeneratedSources);
-        WriteNestedHookEvidence("mixed-session-backend-boundaries",hookOwned+"-"+handlerOwned+"-"+isVoid+"-"+shape,new{hookOwned,handlerOwned,isVoid,shape,source,diagnostics=diagnostics.Select(d=>new{d.Id,message=d.GetMessage()}),generatedSources=0});
+        Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));AssertAcceptedSendEmission(driver,diagnostics,shape=="async"?BoundDispatchFamily.SendAsync:BoundDispatchFamily.SendSync,isVoid);
+        AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
+        WriteNestedHookEvidence("mixed-session-backend-boundaries",hookOwned+"-"+handlerOwned+"-"+isVoid+"-"+shape,new{hookOwned,handlerOwned,isVoid,shape,source,diagnostics=diagnostics.Select(d=>new{d.Id,message=d.GetMessage()}),generatedExecution=true});
     }
     [Fact]
     public void Mixed_session_body_edits_cache_emission_and_each_ownership_change_updates_its_cleanup()

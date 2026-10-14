@@ -46,7 +46,8 @@ public sealed partial class GeneratorTests
     public void Public_session_factory_binds_inherited_explicit_contract_and_ownership_but_blocks_receiver_emission(
         string family, bool owned, bool asyncFactory, bool wrapper)
     {
-        var driver = BindLists(SessionFactoryFixture(family, owned, asyncFactory, wrapper), "ZEN0037");
+        var source = SessionFactoryFixture(family, owned, asyncFactory, wrapper);
+        var driver = family is "SendSync" or "SendAsync" ? BindAcceptedSendLists(source) : BindLists(source,"ZEN0037");
         var stage = Assert.Single(Assert.Single(Selection(driver).Pipelines).Stages);
         var session = Assert.Single(stage.Sessions);
         Assert.True(session.SuppliesCallbackReceiver);
@@ -117,7 +118,7 @@ public sealed partial class GeneratorTests
     public void Factory_body_edits_keep_binding_cached_but_ownership_and_completion_edits_invalidate_it()
     {
         var source = SessionFactoryFixture();
-        var driver = BindLists(source, "ZEN0037");
+        var driver = BindAcceptedSendLists(source);
         var original = Selection(driver);
         driver = driver.RunGenerators(Compilation(source.Replace(".Create(Ping r,CancellationToken c)=>new();", ".Create(Ping r,CancellationToken c)=>throw new Exception();")));
         Assert.Equal(original, Selection(driver));
@@ -133,10 +134,10 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Factory_session_cannot_use_a_DI_receiver_graph_even_when_service_ownership_is_forged_as_borrowed()
     {
-        var driver = BindLists(SessionFactoryFixture(), "ZEN0037");
+        var driver = BindAcceptedSendLists(SessionFactoryFixture());
         var route = Assert.Single(Selection(driver).Pipelines);
         var forged = route with { Stages = new(route.Stages.Select(s => s with { ServiceOwnership = FusionOwnership.BorrowedService })) };
-        var old = Graph(BindLists(SessionFactoryFixture().Replace("Stage.Hook<OperationSession,Factory<string>>()", "Stage.Hook<OperationSession>()"), "ZEN0037"));
+        var old = Graph(BindAcceptedSendLists(SessionFactoryFixture().Replace("Stage.Hook<OperationSession,Factory<string>>()", "Stage.Hook<OperationSession>()")));
         Assert.True(old.IsValid);
         Assert.Contains(CanonicalSendGraphValidator.Validate(forged, old.Schedule!), f => f.Reason == "SessionReceiverTypeOrOwnershipMismatch");
     }
@@ -172,7 +173,7 @@ public sealed partial class GeneratorTests
         if (explicitCleanup) source = sync
             ? source.Replace("public void Dispose(){}", "void IDisposable.Dispose(){}")
             : source.Replace("public ValueTask DisposeAsync()=>default;", "ValueTask IAsyncDisposable.DisposeAsync()=>default;");
-        var driver = BindLists(source, "ZEN0037");
+        var driver = BindAcceptedSendLists(source);
         var session = Assert.Single(Assert.Single(Assert.Single(Selection(driver).Pipelines).Stages).Sessions);
         var input = Compilation(source);
         var contract = sync ? input.GetSpecialType(SpecialType.System_IDisposable) :

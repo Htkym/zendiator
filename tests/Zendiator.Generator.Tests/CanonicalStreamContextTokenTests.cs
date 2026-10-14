@@ -185,7 +185,18 @@ public sealed partial class GeneratorTests
             }
             finally { CanonicalStreamPrototypeProbe.Ambient.Value = before; }
         }
-        var reference = await Selected(false); var candidate = await Selected(true);
+        var entryContext = SynchronizationContext.Current;
+        async Task<StreamEnvironmentResult> FromSameEntry(bool generated)
+        {
+            var before = SynchronizationContext.Current;
+            try
+            {
+                SynchronizationContext.SetSynchronizationContext(entryContext);
+                return await Selected(generated);
+            }
+            finally { SynchronizationContext.SetSynchronizationContext(before); }
+        }
+        var reference = await FromSameEntry(false); var candidate = await FromSameEntry(true);
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence)) File.WriteAllText(Path.Combine(evidence, "stream-prototype", "environment-" + profile + ".json"),
             System.Text.Json.JsonSerializer.Serialize(new { profile, reference, candidate, candidateOnly = true, productionEnabled = false }));

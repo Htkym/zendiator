@@ -40,11 +40,11 @@ public sealed partial class GeneratorTests
             source.Replace("int IRequestHandler<Ping,int>.Handle(Ping request,CancellationToken token) { return _probe.Handle(request,token); }",
                 "global::System.Threading.Tasks.ValueTask<int> IRequestHandler<Ping,int>.HandleAsync(Ping request,CancellationToken token)=>global::System.Threading.Tasks.ValueTask.FromResult(_probe.Handle(request,token));");
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "UnacceptedAsyncNestedHook" + isVoid), out var output, out var diagnostics);
-        Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
+        AssertAcceptedSendEmission(driver,diagnostics,global::Zendiator.SourceGenerator.BoundDispatchFamily.SendAsync,isVoid);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.Canonical", StringComparison.Ordinal));
+        AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
         WriteNestedHookEvidence("nested-hook-async-boundaries", isVoid ? "void" : "response",
-            new { isVoid, source, diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }), generatedSources = 0 });
+            new { isVoid, source, diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }), generatedExecution = true });
     }
 
     public sealed class NestedOverlapOperation(string name, Type requestType, CancellationToken token)

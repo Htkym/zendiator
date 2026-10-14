@@ -48,11 +48,11 @@ public sealed partial class GeneratorTests
     [InlineData(true, true, true)]
     public void Canonical_send_graph_binds_real_frontend_for_each_family_and_shape_but_blocks_runtime_emission(bool sync, bool all, bool isVoid)
     {
-        var driver = BindLists(GraphFixture(sync, all, isVoid), "ZEN0037");
+        var driver = all ? BindLists(GraphFixture(sync, all, isVoid), "ZEN0037") : BindAcceptedSendLists(GraphFixture(sync, all, isVoid));
         var graph = Graph(driver);
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         var schedule = Assert.IsType<CanonicalSendExecutionSchedule>(graph.Schedule);
-        Assert.Contains("runtime generation and equivalence are pending", Assert.Single(driver.GetRunResult().Diagnostics).GetMessage());
+        if (all) Assert.Contains("runtime generation and equivalence are pending", Assert.Single(driver.GetRunResult().Diagnostics).GetMessage());
         Assert.Equal(all ? 2 : 1, graph.Contract.Handlers.Count);
         Assert.All(graph.Contract.Handlers, h => Assert.Equal(sync ? BoundCompletionKind.Synchronous : BoundCompletionKind.ValueTask, h.Callback!.Completion));
         Assert.All(schedule.Owners, o => Assert.Equal(FusionCleanupKind.None, o.Cleanup));
@@ -79,7 +79,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Send_graph_contract_rejects_missing_duplicate_extra_and_misplaced_sites_independently_of_candidate()
     {
-        var graph = Graph(BindLists(GraphFixture(), "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(GraphFixture()));
         var schedule = graph.Schedule!;
         var guarded = Assert.Single(schedule.Sites, s => s.Id == Site(0, 2, SendExecutionPhase.CancellationGuard));
         var entered = Assert.Single(schedule.Sites, s => s.Id == Site(0, 2, SendExecutionPhase.Entered));
@@ -96,7 +96,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Send_graph_preserves_entered_exception_replacement_and_finally_boundaries()
     {
-        var graph = Graph(BindLists(GraphFixture(), "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(GraphFixture()));
         var schedule = graph.Schedule!;
         var before = Assert.Single(schedule.Sites, s => s.Id == Site(0, 0, SendExecutionPhase.Before));
         var observer = Assert.Single(schedule.Sites, s => s.Id == Site(0, 0, SendExecutionPhase.Exception));
@@ -146,7 +146,7 @@ public sealed partial class GeneratorTests
     public void Async_before_success_and_exception_contract_edits_change_real_graph_await_producers_and_resume_policies()
     {
         var source = GraphFixture();
-        var driver = BindLists(source, "ZEN0037");
+        var driver = BindAcceptedSendLists(source);
         var changed = source.Replace("ISendRequestTransform<Ping>, ISendResponseTransform<Ping,int>", "IAsyncSendRequestTransform<Ping>, IAsyncSendResponseTransform<Ping,int>")
             .Replace("ISendExceptionObserver<Ping>, IAsyncSendFinallyObserver<Ping>", "IAsyncSendExceptionObserver<Ping>, IAsyncSendFinallyObserver<Ping>")
             .Replace("public Ping Before(Ping r,CancellationToken c)=>r;", "public ValueTask<Ping> BeforeAsync(Ping r,CancellationToken c)=>new(r);")
@@ -176,7 +176,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Handler_only_graph_has_its_own_guard_resolution_and_await_without_inventing_hook_callbacks()
     {
-        var driver = BindLists(ListFixture("c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(A));"), "ZEN0037");
+        var driver = BindAcceptedSendLists(ListFixture("c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(A));"));
         var graph = Graph(driver);
         Assert.True(graph.IsValid);
         Assert.Single(graph.Schedule!.Awaits);
@@ -187,7 +187,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Actual_frontend_edits_invalidate_graph_capability_order_constraints_and_handler_family_while_trivia_refreshes_locations()
     {
-        var source = GraphFixture();
+        var source = GraphFixture(all:true); // Keep location/cache coverage on the still-unsupported SendAll family.
         var driver = BindLists(source, "ZEN0037");
         var original = Graph(driver);
         var diagnostic = Assert.Single(driver.GetRunResult().Diagnostics);
@@ -228,7 +228,7 @@ public sealed partial class GeneratorTests
         Assert.True(stream.IsValid, string.Join(",", stream.Facts.Select(f => f.Reason)));
         Assert.Null(stream.Schedule);
         Assert.NotNull(stream.StreamSchedule);
-        var valid = Graph(BindLists(GraphFixture(), "ZEN0037"));
+        var valid = Graph(BindAcceptedSendLists(GraphFixture()));
         var owned = valid.Contract with { Stages = new(valid.Contract.Stages.Select((s, i) => i == 0 ? s with { ServiceOwnership = FusionOwnership.OwnedSession } : s)) };
         var rejected = CanonicalExecutionGraphNormalizer.Create(owned);
         Assert.False(rejected.IsValid);
@@ -269,7 +269,7 @@ public sealed partial class GeneratorTests
     [InlineData("Resolve")]
     public void Conditional_control_proof_rejects_guard_or_di_failure_reaching_entered_or_callbacks_even_when_orders_are_unchanged(string phaseName)
     {
-        var graph = Graph(BindLists(GraphFixture(), "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(GraphFixture()));
         var schedule = graph.Schedule!;
         var phase = Enum.Parse<SendExecutionPhase>(phaseName);
         var owner = Scope(0, 0);
@@ -286,7 +286,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Conditional_control_proof_requires_finally_once_without_own_observer_reentry_or_missing_failure_paths()
     {
-        var graph = Graph(BindLists(GraphFixture(), "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(GraphFixture()));
         var schedule = graph.Schedule!;
         var owner = Scope(0, 0);
         var after = Point(owner, Site(0, 0, SendExecutionPhase.Success));
@@ -329,7 +329,7 @@ public sealed partial class GeneratorTests
     [InlineData(42)]
     public void Unknown_async_hook_completion_is_rejected_at_ir_boundary_even_without_single_consumption_flag(int completion)
     {
-        var graph = Graph(BindLists(GraphFixture(), "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(GraphFixture()));
         var malformed = graph.Contract with { Stages = new(graph.Contract.Stages.Select((s, i) => i == 0 ? s with {
             Callbacks = new(s.Callbacks.Select(c => c.Phase == BoundCallbackPhase.Finally ? c with { Completion = (BoundCompletionKind)completion, RequiresSingleConsumption = false } : c)) } : s)) };
         var result = CanonicalExecutionGraphNormalizer.Create(malformed);
@@ -343,7 +343,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Actual_callback_order_requires_before_and_inner_success_even_when_declared_orders_and_counts_are_correct()
     {
-        var graph = Graph(BindLists(GraphFixture(), "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(GraphFixture()));
         var schedule = graph.Schedule!;
         Assert.Empty(CanonicalSendControlValidator.Validate(graph.Contract, schedule));
         var owner = Scope(0, 0);
@@ -373,7 +373,7 @@ public sealed partial class GeneratorTests
                 public ValueTask FinallyAsync(Ping r,SendExitInfo e,CancellationToken c)=>default;
             }
             """;
-        var graph = Graph(BindLists(source, "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(source));
         var schedule = graph.Schedule!;
         Assert.True(graph.IsValid);
         Assert.Empty(CanonicalSendControlValidator.Validate(graph.Contract, schedule));

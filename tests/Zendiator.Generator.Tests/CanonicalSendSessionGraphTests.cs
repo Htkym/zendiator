@@ -23,7 +23,7 @@ public sealed partial class GeneratorTests
 
     private static BoundPipelineModel SessionRoute(bool sync = false, bool all = false, bool isVoid = false)
     {
-        var route = Graph(BindLists(GraphFixture(sync, all, isVoid), "ZEN0037")).Contract;
+        var route = Graph(all ? BindLists(GraphFixture(sync, all, isVoid), "ZEN0037") : BindAcceptedSendLists(GraphFixture(sync, all, isVoid))).Contract;
         var owned = SessionBinding(sync);
         return route with {
             Stages = new(route.Stages.Select((stage, index) => stage with {
@@ -62,8 +62,8 @@ public sealed partial class GeneratorTests
         Assert.All(schedule.SessionCalls, call => { Assert.True(call.PreserveIdentityAndToken); Assert.True(call.ReplacePreviousError); Assert.False(call.Aggregate); });
         Assert.All(schedule.Awaits.Where(a => a.Producer.Phase is SendExecutionPhase.AcquireSession or SendExecutionPhase.CleanupSession),
             a => { Assert.True(a.ConsumeOnce); Assert.True(a.ConfigureAwaitFalse); });
-        // Normal public input still blocks runtime and has no implicit session acquisitions.
-        var frontend = Graph(BindLists(GraphFixture(sync, all, isVoid), "ZEN0037"));
+        // Normal input has no implicit session acquisitions; SendAll remains blocked.
+        var frontend = Graph(all ? BindLists(GraphFixture(sync, all, isVoid), "ZEN0037") : BindAcceptedSendLists(GraphFixture(sync, all, isVoid)));
         Assert.All(frontend.Contract.Stages, stage => Assert.Empty(stage.Sessions));
         Assert.Empty(frontend.Schedule!.SessionCalls);
     }
@@ -253,7 +253,7 @@ public sealed partial class GeneratorTests
         Reject(owned with { Ownership = FusionOwnership.BorrowedResource }, "BorrowedResourceHasCleanup");
         Reject(owned with { Cleanup = SessionBinding(false).Cleanup }, "SessionCleanupModeMismatch");
         Reject(owned with { Ownership = FusionOwnership.BorrowedService }, "ExplicitResourceOwnershipRequired");
-        var stream = Graph(BindLists(StreamGraphFixture(), "ZEN0037")).Contract;
+        var stream = Graph(BindLists(StreamGraphFixture())).Contract;
         stream = stream with { Handlers = new(stream.Handlers.Select(h => h with { Sessions = new(new[] { SessionBinding(false) }) })) };
         Assert.Contains(CanonicalStreamGraphValidator.CheckContract(stream), f => f.Reason == "StreamSessionAcquisitionAndCleanupUnavailable");
         void Reject(BoundSessionModel binding, string reason) =>

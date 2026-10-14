@@ -1,3 +1,4 @@
+using Zendiator.SourceGenerator;
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
@@ -173,11 +174,11 @@ public sealed partial class GeneratorTests
     {
         var source = NestedHookBackendSource(isVoid, shape);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "UnsupportedNestedHook_" + shape + isVoid), out var output, out var diagnostics);
-        Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
+        AssertAcceptedSendEmission(driver,diagnostics,BoundDispatchFamily.SendSync,isVoid);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.Canonical", StringComparison.Ordinal));
+        AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
         WriteNestedHookEvidence("nested-hook-boundaries", (isVoid ? "void-" : "response-") + shape,
-            new { isVoid, shape, source, diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }), generatedSources = 0 });
+            new { isVoid, shape, source, diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }), generatedExecution = true });
     }
 
     [Fact]
@@ -186,19 +187,19 @@ public sealed partial class GeneratorTests
         var source = NestedHookBackendSource(false); var before = SyncCompilation(source, "NestedHookIncremental");
         var driver = SyncDriver().RunGenerators(before);
         Assert.Empty(driver.GetRunResult().Diagnostics);
-        var original = driver.GetRunResult().Results.Single().GeneratedSources.Single(s => s.HintName == "Zendiator.Canonical.SendSync.g.cs").SourceText.ToString();
+        var original = CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
         var body = before.ReplaceSyntaxTree(before.SyntaxTrees.Single(), CSharpSyntaxTree.ParseText(source.Replace("_probe.Before(_owner,request,token)!", "_probe.Before(_owner, request, token)!"), SyncParseOptions));
         driver = driver.RunGenerators(body);
         Assert.Empty(driver.GetRunResult().Diagnostics);
-        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalSyncSourceEmission"].SelectMany(s => s.Outputs),
+        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalRouteOutputFile"].SelectMany(s => s.Outputs),
             output => Assert.True(output.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
         var ordered = body.ReplaceSyntaxTree(body.SyntaxTrees.Single(), CSharpSyntaxTree.ParseText(source.Replace("Stage.Hook<Hook<Outer>>(),Stage.Hook<Hook<Inner>>()", "Stage.Hook<Hook<Inner>>(),Stage.Hook<Hook<Outer>>()"), SyncParseOptions));
         driver = driver.RunGenerators(ordered);
         Assert.Empty(driver.GetRunResult().Diagnostics);
-        Assert.NotEqual(original, driver.GetRunResult().Results.Single().GeneratedSources.Single(s => s.HintName == "Zendiator.Canonical.SendSync.g.cs").SourceText.ToString());
+        Assert.NotEqual(original, CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
         var capability = ordered.ReplaceSyntaxTree(ordered.SyntaxTrees.Single(), CSharpSyntaxTree.ParseText(NestedHookBackendSource(false, "inner-missing-finally"), SyncParseOptions));
         driver = driver.RunGenerators(capability);
-        Assert.Equal("ZEN0037", Assert.Single(driver.GetRunResult().Diagnostics).Id);
-        Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.Canonical", StringComparison.Ordinal));
+        AssertAcceptedSendEmission(driver,driver.GetRunResult().Diagnostics,BoundDispatchFamily.SendSync,false);
+        Assert.NotEqual(original,CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
     }
 }

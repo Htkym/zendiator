@@ -46,7 +46,8 @@ public sealed partial class GeneratorTests
     public void Public_factory_Send_graph_resolves_factory_once_and_calls_returned_session(
         string family, bool owned, bool asyncFactory, bool wrapper, bool isVoid)
     {
-        var driver = BindLists(SendReceiverFixture(family, owned, asyncFactory, wrapper, isVoid), "ZEN0037");
+        var source = SendReceiverFixture(family, owned, asyncFactory, wrapper, isVoid);
+        var driver = family is "SendSync" or "SendAsync" ? BindAcceptedSendLists(source) : BindLists(source,"ZEN0037");
         var graph = Graph(driver);
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         var schedule = graph.Schedule!;
@@ -84,7 +85,7 @@ public sealed partial class GeneratorTests
     [InlineData(true)]
     public void Returned_session_supplies_all_Hook_phases_and_null_or_startup_failure_never_enters_or_disposes(bool sync)
     {
-        var graph = Graph(BindLists(SendReceiverFixture(sync ? "SendSync" : "SendAsync", asyncFactory: !sync, fullHook: true), "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(SendReceiverFixture(sync ? "SendSync" : "SendAsync", asyncFactory: !sync, fullHook: true)));
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         var schedule = graph.Schedule!;
         Assert.Equal(new[] { SendExecutionPhase.Before, SendExecutionPhase.Success, SendExecutionPhase.Exception, SendExecutionPhase.Finally },
@@ -122,7 +123,7 @@ public sealed partial class GeneratorTests
     [InlineData("pending-body-lease-lost", "SessionLeaseLostAcrossPendingAwait")]
     public void Actual_factory_receiver_operands_reject_wrong_values_without_Required_or_builder_oracle(string mutation, string reason)
     {
-        var graph = Graph(BindLists(SendReceiverFixture("SendAsync", asyncFactory: true, fullHook: true), "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(SendReceiverFixture("SendAsync", asyncFactory: true, fullHook: true)));
         var original = graph.Schedule!;
         var resource = Session(0, 0, 0);
         var candidate = mutation switch {
@@ -153,7 +154,7 @@ public sealed partial class GeneratorTests
     [InlineData(true)]
     public void Metadata_preserving_CFG_cannot_skip_nonnull_validation_or_commit_after_its_failure(bool afterFailure)
     {
-        var graph = Graph(BindLists(SendReceiverFixture("SendAsync", asyncFactory: true), "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(SendReceiverFixture("SendAsync", asyncFactory: true)));
         var original = graph.Schedule!;
         var candidate = ChangeControl(original, Scope(0, 0), e => e.From.Site?.Phase ==
             (afterFailure ? SendExecutionPhase.ValidateSessionResult : SendExecutionPhase.AcquireSession) &&
@@ -167,7 +168,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Borrowed_factory_session_rejects_reachable_cleanup_even_when_it_implements_disposal()
     {
-        var graph = Graph(BindLists(SendReceiverFixture("SendAsync", owned: false), "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(SendReceiverFixture("SendAsync", owned: false)));
         var original = graph.Schedule!;
         var owner = Scope(0, 0);
         var cleanup = SessionSite(0, 0, 0, SendExecutionPhase.CleanupSession);
@@ -196,7 +197,7 @@ public sealed partial class GeneratorTests
                 public ValueTask<InnerSession> CreateAsync(Ping r,CancellationToken c)=>new(new InnerSession());
             }
             """;
-        var graph = Graph(BindLists(source, "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(source));
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         var schedule = graph.Schedule!;
         Assert.Equal(SendOwnerMultiplicity.EachNext, Assert.Single(schedule.Owners, o => o.Id == Session(0, 1, 0)).Multiplicity);

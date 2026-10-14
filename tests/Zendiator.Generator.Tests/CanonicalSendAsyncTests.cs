@@ -367,8 +367,14 @@ public sealed partial class GeneratorTests
         var both=SyncCompilation(source,"BothFamilies").AddSyntaxTrees(Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(other,SyncParseOptions));
         driver=SyncDriver().RunGeneratorsAndUpdateCompilation(both,out var output,out diagnostics);
         Assert.Empty(diagnostics);Assert.Empty(output.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error));
-        Assert.Equal(4,driver.GetRunResult().Results.Single().GeneratedSources.Length);
-        WriteNestedHookEvidence("async-incremental","body-and-coexistence",new{bodyEditCached=true,coexistingSources=4});
+        var generated=driver.GetRunResult().Results.Single().GeneratedSources;
+        AssertCanonicalOutputRoles(generated,routes:2,compositions:2,interceptors:2);
+        foreach(var ns in new[]{"App","SyncApp"})
+        {
+            var interceptor=Assert.Single(generated,s=>s.HintName.EndsWith(".Interceptors.g.cs",StringComparison.Ordinal)&&s.SourceText.ToString().Contains("global::"+ns+".Generated.Reads.ZendiatorGeneratedRegistrar.Add",StringComparison.Ordinal));
+            Assert.Contains("typeof(global::"+ns+".Reads)",interceptor.SourceText.ToString());
+        }
+        WriteNestedHookEvidence("async-incremental","body-and-coexistence",new{bodyEditCached=true,coexistingRoutes=2,coexistingCompositions=2});
     }
 
     [Theory] [InlineData("direct",false)] [InlineData("direct",true)] [InlineData("owned",false)] [InlineData("owned",true)] [InlineData("borrowed",false)] [InlineData("borrowed",true)]
