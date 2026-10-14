@@ -4,7 +4,12 @@ namespace Zendiator.SourceGenerator;
 internal sealed record BoundStreamHandlerEmission(string RequestName, string ItemName, string HandlerName,
     string ContractName, string MethodName, bool RequestIsValueType, bool HandlerIsValueType);
 internal sealed record BoundStreamHookEmission(string HookName, string ContractName, string MethodName,
-    BoundCallbackPhase Phase, bool HookIsValueType);
+    BoundCallbackPhase Phase, bool HookIsValueType, BoundCompletionKind Completion = BoundCompletionKind.Synchronous)
+{
+    public string? InputItemName { get; init; }
+    public string? OutputItemName { get; init; }
+    public BoundAsyncFactoryEmission? Factory { get; init; }
+}
 
 internal sealed record CanonicalStreamItemRegion(EquatableArray<StreamExecutionSite> Steps,
     StreamExecutionAwait MoveAwait, StreamValueTransfer CurrentTransfer);

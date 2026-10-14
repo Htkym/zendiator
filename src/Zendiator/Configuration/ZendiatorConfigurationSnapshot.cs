@@ -23,7 +23,8 @@ public sealed class ZendiatorConfigurationSnapshot
         List<string>? handlers = null,
         List<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)>? pipelines = null,
         List<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)>? routeHandlers = null,
-        List<Type>? catalogMarkers = null)
+        List<Type>? catalogMarkers = null,
+        List<(Type Request, Type Item)>? streamOutputs = null)
     {
         Namespace = @namespace;
         ServiceLifetime = serviceLifetime;
@@ -38,6 +39,7 @@ public sealed class ZendiatorConfigurationSnapshot
         Handlers = handlers ?? new();
         Pipelines = (pipelines ?? new()).AsReadOnly();
         RouteHandlers = (routeHandlers ?? new()).AsReadOnly();
+        StreamOutputs = (streamOutputs ?? new()).AsReadOnly();
     }
 
     /// <summary>Gets the generation namespace, or null for the default.</summary>
@@ -82,6 +84,8 @@ public sealed class ZendiatorConfigurationSnapshot
     public IReadOnlyList<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)> Pipelines { get; }
     /// <summary>Gets authoritative route handler lists with their original order.</summary>
     public IReadOnlyList<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)> RouteHandlers { get; }
+    /// <summary>Gets explicit final item types for type-changing Stream pipelines.</summary>
+    public IReadOnlyList<(Type Request, Type Item)> StreamOutputs { get; }
 
     /// <summary>Returns the normalized structural fingerprint. Equal configurations share one generated unit.</summary>
     public string GetFingerprint()
@@ -112,6 +116,8 @@ public sealed class ZendiatorConfigurationSnapshot
             parts.Add("routeHandlers=" + string.Join("|", RouteHandlers.Select(static p => p.Request.AssemblyQualifiedName + ":" + p.Family + ":" +
                 string.Join(",", p.Handlers.Select(static entry => entry.Type!.AssemblyQualifiedName +
                     (entry.FactoryType == null ? "" : ":factory=" + entry.FactoryType.AssemblyQualifiedName))))));
+        if (StreamOutputs.Count != 0)
+            parts.Add("streamOutputs=" + string.Join("|", StreamOutputs.Select(static p => p.Request.AssemblyQualifiedName + ":" + p.Item.AssemblyQualifiedName)));
         return string.Join(";", parts);
     }
 }

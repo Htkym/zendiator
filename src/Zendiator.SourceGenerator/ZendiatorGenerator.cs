@@ -51,6 +51,20 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         var streamConnections = compositionModel.Combine(routeBackends.Collect())
             .Select(static (input, _) => CanonicalStreamEmissionNormalizer.Connect(input.Left, input.Right))
             .WithTrackingName("CanonicalStreamConnectionModel");
+        var streamPublic = compositionModel.Combine(streamConnections)
+            .Select(static (input, _) => CanonicalStreamPublicConnection.Create(input.Left, input.Right))
+            .WithTrackingName("CanonicalStreamPublicModel");
+        var streamPublicSites = streamPublic.Combine(compositions).Combine(context.CompilationProvider)
+            .Select(static (input, ct) => CanonicalStreamPublicConnection.BindCallSites(input.Left.Left, input.Left.Right, input.Right, ct));
+        var streamPublicFiles = streamPublic.Combine(streamPublicSites)
+            .SelectMany(static (input, _) => CanonicalStreamPublicConnection.Files(input.Left, input.Right));
+        context.RegisterSourceOutput(streamPublicFiles, static (ctx, file) => ctx.AddSource(file.HintName, SourceText.From(file.Source, Encoding.UTF8)));
+        var streamPublicInterceptors = streamPublicSites.Select(static (model, _) =>
+            CanonicalSyncSourceEmitter.EmitInterceptors(model, "CanonicalStreamShims"));
+        context.RegisterSourceOutput(streamPublicInterceptors, static (ctx, text) =>
+        {
+            if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.Stream.Interceptors.g.cs", SourceText.From(text, Encoding.UTF8));
+        });
         var streamPrototypeModels = streamConnections.SelectMany(static (catalog, _) => catalog.Routes
             .Where(c => c.Kind == CanonicalStreamConnectionKind.Candidate).Select(c => c.Candidate!))
             .WithTrackingName("CanonicalStreamPrototypeProjection");
@@ -121,12 +135,12 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         var multiInterceptors=multiSites.Select(static(model,_)=>CanonicalSyncSourceEmitter.EmitInterceptors(model,"CanonicalMultiShims"));
         context.RegisterSourceOutput(multiInterceptors,static(ctx,text)=>{if(text.Length!=0)ctx.AddSource("Zendiator.Canonical.Multiple.Interceptors.g.cs",SourceText.From(text,Encoding.UTF8));});
         context.RegisterSourceOutput(compositionModel.Combine(executionModel).Combine(compositions).Combine(canonicalSync).Combine(canonicalSyncSites)
-            .Combine(canonicalAsync).Combine(canonicalAsyncSites).Combine(canonicalWrapper).Combine(wrapperSites).Combine(capabilities).Combine(capabilitySites).Combine(multi).Combine(multiSites).Combine(streamConnections), static (ctx, connected) =>
+            .Combine(canonicalAsync).Combine(canonicalAsyncSites).Combine(canonicalWrapper).Combine(wrapperSites).Combine(capabilities).Combine(capabilitySites).Combine(multi).Combine(multiSites).Combine(streamConnections).Combine(streamPublic).Combine(streamPublicSites), static (ctx, connected) =>
         {
-            var input = connected.Left;
+            var input = connected.Left.Left.Left;
             var originalInput=input.Left.Left;var wrapperInput=originalInput.Left.Left;var original=wrapperInput.Left.Left;var sync = original.Left.Left;
             CompositionSelectionDiscovery.Report(ctx, sync.Left.Left.Left.Left, sync.Left.Left.Right, sync.Left.Left.Left.Right, sync.Left.Right, sync.Right,
-                original.Left.Right, original.Right,wrapperInput.Left.Right,wrapperInput.Right,originalInput.Left.Right,originalInput.Right,input.Left.Right,input.Right,connected.Right);
+                original.Left.Right, original.Right,wrapperInput.Left.Right,wrapperInput.Right,originalInput.Left.Right,originalInput.Right,input.Left.Right,input.Right,connected.Left.Left.Right,connected.Left.Right,connected.Right);
         });
         var legacyInvocations = invocationBindings.Combine(compositions)
             .Select(static (input, _) => CompositionSelectionDiscovery.LegacyInvocations(input.Left, input.Right));

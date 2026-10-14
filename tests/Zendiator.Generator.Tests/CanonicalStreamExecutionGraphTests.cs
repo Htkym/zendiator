@@ -41,17 +41,21 @@ public sealed partial class GeneratorTests
     [InlineData("Stage.Hook<Positive>()")]
     [InlineData("Stage.Hook<DoubleItem>()")]
     [InlineData("Stage.Hook<Positive>(),Stage.Hook<DoubleItem>(),Stage.Hook<Small>()")]
-    public void Stream_real_frontend_builds_independently_valid_lifecycle_graph_and_keeps_runtime_blocked(string pipeline)
+    public void Stream_real_frontend_keeps_lifecycle_graph_when_the_reviewed_shape_is_public(string pipeline)
     {
-        var driver = BindLists(StreamGraphFixture(pipeline), "ZEN0037");
+        var accepted = pipeline == "Stage.Hook<Positive>(),Stage.Hook<DoubleItem>(),Stage.Hook<Small>()";
+        var driver = BindLists(StreamGraphFixture(pipeline), accepted ? [] : ["ZEN0037"]);
         var graph = Graph(driver);
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         Assert.Null(graph.Schedule);
         var schedule = Assert.IsType<CanonicalStreamExecutionSchedule>(graph.StreamSchedule);
         Assert.Equal(5, schedule.Flows.Count);
         Assert.Empty(CanonicalStreamControlValidator.Validate(graph.Contract, schedule));
-        Assert.Contains("Stream execution graph satisfies", Assert.Single(driver.GetRunResult().Diagnostics).GetMessage());
-        Assert.Contains("runtime generation and equivalence are pending", Assert.Single(driver.GetRunResult().Diagnostics).GetMessage());
+        if (!accepted)
+        {
+            Assert.Contains("Stream execution graph satisfies", Assert.Single(driver.GetRunResult().Diagnostics).GetMessage());
+            Assert.Contains("runtime generation and equivalence are pending", Assert.Single(driver.GetRunResult().Diagnostics).GetMessage());
+        }
         Assert.Empty(driver.GetRunResult().Results.Single().GeneratedSources.Where(s => s.HintName.Contains("Items")));
         Assert.True(schedule.FreshCursorPerEnumeration);
         Assert.False(schedule.RequestSnapshot);
@@ -67,7 +71,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Stream_required_derivation_rejects_site_owner_token_await_and_value_mutations_without_copying_candidate()
     {
-        var graph = Graph(BindLists(StreamGraphFixture(), "ZEN0037")); var s = graph.StreamSchedule!;
+        var graph = Graph(BindLists(StreamGraphFixture())); var s = graph.StreamSchedule!;
         var source = Assert.Single(s.Owners, o => o.Id == "source");
         Reject(s with { Owners = new(s.Owners.Select(o => o == source ? o with { Borrowed = true, Cleanup = StreamCleanup.None } : o)) }, "MissingOwner");
         var service = Assert.Single(s.Owners, o => o.Id == Service(1));
@@ -103,7 +107,7 @@ public sealed partial class GeneratorTests
     [InlineData((int)StreamPhase.SourceMove, (int)StreamOutcome.False, (int)StreamPhase.Started, "RestartedStoppedCursor")]
     public void Stream_actual_paths_reject_startup_current_and_failure_ordering_with_metadata_unchanged(int fromValue, int outcomeValue, int toValue, string reason)
     {
-        var graph = Graph(BindLists(StreamGraphFixture(), "ZEN0037")); var s = graph.StreamSchedule!;
+        var graph = Graph(BindLists(StreamGraphFixture())); var s = graph.StreamSchedule!;
         var candidate = Retarget(s, StreamProgram.Move, (StreamPhase)fromValue, (StreamOutcome)outcomeValue, (StreamPhase)toValue);
         Assert.Equal(s.Sites, candidate.Sites); Assert.Equal(s.Transfers, candidate.Transfers); Assert.Equal(s.Awaits, candidate.Awaits);
         Assert.Contains(CanonicalStreamControlValidator.Validate(graph.Contract, candidate), f => f.Reason == reason);
@@ -114,7 +118,7 @@ public sealed partial class GeneratorTests
     [InlineData(2)]
     public void Filter_false_retry_must_pass_a_fresh_source_cancel_guard_even_after_service_is_cached(int stage)
     {
-        var graph = Graph(BindLists(StreamGraphFixture(), "ZEN0037")); var s = graph.StreamSchedule!;
+        var graph = Graph(BindLists(StreamGraphFixture())); var s = graph.StreamSchedule!;
         var bad = Retarget(s, StreamProgram.Move, StreamPhase.Filter, StreamOutcome.False, StreamPhase.SourceMove, stage);
         Assert.Equal(s.Sites, bad.Sites);
         Assert.Contains(CanonicalStreamControlValidator.Validate(graph.Contract, bad), f => f.Reason == "SourceMoveWithoutFreshCancellationGuard");
@@ -128,7 +132,7 @@ public sealed partial class GeneratorTests
     [InlineData((int)StreamPhase.Filter, 2)]
     public void Reached_item_callbacks_require_guard_and_lazy_service_resolution(int callbackValue, int stage)
     {
-        var graph = Graph(BindLists(StreamGraphFixture(), "ZEN0037")); var s = graph.StreamSchedule!;
+        var graph = Graph(BindLists(StreamGraphFixture())); var s = graph.StreamSchedule!;
         var bad = Retarget(s, StreamProgram.Move, StreamPhase.HookGuard, StreamOutcome.Success, (StreamPhase)callbackValue, stage, stage);
         Assert.Contains(CanonicalStreamControlValidator.Validate(graph.Contract, bad), f => f.Reason == "ItemCallbackWithoutCurrentGuardResolveOrDeclarationOrder");
         bad = Retarget(s, StreamProgram.Move, StreamPhase.Filter, StreamOutcome.False, StreamPhase.HookGuard, 0, 1);
@@ -143,14 +147,14 @@ public sealed partial class GeneratorTests
     [InlineData((int)StreamPhase.DisposeSource, (int)StreamOutcome.Failure, (int)StreamPhase.DisposeSuccess, "InvalidStreamExit:DisposeSuccess")]
     public void Dispose_actual_paths_detach_once_cleanup_all_owners_and_preserve_failure(int fromValue, int outcomeValue, int toValue, string reason)
     {
-        var graph = Graph(BindLists(StreamGraphFixture(), "ZEN0037")); var s = graph.StreamSchedule!;
+        var graph = Graph(BindLists(StreamGraphFixture())); var s = graph.StreamSchedule!;
         Assert.Contains(CanonicalStreamControlValidator.Validate(graph.Contract, Retarget(s, StreamProgram.Dispose, (StreamPhase)fromValue, (StreamOutcome)outcomeValue, (StreamPhase)toValue)), f => f.Reason == reason);
     }
 
     [Fact]
     public void Stream_busy_and_stopped_paths_cannot_start_execution_or_recover_a_failed_cursor()
     {
-        var graph = Graph(BindLists(StreamGraphFixture(), "ZEN0037")); var s = graph.StreamSchedule!;
+        var graph = Graph(BindLists(StreamGraphFixture())); var s = graph.StreamSchedule!;
         var busy = Retarget(s, StreamProgram.Move, StreamPhase.MoveGuard, StreamOutcome.Failure, StreamPhase.ClearCurrent);
         Assert.Contains(CanonicalStreamControlValidator.Validate(graph.Contract, busy), f => f.Reason == "ExecutionAfterBusyRejection");
         var stopped = Retarget(s, StreamProgram.Move, StreamPhase.Stopped, StreamOutcome.True, StreamPhase.Started);
@@ -179,7 +183,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Stream_frontend_order_edits_change_graph_while_body_and_trivia_keep_cached_value_and_fresh_location()
     {
-        var source = StreamGraphFixture(); var driver = BindLists(source, "ZEN0037"); var original = Graph(driver);
+        var source = StreamGraphFixture(); var driver = BindLists(source); var original = Graph(driver);
         var reordered = source.Replace("Stage.Hook<Positive>(),Stage.Hook<DoubleItem>()", "Stage.Hook<DoubleItem>(),Stage.Hook<Positive>()");
         driver = driver.RunGenerators(Compilation(reordered));
         GraphReason(driver, IncrementalStepRunReason.Modified);

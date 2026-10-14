@@ -74,6 +74,9 @@ internal sealed class RequiredStreamExecutionContract
             AddTransfer(StreamProgram.Move, phase, "cursor/request", "hook:" + i + "/request", StreamOutcome.Always, i);
             AddTransfer(StreamProgram.Move, phase, "cursor/start-token", "hook:" + i + "/token", StreamOutcome.Always, i);
             if (phase == StreamPhase.Map) AddTransfer(StreamProgram.Move, phase, "hook:" + i + "/result", "cursor/item", StreamOutcome.Success, i);
+            if (contract.Hooks[i].Callbacks[0].Completion == BoundCompletionKind.ValueTask)
+                required.Awaits.Add(new(Id(StreamProgram.Move, phase, i), phase == StreamPhase.Filter ? "bool" : "item", true, true,
+                    "hook-result", "ended-failure", new(new[] { "cursor/request", "cursor/start-token", "cursor/source", "cursor/hook-cache", "cursor/item" })));
         }
         AddTransfer(StreamProgram.Move, StreamPhase.CacheCurrent, "cursor/item", "cursor/current-cache");
         AddTransfer(StreamProgram.Current, StreamPhase.ReadCache, "cursor/current-cache", "consumer/Current");
@@ -102,7 +105,8 @@ internal sealed class RequiredStreamExecutionContract
                     StreamPhase.DisposeSource => "IAsyncDisposable.DisposeAsync", _ => null
                 };
                 required.Sites.Add(new(id, stage < 0 ? contract.Anchor : contract.Hooks[stage].Anchor, owner,
-                    phase is StreamPhase.SourceMove or StreamPhase.DisposeSource ? BoundCompletionKind.ValueTask : BoundCompletionKind.Synchronous, producer));
+                    phase is StreamPhase.SourceMove or StreamPhase.DisposeSource ? BoundCompletionKind.ValueTask :
+                    phase is StreamPhase.Filter or StreamPhase.Map ? contract.Hooks[stage].Callbacks[0].Completion : BoundCompletionKind.Synchronous, producer));
                 if (phase is StreamPhase.MergeTokens or StreamPhase.PreCancel or StreamPhase.ResolveHandler or StreamPhase.ResolveWrapper or StreamPhase.SourceFactory or StreamPhase.WrapperFactory or
                     StreamPhase.AcquireSource or StreamPhase.StartupDisposeLink or StreamPhase.SourceGuard or StreamPhase.SourceMove or StreamPhase.SourceCurrent or
                     StreamPhase.HookGuard or StreamPhase.ResolveHook or StreamPhase.Filter or StreamPhase.Map or StreamPhase.DisposeSource or StreamPhase.DisposeLink)

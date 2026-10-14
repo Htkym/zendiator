@@ -174,7 +174,7 @@ public sealed partial class GeneratorTests
         {
             if (FallbackFixtures.TryGetValue(shape, out var cached)) return cached;
             var item = shape is "long" or "string" ? shape : "int";
-            var wrapper = shape is "wrapper" or "wrapper-trace";
+            var wrapper = shape is "wrapper" or "wrapper-trace" or "wrapper-retry";
             var pipeline = wrapper ? "Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()" :
                 shape == "order" ? "Stage.Hook<DoubleItem>(),Stage.Hook<Positive>(),Stage.Hook<Small>()" :
                 "Stage.Hook<Positive>(),Stage.Hook<DoubleItem>(),Stage.Hook<Small>()";
@@ -192,14 +192,14 @@ public sealed partial class GeneratorTests
                 .Replace("=>item*2;", "=>p.Map(r,item,c);")
                 .Replace("public sealed class Small :", "public sealed class Small(global::Zendiator.Generator.Tests.CanonicalStreamFallbackProbe p) :")
                 .Replace("=>item<4;", "=>p.Last(r,item,c);");
-            if (shape == "wrapper-trace") source = source.Replace("global::Zendiator.Generator.Tests.CanonicalStreamFallbackProbe",
+            if (shape is "wrapper-trace" or "wrapper-retry") source = source.Replace("global::Zendiator.Generator.Tests.CanonicalStreamFallbackProbe",
                 "global::Zendiator.Generator.Tests.CanonicalStreamWrapperEventProbe");
             if (wrapper) source = source.Replace("""
                 public sealed class StreamOpaque : IStreamWrapper<Items,int> {
                     public System.Collections.Generic.IAsyncEnumerable<int> Wrap<N>(Items r,N n,CancellationToken c)
                         where N : IStreamUpstream<Items,int> => n.Open(r,c);
                 }
-                """, shape == "wrapper-trace" ? WrapperTraceFixtureCode : """
+                """, shape == "wrapper-trace" ? WrapperTraceFixtureCode : shape == "wrapper-retry" ? WrapperRetryFixtureCode : """
                 public sealed class StreamOpaque(global::Zendiator.Generator.Tests.CanonicalStreamFallbackProbe p) : IStreamWrapper<Items,int> {
                     public System.Collections.Generic.IAsyncEnumerable<int> Wrap<N>(Items r,N n,CancellationToken c) where N : IStreamUpstream<Items,int> {
                         p.Wrap(r,c);
@@ -229,9 +229,9 @@ public sealed partial class GeneratorTests
                 }
                 """;
             var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "Fallback_" + shape + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-            Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
             var backend = Assert.IsType<CanonicalRouteBackend>(Assert.Single(driver.GetRunResult().Results.Single()
                 .TrackedSteps["CanonicalRouteBackendEntry"].SelectMany(s => s.Outputs)).Value);
+            Assert.Equal(backend.StreamCandidate == null ? new[] { "ZEN0037" } : Array.Empty<string>(), diagnostics.Select(d => d.Id));
             CanonicalSourceFile? forced = null;
             if (backend.StreamCandidate != null)
             {

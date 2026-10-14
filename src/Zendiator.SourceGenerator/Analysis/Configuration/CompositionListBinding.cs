@@ -15,7 +15,7 @@ internal sealed class CompositionListBinding
 {
     private sealed record Entry(INamedTypeSymbol Type, string Anchor, FusionStageKind Kind = FusionStageKind.Hook, INamedTypeSymbol? Factory = null);
     private sealed record Declaration(string Anchor, INamedTypeSymbol Request, BoundDispatchFamily? Family,
-        bool HandlerList, ImmutableArray<Entry> Entries);
+        bool HandlerList, ImmutableArray<Entry> Entries, ITypeSymbol? StreamFinal = null);
     private readonly Compilation _compilation;
     private readonly SemanticModel _semantic;
     private readonly ImmutableArray<Candidate> _marked;
@@ -40,7 +40,10 @@ internal sealed class CompositionListBinding
         var handlerList = method.Name == "Handlers";
         var arguments = call.ArgumentList.Arguments;
         var requestOffset = method.Arity == 0 ? 1 : 0;
-        var request = method.Arity == 1 ? method.TypeArguments[0] as INamedTypeSymbol :
+        var typedStream = method.Name == "StreamPipeline";
+        ITypeSymbol? streamFinal = typedStream ? method.Arity == 2 ? method.TypeArguments[1] :
+            arguments.Count >= 2 && arguments[1].Expression is TypeOfExpressionSyntax finalType ? _semantic.GetTypeInfo(finalType.Type, _ct).Type : null : null;
+        var request = method.Arity is 1 or 2 ? method.TypeArguments[0] as INamedTypeSymbol :
             method.Arity == 0 && arguments.Count > 0 && arguments[0].Expression is TypeOfExpressionSyntax requestType
                 ? _semantic.GetTypeInfo(requestType.Type, _ct).Type as INamedTypeSymbol : null;
         if (request == null)
@@ -49,14 +52,16 @@ internal sealed class CompositionListBinding
             return;
         }
         if (request.IsUnboundGenericType) request = request.OriginalDefinition;
+        if (typedStream && streamFinal == null)
+        { Reject("UnsupportedGenerationShape", anchor, "StreamPipeline requires an explicit final type argument or literal typeof final pattern."); return; }
         if (arguments.Any(a => a.NameColon != null || a.RefKindKeyword != default))
         {
             Reject("UnsupportedGenerationShape", anchor, "Ordered lists require direct positional arguments.");
             return;
         }
-        BoundDispatchFamily? family = null;
-        var hasFamily = requestOffset != 0 || handlerList || method.Parameters[0].Type.Name == "DispatchFamily";
-        var offset = requestOffset + (hasFamily ? 1 : 0);
+        BoundDispatchFamily? family = typedStream ? BoundDispatchFamily.Stream : null;
+        var hasFamily = !typedStream && (requestOffset != 0 || handlerList || method.Parameters[0].Type.Name == "DispatchFamily");
+        var offset = typedStream && method.Arity == 0 ? 2 : requestOffset + (hasFamily ? 1 : 0);
         if (hasFamily)
         {
             var definition = _compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly.GetTypeByMetadataName("Zendiator.DispatchFamily");
@@ -89,7 +94,7 @@ internal sealed class CompositionListBinding
             {
                 type = handlerMethod.Arity is 1 or 2 && handlerFactory.ArgumentList.Arguments.Count == 0
                     ? handlerMethod.TypeArguments[0] as INamedTypeSymbol
-                    : handlerMethod.Name == "Service" && handlerFactory.ArgumentList.Arguments.Count == 1 &&
+                    : handlerFactory.ArgumentList.Arguments.Count == (handlerMethod.Name == "Session" ? 2 : 1) &&
                         handlerFactory.ArgumentList.Arguments[0].Expression is TypeOfExpressionSyntax serviceType
                             ? _semantic.GetTypeInfo(serviceType.Type, _ct).Type as INamedTypeSymbol : null;
                 if (handlerMethod.Name == "Session" && handlerMethod.Arity == 2 && handlerFactory.ArgumentList.Arguments.Count == 0)
@@ -101,6 +106,11 @@ internal sealed class CompositionListBinding
                         continue;
                     }
                 }
+                else if (handlerMethod.Name == "Session" && handlerMethod.Arity == 0 && handlerFactory.ArgumentList.Arguments.Count == 2 &&
+                    handlerFactory.ArgumentList.Arguments[1].Expression is TypeOfExpressionSyntax literalFactory)
+                    factoryType = _semantic.GetTypeInfo(literalFactory.Type, _ct).Type as INamedTypeSymbol;
+                if (handlerMethod.Name == "Session" && factoryType == null)
+                { Reject("UnsupportedGenerationShape", entryAnchor, "A handler factory requires one known type argument or literal typeof definition."); continue; }
             }
             else if (!handlerList && expression is InvocationExpressionSyntax factory &&
                 _semantic.GetSymbolInfo(factory, _ct).Symbol is IMethodSymbol factoryMethod && Same(factoryMethod.ContainingType, stage) &&
@@ -109,7 +119,7 @@ internal sealed class CompositionListBinding
                 kind = factoryMethod.Name == "Hook" ? FusionStageKind.Hook : FusionStageKind.Wrapper;
                 type = factoryMethod.Arity is 1 or 2 && factory.ArgumentList.Arguments.Count == 0
                     ? factoryMethod.TypeArguments[0] as INamedTypeSymbol
-                    : factory.ArgumentList.Arguments.Count == 1 && factory.ArgumentList.Arguments[0].Expression is TypeOfExpressionSyntax stageType
+                    : factory.ArgumentList.Arguments.Count is 1 or 2 && factory.ArgumentList.Arguments[0].Expression is TypeOfExpressionSyntax stageType
                         ? _semantic.GetTypeInfo(stageType.Type, _ct).Type as INamedTypeSymbol : null;
                 if (factoryMethod.Arity == 2 && factory.ArgumentList.Arguments.Count == 0)
                 {
@@ -120,6 +130,11 @@ internal sealed class CompositionListBinding
                         continue;
                     }
                 }
+                else if (factoryMethod.Arity == 0 && factory.ArgumentList.Arguments.Count == 2 &&
+                    factory.ArgumentList.Arguments[1].Expression is TypeOfExpressionSyntax literalFactory)
+                    factoryType = _semantic.GetTypeInfo(literalFactory.Type, _ct).Type as INamedTypeSymbol;
+                if (factory.ArgumentList.Arguments.Count == 2 && factoryType == null)
+                { Reject("UnsupportedGenerationShape", entryAnchor, "A stage factory requires a literal typeof definition."); continue; }
             }
             if (type == null)
             {
@@ -134,7 +149,7 @@ internal sealed class CompositionListBinding
             entries.Add(new(type, entryAnchor, kind, factoryType));
             if (handlerList && (_marked.Any(c => Same(c.Symbol, type.OriginalDefinition)) || BindExplicitMetadata(_compilation,type,_ct)!=null)) _select(type);
         }
-        _declarations.Add(new(anchor, request, family, handlerList, entries.ToImmutable()));
+        _declarations.Add(new(anchor, request, family, handlerList, entries.ToImmutable(), streamFinal));
     }
 
     internal EquatableArray<BoundPipelineModel> Bind(IEnumerable<INamedTypeSymbol> selected)
@@ -198,11 +213,11 @@ internal sealed class CompositionListBinding
             if (IsOpenDefinition(request))
             {
                 string? error = null;
-                if (family == BoundDispatchFamily.Stream && handlerEntries.Length == 1 && handlerEntries[0].Factory == null)
+                if (family == BoundDispatchFamily.Stream && handlerEntries.Length == 1)
                     open = CanonicalStreamOpenBinding.Create(request, handlerEntries[0].Type, _compilation, out error);
                 if (open == null)
                 {
-                    Reject("UnsupportedGenerationShape", declaration.Anchor, error ?? "An open request requires one Stream handler without a session factory.");
+                    Reject("UnsupportedGenerationShape", declaration.Anchor, error ?? "An open request requires one handler-derived Stream pattern.");
                     output.Add(Model(null, null, Array.Empty<BoundHandlerModel>(), Array.Empty<BoundStageModel>(), explicitHandlers != null));
                     continue;
                 }
@@ -305,8 +320,14 @@ internal sealed class CompositionListBinding
                         BoundName(contract), member.Name, request.IsValueType, entry.Type.IsValueType) };
                 if (entry.Factory != null && !handlerModel.CompilerOwnsError)
                 {
-                    var binding = SessionFactoryContractBinding.Bind(entry.Factory, entry.Type, declaration.Request, family.Value,
-                        entry.Anchor, _compilation, Facts);
+                    if (family == BoundDispatchFamily.Stream)
+                    {
+                        var closure = CanonicalStreamTypeClosure.Factory(entry.Factory, request, entry.Type, _compilation, open);
+                        if (closure.Type == null) { Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!); continue; }
+                        entry = entry with { Factory = closure.Type };
+                    }
+                    var binding = SessionFactoryContractBinding.Bind(entry.Factory, entry.Type, request, family.Value,
+                        entry.Anchor, _compilation, Facts, open);
                     handlerModel = handlerModel with { CompilerOwnsError = binding.CompilerOwnsError,
                         ServiceOwnership = binding.Session?.Ownership ?? handlerModel.ServiceOwnership,
                         Sessions = binding.Session == null ? default : new(new[] { binding.Session! }) };
@@ -318,6 +339,8 @@ internal sealed class CompositionListBinding
                 Reject("UnsupportedGenerationShape", explicitHandlers?.Anchor ?? declaration.Anchor,
                     multiple ? "SendAll requires at least one handler." : "Send/Stream requires exactly one selected handler; use an explicit list to resolve ambiguity.");
             var stages = new List<BoundStageModel>();
+            var registrationStages = new List<RegistrationStageEmission>();
+            var sourceItem = result;
             var closedStages = new Dictionary<string, string>(StringComparer.Ordinal);
             if (resultKind != null && handlers.Count == handlerEntries.Length)
                 foreach (var supplied in declaration.HandlerList ? ImmutableArray<Entry>.Empty : declaration.Entries)
@@ -338,25 +361,60 @@ internal sealed class CompositionListBinding
                         }
                         closedStages.Add(closedKey, entry.Anchor);
                     }
-                    if (open != null && entry.Factory != null)
-                    { Reject("UnsupportedGenerationShape", entry.Anchor, "Open Stream session factories remain outside this borrowed-service backend."); continue; }
                     var stageModel = StageContractBinding.Bind(entry.Type, entry.Kind, entry.Anchor, request, family.Value,
-                        resultKind.Value, result, _compilation, Facts, open);
+                        resultKind.Value, result, _compilation, Facts, open, declaration.StreamFinal != null);
                     if (entry.Factory != null && !stageModel.CompilerOwnsError)
                     {
-                        var binding = SessionFactoryContractBinding.Bind(entry.Factory, entry.Type, declaration.Request, family.Value,
-                            entry.Anchor, _compilation, Facts);
+                        if (family == BoundDispatchFamily.Stream)
+                        {
+                            var closure = CanonicalStreamTypeClosure.Factory(entry.Factory, request, entry.Type, _compilation, open);
+                            if (closure.Type == null) { Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!); continue; }
+                            entry = entry with { Factory = closure.Type };
+                        }
+                        var binding = SessionFactoryContractBinding.Bind(entry.Factory, entry.Type, request, family.Value,
+                            entry.Anchor, _compilation, Facts, open);
                         stageModel = stageModel with { CompilerOwnsError = binding.CompilerOwnsError,
                             ServiceOwnership = binding.Session?.Ownership ?? stageModel.ServiceOwnership,
                             Sessions = binding.Session == null ? default : new(new[] { binding.Session! }) };
                     }
                     stages.Add(stageModel);
+                    if (open != null)
+                        registrationStages.Add(new(DefinitionName(supplied.Type), supplied.Kind.ToString(),
+                            supplied.Factory == null ? null : DefinitionName(supplied.Factory)));
+                    if (declaration.StreamFinal != null && stageModel.StreamItems != null)
+                        result = StageContractBinding.StreamOutput(entry.Type, stageModel) ?? result;
                 }
+            BoundStreamItemFlow? itemFlow = null;
+            if (declaration.StreamFinal is { } finalPattern)
+            {
+                var finalItem = result == null ? null : CanonicalStreamTypeClosure.Final(finalPattern, result, _compilation, open);
+                if (finalItem == null || result == null || !SymbolEqualityComparer.IncludeNullability.Equals(result, finalItem))
+                    Reject("StageTypeMismatch", declaration.Anchor, "The last Stream stage output does not match the explicitly declared final item type.");
+                else if (finalItem.IsRefLikeType || HasOpenShape(finalItem) && (open == null || !open.Contains(finalItem)) || !(open?.Public(finalItem) ?? Public(finalItem)))
+                    Reject("UnsupportedGenerationShape", declaration.Anchor, "The final Stream pattern requires public, ownable and fully determined arguments.");
+                if (sourceItem != null && result != null && finalItem != null && stages.All(s => s.StreamItems != null))
+                    itemFlow = new(new(Identity(sourceItem), BoundName(sourceItem), sourceItem.IsValueType),
+                        new(Identity(finalItem), BoundName(finalItem), finalItem.IsValueType), new(stages.Select(s => s.StreamItems!)));
+            }
             string? constraintError = null;
             var generic = open?.Emission(out constraintError);
             if (open != null && generic == null)
                 Reject("UnsupportedGenerationShape", declaration.Anchor, constraintError!);
-            output.Add(Model(resultKind, result, handlers, stages, explicitHandlers != null) with { StreamGeneric = generic });
+            output.Add(Model(resultKind, result, handlers, stages, explicitHandlers != null) with
+            {
+                StreamGeneric = generic, StreamItemFlow = itemFlow,
+                StreamDeclaredStages = declaration.StreamFinal == null ? default : new(declaration.Entries.Select(entry =>
+                    new RegistrationStageEmission(Name(entry.Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated)), entry.Kind.ToString(),
+                        entry.Factory == null ? null : Name(entry.Factory.WithNullableAnnotation(NullableAnnotation.NotAnnotated))))),
+                StreamOpenRegistration = open != null && generic != null && handlers.Count == 1 && handlerEntries.Length == 1
+                    ? new(DefinitionName(declaration.Request), DefinitionName(handlerEntries[0].Type),
+                        new(new[] { Identity(handlerEntries[0].Type), handlers[0].Type }), new(registrationStages))
+                    {
+                        FinalDefinitionName = declaration.StreamFinal == null ? null :
+                            Name(declaration.StreamFinal.WithNullableAnnotation(NullableAnnotation.NotAnnotated)),
+                        HandlerFactoryDefinitionName = handlerEntries[0].Factory == null ? null : DefinitionName(handlerEntries[0].Factory!)
+                    } : null
+            });
             if (Facts.Count == before && !HasDeclarationError(declaration.Anchor) &&
                 (explicitHandlers == null || !HasDeclarationError(explicitHandlers.Anchor)) && !stages.Any(s => s.CompilerOwnsError) &&
                 !handlers.Any(h => h.CompilerOwnsError) && handlers.Count == handlerEntries.Length && resultKind != null)
@@ -376,6 +434,8 @@ internal sealed class CompositionListBinding
 
     private bool HasDeclarationError(string anchor) => Facts.Any(f => f.Anchor == anchor || f.Anchor.StartsWith(anchor + "/", StringComparison.Ordinal) ||
         f.AdditionalAnchor == anchor || (f.AdditionalAnchor?.StartsWith(anchor + "/", StringComparison.Ordinal) ?? false));
+
+    private string DefinitionName(INamedTypeSymbol type) => Name(type.Arity == 0 ? type : type.OriginalDefinition.ConstructUnboundGenericType());
 
     private bool Eligible(INamedTypeSymbol type, string anchor, string role, bool concrete = true, CanonicalStreamOpenBinding? open = null)
     {

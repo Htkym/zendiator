@@ -5,6 +5,79 @@ namespace Zendiator.Tests.Contracts;
 // C02 reference for F1 -> opaque W -> F2. W alone decides how often and with which inputs to Open.
 internal static class CanonicalStreamWrapperReference
 {
+    // C10 extension of the independent wrapper control: async intervals on each side.
+    public static IAsyncEnumerable<TItem> AsyncFilterWrapperMap<TRequest, TItem, TBefore, TWrapper, TAfter>(
+        IServiceProvider services, TRequest request, Func<TRequest, CancellationToken, IAsyncEnumerable<TItem>> start,
+        CancellationToken api = default)
+        where TBefore : IAsyncStreamItemFilter<TRequest, TItem>
+        where TWrapper : IStreamWrapper<TRequest, TItem>
+        where TAfter : IAsyncStreamItemMap<TRequest, TItem>
+    {
+        ArgumentNullException.ThrowIfNull(services); ArgumentNullException.ThrowIfNull(request); ArgumentNullException.ThrowIfNull(start);
+        return Run();
+        async IAsyncEnumerable<TItem> Run([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken enumeration = default)
+        {
+            CancellationTokenSource? linked = null; IAsyncEnumerator<TItem>? source = null;
+            IAsyncStreamItemMap<TRequest, TItem>? map = null;
+            try
+            {
+                var token = !api.CanBeCanceled ? enumeration : !enumeration.CanBeCanceled || api == enumeration ? api
+                    : (linked = CancellationTokenSource.CreateLinkedTokenSource(api, enumeration)).Token;
+                token.ThrowIfCancellationRequested();
+                var wrapper = (IStreamWrapper<TRequest, TItem>)services.GetRequiredService(typeof(TWrapper));
+                source = wrapper.Wrap(request, new AsyncUpstream<TRequest, TItem, TBefore>(services, start), token).GetAsyncEnumerator();
+                while (true)
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (!await source.MoveNextAsync().ConfigureAwait(false)) yield break;
+                    var item = source.Current; token.ThrowIfCancellationRequested();
+                    map ??= (IAsyncStreamItemMap<TRequest, TItem>)services.GetRequiredService(typeof(TAfter));
+                    yield return await map.MapAsync(request, item, token).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                var inner = source; source = null;
+                try { if (inner is not null) await inner.DisposeAsync().ConfigureAwait(false); }
+                finally { linked?.Dispose(); }
+            }
+        }
+    }
+    private sealed class AsyncUpstream<TRequest, TItem, TFilter>(IServiceProvider services,
+        Func<TRequest, CancellationToken, IAsyncEnumerable<TItem>> start) : IStreamUpstream<TRequest, TItem>
+        where TFilter : IAsyncStreamItemFilter<TRequest, TItem>
+    {
+        public IAsyncEnumerable<TItem> Open(TRequest request, CancellationToken api)
+        {
+            ArgumentNullException.ThrowIfNull(request); return Run();
+            async IAsyncEnumerable<TItem> Run([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken enumeration = default)
+            {
+                CancellationTokenSource? linked = null; IAsyncEnumerator<TItem>? source = null;
+                IAsyncStreamItemFilter<TRequest, TItem>? filter = null;
+                try
+                {
+                    var token = !api.CanBeCanceled ? enumeration : !enumeration.CanBeCanceled || api == enumeration ? api
+                        : (linked = CancellationTokenSource.CreateLinkedTokenSource(api, enumeration)).Token;
+                    token.ThrowIfCancellationRequested(); source = start(request, token).GetAsyncEnumerator(token);
+                    while (true)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        if (!await source.MoveNextAsync().ConfigureAwait(false)) yield break;
+                        var item = source.Current; token.ThrowIfCancellationRequested();
+                        filter ??= (IAsyncStreamItemFilter<TRequest, TItem>)services.GetRequiredService(typeof(TFilter));
+                        if (await filter.AcceptAsync(request, item, token).ConfigureAwait(false)) yield return item;
+                    }
+                }
+                finally
+                {
+                    var inner = source; source = null;
+                    try { if (inner is not null) await inner.DisposeAsync().ConfigureAwait(false); }
+                    finally { linked?.Dispose(); }
+                }
+            }
+        }
+    }
+
     public static IAsyncEnumerable<TItem> FilterWrapperFilter<TRequest, TItem, TBefore, TWrapper, TAfter>(
         IServiceProvider services, TRequest request,
         Func<TRequest, CancellationToken, IAsyncEnumerable<TItem>> start,

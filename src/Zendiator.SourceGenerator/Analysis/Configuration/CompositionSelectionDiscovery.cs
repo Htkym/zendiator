@@ -37,7 +37,7 @@ internal static class CompositionSelectionDiscovery
             // An explicit new selection operation identifies a new default composition.
             var explicitDefault = method.Arity == 0 && lambda != null && lambda.DescendantNodes().OfType<InvocationExpressionSyntax>().Any(call =>
                 semantic.GetSymbolInfo(call, ct).Symbol is IMethodSymbol operation && Same(operation.ContainingType, configuration) &&
-                operation.Name is "UseLocalHandlers" or "UseCatalogFrom" or "AddHandler" or "Pipeline" or "Handlers");
+                operation.Name is "UseLocalHandlers" or "UseCatalogFrom" or "AddHandler" or "Pipeline" or "StreamPipeline" or "Handlers");
             if (method.Arity == 0 && !explicitDefault) continue;
 
             var errors = new List<string>();
@@ -131,14 +131,16 @@ internal static class CompositionSelectionDiscovery
                     if (type == null) errors.Add("AddHandler requires a known handler type or a typeof expression.");
                     else
                     {
+                        // Keep the symbol's typeof spelling before normalizing membership to its definition.
+                        var registrationName = Name(type.WithNullableAnnotation(NullableAnnotation.NotAnnotated));
                         if (type.IsUnboundGenericType) type = type.OriginalDefinition;
                         if (!explicitTypes.Add(MarkedHandlerDiscovery.RegistrationIdentity(type, compilation)))
                             errors.Add($"Handler {Name(type)} is explicitly selected more than once.");
-                        explicitHandlerNames.Add(Name(type));
+                        explicitHandlerNames.Add(registrationName);
                         Select(type);
                     }
                 }
-                else if (operation.Name is "Pipeline" or "Handlers") lists.Parse(call, operation, ordinal);
+                else if (operation.Name is "Pipeline" or "StreamPipeline" or "Handlers") lists.Parse(call, operation, ordinal);
                 else errors.Add($"Composition selection operation {operation.Name} is not connected yet.");
             }
             var pipelines = lists.Bind(selected.Keys);
@@ -194,7 +196,7 @@ internal static class CompositionSelectionDiscovery
         CanonicalWrapperEmissionModel wrappers,CanonicalSyncInterceptorModel wrapperCallSites,
         CanonicalCapabilityEmissionModel capabilities,CanonicalSyncInterceptorModel capabilityCallSites,
         CanonicalMultiEmissionModel multi,CanonicalSyncInterceptorModel multiCallSites,
-        CanonicalStreamConnectionCatalog streams)
+        CanonicalStreamConnectionCatalog streams, CanonicalStreamPublicModel streamPublic, CanonicalSyncInterceptorModel streamPublicSites)
     {
         for (var index = 0; index < catalog.Compositions.Count; index++)
         {
@@ -219,6 +221,8 @@ internal static class CompositionSelectionDiscovery
                     var message = fact.Message;
                     if (fact.Key == "IncompleteExecutionContract")
                     {
+                        var streamEnabled = streamPublic.Compositions.FirstOrDefault(c => c.Registration.Index == index);
+                        if (streamEnabled != null && CanonicalStreamPublicConnection.IsConnected(streamEnabled, streamPublicSites)) continue;
                         if(multi.Compositions.Any(c=>c.Index==index)&&multiCallSites.CallSites.Any(s=>s.Namespace==composition.GeneratedNamespace&&s.MarkerName==composition.MarkerName))continue;
                         var enabled = canonicalSync.Compositions.FirstOrDefault(c => c.Index == index);
                         if (enabled != null &&

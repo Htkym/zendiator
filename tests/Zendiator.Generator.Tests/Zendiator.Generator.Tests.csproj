@@ -2,6 +2,12 @@
   <PropertyGroup><TargetFramework>net10.0</TargetFramework><IsTestProject>true</IsTestProject></PropertyGroup>
   <ItemGroup>
     <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamItemReference.cs" Link="Reference/CanonicalStreamItemReference.cs" />
+    <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamAsyncItemReference.cs" Link="Reference/CanonicalStreamAsyncItemReference.cs" />
+    <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamTypeChangingReference.cs" Link="Reference/CanonicalStreamTypeChangingReference.cs" />
+    <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamSessionReference.cs" Link="Reference/CanonicalStreamSessionReference.cs" />
+    <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamWrapperSessionReference.cs" Link="Reference/CanonicalStreamWrapperSessionReference.cs" />
+    <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamCleanupReference.cs" Link="Reference/CanonicalStreamCleanupReference.cs" />
+    <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamTypedOwnedReference.cs" Link="Reference/CanonicalStreamTypedOwnedReference.cs" />
     <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamWrapperReference.cs" Link="Reference/CanonicalStreamWrapperReference.cs" />
     <Compile Include="../Zendiator.Tests/Contracts/ContractEvents.cs" Link="Reference/ContractEvents.cs" />
     <ProjectReference Include="../../src/Zendiator.Abstractions/Zendiator.Abstractions.csproj" />

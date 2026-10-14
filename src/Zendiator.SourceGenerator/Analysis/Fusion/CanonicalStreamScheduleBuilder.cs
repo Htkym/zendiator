@@ -104,6 +104,9 @@ internal static class CanonicalStreamScheduleBuilder
             Transfer(move, callback.Phase, "cursor/request", "hook:" + i + "/request", StreamOutcome.Always, i);
             Transfer(move, callback.Phase, "cursor/start-token", "hook:" + i + "/token", StreamOutcome.Always, i);
             if (callback.Phase == StreamPhase.Map) Transfer(move, callback.Phase, "hook:" + i + "/result", "cursor/item", StreamOutcome.Success, i);
+            if (stage.Callbacks[0].Completion == BoundCompletionKind.ValueTask)
+                Await(move, callback.Phase, callback.Phase == StreamPhase.Filter ? "bool" : "item", "hook-result", "ended-failure",
+                    new[] { "cursor/request", "cursor/start-token", "cursor/source", "cursor/hook-cache", "cursor/item" }, i);
             previous = callback;
         }
         Transfer(move, StreamPhase.CacheCurrent, "cursor/item", "cursor/current-cache");
@@ -158,7 +161,8 @@ internal static class CanonicalStreamScheduleBuilder
         void Add(StreamSiteId id)
         {
             if (sites.ContainsKey(id)) return;
-            var completion = id.Phase is StreamPhase.SourceMove or StreamPhase.DisposeSource ? BoundCompletionKind.ValueTask : BoundCompletionKind.Synchronous;
+            var completion = id.Phase is StreamPhase.SourceMove or StreamPhase.DisposeSource ? BoundCompletionKind.ValueTask :
+                id.Phase is StreamPhase.Filter or StreamPhase.Map ? contract.Hooks[id.Stage].Callbacks[0].Completion : BoundCompletionKind.Synchronous;
             var owner = id.Program == StreamProgram.Create ? "envelope" : id.Phase is StreamPhase.SourceMove or StreamPhase.SourceCurrent or StreamPhase.DisposeSource ? "source" :
                 id.Phase is StreamPhase.StartupDisposeLink or StreamPhase.DisposeLink ? "linked-token" : "cursor";
             var producer = id.Phase is StreamPhase.SourceFactory or StreamPhase.WrapperFactory ? contract.Callback.Implementation :
@@ -175,6 +179,6 @@ internal static class CanonicalStreamScheduleBuilder
             transfers.Add(new("producer/error", "cursor/error", id, StreamOutcome.Failure));
         }
         void Transfer(StreamProgram program, StreamPhase phase, string from, string to, StreamOutcome outcome = StreamOutcome.Always, int stage = -1) => transfers.Add(new(from, to, Id(program, phase, stage), outcome));
-        void Await(StreamProgram program, StreamPhase phase, string result, string normal, string failure, IEnumerable<string> slots) => awaits.Add(new(Id(program, phase), result, true, true, normal, failure, new(slots)));
+        void Await(StreamProgram program, StreamPhase phase, string result, string normal, string failure, IEnumerable<string> slots, int stage = -1) => awaits.Add(new(Id(program, phase, stage), result, true, true, normal, failure, new(slots)));
     }
 }

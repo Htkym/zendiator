@@ -2,6 +2,9 @@ using System.Globalization;
 
 namespace Zendiator.Generator.Tests;
 
+internal sealed record WrapperInvocationOperation(string Kind, int Invocation, bool CallsiteThrow, bool Completed,
+    bool CompletedSuccessfully, bool Canceled, bool Faulted, int Error, string? ErrorType);
+
 // One synchronous wrapper fixture. This observes the actual generated/reference cursor and typed Open.
 // Scope forwarding returns the original ValueTask; it adds no async adapter or token merge.
 public sealed class CanonicalStreamWrapperEventProbe
@@ -9,14 +12,25 @@ public sealed class CanonicalStreamWrapperEventProbe
     public CancellationToken ApiToken, FirstToken, SecondToken;
     public int[] Input = [1, 2];
     public int Starts, Moves, Reads, Disposals;
+    public int FailInvocation;
+    public readonly Exception SourceError = new FormatException("first-upstream-source");
     private readonly AsyncLocal<Scope?> _active = new();
     private readonly Dictionary<int, Scope> _scopes = [];
     private readonly Dictionary<object, int> _requests = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<CancellationToken, int> _tokens = [];
     private readonly List<StreamSeedEvent> _events = [];
+    private readonly Dictionary<Exception, int> _errors = new(ReferenceEqualityComparer.Instance);
+    private readonly List<WrapperInvocationOperation> _operations = [];
     private int _nextInvocation;
     internal int LastOuterInvocation { get; private set; }
     internal StreamSeedEvent[] Snapshot() => [.. _events];
+    internal WrapperInvocationOperation[] OperationSnapshot() => [.. _operations];
+    private int ErrorId(Exception? error)
+    {
+        if (error is null) return 0;
+        if (!_errors.TryGetValue(error, out var id)) _errors.Add(error, id = _errors.Count + 1);
+        return id;
+    }
     internal sealed class Scope(int id, int parent, object request, CancellationToken token)
     {
         public readonly int Id = id, Parent = parent;
@@ -47,7 +61,7 @@ public sealed class CanonicalStreamWrapperEventProbe
         if (!ReferenceEquals(scope.Request, value.Request) || scope.Token != value.Token)
             throw new InvalidOperationException("An invocation received another request/token.");
         _events.Add(new(value.Kind, value.Stage, scope.Id, RequestId(scope.Request), TokenId(value.Token),
-            value.Sequence, StreamEventItems.Int32(value.Input), StreamEventItems.Int32(value.Output), value.Result, 0, null,
+            value.Sequence, StreamEventItems.Int32(value.Input), StreamEventItems.Int32(value.Output), value.Result, ErrorId(value.Error), value.Error?.GetType().FullName,
             scope.Parent, related, relatedSequence, enumeratorToken.HasValue ? TokenId(enumeratorToken.Value) : null));
     }
     private void Emit(string kind, string stage, object request, CancellationToken token,
@@ -63,6 +77,13 @@ public sealed class CanonicalStreamWrapperEventProbe
     public void Wrap(object request, CancellationToken token) => Emit("WrapperWrap", "W", request, token);
     public void WrapperBefore(object request, CancellationToken token) => Emit("WrapperBefore", "W", request, token);
     public void WrapperFinally(object request, CancellationToken token) => Emit("WrapperFinally", "W", request, token);
+    public void WrapperCatch(object request, CancellationToken token, int upstreamInvocation, Exception error)
+    {
+        if (!ReferenceEquals(error, SourceError)) throw new InvalidOperationException("The wrapper must catch the actual source failure.");
+        Add(Current, new("WrapperCatch", "W", request, token, Error: error), upstreamInvocation);
+    }
+    public void WrapperUpstreamClosed(object request, CancellationToken token, int upstreamInvocation)
+        => Add(Current, new("WrapperUpstreamClosed", "W", request, token), upstreamInvocation);
     public void WrapperDrop(object request, CancellationToken token, int item, int upstreamInvocation)
         => Add(Current, new("WrapperDrop", "W", request, token, Input: item), upstreamInvocation, _scopes[upstreamInvocation].SourceSequence);
     public void WrapperItem(object request, CancellationToken token, int item, int upstreamInvocation)
@@ -108,7 +129,15 @@ public sealed class CanonicalStreamWrapperEventProbe
             }
         }
         public ValueTask<bool> MoveNextAsync()
-        { p.Moves++; _index++; p.Add(scope, new("InnerMoveNext", "H", request, start, _index)); return new(_index < p.Input.Length); }
+        {
+            p.Moves++; _index++; p.Add(scope, new("InnerMoveNext", "H", request, start, _index));
+            if (scope.Id == p.FailInvocation && _index == 0)
+            {
+                p.Add(scope, new("Throw", "H.Move", request, start, _index, Error: p.SourceError));
+                return ValueTask.FromException<bool>(p.SourceError);
+            }
+            return new(_index < p.Input.Length);
+        }
         public ValueTask DisposeAsync()
         {
             p.Disposals++; p.Add(scope, new("InnerDisposeStart", "H", request, start));
@@ -148,12 +177,30 @@ public sealed class CanonicalStreamWrapperEventProbe
     private sealed class TrackedCursor(CanonicalStreamWrapperEventProbe owner, IAsyncEnumerator<int> inner, Scope scope) : IAsyncEnumerator<int>
     {
         public int Current { get { using var lease = owner.Enter(scope); return inner.Current; } }
-        public ValueTask<bool> MoveNextAsync() { using var lease = owner.Enter(scope); return inner.MoveNextAsync(); }
+        public ValueTask<bool> MoveNextAsync()
+        {
+            using var lease = owner.Enter(scope);
+            try
+            {
+                var value = inner.MoveNextAsync();
+                if (owner.FailInvocation != 0 && scope.Parent != 0)
+                    owner._operations.Add(new("Move", scope.Id, false, value.IsCompleted, value.IsCompletedSuccessfully, value.IsCanceled, value.IsFaulted, 0, null));
+                return value;
+            }
+            catch (Exception error)
+            {
+                if (owner.FailInvocation != 0 && scope.Parent != 0)
+                    owner._operations.Add(new("Move", scope.Id, true, false, false, false, false, owner.ErrorId(error), error.GetType().FullName));
+                throw;
+            }
+        }
         public ValueTask DisposeAsync()
         {
             using var lease = owner.Enter(scope);
             owner.Add(scope, new("EnumeratorDispose", scope.Parent == 0 ? "outer" : "upstream", scope.Request, scope.Token));
             var value = inner.DisposeAsync();
+            if (owner.FailInvocation != 0 && scope.Parent != 0)
+                owner._operations.Add(new("Dispose", scope.Id, false, value.IsCompleted, value.IsCompletedSuccessfully, value.IsCanceled, value.IsFaulted, 0, null));
             if (value.IsCompletedSuccessfully)
                 owner.Add(scope, new("EnumeratorDisposed", scope.Parent == 0 ? "outer" : "upstream", scope.Request, scope.Token));
             return value;

@@ -25,6 +25,21 @@ public sealed class ZendiatorConfiguration
     private readonly List<Type> _catalogMarkers = new();
     private readonly List<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)> _pipelines = new();
     private readonly List<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)> _routeHandlers = new();
+    private readonly List<(Type Request, Type Item)> _streamOutputs = new();
+
+    /// <summary>Declares an ordered Stream pipeline and its final item type. The request/handler contract retains the source item type.</summary>
+    public void StreamPipeline<TRequest, TFinal>(params Stage[] stages)
+    {
+        RecordPipeline(typeof(TRequest), DispatchFamily.Stream, stages);
+        _streamOutputs.Add((typeof(TRequest), typeof(TFinal)));
+    }
+    /// <summary>Declares request and final type patterns. An open final definition is closed only from the fully bound last item port.</summary>
+    /// <remarks>Final arguments are determined by dedicated map contracts, never inferred by parameter names or ordinal pairing with the request.</remarks>
+    public void StreamPipeline(Type request, Type final, params Stage[] stages)
+    {
+        ArgumentNullException.ThrowIfNull(request); ArgumentNullException.ThrowIfNull(final);
+        RecordPipeline(request, DispatchFamily.Stream, stages); _streamOutputs.Add((request, final));
+    }
 
     /// <summary>Declares stages in order, inferring an unambiguous dispatch family from selected handlers.</summary>
     public void Pipeline<TRequest>(params Stage[] stages) => RecordPipeline(typeof(TRequest), null, stages);
@@ -60,6 +75,12 @@ public sealed class ZendiatorConfiguration
         ThrowIfFrozen();
         ArgumentNullException.ThrowIfNull(rest);
         RecordHandlers(typeof(TRequest), family, new[] { first }.Concat(rest).ToArray());
+    }
+    /// <summary>Declares explicit receiver/factory entries for a closed request or handler-derived open request pattern.</summary>
+    public void Handlers(Type request, DispatchFamily family, HandlerEntry first, params HandlerEntry[] rest)
+    {
+        ThrowIfFrozen(); ArgumentNullException.ThrowIfNull(request); ArgumentNullException.ThrowIfNull(rest);
+        RecordHandlers(request, family, new[] { first }.Concat(rest).ToArray());
     }
 
     private void RecordHandlers(Type request, DispatchFamily family, HandlerEntry[] handlers)
@@ -230,7 +251,7 @@ public sealed class ZendiatorConfiguration
                 : null,
             _useLocalHandlers,
             _handlers.Select(static type => type.AssemblyQualifiedName ?? TypeName(type)).OrderBy(static name => name, StringComparer.Ordinal).ToList(),
-            _pipelines.ToList(), _routeHandlers.ToList(), _catalogMarkers.ToList());
+            _pipelines.ToList(), _routeHandlers.ToList(), _catalogMarkers.ToList(), _streamOutputs.ToList());
     }
 
     private static string TypeName(Type type) => type.IsGenericTypeDefinition ? type.FullName ?? type.Name : type.ToString();

@@ -12,7 +12,7 @@ internal static class CanonicalStreamPrototypeProjection
         if (row.Graph?.IsValid != true || schedule == null || composition.GeneratedNamespace == null ||
             composition.Errors.Count != 0 || composition.CompilerOwnsHandlerError || composition.ExternAliases.Count != 0 ||
             composition.Facts.Count != 1 || composition.Facts[0].Key != "IncompleteExecutionContract" ||
-            route.Family != BoundDispatchFamily.Stream || route.Handlers.Count != 1 || route.Stages.Count != 3) return null;
+            route.Family != BoundDispatchFamily.Stream || route.Handlers.Count != 1 || route.Stages.Count != 3 || route.StreamItemFlow != null) return null;
         var handler = route.Handlers[0];
         var call = handler.StreamEmission;
         if (call == null || handler.CompilerOwnsError || handler.ServiceOwnership != FusionOwnership.BorrowedService ||
@@ -24,7 +24,7 @@ internal static class CanonicalStreamPrototypeProjection
             var stage = route.Stages[i];
             if (stage.Kind != FusionStageKind.Hook || stage.CompilerOwnsError || stage.Sessions.Count != 0 ||
                 stage.ServiceOwnership != FusionOwnership.BorrowedService || stage.StreamEmission is not { } hook ||
-                hook.HookIsValueType || hook.Phase != expected[i]) return null;
+                hook.HookIsValueType || hook.Phase != expected[i] || hook.Completion != BoundCompletionKind.Synchronous) return null;
             // Validated graph positions are the ordered list, not a type/phase sort.
             var phase = hook.Phase == BoundCallbackPhase.Filter ? StreamPhase.Filter : StreamPhase.Map;
             if (schedule.Sites.Count(s => s.Id == new StreamSiteId(StreamProgram.Move, phase, i)) != 1) return null;

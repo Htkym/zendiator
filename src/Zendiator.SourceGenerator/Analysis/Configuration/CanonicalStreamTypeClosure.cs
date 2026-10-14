@@ -22,7 +22,25 @@ internal static class CanonicalStreamTypeClosure
     internal static Result Stage(INamedTypeSymbol type, INamedTypeSymbol request, ITypeSymbol item,
         FusionStageKind kind, Compilation compilation, CanonicalStreamOpenBinding? open = null) => Close(type, request, item,
         kind == FusionStageKind.Wrapper ? new[] { "Zendiator.IStreamWrapper`2" } :
-            new[] { "Zendiator.IStreamItemFilter`2", "Zendiator.IStreamItemMap`2" }, compilation, open);
+            new[] { "Zendiator.IStreamItemFilter`2", "Zendiator.IStreamItemMap`2",
+                "Zendiator.IAsyncStreamItemFilter`2", "Zendiator.IAsyncStreamItemMap`2",
+                "Zendiator.IStreamItemMap`3", "Zendiator.IAsyncStreamItemMap`3" }, compilation, open);
+
+    internal static Result Factory(INamedTypeSymbol type, INamedTypeSymbol request, INamedTypeSymbol receiver,
+        Compilation compilation, CanonicalStreamOpenBinding? open = null) => Close(type, request, receiver,
+        new[] { "Zendiator.IOwnedSessionFactory`2", "Zendiator.IBorrowedSessionFactory`2", "Zendiator.IAsyncOwnedSessionFactory`2", "Zendiator.IAsyncBorrowedSessionFactory`2" }, compilation, open);
+
+    internal static ITypeSymbol? Final(ITypeSymbol pattern, ITypeSymbol output, Compilation compilation, CanonicalStreamOpenBinding? open)
+    {
+        if (pattern is not INamedTypeSymbol { IsUnboundGenericType: true } unbound) return pattern;
+        var definition = unbound.OriginalDefinition;
+        var map = new Dictionary<ITypeParameterSymbol, ITypeSymbol>(SymbolEqualityComparer.Default);
+        if (HasGenericContainer(definition) || !Match(definition, output, definition, map, compilation) || definition.TypeParameters.Any(p => !map.ContainsKey(p))) return null;
+        var args = definition.TypeParameters.Select(p => map[p]).ToArray();
+        if (open == null && !GenericConstraints.SatisfiesConstraints(definition, args, compilation)) return null;
+        var closed = (INamedTypeSymbol)definition.Construct(args).WithNullableAnnotation(output.NullableAnnotation);
+        return open != null && open.ApplyConstraints(closed) != null ? null : closed;
+    }
 
     private static Result Close(INamedTypeSymbol type, INamedTypeSymbol request, ITypeSymbol item,
         string[] names, Compilation compilation, CanonicalStreamOpenBinding? open)

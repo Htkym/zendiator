@@ -20,13 +20,13 @@ internal static class SessionFactoryContractBinding
 
     internal static (BoundSessionModel? Session, bool CompilerOwnsError) Bind(INamedTypeSymbol factory,
         INamedTypeSymbol session, INamedTypeSymbol request, BoundDispatchFamily family, string anchor,
-        Compilation compilation, List<CompositionDiagnosticFact> facts)
+        Compilation compilation, List<CompositionDiagnosticFact> facts, CanonicalStreamOpenBinding? open = null)
     {
-        string Name(ITypeSymbol symbol) => CanonicalSymbolName.Display(symbol, compilation);
+        string Name(ITypeSymbol symbol) => open?.Display(symbol) ?? CanonicalSymbolName.Display(symbol, compilation);
         void Reject(string key, string message) => facts.Add(new(key, anchor, message));
         if (factory.TypeKind == TypeKind.Error) return (null, true);
         if (factory.IsRefLikeType) { Reject("RefLikeCapture", "A session factory cannot be captured as a DI service."); return (null, false); }
-        if (factory.IsAbstract || factory.IsStatic || factory.IsUnboundGenericType || HasOpenShape(factory) ||
+        if (factory.IsAbstract || factory.IsStatic || factory.IsUnboundGenericType || HasOpenShape(factory) && (open == null || !open.Contains(factory)) ||
             factory.TypeKind is not (TypeKind.Class or TypeKind.Struct))
         { Reject("UnsupportedGenerationShape", "A session factory requires a closed, concrete class or struct."); return (null, false); }
         if (!compilation.IsSymbolAccessibleWithin(factory, compilation.Assembly))
@@ -82,7 +82,7 @@ internal static class SessionFactoryContractBinding
                 SyncEmission = family == BoundDispatchFamily.SendSync && factory.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(factory,compilation.Assembly)
                     ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name, cleanupContractName)
                         { FactoryIsValueType = factory.IsValueType, IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource) } : null,
-                AsyncEmission = family == BoundDispatchFamily.SendAsync && factory.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(factory,compilation.Assembly)
+                AsyncEmission = family is (BoundDispatchFamily.SendAsync or BoundDispatchFamily.Stream) && factory.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(factory,compilation.Assembly)
                     ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name,
                         cleanupContractName, selected.Completion == BoundCompletionKind.ValueTask)
                         { FactoryIsValueType = factory.IsValueType, IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource) } : null }, false);

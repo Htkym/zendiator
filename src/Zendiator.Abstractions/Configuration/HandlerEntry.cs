@@ -14,6 +14,8 @@ public readonly record struct HandlerEntry
     public static HandlerEntry Service(Type type) => new(type ?? throw new ArgumentNullException(nameof(type)));
     /// <summary>Declares a marked handler session returned by one explicit Owned or Borrowed factory contract.</summary>
     public static HandlerEntry Session<TSession, TFactory>() where TSession : class => new(typeof(TSession), typeof(TFactory));
+    /// <summary>Declares literal receiver/factory definitions whose arguments are determined by the route contract.</summary>
+    public static HandlerEntry Session(Type session, Type factory) => new(session ?? throw new ArgumentNullException(nameof(session)), factory ?? throw new ArgumentNullException(nameof(factory)));
     /// <summary>Allows literal typeof service entries beside explicit session entries in the same ordered list.</summary>
     public static implicit operator HandlerEntry(Type type) => Service(type);
 }

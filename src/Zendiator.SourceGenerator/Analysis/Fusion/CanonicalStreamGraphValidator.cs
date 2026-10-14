@@ -12,6 +12,24 @@ internal static class CanonicalStreamGraphValidator
         if (route.ContractOrigin != FusionContractOrigin.NewCanonical) Reject("NewCanonicalOriginRequired");
         if (route.Family != BoundDispatchFamily.Stream || route.ResultKind != FusionResultKind.Item || route.Result == null) Reject("StreamItemShapeRequired");
         if (route.Handlers.Count != 1) Reject("SingleStreamHandlerRequired");
+        if (route.StreamItemFlow is { } items)
+        {
+            if (items.Stages.Count != route.Stages.Count || items.Source.Identity != route.Handlers.FirstOrDefault()?.Result || items.Final.Identity != route.Result)
+                Reject("StreamItemFlowEndpointMismatch");
+            var previous = items.Source;
+            for (var i = 0; i < route.Stages.Count; i++)
+            {
+                var flow = route.Stages[i].StreamItems;
+                if (flow == null || flow.Input != previous || i >= items.Stages.Count || flow != items.Stages[i])
+                    Reject("StreamItemConnectionMismatch", route.Stages[i].Anchor);
+                if (flow != null)
+                {
+                    if (route.Stages[i].Kind == FusionStageKind.Wrapper && flow.Input != flow.Output) Reject("WrapperItemBoundaryMismatch", route.Stages[i].Anchor);
+                    previous = flow.Output;
+                }
+            }
+            if (previous != items.Final) Reject("StreamFinalItemMismatch");
+        }
         foreach (var handler in route.Handlers)
         {
             CheckSessions(handler.Type, handler.ServiceOwnership, handler.Sessions, handler.Anchor, "Handler");
@@ -28,7 +46,8 @@ internal static class CanonicalStreamGraphValidator
             foreach (var callback in stage.Callbacks)
             {
                 if (stage.Kind == FusionStageKind.Hook && (callback.Phase is not (BoundCallbackPhase.Filter or BoundCallbackPhase.Map) ||
-                    callback.Completion != BoundCompletionKind.Synchronous || callback.RequiresSingleConsumption)) Reject("SynchronousSameItemHookRequired", stage.Anchor);
+                    callback.Completion is not (BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask) ||
+                    callback.RequiresSingleConsumption != (callback.Completion == BoundCompletionKind.ValueTask))) Reject("SameItemHookCompletionMismatch", stage.Anchor);
                 if (stage.Kind == FusionStageKind.Wrapper && (callback.Phase != BoundCallbackPhase.Wrapper ||
                     callback.Completion != BoundCompletionKind.Enumerable || callback.RequiresSingleConsumption)) Reject("StreamWrapperCompletionMismatch", stage.Anchor);
                 CheckParameters(callback, stage.Anchor);

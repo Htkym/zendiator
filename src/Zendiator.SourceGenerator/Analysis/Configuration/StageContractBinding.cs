@@ -30,12 +30,16 @@ internal static class StageContractBinding
         new("IAsyncSendWrapper`1", BoundCallbackPhase.Wrapper, BoundCompletionKind.ValueTask, VoidOnly: true, Wrapper: true),
         new("IStreamItemFilter`2", BoundCallbackPhase.Filter, BoundCompletionKind.Synchronous, Stream: true),
         new("IStreamItemMap`2", BoundCallbackPhase.Map, BoundCompletionKind.Synchronous, Stream: true),
+        new("IAsyncStreamItemFilter`2", BoundCallbackPhase.Filter, BoundCompletionKind.ValueTask, Stream: true),
+        new("IAsyncStreamItemMap`2", BoundCallbackPhase.Map, BoundCompletionKind.ValueTask, Stream: true),
+        new("IStreamItemMap`3", BoundCallbackPhase.Map, BoundCompletionKind.Synchronous, Stream: true),
+        new("IAsyncStreamItemMap`3", BoundCallbackPhase.Map, BoundCompletionKind.ValueTask, Stream: true),
         new("IStreamWrapper`2", BoundCallbackPhase.Wrapper, BoundCompletionKind.Enumerable, Wrapper: true, Stream: true)
     };
 
     internal static BoundStageModel Bind(INamedTypeSymbol type, FusionStageKind kind, string anchor,
         INamedTypeSymbol request, BoundDispatchFamily family, FusionResultKind resultKind, ITypeSymbol? result,
-        Compilation compilation, List<CompositionDiagnosticFact> facts, CanonicalStreamOpenBinding? open = null)
+        Compilation compilation, List<CompositionDiagnosticFact> facts, CanonicalStreamOpenBinding? open = null, bool typedStream = false)
     {
         var before = facts.Count;
         string Name(ITypeSymbol symbol) => open?.Display(symbol) ?? CanonicalSymbolName.Display(symbol, compilation);
@@ -45,6 +49,7 @@ internal static class StageContractBinding
         var asyncCallbacks = new Dictionary<BoundCallbackPhase, BoundAsyncHookCallbackEmission>();
         BoundWrapperEmission? wrapperEmission = null;
         BoundStreamHookEmission? streamEmission = null;
+        BoundStreamStageItems? streamItems = null;
         var capabilityCalls = new Dictionary<BoundCallbackPhase,CapabilityCallbackEmission>();
         CapabilityCallbackEmission? Capability(BoundCallbackPhase phase)=>capabilityCalls.TryGetValue(phase,out var value)?value:null;
         var compilerOwned = false;
@@ -94,17 +99,28 @@ internal static class StageContractBinding
         {
             if ((role.ResponseOnly && resultKind == FusionResultKind.Void) || (role.VoidOnly && resultKind != FusionResultKind.Void))
                 Reject("CapabilityResultShapeMismatch", $"Stage {Name(type)} has a capability for a different response/void shape.");
-            else if (contract.TypeArguments.Length == 2 && (result == null ||
-                RegistrationIdentity(contract.TypeArguments[1], compilation) != RegistrationIdentity(result, compilation)))
+            else if (contract.TypeArguments.Length >= 2 && (result == null || (typedStream && role.Stream
+                ? !SymbolEqualityComparer.IncludeNullability.Equals(contract.TypeArguments[1], result)
+                : RegistrationIdentity(contract.TypeArguments[1], compilation) != RegistrationIdentity(result, compilation))))
                 Reject("StageTypeMismatch", $"Stage {Name(type)} has a response/item type different from this route.");
+            if (role.Stream && contract.TypeArguments.Length == 3 && !typedStream)
+                Reject("UnsupportedGenerationShape", "A type-changing Stream map requires StreamPipeline<TRequest,TFinal>.");
+            var output = role.Stream && contract.TypeArguments.Length == 3 ? contract.TypeArguments[2] : result;
+            if (typedStream && role.Stream && result != null && output != null)
+            {
+                if (output.IsRefLikeType || HasOpenShape(output) && (open == null || !open.Contains(output)) || !(open?.Public(output) ?? Public(output)))
+                    Reject("UnsupportedGenerationShape", "Stream stage output requires a public, ownable item type with proved arguments.");
+                streamItems = new(new(Identity(result), Name(result), result.IsValueType), new(Identity(output), Name(output), output.IsValueType));
+            }
             if (sync && !role.Wrapper && role.Completion == BoundCompletionKind.ValueTask)
                 Reject("AsyncHookOnSyncRoute", $"Stage {Name(type)} supplies an asynchronous callback on {family}; blocking conversion is unsupported.");
             var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
             var implementation = members.Length == 1 ? type.FindImplementationForInterfaceMember(members[0]) as IMethodSymbol : null;
             if (implementation == null) { compilerOwned = true; continue; }
             if (role.Wrapper) wrapperEmission = new(Name(type),Name(contract),members[0].Name,role.Completion);
-            if (role.Stream && !role.Wrapper && role.Completion == BoundCompletionKind.Synchronous)
-                streamEmission = new(Name(type), Name(contract), members[0].Name, role.Phase, type.IsValueType);
+            if (role.Stream && !role.Wrapper && (role.Completion is BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask))
+                streamEmission = new(Name(type), Name(contract), members[0].Name, role.Phase, type.IsValueType, role.Completion)
+                { InputItemName = typedStream ? streamItems?.Input.Name : null, OutputItemName = typedStream ? streamItems?.Output.Name : null };
             if(!role.Wrapper&&!role.Stream)capabilityCalls[role.Phase]=new(Name(contract),members[0].Name,role.Completion);
             if (role.Completion == BoundCompletionKind.Synchronous)
                 syncCallbacks[role.Phase] = new(Name(contract), members[0].Name);
@@ -125,6 +141,7 @@ internal static class StageContractBinding
         BoundStageModel Value() => new(anchor, Identity(type), Name(type), kind, hierarchy,
             new(callbacks.OrderBy(c => c.Phase).ThenBy(c => c.Interface, StringComparer.Ordinal)), FusionOwnership.BorrowedService, compilerOwned)
         {
+            StreamItems = facts.Count == before && !compilerOwned && typedStream && callbacks.Count == 1 ? streamItems : null,
             StreamEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.Stream &&
                 kind == FusionStageKind.Hook && callbacks.Count == 1 ? streamEmission : null,
             StreamWrapperEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.Stream &&
@@ -153,6 +170,13 @@ internal static class StageContractBinding
                 capabilityCalls.Count>0&&capabilityCalls.Count<=4
                     ?new(Name(type),Capability(BoundCallbackPhase.Before),Capability(BoundCallbackPhase.Success),Capability(BoundCallbackPhase.Exception),Capability(BoundCallbackPhase.Finally)){HookIsValueType=type.IsValueType}:null
         };
+    }
+
+    internal static ITypeSymbol? StreamOutput(INamedTypeSymbol type, BoundStageModel stage)
+    {
+        if (stage.Callbacks.Count != 1 || stage.StreamItems == null) return null;
+        var contract = type.AllInterfaces.SingleOrDefault(i => Identity(i) == stage.Callbacks[0].Interface);
+        return contract == null ? null : contract.TypeArguments.Length == 3 ? contract.TypeArguments[2] : contract.TypeArguments[1];
     }
 
     internal static EquatableArray<string> DescribeHierarchy(INamedTypeSymbol type)

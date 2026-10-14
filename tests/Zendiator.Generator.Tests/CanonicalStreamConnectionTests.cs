@@ -18,6 +18,7 @@ public sealed partial class GeneratorTests
             input.Options.SpecificDiagnosticOptions.SetItem("ZEN0037", ReportDiagnostic.Suppress)));
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(input, out var output, out var diagnostics);
         var files = driver.GetRunResult().Results.Single().GeneratedSources;
+        var publicConnected = files.Any(f => f.HintName.StartsWith("Zendiator.Canonical.Stream.Public.", StringComparison.Ordinal));
         using var bytes = new MemoryStream(); var emitted = output.Emit(bytes);
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence))
@@ -28,7 +29,7 @@ public sealed partial class GeneratorTests
             File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
             File.WriteAllText(Path.Combine(folder, "connection.json"), System.Text.Json.JsonSerializer.Serialize(new
             {
-                label, suppress, candidateOnly = true, productionEnabled = false, emitted.Success,
+                label, suppress, candidateOnly = !publicConnected, productionEnabled = publicConnected, emitted.Success,
                 connections = StreamConnections(driver).Routes.Select(r => new { r.RouteKey, r.Anchor, kind = r.Kind.ToString(), r.Reason, hint = r.Candidate?.HintName ?? r.Canonical?.HintName }),
                 generatorDiagnostics = diagnostics.Select(d => new { d.Id, d.IsSuppressed, message = d.GetMessage(),
                     start = d.Location.SourceSpan.Start, length = d.Location.SourceSpan.Length,
@@ -40,12 +41,12 @@ public sealed partial class GeneratorTests
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         Assert.DoesNotContain(files, f => f.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal) ||
-            f.HintName.StartsWith("Zendiator.Composition.", StringComparison.Ordinal) || f.HintName.Contains("Interceptors", StringComparison.Ordinal));
+            f.HintName.StartsWith("Zendiator.Composition.", StringComparison.Ordinal) || !publicConnected && f.HintName.Contains("Interceptors", StringComparison.Ordinal));
         return new(driver, diagnostics);
     }
 
     [Fact]
-    public void Stream_connection_supported_shape_uses_lowered_rendered_candidate_without_public_registration()
+    public void Stream_connection_supported_shape_keeps_selected_candidate_behind_public_registration()
     {
         var run = RunStreamConnection(StreamGraphFixture(), "selected");
         var connection = Assert.Single(StreamConnections(run.Driver).Routes);
@@ -55,14 +56,15 @@ public sealed partial class GeneratorTests
         Assert.Equal(connection.Candidate, backend.StreamCandidate);
         var rendered = Assert.IsType<CanonicalRouteText>(Assert.Single(run.Driver.GetRunResult().Results.Single()
             .TrackedSteps["CanonicalRouteSourceEntry"].SelectMany(s => s.Outputs)).Value);
-        Assert.Empty(rendered.Source); // No public Stream route is accepted.
+        Assert.Empty(rendered.Source); // The facade connects separately without replacing candidate text.
         var generated = Assert.Single(run.Driver.GetRunResult().Results.Single().GeneratedSources,
             s => s.HintName == connection.Candidate!.HintName);
         Assert.Equal(rendered.StreamCandidateFile!.Source, generated.SourceText.ToString());
         Assert.Contains("RunSegment", generated.SourceText.ToString());
         Assert.DoesNotContain("CanonicalStreamItemReference", generated.SourceText.ToString());
-        Assert.Contains("connected to route lowering and rendering", Assert.Single(run.Diagnostics).GetMessage());
-        Assert.Equal("ZEN0037", Assert.Single(run.Diagnostics).Id);
+        Assert.Contains("connected to route lowering and rendering", connection.Reason);
+        Assert.Empty(run.Diagnostics);
+        Assert.Single(run.Driver.GetRunResult().Results.Single().GeneratedSources, f => f.HintName.StartsWith("Zendiator.Canonical.Stream.Public.", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -146,7 +148,8 @@ public sealed partial class GeneratorTests
         var source = canonical ? StreamGraphFixture("Stage.Hook<DoubleItem>(),Stage.Hook<Positive>(),Stage.Hook<Small>()") : StreamGraphFixture();
         var normal = RunStreamConnection(source, canonical ? "suppression-canonical-before" : "suppression-selected-before");
         var suppressed = RunStreamConnection(source, canonical ? "suppression-canonical-after" : "suppression-selected-after", suppress: true);
-        Assert.Equal("ZEN0037", Assert.Single(normal.Diagnostics).Id);
+        if (canonical) Assert.Equal("ZEN0037", Assert.Single(normal.Diagnostics).Id);
+        else Assert.Empty(normal.Diagnostics);
         Assert.DoesNotContain(suppressed.Diagnostics, d => d.Id == "ZEN0037" && !d.IsSuppressed);
         Assert.Equal(StreamConnections(normal.Driver), StreamConnections(suppressed.Driver));
         var before = normal.Driver.GetRunResult().Results.Single().GeneratedSources.OrderBy(f => f.HintName).Select(f => (f.HintName, f.SourceText.ToString())).ToArray();

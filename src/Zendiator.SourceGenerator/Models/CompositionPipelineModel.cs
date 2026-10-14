@@ -18,6 +18,7 @@ internal sealed record BoundStageModel(string Anchor, string Type, string Name, 
     public HookCapabilityEmission? Capabilities { get; init; }
     public BoundStreamHookEmission? StreamEmission { get; init; }
     public BoundWrapperEmission? StreamWrapperEmission { get; init; }
+    public BoundStreamStageItems? StreamItems { get; init; }
 }
 internal sealed record BoundHandlerModel(string Anchor, string Type, string Name, string Contract, string? Result,
     string Implementation, FusionOwnership ServiceOwnership, bool CompilerOwnsError, BoundCallbackModel? Callback)
@@ -48,7 +49,22 @@ internal sealed record BoundPipelineModel(string Anchor, string Request, string 
     public bool HasEmptyPipeline { get; init; }
     public BoundDispatchFamily? PipelineFamily { get; init; }
     public BoundStreamGenericEmission? StreamGeneric { get; init; }
+    public BoundStreamItemFlow? StreamItemFlow { get; init; }
+    public BoundStreamOpenRegistration? StreamOpenRegistration { get; init; }
+    public EquatableArray<RegistrationStageEmission> StreamDeclaredStages { get; init; }
 }
+// Registration definitions are captured from frontend symbols, independently of execution patterns.
+internal sealed record BoundStreamOpenRegistration(string RequestDefinitionName, string HandlerDefinitionName,
+    EquatableArray<string> HandlerMembership, EquatableArray<RegistrationStageEmission> Stages)
+{
+    public string? FinalDefinitionName { get; init; }
+    public string? HandlerFactoryDefinitionName { get; init; }
+}
+// Nullable-aware identities and callable C# names are retained separately from receiver shape.
+internal sealed record BoundStreamItemType(string Identity, string Name, bool IsValueType);
+internal sealed record BoundStreamStageItems(BoundStreamItemType Input, BoundStreamItemType Output);
+internal sealed record BoundStreamItemFlow(BoundStreamItemType Source, BoundStreamItemType Final,
+    EquatableArray<BoundStreamStageItems> Stages);
 // Symbols stay in the frontend. Generic declarations participate in value equality and rendering.
 internal sealed record BoundStreamGenericEmission(EquatableArray<string> Parameters, EquatableArray<string> Constraints)
 {
