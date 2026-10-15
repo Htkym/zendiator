@@ -81,10 +81,10 @@ internal static class SessionFactoryContractBinding
         {
             SuppliesCallbackReceiver = true,
             FactoryHierarchy = StageContractBinding.DescribeHierarchy(factory),
-            SyncEmission = family == BoundDispatchFamily.SendSync && factory.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(factory, compilation.Assembly)
+            SyncEmission = family is (BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync) && factory.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(factory, compilation.Assembly)
                     ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name, cleanupContractName)
                     { FactoryIsValueType = factory.IsValueType, IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource) } : null,
-            AsyncEmission = family is (BoundDispatchFamily.SendAsync or BoundDispatchFamily.Stream) && factory.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(factory, compilation.Assembly)
+            AsyncEmission = family is (BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync or BoundDispatchFamily.Stream) && factory.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(factory, compilation.Assembly)
                     ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name,
                         cleanupContractName, selected.Completion == BoundCompletionKind.ValueTask)
                     { FactoryIsValueType = factory.IsValueType, IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource) } : null

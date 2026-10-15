@@ -32,21 +32,21 @@ internal static class CanonicalSendAllSyncSourceEmitter
                         global::System.ArgumentNullException.ThrowIfNull(request);
                         cancellationToken.ThrowIfCancellationRequested();
             """);
-        if (response != null) b.AppendLine($"            var results = new {response}[{c.Handlers.Count}];");
-        for (var i = 0; i < c.Handlers.Count; i++) b.AppendLine($"            {(response == null ? "" : $"results[{i}] = ")}Branch{i}(request, cancellationToken);");
+        if (response != null) b.AppendLine($"            var results = new {response}[{c.Branches.Count}];");
+        for (var i = 0; i < c.Branches.Count; i++) b.AppendLine($"            {(response == null ? "" : $"results[{i}] = ")}Branch{i}(request, cancellationToken);");
         if (response != null) b.AppendLine("            return results;");
         b.AppendLine("        }");
         if (response != null) b.AppendLine($$"""
                     public int SendAll({{request}} request, scoped global::System.Span<{{response}}> destination, global::System.Threading.CancellationToken cancellationToken = default)
                     {
                         global::System.ArgumentNullException.ThrowIfNull(request);
-                        if (destination.Length < {{c.Handlers.Count}}) throw new global::System.ArgumentException("Destination is too short.", nameof(destination));
+                        if (destination.Length < {{c.Branches.Count}}) throw new global::System.ArgumentException("Destination is too short.", nameof(destination));
                         var results = SendAll(request, cancellationToken);
                         global::System.MemoryExtensions.AsSpan(results).CopyTo(destination);
                         return results.Length;
                     }
             """);
-        for (var i = 0; i < c.Handlers.Count; i++)
+        for (var i = 0; i < c.Branches.Count; i++)
         {
             b.AppendLine($$"""
                     private {{response ?? "void"}} Branch{{i}}({{request}} request, global::System.Threading.CancellationToken cancellationToken)
@@ -54,7 +54,7 @@ internal static class CanonicalSendAllSyncSourceEmitter
                         global::System.ArgumentNullException.ThrowIfNull(request);
                         cancellationToken.ThrowIfCancellationRequested();
                 """);
-            CanonicalSyncSourceEmitter.EmitHookSend(b, registration with { Handler = c.Handlers[i] });
+            CanonicalSyncSourceEmitter.EmitHookSend(b, c.Branches[i]);
             b.AppendLine("        }");
         }
         b.AppendLine("    }");

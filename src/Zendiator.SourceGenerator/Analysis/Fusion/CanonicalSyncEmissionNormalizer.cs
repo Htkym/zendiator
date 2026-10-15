@@ -65,7 +65,7 @@ internal static class CanonicalSyncEmissionNormalizer
         return new(new(output));
     }
 
-    private static BoundSyncFactoryEmission? SyncFactory(BoundSessionModel session)
+    internal static BoundSyncFactoryEmission? SyncFactory(BoundSessionModel session)
     {
         if (!session.SuppliesCallbackReceiver || session.SyncEmission == null || session.Acquire.Completion != BoundCompletionKind.Synchronous ||
             session.Ownership is not (FusionOwnership.OwnedSession or FusionOwnership.BorrowedResource) ||

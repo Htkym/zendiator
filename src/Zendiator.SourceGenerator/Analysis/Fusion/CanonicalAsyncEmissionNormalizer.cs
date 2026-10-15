@@ -60,7 +60,7 @@ internal static class CanonicalAsyncEmissionNormalizer
         return new(new(output));
     }
 
-    private static BoundAsyncFactoryEmission? AsyncFactory(BoundSessionModel session)
+    internal static BoundAsyncFactoryEmission? AsyncFactory(BoundSessionModel session)
     {
         if (!session.SuppliesCallbackReceiver || session.AsyncEmission is not { } bound ||
             session.Acquire.Completion is not (BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask) ||

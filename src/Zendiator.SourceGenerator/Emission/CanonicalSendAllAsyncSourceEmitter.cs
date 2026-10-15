@@ -34,11 +34,11 @@ internal static class CanonicalSendAllAsyncSourceEmitter
                     {
                         cancellationToken.ThrowIfCancellationRequested();
             """);
-        if (response != null) b.AppendLine($"            var results = new {response}[{c.Handlers.Count}];");
-        for (var i = 0; i < c.Handlers.Count; i++) b.AppendLine($"            {(response == null ? "" : $"results[{i}] = ")}await Branch{i}Async(request, cancellationToken).ConfigureAwait(false);");
+        if (response != null) b.AppendLine($"            var results = new {response}[{c.Branches.Count}];");
+        for (var i = 0; i < c.Branches.Count; i++) b.AppendLine($"            {(response == null ? "" : $"results[{i}] = ")}await Branch{i}Async(request, cancellationToken).ConfigureAwait(false);");
         if (response != null) b.AppendLine("            return results;");
         b.AppendLine("        }");
-        for (var i = 0; i < c.Handlers.Count; i++)
+        for (var i = 0; i < c.Branches.Count; i++)
         {
             b.AppendLine($$"""
                     private async {{branchResult}} Branch{{i}}Async({{request}} request, global::System.Threading.CancellationToken cancellationToken)
@@ -47,7 +47,7 @@ internal static class CanonicalSendAllAsyncSourceEmitter
                         cancellationToken.ThrowIfCancellationRequested();
                 """);
             if (response != null) b.AppendLine($"            {response} response;");
-            CanonicalAsyncSourceEmitter.EmitHookScope(b, branch with { Handler = c.Handlers[i] }, 0, "request");
+            CanonicalAsyncSourceEmitter.EmitHookScope(b, c.Branches[i], 0, "request");
             if (response != null) b.AppendLine("            return response;");
             b.AppendLine("        }");
         }
