@@ -23,7 +23,7 @@ public sealed partial class GeneratorTests
 
     private static BoundPipelineModel SessionRoute(bool sync = false, bool all = false, bool isVoid = false)
     {
-        var route = Graph(all ? BindLists(GraphFixture(sync, all, isVoid), "ZEN0037") : BindAcceptedSendLists(GraphFixture(sync, all, isVoid))).Contract;
+        var route = Graph(BindAcceptedSendLists(GraphFixture(sync, all, isVoid))).Contract;
         var owned = SessionBinding(sync);
         return route with
         {
@@ -65,8 +65,8 @@ public sealed partial class GeneratorTests
         Assert.All(schedule.SessionCalls, call => { Assert.True(call.PreserveIdentityAndToken); Assert.True(call.ReplacePreviousError); Assert.False(call.Aggregate); });
         Assert.All(schedule.Awaits.Where(a => a.Producer.Phase is SendExecutionPhase.AcquireSession or SendExecutionPhase.CleanupSession),
             a => { Assert.True(a.ConsumeOnce); Assert.True(a.ConfigureAwaitFalse); });
-        // Normal input has no implicit session acquisitions; SendAll remains blocked.
-        var frontend = Graph(all ? BindLists(GraphFixture(sync, all, isVoid), "ZEN0037") : BindAcceptedSendLists(GraphFixture(sync, all, isVoid)));
+        // Accepted frontend input still has no implicit session acquisitions.
+        var frontend = Graph(BindAcceptedSendLists(GraphFixture(sync, all, isVoid)));
         Assert.All(frontend.Contract.Stages, stage => Assert.Empty(stage.Sessions));
         Assert.Empty(frontend.Schedule!.SessionCalls);
     }

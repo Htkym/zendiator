@@ -49,13 +49,12 @@ public sealed partial class GeneratorTests
     [InlineData(false, true, true)]
     [InlineData(true, true, false)]
     [InlineData(true, true, true)]
-    public void Canonical_send_graph_binds_real_frontend_for_each_family_and_shape_but_blocks_runtime_emission(bool sync, bool all, bool isVoid)
+    public void Canonical_send_graph_binds_real_frontend_and_accepted_emission_for_each_family_and_shape(bool sync, bool all, bool isVoid)
     {
-        var driver = all ? BindLists(GraphFixture(sync, all, isVoid), "ZEN0037") : BindAcceptedSendLists(GraphFixture(sync, all, isVoid));
+        var driver = BindAcceptedSendLists(GraphFixture(sync, all, isVoid));
         var graph = Graph(driver);
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         var schedule = Assert.IsType<CanonicalSendExecutionSchedule>(graph.Schedule);
-        if (all) Assert.Contains("runtime generation and equivalence are pending", Assert.Single(driver.GetRunResult().Diagnostics).GetMessage());
         Assert.Equal(all ? 2 : 1, graph.Contract.Handlers.Count);
         Assert.All(graph.Contract.Handlers, h => Assert.Equal(sync ? BoundCompletionKind.Synchronous : BoundCompletionKind.ValueTask, h.Callback!.Completion));
         Assert.All(schedule.Owners, o => Assert.Equal(FusionCleanupKind.None, o.Cleanup));
@@ -129,7 +128,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Send_graph_rejects_double_await_wrong_resume_result_and_ownership_or_state_aliases()
     {
-        var graph = Graph(BindLists(GraphFixture(all: true), "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(GraphFixture(all: true)));
         var schedule = graph.Schedule!;
         var awaitSite = schedule.Awaits[0];
         AssertRejected(schedule with { Awaits = new(schedule.Awaits.Append(awaitSite)) }, "DuplicateAwaitConsumer");
@@ -194,7 +193,8 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Actual_frontend_edits_invalidate_graph_capability_order_constraints_and_handler_family_while_trivia_refreshes_locations()
     {
-        var source = GraphFixture(all: true); // Keep location/cache coverage on the still-unsupported SendAll family.
+        // Two distinct wrappers keep runtime emission unsupported while the graph stays valid.
+        var source = GraphFixture(all: true).Replace("Stage.Wrapper<Opaque>()", "Stage.Wrapper<Opaque>(),Stage.Wrapper<OtherOpaque>()") + OtherOpaqueListStage;
         var driver = BindLists(source, "ZEN0037");
         var original = Graph(driver);
         var diagnostic = Assert.Single(driver.GetRunResult().Diagnostics);
@@ -209,12 +209,13 @@ public sealed partial class GeneratorTests
         Assert.Equal(original, Graph(driver));
         GraphReason(driver, IncrementalStepRunReason.Cached);
         foreach (var changed in new[] {
-            source.Replace("Stage.Hook<Full<string>>(),Stage.Wrapper<Opaque>(),Stage.Hook<Tail<string>>()", "Stage.Hook<Tail<string>>(),Stage.Wrapper<Opaque>(),Stage.Hook<Full<string>>()"),
+            source.Replace("Stage.Hook<Full<string>>(),Stage.Wrapper<Opaque>(),Stage.Wrapper<OtherOpaque>(),Stage.Hook<Tail<string>>()", "Stage.Hook<Tail<string>>(),Stage.Wrapper<Opaque>(),Stage.Wrapper<OtherOpaque>(),Stage.Hook<Full<string>>()"),
             source.Replace("where T : class", "where T : notnull"),
             source.Replace("ISendExceptionObserver<Ping>, IAsyncSendFinallyObserver<Ping>", "ISendExceptionObserver<Ping>, ISendFinallyObserver<Ping>")
                 .Replace("public ValueTask FinallyAsync(Ping r,SendExitInfo e,CancellationToken c)=>default;", "public void Finally(Ping r,SendExitInfo e,CancellationToken c){}"),
             GraphFixture(sync: true) })
         {
+            Assert.NotEqual(source, changed);
             driver = driver.RunGenerators(Compilation(changed));
             Assert.NotEqual(original, Graph(driver));
             Assert.True(Graph(driver).IsValid);
@@ -246,7 +247,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Request_token_transfers_reject_wrong_sources_destinations_and_before_failure_propagation()
     {
-        var graph = Graph(BindLists(GraphFixture(all: true), "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(GraphFixture(all: true)));
         var schedule = graph.Schedule!;
         var before = Assert.Single(schedule.Transfers, t => t.At == Site(0, 0, SendExecutionPhase.Before));
         Assert.Equal(new SendValueReference(Scope(0, 0), SendValueKind.BeforeResult), before.Source);
@@ -319,7 +320,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Conditional_branch_paths_stop_on_failure_and_publish_only_after_all_branches_succeed()
     {
-        var graph = Graph(BindLists(GraphFixture(sync: true, all: true), "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(GraphFixture(sync: true, all: true)));
         var schedule = graph.Schedule!;
         var first = Point("operation", Site(0, -1, SendExecutionPhase.BranchStart));
         var second = Point("operation", Site(1, -1, SendExecutionPhase.BranchStart));
@@ -410,7 +411,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Span_commit_must_precede_return_at_return_point_even_if_success_exit_later_observes_commit()
     {
-        var graph = Graph(BindLists(GraphFixture(sync: true, all: true), "ZEN0037"));
+        var graph = Graph(BindAcceptedSendLists(GraphFixture(sync: true, all: true)));
         var schedule = graph.Schedule!;
         Assert.Empty(CanonicalSendControlValidator.Validate(graph.Contract, schedule));
         var last = Point("operation", Site(1, -1, SendExecutionPhase.BranchStart));

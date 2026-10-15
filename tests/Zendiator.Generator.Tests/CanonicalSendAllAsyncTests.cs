@@ -120,11 +120,14 @@ public sealed partial class GeneratorTests
             }
             """.Replace("__CONFIG__", config).Replace("__CONSUMER__", gate ? "" : SendAllAsyncConsumer)
             .Replace("__NEGATIVE__", gate ? """
+                public sealed class RejectedOpaque:IAsyncSendWrapper<D.Ping,int>{
+                    public ValueTask<int> InvokeAsync<TNext>(D.Ping r,TNext next,CancellationToken t)where TNext:IAsyncSendContinuation<D.Ping,int> =>next.InvokeAsync(r,t);
+                }
                 [ZendiatorComposition("all-async-rejected")]public sealed class Rejected;
                 public static class RejectedBridge{
                     public static IServiceCollection RegisterRejected(IServiceCollection s)=>s.AddZendiator<Rejected>(c=>{__BAD__});
                 } /* rejected end */
-                """.Replace("__BAD__", config.Replace("Stage.Hook<D.Hook>()", "Stage.Hook<D.Hook>(),Stage.Wrapper<D.Opaque>()")) : "");
+                """.Replace("__BAD__", config.Replace("Stage.Hook<D.Hook>()", "Stage.Hook<D.Hook>(),Stage.Wrapper<D.Opaque>(),Stage.Wrapper<RejectedOpaque>()")) : "");
     }
 
     private const string SendAllAsyncConsumer = """
@@ -237,7 +240,7 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
-    public void SendAllAsync_gate_accepts_response_void_in_common_composition_and_rejects_opaque_route_as_a_whole()
+    public void SendAllAsync_gate_accepts_response_void_in_common_composition_and_rejects_multiple_wrapper_route_as_a_whole()
     {
         var source = SendAllAsyncSource(true);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllAsyncGate_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);

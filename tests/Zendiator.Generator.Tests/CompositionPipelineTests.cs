@@ -18,6 +18,11 @@ public sealed partial class GeneratorTests
             public ValueTask<int> InvokeAsync<N>(Ping r, N n, CancellationToken c) where N : IAsyncSendContinuation<Ping,int> => n.InvokeAsync(r,c);
         }
         """;
+    private const string OtherOpaqueListStage = """
+        public sealed class OtherOpaque : IAsyncSendWrapper<Ping,int> {
+            public ValueTask<int> InvokeAsync<N>(Ping r,N n,CancellationToken c) where N : IAsyncSendContinuation<Ping,int> => n.InvokeAsync(r,c);
+        }
+        """;
     private static string ListFixture(string body, bool defaultComposition = false) => Head + Request + Handler +
         string.Concat(new[] { "A", "B", "C" }.Select(n => Handler.Replace("class Handler", "class " + n)
             .Replace("public sealed class " + n, "[ZendiatorHandler] public sealed class " + n))) + ListStages +
@@ -44,9 +49,17 @@ public sealed partial class GeneratorTests
         AssertCanonicalOutputRoles(generated, routes: routes, legacy: legacy);
         foreach (var route in selection.Pipelines)
         {
-            Assert.True(route.Family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync);
+            Assert.True(route.Family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAllAsync);
             var body = string.Concat(generated.Where(IsCanonicalRoute).Select(s => s.SourceText.ToString()));
-            Assert.Contains((route.Family == BoundDispatchFamily.SendSync ? "Send(" : "SendAsync(") + route.RequestName + " request", body);
+            var method = route.Family switch
+            {
+                BoundDispatchFamily.SendSync => "Send(",
+                BoundDispatchFamily.SendAsync => "SendAsync(",
+                BoundDispatchFamily.SendAllSync => "SendAll(",
+                BoundDispatchFamily.SendAllAsync => "SendAllAsync(",
+                _ => throw new InvalidOperationException()
+            };
+            Assert.Contains(method + route.RequestName + " request", body);
         }
         return driver;
     }
@@ -67,11 +80,12 @@ public sealed partial class GeneratorTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Ordered_lists_bind_exact_branches_and_per_phase_completion_without_execution_sites(bool defaultComposition)
+    public void Ordered_lists_preserve_branches_and_phases_with_named_emission_and_default_rejection(bool defaultComposition)
     {
         const string body = "c.Pipeline<Ping>(Stage.Hook<Mixed<string>>(), Stage.Wrapper(typeof(Opaque)), Stage.Hook<Last>()); " +
             "c.Handlers<Ping>(DispatchFamily.SendAllAsync, typeof(B), typeof(A));";
-        var driver = BindLists(ListFixture(body, defaultComposition), "ZEN0037");
+        var source = ListFixture(body, defaultComposition);
+        var driver = defaultComposition ? BindLists(source, "ZEN0037") : BindAcceptedSendLists(source);
         var selection = Selection(driver);
         Assert.Equal(defaultComposition ? 3 : 2, selection.Handlers.Count);
         Assert.DoesNotContain(selection.Handlers.Where(_ => !defaultComposition), h => h.Definition.Name == "global::App.C");
@@ -93,7 +107,7 @@ public sealed partial class GeneratorTests
         Assert.All(route.Stages, s => Assert.Equal(FusionOwnership.BorrowedService, s.ServiceOwnership));
         Assert.All(route.Handlers, h => Assert.Equal(FusionOwnership.BorrowedService, h.ServiceOwnership));
         Assert.Contains("global::App.Handler", LegacySource(driver.GetRunResult()));
-        var explicitLocal = BindLists(ListFixture("c.UseLocalHandlers(); " + body), "ZEN0037");
+        var explicitLocal = BindAcceptedSendLists(ListFixture("c.UseLocalHandlers(); " + body));
         Assert.Equal(3, Selection(explicitLocal).Handlers.Count);
         Assert.Equal(route.Handlers.Select(h => h.Name), Assert.Single(Selection(explicitLocal).Pipelines).Handlers.Select(h => h.Name));
     }
@@ -102,8 +116,8 @@ public sealed partial class GeneratorTests
     public void List_metadata_caches_bodies_and_trivia_but_tracks_order_capabilities_constraints_and_current_sources()
     {
         const string body = "c.Handlers<Ping>(DispatchFamily.SendAllAsync, typeof(A), typeof(B)); " +
-            "c.Pipeline<Ping>(Stage.Hook<Mixed<string>>(), Stage.Wrapper<Opaque>(), Stage.Hook<Last>());";
-        var source = ListFixture(body);
+            "c.Pipeline<Ping>(Stage.Hook<Mixed<string>>(), Stage.Wrapper<Opaque>(), Stage.Wrapper<OtherOpaque>(), Stage.Hook<Last>());";
+        var source = ListFixture(body) + OtherOpaqueListStage;
         var driver = BindLists(source, "ZEN0037");
         var original = Selection(driver);
         var diagnostic = Assert.Single(driver.GetRunResult().Diagnostics);
@@ -118,11 +132,12 @@ public sealed partial class GeneratorTests
         Assert.Equal(original, Selection(driver));
         SelectionReason(driver, IncrementalStepRunReason.Cached);
         foreach (var changed in new[] {
-            source.Replace("Stage.Hook<Mixed<string>>(), Stage.Wrapper<Opaque>(), Stage.Hook<Last>()", "Stage.Hook<Last>(), Stage.Wrapper<Opaque>(), Stage.Hook<Mixed<string>>()"),
+            source.Replace("Stage.Hook<Mixed<string>>(), Stage.Wrapper<Opaque>(), Stage.Wrapper<OtherOpaque>(), Stage.Hook<Last>()", "Stage.Hook<Last>(), Stage.Wrapper<Opaque>(), Stage.Wrapper<OtherOpaque>(), Stage.Hook<Mixed<string>>()"),
             source.Replace("where T : class", "where T : notnull"),
             source.Replace("IAsyncSendFinallyObserver<Ping>", "ISendFinallyObserver<Ping>")
                 .Replace("public ValueTask FinallyAsync(Ping r, SendExitInfo e, CancellationToken c) => default;", "public void Finally(Ping r, SendExitInfo e, CancellationToken c) {}") })
         {
+            Assert.NotEqual(source, changed);
             driver = driver.RunGenerators(Compilation(changed));
             Assert.NotEqual(original, Selection(driver));
             SelectionReason(driver, IncrementalStepRunReason.Modified);
@@ -195,7 +210,7 @@ public sealed partial class GeneratorTests
             .Replace("ValueTask<int> HandleAsync", "ValueTask HandleAsync").Replace("=> new(1)", "=> default")
             .Replace("IAsyncSendWrapper<Ping,int>", "IAsyncSendWrapper<Ping>").Replace("IAsyncSendContinuation<Ping,int>", "IAsyncSendContinuation<Ping>")
             .Replace("ValueTask<int> InvokeAsync", "ValueTask InvokeAsync");
-        var boundVoid = BindLists(@void, "ZEN0037");
+        var boundVoid = BindAcceptedSendLists(@void);
         Assert.Equal(FusionResultKind.Void, Assert.Single(Selection(boundVoid).Pipelines).ResultKind);
         Assert.Null(Selection(boundVoid).Pipelines[0].Result);
     }
@@ -311,7 +326,7 @@ public sealed partial class GeneratorTests
                 var required = sync ? "ISendContinuation" : "IAsyncSendContinuation";
                 string Body(string wrapper) => $"c.Handlers<Ping>(DispatchFamily.{family},typeof(A)); " +
                     $"c.Pipeline<Ping>(DispatchFamily.{family},Stage.Hook<Last>(),Stage.Wrapper<{wrapper}>());";
-                var driver = sendAll ? BindLists(FamilyFixture(Body(compatible), sync, isVoid), "ZEN0037") : BindAcceptedSendLists(FamilyFixture(Body(compatible), sync, isVoid));
+                var driver = BindAcceptedSendLists(FamilyFixture(Body(compatible), sync, isVoid));
                 var route = Assert.Single(Selection(driver).Pipelines);
                 Assert.Equal(isVoid ? FusionResultKind.Void : FusionResultKind.Response, route.ResultKind);
                 Assert.Equal(BoundCompletionKind.Synchronous, Assert.Single(route.Stages[0].Callbacks).Completion);

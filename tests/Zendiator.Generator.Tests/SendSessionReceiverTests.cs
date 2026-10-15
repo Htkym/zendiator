@@ -47,7 +47,8 @@ public sealed partial class GeneratorTests
         string family, bool owned, bool asyncFactory, bool wrapper, bool isVoid)
     {
         var source = SendReceiverFixture(family, owned, asyncFactory, wrapper, isVoid);
-        var driver = family is "SendSync" or "SendAsync" ? BindAcceptedSendLists(source) : BindLists(source, "ZEN0037");
+        var acceptsRuntime = family is "SendSync" or "SendAsync" || (wrapper && (family is "SendAllSync" or "SendAllAsync"));
+        var driver = acceptsRuntime ? BindAcceptedSendLists(source) : BindLists(source, "ZEN0037");
         var graph = Graph(driver);
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         var schedule = graph.Schedule!;
