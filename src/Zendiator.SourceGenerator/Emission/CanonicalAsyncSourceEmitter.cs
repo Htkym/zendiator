@@ -14,12 +14,14 @@ internal static class CanonicalAsyncSourceEmitter
         {
             var h = c.Handler;
             var result = h.ResultName == null ? "global::System.Threading.Tasks.ValueTask" : "global::System.Threading.Tasks.ValueTask<" + h.ResultName + ">";
+            var typeParameters = c.Generic?.TypeParameters ?? "";
+            var constraints = c.Generic?.TypeConstraints ?? "";
             b.AppendLine($$"""
                 namespace {{c.Namespace}}
                 {
                     public interface IZendiator
                     {
-                        {{result}} SendAsync({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default);
+                        {{result}} SendAsync{{typeParameters}}({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default){{constraints}};
                     }
                     public sealed class Zendiator : IZendiator
                     {
@@ -29,12 +31,12 @@ internal static class CanonicalAsyncSourceEmitter
                             global::System.ArgumentNullException.ThrowIfNull(provider);
                             _provider = provider;
                         }
-                        public {{result}} SendAsync({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default)
+                        public {{result}} SendAsync{{typeParameters}}({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default){{constraints}}
                         {
                             {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
-                            return ExecuteAsync(request, cancellationToken);
+                            return ExecuteAsync{{typeParameters}}(request, cancellationToken);
                         }
-                        private async {{result}} ExecuteAsync({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken)
+                        private async {{result}} ExecuteAsync{{typeParameters}}({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken){{constraints}}
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                 """);

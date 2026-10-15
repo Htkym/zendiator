@@ -11,12 +11,14 @@ namespace Zendiator.SourceGenerator;
 internal static class CanonicalStreamTypeClosure
 {
     internal sealed record Result(INamedTypeSymbol? Type, string? Error);
-    internal static Result SendSyncHandler(INamedTypeSymbol type, INamedTypeSymbol request,
-        Compilation compilation, CanonicalStreamOpenBinding open) => Close(type, request, null,
-        new[] { ContractNames.SyncHandler, ContractNames.SyncVoidHandler }, compilation, open, requestOnly: true);
+    internal static Result SendHandler(INamedTypeSymbol type, INamedTypeSymbol request,
+        Compilation compilation, CanonicalStreamOpenBinding open, bool async) => Close(type, request, null,
+        async ? new[] { ContractNames.Handler, ContractNames.VoidHandler } : new[] { ContractNames.SyncHandler, ContractNames.SyncVoidHandler }, compilation, open, requestOnly: true);
 
-    internal static Result SendSyncHook(INamedTypeSymbol type, INamedTypeSymbol request,
-        Compilation compilation, CanonicalStreamOpenBinding open) => Close(type, request, null,
+    internal static Result SendHook(INamedTypeSymbol type, INamedTypeSymbol request,
+        Compilation compilation, CanonicalStreamOpenBinding open, bool async) => Close(type, request, null,
+        async ? new[] { "Zendiator.IAsyncSendRequestTransform`1", "Zendiator.IAsyncSendResponseTransform`2", "Zendiator.IAsyncSendSuccessObserver`1",
+            "Zendiator.IAsyncSendExceptionObserver`1", "Zendiator.IAsyncSendFinallyObserver`1" } :
         new[] { "Zendiator.ISendRequestTransform`1", "Zendiator.ISendResponseTransform`2", "Zendiator.ISendSuccessObserver`1",
             "Zendiator.ISendExceptionObserver`1", "Zendiator.ISendFinallyObserver`1" }, compilation, open, requestOnly: true);
     internal static Result Handler(INamedTypeSymbol type, INamedTypeSymbol request, Compilation compilation, CanonicalStreamOpenBinding? open = null)

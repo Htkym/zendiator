@@ -22,6 +22,12 @@ internal static class CanonicalAsyncEmissionNormalizer
             if (graph?.IsValid != true || graph.Schedule == null || route.Family != BoundDispatchFamily.SendAsync || route.Stages.Count > 2 ||
                 route.Handlers.Count != 1 || !route.ExplicitHandlerOrder || route.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void)) continue;
             var h = route.Handlers[0];
+            if (route.RequestShape == BoundRequestShape.OpenAsyncReference &&
+                (c.MarkerName == null || route.SendGeneric == null || route.SendOpenRegistration is not { } open ||
+                route.Stages.Count != 1 || open.Stages.Count != 1 || h.Sessions.Count != 0 ||
+                h.AsyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false } ||
+                route.Stages[0].Sessions.Count != 0 || route.Stages[0].AsyncEmission is not { HookIsValueType: false } ||
+                c.Handlers.Any(member => !open.HandlerMembership.Contains(member.Identity)))) continue;
             if (h.CompilerOwnsError || h.AsyncEmission == null || h.Callback?.Completion != BoundCompletionKind.ValueTask ||
                 !c.Handlers.Any(handler => handler.Identity == h.Type)) continue;
             BoundAsyncFactoryEmission? factory = null;
@@ -55,7 +61,7 @@ internal static class CanonicalAsyncEmissionNormalizer
             else if (h.ServiceOwnership != FusionOwnership.BorrowedService) continue;
             output.Add(new(i, c.GeneratedNamespace, c.MarkerName, c.UseLocalHandlers, h.AsyncEmission, factory,
                 route.HasEmptyPipeline, route.PipelineFamily, c.MicrosoftDiProviderName ?? "")
-            { Hooks = new(hooks), ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes, ExternAliases = c.ExternAliases });
+            { Generic = route.SendGeneric, OpenRegistration = route.SendOpenRegistration, Hooks = new(hooks), ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes, ExternAliases = c.ExternAliases });
         }
         return new(new(output));
     }
@@ -76,6 +82,8 @@ internal static class CanonicalAsyncEmissionNormalizer
         c.Factory == null ? null : new(c.Factory.FactoryName, c.Factory.ContractName, c.Factory.MethodName, c.Factory.CleanupContractName) { FactoryIsValueType = c.Factory.FactoryIsValueType },
         c.HasEmptyPipeline, c.PipelineFamily, c.MicrosoftDiProviderName ?? "")
     {
+        Generic = c.Generic,
+        OpenRegistration = c.OpenRegistration,
         ExplicitHandlerTypes = c.ExplicitHandlerTypes,
         CatalogMarkerTypes = c.CatalogMarkerTypes,
         ExternAliases = c.ExternAliases,
