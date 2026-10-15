@@ -19,7 +19,7 @@ internal static class CanonicalMultiEmissionNormalizer
                 catalog.Compositions.Count(x => x.Identity == c.Identity || x.Key == c.Key || x.GeneratedNamespace == c.GeneratedNamespace) != 1) continue;
             var mixedStream = c.Pipelines.Any(r => r.Family == BoundDispatchFamily.Stream);
             if (mixedStream && (streams == null || c.ExternAliases.Count != 0 ||
-                c.Pipelines.Any(r => r.Family is not (BoundDispatchFamily.Stream or BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) ||
+                c.Pipelines.Any(r => r.Family is not (BoundDispatchFamily.Stream or BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllSync) ||
                     !(r.RequestShape == BoundRequestShape.ClosedReference || r.RequestShape == BoundRequestShape.ClosedNonGenericValue)) ||
                 c.Pipelines.Select(r => r.Family + "|" + r.RequestRuntimeIdentity).Distinct(StringComparer.Ordinal).Count() != c.Pipelines.Count)) continue;
             var routes = new List<CanonicalMultiRouteEmission>();
@@ -43,11 +43,12 @@ internal static class CanonicalMultiEmissionNormalizer
                 var async = CanonicalAsyncEmissionNormalizer.Create(projected, graphs);
                 var wrapper = CanonicalWrapperEmissionNormalizer.Create(projected, graphs);
                 var capability = CanonicalCapabilityEmissionNormalizer.Create(projected, graphs, sync, async, wrapper);
+                var sendAll = CanonicalSendAllSyncEmissionNormalizer.Create(projected, graphs).Compositions.SingleOrDefault();
                 var s = sync.Compositions.SingleOrDefault(); var a = async.Compositions.SingleOrDefault(); var w = wrapper.Compositions.SingleOrDefault(); var h = capability.Compositions.SingleOrDefault();
-                if ((s == null ? 0 : 1) + (a == null ? 0 : 1) + (w == null ? 0 : 1) + (h == null ? 0 : 1) != 1) break;
-                var registration = (s ?? (a == null ? null : CanonicalAsyncEmissionNormalizer.Registration(a)) ?? w?.Registration ?? h!.Registration) with { Index = i };
+                if ((s == null ? 0 : 1) + (a == null ? 0 : 1) + (w == null ? 0 : 1) + (h == null ? 0 : 1) + (sendAll == null ? 0 : 1) != 1) break;
+                var registration = (s ?? (a == null ? null : CanonicalAsyncEmissionNormalizer.Registration(a)) ?? w?.Registration ?? h?.Registration ?? sendAll!.Registration) with { Index = i };
                 var key = c.Identity + "|" + route.Family + "|" + route.Request + "|" + route.Result;
-                routes.Add(new(key, route.HandlerListOrdinal, route.PipelineListOrdinal, registration, s, a, w, h));
+                routes.Add(new(key, route.HandlerListOrdinal, route.PipelineListOrdinal, registration, s, a, w, h) { SendAllSync = sendAll });
             }
             var composition = new CanonicalMultiCompositionEmission(i, c.GeneratedNamespace, new(routes));
             if (routes.Count == c.Pipelines.Count && CanonicalRegistrationPlan.Compatible(composition)) result.Add(composition);

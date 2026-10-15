@@ -28,7 +28,8 @@ internal sealed record CanonicalRegistrationPlan(CanonicalSyncCompositionEmissio
 
     internal static CanonicalRegistrationPlan Multi(CanonicalMultiCompositionEmission c) => new(c.Routes[0].Registration,
         new(c.Routes.Select(r => new CanonicalRouteRegistration(r.Registration, r.Family!.Value, r.HandlerOrdinal, r.PipelineOrdinal,
-            r.Stream?.OpenRegistration, r.Stream?.FinalItemName, r.Stream?.DeclaredStages ?? default))));
+            r.Stream?.OpenRegistration, r.Stream?.FinalItemName, r.Stream?.DeclaredStages ?? default)
+        { BranchHandlers = r.SendAllSync?.Handlers ?? default })));
 
     internal static bool Compatible(CanonicalMultiCompositionEmission c)
     {

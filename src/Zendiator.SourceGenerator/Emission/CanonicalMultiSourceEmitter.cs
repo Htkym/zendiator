@@ -16,6 +16,7 @@ internal static class CanonicalMultiSourceEmitter
         r.Async != null ? CanonicalAsyncSourceEmitter.Emit(new(new(new[] { r.Async }))) :
         r.Stream != null ? CanonicalStreamPublicConnection.Source(r.Stream) :
         r.Wrapper != null ? CanonicalWrapperSourceEmitter.Emit(new(new(new[] { r.Wrapper }))) :
+        r.SendAllSync != null ? CanonicalSendAllSyncSourceEmitter.Emit(r.SendAllSync) :
         CanonicalCapabilitySourceEmitter.Emit(new(new(new[] { r.Capability! })));
     private static string Suffix(string key)
     { using var hash = SHA256.Create(); return "__" + string.Concat(hash.ComputeHash(Encoding.UTF8.GetBytes(key)).Select(b => b.ToString("X2", CultureInfo.InvariantCulture))); }
