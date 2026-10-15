@@ -13,6 +13,7 @@ internal sealed record BoundStageModel(string Anchor, string Type, string Name, 
     FusionOwnership ServiceOwnership, bool CompilerOwnsError)
 {
     public bool ReceiverIsGeneric { get; init; }
+    public bool ReceiverIsPublic { get; init; }
     public EquatableArray<BoundSessionModel> Sessions { get; init; }
     public BoundSyncHookEmission? SyncEmission { get; init; }
     public BoundAsyncHookEmission? AsyncEmission { get; init; }

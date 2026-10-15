@@ -42,9 +42,10 @@ public sealed partial class GeneratorTests
         [ZendiatorHandler]public sealed class ConstrainedH<T>:H3 where T:class{public ConstrainedH(Probe p):base(p){} }
         }
         """;
-    private static string AllClosedHandlerExtras(AllGenericCase c, bool wrapper = false)
+    private static string AllClosedHandlerExtras(AllGenericCase c, bool wrapper = false, bool genericHook = false)
     {
         var text = "namespace GenericCases." + c.Name + "{using Ping=" + c.Request + ";" + string.Join("", new[] { 1, 2, 3 }.Select(id => "using G" + id + "=" + ClosedHandlerName(c, id) + ";"));
+        if (genericHook) text += "using GHook=" + ClosedHookName(c) + ";" + AllClosedHookFactory(c);
         foreach (var id in new[] { 2, 1, 3 })
         {
             var mode = AllGenericHandlerMode(c, id); var af = mode.StartsWith("async-", StringComparison.Ordinal); var owned = mode.EndsWith("owned", StringComparison.Ordinal);
@@ -58,13 +59,14 @@ public sealed partial class GeneratorTests
             var completion = c.Async ? "a" : "s";
             var reference = CanonicalCapabilityReference.Source(c.Async, c.Void, completion, completion, completion, completion, false, wrapper ? "direct" : AllGenericHookMode(c), mode, wrapper);
             reference = Regex.Replace(reference, @"\bOracle\b", "GenericReference" + id); reference = Regex.Replace(reference, @"\bHandler\b", "G" + id); reference = Regex.Replace(reference, @"\bHFactory\b", "GF" + id);
+            if (genericHook) { reference = Regex.Replace(reference, @"\bHook0\b", "GHook"); reference = Regex.Replace(reference, @"\bKFactory\b", "GKFactory"); }
             text += reference.Replace("namespace App {", "", StringComparison.Ordinal)[..^1];
         }
         var ret = c.Async ? c.Void ? "ValueTask" : "ValueTask<int[]>" : c.Void ? "void" : "int[]";
         var calls = string.Join("", new[] { 2, 1, 3 }.Select((id, i) => (c.Void ? "" : "results[" + i + "]=") + (c.Async ? "await " : "") + "GenericReference" + id + ".Send(p,r,t)" + (c.Async ? ".ConfigureAwait(false)" : "") + ";"));
         return text + "public static class GenericReferenceAll{public static " + (c.Async ? "async " : "") + ret + " Run(IServiceProvider p,Ping r,CancellationToken t){ArgumentNullException.ThrowIfNull(r);t.ThrowIfCancellationRequested();" + (c.Void ? "" : "var results=new int[3];") + calls + (c.Void ? "" : "return results;") + "}}}";
     }
-    private static string AllClosedHandlerConfiguration(IEnumerable<AllGenericCase> cases, bool wrapper = false)
+    private static string AllClosedHandlerConfiguration(IEnumerable<AllGenericCase> cases, bool wrapper = false, bool genericHook = false)
     {
         var handlers = new List<string>(); var pipelines = new List<string>();
         foreach (var c in cases)
@@ -72,7 +74,8 @@ public sealed partial class GeneratorTests
             var a = "global::GenericCases." + c.Name + ".";
             var entries = new[] { 2, 1, 3 }.Select(id => id == 3 ? "typeof(" + ClosedHandlerName(c, id) + ")" : "HandlerEntry.Session<" + ClosedHandlerName(c, id) + "," + a + "GF" + id + ">()");
             handlers.Add($"c.Handlers<{c.Request}>(DispatchFamily.{c.Family},{string.Join(",", entries)});");
-            pipelines.Add($"c.Pipeline<{c.Request}>(DispatchFamily.{c.Family},Stage.Hook<{a}Hook0{(wrapper ? "" : "," + a + "KFactory")}>(){(wrapper ? ",Stage.Wrapper<" + a + "W>(),Stage.Hook<" + a + "Hook1>()" : "")});");
+            var hook = genericHook ? ClosedHookName(c) : a + "Hook0"; var factory = a + (genericHook ? "GKFactory" : "KFactory");
+            pipelines.Add($"c.Pipeline<{c.Request}>(DispatchFamily.{c.Family},Stage.Hook<{hook}{(wrapper ? "" : "," + factory)}>(){(wrapper ? ",Stage.Wrapper<" + a + "W>(),Stage.Hook<" + a + "Hook1>()" : "")});");
         }
         return string.Join("", handlers) + string.Join("", pipelines.AsEnumerable().Reverse());
     }
@@ -96,13 +99,13 @@ public sealed partial class GeneratorTests
         text += "[ZendiatorComposition(\"legacy-internal-generic\")]public sealed class LegacyInternalGeneric;public static class LegacyInternalGenericBridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<LegacyInternalGeneric>(c=>{" + AllGenericConfiguration([legacy]).Replace("typeof(global::GenericCases.Legacy.H3)", "typeof(global::GenericCases.Legacy.InternalH<string>)", StringComparison.Ordinal) + "});}";
         return text;
     }
-    private static string AllClosedHandlerSource()
+    private static string AllClosedHandlerSource(bool genericHook = false)
     {
         var common = SendAllCompositionSource(false); common = common[..common.IndexOf("namespace AllMix {", StringComparison.Ordinal)];
         var definitions = "namespace GenericCases{" + AllGenericRequestDefinition("Response", false) + AllGenericRequestDefinition("Command", true) + "}";
-        var cases = string.Join("", AllClosedHandlerCases.Select(c => AllGenericConsumerCase(c).Replace(".ReferenceAll.Run", ".GenericReferenceAll.Run", StringComparison.Ordinal)
+        var cases = string.Join("", AllClosedHandlerCases.Select(c => (genericHook ? AllClosedHandlerWrapperConsumerCase(c) : AllGenericConsumerCase(c)).Replace(".ReferenceAll.Run", ".GenericReferenceAll.Run", StringComparison.Ordinal)
             .Replace("break;", "expectedTypes=new[]{" + string.Join(",", (c.Name == "AVString" ? new[] { 2, 1 } : new[] { 2, 1, 3 }).Select(id => "typeof(" + ClosedHandlerName(c, id) + ").ToString()")) + "};break;", StringComparison.Ordinal)));
-        return common + AllGenericProbeSource + definitions + AllClosedHandlerDefinitions() + string.Join("", AllClosedHandlerCases.Select(c => AllGenericModule(c) + AllClosedHandlerExtras(c))) + """
+        return common + AllGenericProbeSource + definitions + AllClosedHandlerDefinitions() + (genericHook ? AllClosedHookDefinitions() : "") + string.Join("", AllClosedHandlerCases.Select(c => AllGenericModule(c) + AllClosedHandlerExtras(c, genericHook: genericHook))) + """
             namespace AllGeneric{
             using P=global::GenericCases.Probe;
             using S=global::Closed.AllMixStream;using R=global::Closed.AllMixSync;
@@ -122,6 +125,7 @@ public sealed partial class GeneratorTests
                         P.Check(originalValue==1,"caller original request remains unchanged");P.Check(p.Branch==(p.Fail?2:3)&&p.Handlers.SequenceEqual(p.Fail?new[]{2,1}:new[]{2,1,3}),"ordered generic handler branches and failure stop");
                         var actualTypes=p.Trace.Where(e=>e.StartsWith("handler-type:",StringComparison.Ordinal)).Select(e=>e.Substring("handler-type:".Length)).ToArray();
                         P.Check(actualTypes.SequenceEqual(expectedTypes)&&actualTypes.Distinct().Count()==expectedTypes.Length,"actual request type argument and branch tag DI types remain distinct");
+                        __HOOK_TYPE_CHECK__
                         if(profile=="SRInt")P.Check(results!.SequenceEqual(new[]{14,13,15})&&destination.SequenceEqual(new[]{14,13,15,-9}),"generic handler Span complete ordered commit");
                         if(profile=="ARString")P.Check(results!.SequenceEqual(new[]{14,13,15})&&callerValue==900&&p.Gate!.Consumptions==1,"generic handler pending task consumes once after caller replacement");
                         if(p.Fail)P.Check(error=="sentinel"&&final=="Faulted"&&results==null&&!p.Resources.Values.Any(r=>r.Id=="H3"),"failure stops later generic DI handler");
@@ -132,7 +136,7 @@ public sealed partial class GeneratorTests
                         var beforeScope=p.Released.Select(r=>p.Resources[r].Id).ToArray();await scope.DisposeAsync();
                         P.Check(p.FactoryEnds.SequenceEqual(p.Factories.AsEnumerable().Reverse()),"DI factory reverse disposal");
                         foreach(var resource in p.Resources)P.Check((resource.Value.Owned||resource.Value.Direct)==p.Released.Contains(resource.Key),"DI owns direct generic handler; borrowed sessions remain external");
-                        var snapshot=JsonSerializer.Serialize(new{profile,results,destination,initial,final,error,p.Branch,p.Handlers,actualTypes,expectedTypes,p.Events,p.Trace,p.Factories,p.FactoryEnds,created=p.Resources.Values.Select(r=>new{r.Id,r.Owned,r.Direct}),released=p.Released.Select(r=>p.Resources[r].Id),beforeScope,shared=shared.Version,callerValue,originalValue,waiting,consumptions=p.Gate?.Consumptions??0});
+                        var snapshot=JsonSerializer.Serialize(new{profile,results,destination,initial,final,error,p.Branch,p.Handlers,actualTypes,expectedTypes,__HOOK_TYPE_FIELDS__p.Events,p.Trace,p.Factories,p.FactoryEnds,created=p.Resources.Values.Select(r=>new{r.Id,r.Owned,r.Direct}),released=p.Released.Select(r=>p.Resources[r].Id),beforeScope,shared=shared.Version,callerValue,originalValue,waiting,consumptions=p.Gate?.Consumptions??0});
                         foreach(var resource in p.Resources.Keys.Where(r=>!p.Released.Contains(r)).ToArray()){if(profile[0]=='A')await ((IAsyncDisposable)resource).DisposeAsync();else ((IDisposable)resource).Dispose();}
                         P.Check(p.Released.Count==p.Resources.Count,"external borrowed generic receiver cleanup");return(snapshot,interleave);
                     }finally{p.Token.Dispose();single.Token.Dispose();}
@@ -143,11 +147,12 @@ public sealed partial class GeneratorTests
                         var g=await Observe(profile,true);var r=await Observe(profile,false);P.Check(g.Snapshot==r.Snapshot,"closed generic handler generated/reference mismatch "+profile+"\n"+g.Snapshot+"\n"+r.Snapshot);
                         rows.Add(new{profile,generated=JsonDocument.Parse(g.Snapshot).RootElement.Clone(),reference=JsonDocument.Parse(r.Snapshot).RootElement.Clone()});if(g.Interleave!=null)interleave=g.Interleave;
                     }
-                    P.Check(dispatches==10,"four pairs and two interleaves");return JsonSerializer.Serialize(new{generatorInputs=1,pairedScenarios=4,pairedDispatches=8,interleaveDispatches=2,dispatches,rows,interleave});
+                    P.Check(dispatches==__DISPATCHES__,"four pairs and configured interleaves");return JsonSerializer.Serialize(new{generatorInputs=1,pairedScenarios=4,pairedDispatches=8,interleaveDispatches=__INTERLEAVES__,dispatches,rows,interleave});
                 }
             }}
-            """.Replace("__CONFIG__", AllClosedHandlerConfiguration(AllClosedHandlerCases) + "c.Handlers<S.Items>(DispatchFamily.Stream,typeof(S.H));c.Handlers<R.Ping>(DispatchFamily.SendSync,HandlerEntry.Session<R.Handler,R.Factory>());c.Pipeline<S.Items>(DispatchFamily.Stream,Stage.Hook<S.F1>(),Stage.Hook<S.M>(),Stage.Hook<S.F2>());c.Pipeline<R.Ping>(DispatchFamily.SendSync,Stage.Hook<R.Hook>());")
-            .Replace("__CASES__", cases);
+            """.Replace("__CONFIG__", AllClosedHandlerConfiguration(AllClosedHandlerCases, genericHook: genericHook) + "c.Handlers<S.Items>(DispatchFamily.Stream,typeof(S.H));c.Handlers<R.Ping>(DispatchFamily.SendSync,HandlerEntry.Session<R.Handler,R.Factory>());c.Pipeline<S.Items>(DispatchFamily.Stream,Stage.Hook<S.F1>(),Stage.Hook<S.M>(),Stage.Hook<S.F2>());c.Pipeline<R.Ping>(DispatchFamily.SendSync,Stage.Hook<R.Hook>());")
+            .Replace("__CASES__", cases).Replace("__HOOK_TYPE_CHECK__", genericHook ? AllClosedHookTypeCheck() : "", StringComparison.Ordinal).Replace("__HOOK_TYPE_FIELDS__", genericHook ? "actualHookTypes,expectedHookType," : "", StringComparison.Ordinal)
+            .Replace("__DISPATCHES__", genericHook ? "8" : "10", StringComparison.Ordinal).Replace("__INTERLEAVES__", genericHook ? "0" : "2", StringComparison.Ordinal);
     }
     [Fact]
     public async Task AllClosedHandler_four_profiles_preserve_actual_type_arguments_DI_branch_tags_pending_and_ownership()
