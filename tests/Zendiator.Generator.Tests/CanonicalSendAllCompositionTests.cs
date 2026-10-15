@@ -46,11 +46,12 @@ public sealed partial class GeneratorTests
             """.Replace("__CONFIG__", SendAllCompositionConfiguration)
             .Replace("__CONSUMER__", gate ? "" : SendAllCompositionConsumer)
             .Replace("__REJECTED__", gate ? """
+                public sealed class OtherOpaque:ISendWrapper<B.Ping,int>{public int Invoke<N>(B.Ping request,N next,CancellationToken token)where N:ISendContinuation<B.Ping,int> => next.Invoke(request,token);}
                 [ZendiatorComposition("all-mix-rejected")]public sealed class Rejected;
                 public static class RejectedBridge {
                     public static IServiceCollection RegisterRejected(IServiceCollection s)=>s.AddZendiator<Rejected>(c=>{__BAD_CONFIG__});
                 } /* rejected end */
-                """.Replace("__BAD_CONFIG__", SendAllCompositionConfiguration.Replace("Stage.Hook<B.Hook>()", "Stage.Hook<B.Hook>(),Stage.Wrapper<B.Opaque>()")) : "");
+                """.Replace("__BAD_CONFIG__", SendAllCompositionConfiguration.Replace("Stage.Hook<B.Hook>()", "Stage.Hook<B.Hook>(),Stage.Wrapper<B.Opaque>(),Stage.Wrapper<OtherOpaque>()")) : "");
     }
 
     private const string SendAllCompositionConsumer = """
@@ -163,7 +164,7 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
-    public void SendAll_composition_gate_preserves_all_branches_ordinals_and_rejects_opaque_mixture_as_a_whole()
+    public void SendAll_composition_gate_preserves_all_branches_ordinals_and_rejects_multiple_wrapper_mixture_as_a_whole()
     {
         var source = SendAllCompositionSource(true);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllCompositionGate_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
@@ -182,7 +183,7 @@ public sealed partial class GeneratorTests
         var files = driver.GetRunResult().Results.Single().GeneratedSources;
         Assert.Contains(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains("AllMix.Generated.Many.ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
         Assert.DoesNotContain(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains("AllMix.Generated.Rejected.ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, runtimeOperations = 0, acceptedRoutes = 5, rejectedPipelineDiagnostics = 5, opaqueMixedWholeCompositionRejected = true, registration }));
+        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, runtimeOperations = 0, acceptedRoutes = 5, rejectedPipelineDiagnostics = 5, unsupportedMultipleWrapperWholeCompositionRejected = true, registration }));
     }
 
     [Fact]

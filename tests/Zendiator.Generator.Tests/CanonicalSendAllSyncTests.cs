@@ -110,10 +110,10 @@ public sealed partial class GeneratorTests
         __NEGATIVE__
         }
         """.Replace("__CONSUMER__", gate ? "" : SendAllSyncConsumer).Replace("__NEGATIVE__", gate ? """
-        [ZendiatorComposition("bad-wrapper")]public sealed class BadWrapper;
+        [ZendiatorComposition("send-all-wrapper")]public sealed class Wrappers;
         [ZendiatorComposition("bad-async")]public sealed class BadAsync;
-        public static class Rejected {
-            public static IServiceCollection Wrapper(IServiceCollection s)=>s.AddZendiator<BadWrapper>(c=>{
+        public static class GateVariants {
+            public static IServiceCollection Wrapper(IServiceCollection s)=>s.AddZendiator<Wrappers>(c=>{
                 c.Handlers<Response.Ping>(DispatchFamily.SendAllSync,typeof(Response.H1));
                 c.Pipeline<Response.Ping>(DispatchFamily.SendAllSync,Stage.Hook<Response.Hook>(),Stage.Wrapper<Response.Opaque>());
             });
@@ -231,32 +231,33 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
-    public void SendAllSync_public_gate_accepts_borrowed_sync_response_void_and_rejects_wrapper_async()
+    public void SendAllSync_public_gate_accepts_borrowed_sync_response_void_wrapper_and_rejects_unsupported_async_hook()
     {
         var source = SendAllSyncSource(true);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "SendAllSyncGate_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         var folder = string.IsNullOrEmpty(evidence) ? null : Path.Combine(evidence, "sendall-sync-gate");
         SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Equal(2, diagnostics.Length); Assert.All(diagnostics, d => Assert.Equal("ZEN0037", d.Id));
+        Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         AssertSendAllSyncContract(output);
         var files = driver.GetRunResult().Results.Single().GeneratedSources;
-        var routes = files.Where(f => IsCanonicalRoute(f)).ToArray(); Assert.Equal(2, routes.Length);
+        var routes = files.Where(f => IsCanonicalRoute(f)).ToArray(); Assert.Equal(3, routes.Length);
         Assert.All(routes, f => { Assert.DoesNotContain("ValueTask", f.SourceText.ToString()); Assert.DoesNotContain("global::System.Threading.Tasks.Task", f.SourceText.ToString()); Assert.DoesNotContain("Unit", f.SourceText.ToString()); });
-        foreach (var name in new[] { "Responses", "Commands" })
+        foreach (var name in new[] { "Responses", "Commands", "Wrappers" })
         {
             var ns = "AllSync.Generated." + name;
+            Assert.NotNull(output.GetTypeByMetadataName(ns + ".IZendiator"));
             Assert.NotNull(output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar"));
             Assert.Contains(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains(ns + ".ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
         }
-        foreach (var name in new[] { "BadWrapper", "BadAsync" })
+        foreach (var name in new[] { "BadAsync" })
         {
             var ns = "AllSync.Generated." + name;
             Assert.Null(output.GetTypeByMetadataName(ns + ".IZendiator")); Assert.Null(output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar"));
             Assert.DoesNotContain(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains(ns + ".ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
         }
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, runtimeOperations = 0, accepted = new[] { "Responses", "Commands" }, rejected = new[] { "BadWrapper", "BadAsync" } }));
+        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, runtimeOperations = 0, accepted = new[] { "Responses", "Commands", "Wrappers" }, rejected = new[] { "BadAsync" } }));
     }
 
     [Fact]
