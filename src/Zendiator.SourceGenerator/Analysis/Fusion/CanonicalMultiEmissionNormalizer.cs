@@ -19,8 +19,13 @@ internal static class CanonicalMultiEmissionNormalizer
                 catalog.Compositions.Count(x => x.Identity == c.Identity || x.Key == c.Key || x.GeneratedNamespace == c.GeneratedNamespace) != 1) continue;
             var mixedStream = c.Pipelines.Any(r => r.Family == BoundDispatchFamily.Stream);
             if (mixedStream && (streams == null || c.ExternAliases.Count != 0 ||
-                c.Pipelines.Any(r => !r.ClosedReferenceRequest || r.Family is not (BoundDispatchFamily.Stream or BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync)) ||
+                c.Pipelines.Any(r => r.Family is not (BoundDispatchFamily.Stream or BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) ||
+                    !(r.RequestShape == BoundRequestShape.ClosedReference || r.Family == BoundDispatchFamily.Stream && r.RequestShape == BoundRequestShape.ClosedNonGenericValue)) ||
                 c.Pipelines.Select(r => r.Family + "|" + r.RequestRuntimeIdentity).Distinct(StringComparer.Ordinal).Count() != c.Pipelines.Count)) continue;
+            if (c.Pipelines.Any(r => r.Family == BoundDispatchFamily.Stream && r.RequestShape == BoundRequestShape.ClosedNonGenericValue) &&
+                (c.Pipelines.Count != 2 ||
+                c.Pipelines.Count(r => r.Family == BoundDispatchFamily.Stream && r.RequestShape == BoundRequestShape.ClosedNonGenericValue) != 1 ||
+                c.Pipelines.Count(r => r.Family == BoundDispatchFamily.SendSync && r.RequestShape == BoundRequestShape.ClosedReference) != 1)) continue;
             var routes = new List<CanonicalMultiRouteEmission>();
             foreach (var route in c.Pipelines)
             {

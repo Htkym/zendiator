@@ -450,7 +450,9 @@ internal sealed class CompositionListBinding
                     PipelineListOrdinal = declaration.HandlerList ? int.MaxValue : int.Parse(declaration.Anchor.Substring(5), System.Globalization.CultureInfo.InvariantCulture),
                     HasEmptyPipeline = !declaration.HandlerList && declaration.Entries.Length == 0,
                     PipelineFamily = declaration.HandlerList ? null : declaration.Family,
-                    ClosedReferenceRequest = request.TypeKind == TypeKind.Class && !HasOpenShape(request),
+                    RequestShape = request.TypeKind == TypeKind.Class && !HasOpenShape(request) ? BoundRequestShape.ClosedReference :
+                        request.TypeKind == TypeKind.Struct && !request.IsRefLikeType && !request.IsGenericType && !HasOpenShape(request) ?
+                            BoundRequestShape.ClosedNonGenericValue : BoundRequestShape.Unsupported,
                     RequestRuntimeIdentity = request.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                 };
         }

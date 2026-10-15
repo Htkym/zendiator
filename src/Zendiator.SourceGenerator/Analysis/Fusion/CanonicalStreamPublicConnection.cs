@@ -42,7 +42,10 @@ internal static class CanonicalStreamPublicConnection
             var h = prototype?.Handler ?? canonical!.Handler;
             var generic = prototype?.Generic ?? canonical?.Generic;
             var open = generic == null ? null : route.StreamOpenRegistration;
-            if (h.RequestIsValueType || route.StreamItemFlow != null && !itemChange || !route.ExplicitHandlerOrder || route.Handlers.Count != 1) continue;
+            if (route.StreamItemFlow != null && !itemChange || !route.ExplicitHandlerOrder || route.Handlers.Count != 1) continue;
+            if (h.RequestIsValueType && (route.RequestShape != BoundRequestShape.ClosedNonGenericValue || prototype == null || generic != null ||
+                h.HandlerIsValueType || route.Handlers[0].Sessions.Count != 0 ||
+                prototype.Hooks.Any(hook => hook.HookIsValueType || hook.Factory != null))) continue;
             if (generic == null)
             {
                 if (c.Handlers.Count != 1 || c.Handlers[0].Identity != route.Handlers[0].Type) continue;
@@ -53,7 +56,8 @@ internal static class CanonicalStreamPublicConnection
             // Each selected projection proves its exact schedule; public dispatch never chooses another backend.
             var factory = canonical?.HandlerFactory;
             var registration = new CanonicalSyncCompositionEmission(i, c.GeneratedNamespace, c.MarkerName, c.UseLocalHandlers,
-                new(h.RequestName, h.HandlerName, h.ContractName, h.MethodName, h.ItemName),
+                new(h.RequestName, h.HandlerName, h.ContractName, h.MethodName, h.ItemName)
+                { RequestIsValueType = h.RequestIsValueType, HandlerIsValueType = h.HandlerIsValueType },
                 factory == null ? null : new(factory.FactoryName, factory.ContractName, factory.MethodName, factory.CleanupContractName)
                 { FactoryIsValueType = factory.FactoryIsValueType, IsSourceDeclaration = factory.IsSourceDeclaration },
                 route.HasEmptyPipeline, route.PipelineFamily, c.MicrosoftDiProviderName ?? "")
@@ -80,7 +84,8 @@ internal static class CanonicalStreamPublicConnection
             route.Family != BoundDispatchFamily.Stream || route.Handlers.Count != 1) return null;
         var connection = connections.Routes.SingleOrDefault(c => c.CompositionIdentity == composition.Identity && c.Anchor == route.Anchor);
         if (connection is not { Kind: CanonicalStreamConnectionKind.Candidate or CanonicalStreamConnectionKind.CanonicalCandidate } ||
-            !route.ClosedReferenceRequest || route.StreamGeneric != null || route.StreamOpenRegistration != null) return null;
+            route.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue) ||
+            route.StreamGeneric != null || route.StreamOpenRegistration != null) return null;
         var projected = composition with
         {
             Pipelines = new(new[] { route }),
@@ -229,7 +234,7 @@ internal static class CanonicalStreamPublicConnection
                         public global::System.Collections.Generic.IAsyncEnumerable<{{itemName}}> StreamAsync{{c.Generic?.TypeParameters}}(
                             {{registration.Handler.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default){{c.Generic?.TypeConstraints}}
                         {
-                            global::System.ArgumentNullException.ThrowIfNull(request);
+                            {{CanonicalCapabilitySourceEmitter.RequestGuard(registration.Handler.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
                             return {{c.CandidateClassName}}{{c.Generic?.TypeParameters}}.Create(_provider, request, cancellationToken);
                         }
                     }

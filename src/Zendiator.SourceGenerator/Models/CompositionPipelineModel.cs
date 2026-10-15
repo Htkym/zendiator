@@ -1,6 +1,7 @@
 namespace Zendiator.SourceGenerator;
 
 internal enum BoundDispatchFamily { SendAsync, SendSync, SendAllAsync, SendAllSync, Stream, Notification }
+internal enum BoundRequestShape { Unsupported, ClosedReference, ClosedNonGenericValue }
 internal enum BoundCallbackPhase { Before, Success, Exception, Finally, Filter, Map, Wrapper, Handler, SessionAcquire, SessionCleanup }
 internal enum BoundCompletionKind { Synchronous, ValueTask, Enumerable }
 internal sealed record BoundParameterModel(string Type, string RefKind, string ScopedKind);
@@ -48,7 +49,7 @@ internal sealed record BoundPipelineModel(string Anchor, string Request, string 
     public int PipelineListOrdinal { get; init; }
     public bool HasEmptyPipeline { get; init; }
     public BoundDispatchFamily? PipelineFamily { get; init; }
-    public bool ClosedReferenceRequest { get; init; }
+    public BoundRequestShape RequestShape { get; init; }
     public string RequestRuntimeIdentity { get; init; } = "";
     public BoundStreamGenericEmission? StreamGeneric { get; init; }
     public BoundStreamItemFlow? StreamItemFlow { get; init; }
