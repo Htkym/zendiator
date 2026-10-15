@@ -21,7 +21,18 @@ internal static class CanonicalSendAllAsyncEmissionNormalizer
             var graph = execution.Compositions[i].SingleOrDefault(g => g.Contract.Anchor == r.Anchor);
             if (graph?.IsValid != true || graph.Schedule == null || r.Family != BoundDispatchFamily.SendAllAsync ||
                 r.RequestShape != BoundRequestShape.ClosedReference || r.RequestIsGeneric || !r.ExplicitHandlerOrder || r.Handlers.Count == 0 ||
-                r.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void) || r.Stages.Count != 1) continue;
+                r.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void)) continue;
+            if (r.Stages.Any(s => s.Kind == FusionStageKind.Wrapper))
+            {
+                var wrappers = CanonicalWrapperEmissionNormalizer.AllBranches(c, r, graph, i);
+                if (wrappers.Count == r.Handlers.Count)
+                    result.Add(new(new(wrappers.Select((w, branch) => new CanonicalAsyncCompositionEmission(i,
+                        c.GeneratedNamespace, c.MarkerName, c.UseLocalHandlers, r.Handlers[branch].AsyncEmission!, w.AsyncFactory,
+                        false, r.PipelineFamily, c.MicrosoftDiProviderName ?? ""))))
+                    { Wrappers = wrappers });
+                continue;
+            }
+            if (r.Stages.Count != 1) continue;
             var stage = r.Stages[0];
             if (stage.CompilerOwnsError || stage.Kind != FusionStageKind.Hook || stage.AsyncEmission is not { HookIsValueType: false } hook ||
                 !TryFactory(stage.Sessions, stage.ServiceOwnership, out var hookFactory)) continue;

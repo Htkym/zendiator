@@ -48,6 +48,11 @@ internal static class CanonicalSendAllSyncSourceEmitter
             """);
         for (var i = 0; i < c.Branches.Count; i++)
         {
+            if (c.Wrappers.Count != 0)
+            {
+                CanonicalWrapperSourceEmitter.EmitBranch(b, c.Wrappers[i], $"Branch{i}");
+                continue;
+            }
             b.AppendLine($$"""
                     private {{response ?? "void"}} Branch{{i}}({{request}} request, global::System.Threading.CancellationToken cancellationToken)
                     {

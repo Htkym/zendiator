@@ -164,11 +164,11 @@ internal static class StageContractBinding
                         asyncCallbacks[BoundCallbackPhase.Exception], asyncCallbacks[BoundCallbackPhase.Finally])
                     { HookIsValueType = type.IsValueType } : null,
             WrapperEmission = facts.Count == before && !compilerOwned && kind == FusionStageKind.Wrapper &&
-                (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly) &&
+                (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAllAsync) && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly) &&
                 callbacks.Count == 1
                     ? wrapperEmission! with { WrapperIsValueType = type.IsValueType } : null,
             Capabilities = facts.Count == before && !compilerOwned && kind == FusionStageKind.Hook &&
-                (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly) &&
+                (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAllAsync) && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly) &&
                 capabilityCalls.Count > 0 && capabilityCalls.Count <= 4
                     ? new(Name(type), Capability(BoundCallbackPhase.Before), Capability(BoundCallbackPhase.Success), Capability(BoundCallbackPhase.Exception), Capability(BoundCallbackPhase.Finally)) { HookIsValueType = type.IsValueType } : null
         };

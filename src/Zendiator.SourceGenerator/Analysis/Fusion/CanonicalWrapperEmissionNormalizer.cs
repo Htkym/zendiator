@@ -71,6 +71,43 @@ internal static class CanonicalWrapperEmissionNormalizer
         }
         return new(new(output));
     }
+    // The All graph is proved before projecting each branch to the accepted Single backend.
+    // Keep the current All boundary explicit; Single also supports wider wrapper/value shapes.
+    internal static EquatableArray<CanonicalWrapperCompositionEmission> AllBranches(CompositionSelectionModel composition,
+        BoundPipelineModel route, CanonicalExecutionGraphModel graph, int index)
+    {
+        var sync = route.Family == BoundDispatchFamily.SendAllSync;
+        if (route.Family is not (BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAllAsync) ||
+            route.RequestShape != BoundRequestShape.ClosedReference || route.RequestIsGeneric ||
+            route.Stages.Count(s => s.Kind == FusionStageKind.Wrapper) != 1 ||
+            route.Stages.Any(s => s.CompilerOwnsError || !Session(s.Sessions, s.ServiceOwnership) ||
+                (s.Kind == FusionStageKind.Wrapper ? s.WrapperEmission is not { WrapperIsValueType: false } :
+                    s.Kind != FusionStageKind.Hook || s.Capabilities is not { HookIsValueType: false })) ||
+            route.Handlers.Any(h => h.CompilerOwnsError || !Session(h.Sessions, h.ServiceOwnership) ||
+                (sync ? h.SyncEmission is not { RequestIsValueType: false, HandlerIsValueType: false } ||
+                        h.SyncEmission.ResultName is not (null or "int" or "global::System.Int32") :
+                    h.AsyncEmission is not { RequestIsValueType: false, HandlerIsValueType: false } ||
+                        h.AsyncEmission.ResultName is not (null or "int" or "global::System.Int32")))) return default;
+        bool Session(EquatableArray<BoundSessionModel> sessions, FusionOwnership ownership) => sessions.Count == 0
+            ? ownership == FusionOwnership.BorrowedService
+            : sessions.Count == 1 && ownership == sessions[0].Ownership &&
+                CanonicalCapabilityEmissionNormalizer.Factory(sessions[0], sync) is { FactoryIsValueType: false };
+        var branches = new List<CanonicalWrapperCompositionEmission>();
+        foreach (var handler in route.Handlers)
+        {
+            var projected = composition with
+            {
+                Pipelines = new(new[] { route with {
+                Family = sync ? BoundDispatchFamily.SendSync : BoundDispatchFamily.SendAsync,
+                Handlers = new(new[] { handler }) } })
+            };
+            var branch = Create(new(new(new[] { projected })),
+                new(new(new[] { new EquatableArray<CanonicalExecutionGraphModel>(new[] { graph }) }))).Compositions.SingleOrDefault();
+            if (branch == null) return default;
+            branches.Add(branch with { Registration = branch.Registration with { Index = index } });
+        }
+        return new(branches);
+    }
     internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalWrapperEmissionModel model, ImmutableArray<CompositionSelectionDiscovery.Binding> current, Compilation compilation, CancellationToken token) =>
         CanonicalSyncEmissionNormalizer.BindCallSites(new(new(model.Compositions.Select(c => c.Registration))), current, compilation, token);
 }
