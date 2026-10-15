@@ -138,7 +138,7 @@ public sealed partial class GeneratorTests
         foreach (var c in cases)
         {
             var a = "global::GenericCases." + c.Name + ".";
-            var entries = new[] { 2, 1, 3 }.Select(id => id == 3 ? "typeof(" + a + (mutation == "handler" ? "GenericH3<string>" : "H3") + ")" : "HandlerEntry.Session<" + a + "H" + id + "," + a + (mutation == "factory" && id == 1 ? "GenericF1<string>" : "F" + id) + ">()");
+            var entries = new[] { 2, 1, 3 }.Select(id => id == 3 ? "typeof(" + a + (mutation is "handler" or "handlerWrapper" ? "GenericH3<string>" : "H3") + ")" : "HandlerEntry.Session<" + a + "H" + id + "," + a + (mutation == "factory" && id == 1 ? "GenericF1<string>" : "F" + id) + ">()");
             handlers.Add($"c.Handlers<{c.Request}>(DispatchFamily.{c.Family},{string.Join(",", entries)});");
             var stage = mutation switch
             {
@@ -149,7 +149,7 @@ public sealed partial class GeneratorTests
                 "onlyWrapper" => "Stage.Wrapper<" + a + "W>()",
                 _ => "Stage.Hook<" + a + "Hook0" + (wrapper ? "" : "," + a + "KFactory") + ">()"
             };
-            if (mutation is "wrapper" or "genericWrapper" or "partialWrapper" or "mixedWrapper" or "multipleWrappers") stage += ",Stage.Wrapper<" + a + (mutation == "genericWrapper" ? "GenericW<string>" : "W") + ">()";
+            if (mutation is "wrapper" or "genericWrapper" or "handlerWrapper" or "partialWrapper" or "mixedWrapper" or "multipleWrappers") stage += ",Stage.Wrapper<" + a + (mutation == "genericWrapper" ? "GenericW<string>" : "W") + ">()";
             if (mutation == "multipleWrappers") stage += ",Stage.Wrapper<" + a + "OtherW>()";
             if (wrapper) stage += ",Stage.Wrapper<" + a + "W>(),Stage.Hook<" + a + "Hook1>()";
             pipelines.Add($"c.Pipeline<{c.Request}>(DispatchFamily.{c.Family},{stage});");
@@ -160,7 +160,7 @@ public sealed partial class GeneratorTests
     {
         var text = "";
         foreach (var c in new[] { AllGenericCases[0], AllGenericCases[5] })
-            foreach (var mutation in new[] { "handler", "hook", "factory", "hookFactory", "wrapper", "genericWrapper", "before", "default", "partialWrapper", "mixedWrapper", "onlyWrapper", "multipleWrappers" })
+            foreach (var mutation in new[] { "handler", "handlerWrapper", "hook", "factory", "hookFactory", "wrapper", "genericWrapper", "before", "default", "partialWrapper", "mixedWrapper", "onlyWrapper", "multipleWrappers" })
             {
                 if (mutation == "default" && c.Async) continue;
                 var marker = "Reject" + c.Name + mutation;
@@ -174,7 +174,7 @@ public sealed partial class GeneratorTests
             var c = new AllGenericCase("Legacy", false, false, "int", true);
             text += "[ZendiatorComposition(\"legacy-" + mutation + "\")]public sealed class Legacy" + mutation + ";public static class Legacy" + mutation + "Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<Legacy" + mutation + ">(c=>{" + AllGenericConfiguration([c], mutation) + "});}";
         }
-        return text;
+        return text + AllHandlerVisibilityCases();
     }
     private static string AllGenericConsumerCase(AllGenericCase c)
     {
@@ -206,7 +206,7 @@ public sealed partial class GeneratorTests
         var common = SendAllCompositionSource(false); common = common[..common.IndexOf("namespace AllMix {", StringComparison.Ordinal)];
         var definitions = "namespace GenericCases{" + AllGenericRequestDefinition("Response", false) + AllGenericRequestDefinition("Command", true) + AllGenericRequestDefinition("LegacyResponse", false, true) + "}";
         var legacy = gate ? AllGenericModule(new("Legacy", false, false, "int", true)) : "";
-        return common + AllGenericProbeSource + definitions + string.Join("", cases.Select(c => AllGenericModule(c))) + legacy + """
+        return common + AllGenericProbeSource + definitions + (gate ? AllClosedHandlerDefinitions() : "") + string.Join("", cases.Select(c => AllGenericModule(c) + (gate ? AllClosedHandlerExtras(c) + AllHandlerVisibilityExtras(c) : ""))) + legacy + (gate ? AllHandlerVisibilityExtras(new("Legacy", false, false, "int", true)) : "") + """
             namespace AllGeneric{
             using P=global::GenericCases.Probe;
             using S=global::Closed.AllMixStream;using R=global::Closed.AllMixSync;using A=global::Closed.AllMixAsync;
@@ -218,7 +218,7 @@ public sealed partial class GeneratorTests
             }
             __REJECTED__
             }
-            """.Replace("__CONFIG__", AllGenericConfiguration(cases, gate ? "wrapper" : "") + "c.Handlers<S.Items>(DispatchFamily.Stream,typeof(S.H));c.Handlers<R.Ping>(DispatchFamily.SendSync,HandlerEntry.Session<R.Handler,R.Factory>());c.Pipeline<S.Items>(DispatchFamily.Stream,Stage.Hook<S.F1>(),Stage.Hook<S.M>(),Stage.Hook<S.F2>());c.Pipeline<R.Ping>(DispatchFamily.SendSync,Stage.Hook<R.Hook>());")
+            """.Replace("__CONFIG__", (gate ? AllClosedHandlerConfiguration(cases) : AllGenericConfiguration(cases)) + "c.Handlers<S.Items>(DispatchFamily.Stream,typeof(S.H));c.Handlers<R.Ping>(DispatchFamily.SendSync,HandlerEntry.Session<R.Handler,R.Factory>());c.Pipeline<S.Items>(DispatchFamily.Stream,Stage.Hook<S.F1>(),Stage.Hook<S.M>(),Stage.Hook<S.F2>());c.Pipeline<R.Ping>(DispatchFamily.SendSync,Stage.Hook<R.Hook>());")
             .Replace("__REJECTED__", gate ? AllGenericRejectedSource() : "")
             .Replace("__CONSUMER__", gate ? "" : """
                 private static int dispatches;
@@ -286,17 +286,23 @@ public sealed partial class GeneratorTests
     public void AllGeneric_gate_preserves_closed_type_identity_and_symbol_based_receiver_factory_boundaries()
     {
         var source = AllGenericSource(true); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllGenericGate_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); var folder = AllGenericFolder("gate"); SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Equal(29, diagnostics.Length);
+        Assert.Equal(37, diagnostics.Length);
         var blocking = Assert.Single(diagnostics, d => d.Id == "ZEN0030"); Assert.Contains("SRInt.MixedFull", blocking.GetMessage());
-        Assert.All(diagnostics.Where(d => !ReferenceEquals(d, blocking)), d => Assert.Equal("ZEN0037", d.Id));
-        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); var contract = AssertAllGenericContract(output, driver, true);
+        var wrongRequests = diagnostics.Where(d => d.Id == "ZEN0035").ToArray(); Assert.Equal(2, wrongRequests.Length);
+        Assert.All(diagnostics.Where(d => !ReferenceEquals(d, blocking) && d.Id != "ZEN0035"), d => Assert.Equal("ZEN0037", d.Id));
+        var compiler = output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning).ToArray();
+        Assert.Equal(2, compiler.Length); Assert.All(compiler, d => { Assert.Equal("CS0452", d.Id); Assert.Equal(source, d.Location.SourceTree!.GetText().ToString()); });
+        var contract = AssertAllGenericContract(output, driver, true);
         var files = driver.GetRunResult().Results.Single().GeneratedSources;
         foreach (var c in new[] { AllGenericCases[0], AllGenericCases[5] })
         {
-            var accepted = "AllGeneric.Generated.Reject" + c.Name + "wrapper";
-            Assert.NotNull(output.GetTypeByMetadataName(accepted + ".IZendiator")); Assert.NotNull(output.GetTypeByMetadataName(accepted + ".ZendiatorGeneratedRegistrar"));
-            Assert.Contains(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains(accepted + ".ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
-            foreach (var mutation in new[] { "handler", "hook", "factory", "hookFactory", "genericWrapper", "before", "partialWrapper", "mixedWrapper", "onlyWrapper", "multipleWrappers" })
+            foreach (var newlyAccepted in new[] { "wrapper", "handler" })
+            {
+                var accepted = "AllGeneric.Generated.Reject" + c.Name + newlyAccepted;
+                Assert.NotNull(output.GetTypeByMetadataName(accepted + ".IZendiator")); Assert.NotNull(output.GetTypeByMetadataName(accepted + ".ZendiatorGeneratedRegistrar"));
+                Assert.Contains(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains(accepted + ".ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
+            }
+            foreach (var mutation in new[] { "handlerWrapper", "hook", "factory", "hookFactory", "genericWrapper", "before", "partialWrapper", "mixedWrapper", "onlyWrapper", "multipleWrappers" })
             {
                 var ns = "AllGeneric.Generated.Reject" + c.Name + mutation;
                 Assert.Null(output.GetTypeByMetadataName(ns + ".IZendiator")); Assert.Null(output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar"));
@@ -308,16 +314,30 @@ public sealed partial class GeneratorTests
         Assert.Null(output.GetTypeByMetadataName("AllGeneric.Generated.RejectWhole.IZendiator")); Assert.Null(output.GetTypeByMetadataName("AllGeneric.Generated.RejectWhole.ZendiatorGeneratedRegistrar"));
         Assert.DoesNotContain(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains("AllGeneric.Generated.RejectWhole.ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
         foreach (var mutation in new[] { "handler", "hook", "factory", "hookFactory" }) Assert.NotNull(output.GetTypeByMetadataName("AllGeneric.Generated.Legacy" + mutation + ".IZendiator"));
+        foreach (var c in new[] { AllGenericCases[0], AllGenericCases[5] })
+            foreach (var name in new[] { "Internal", "Containing", "Argument", "PublicNested", "OldInternalPlain", "Constraint", "WrongRequest" })
+            {
+                var marker = "Visibility" + c.Name + name; var ns = "AllGeneric.Generated." + marker; var accepted = name is "PublicNested" or "OldInternalPlain";
+                Assert.Equal(accepted, output.GetTypeByMetadataName(ns + ".IZendiator") != null); Assert.Equal(accepted, output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar") != null);
+                Assert.Equal(accepted, files.Any(f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains(ns + ".ZendiatorGeneratedRegistrar", StringComparison.Ordinal)));
+                var start = source.IndexOf("public static class " + marker + "Bridge", StringComparison.Ordinal); var end = source.IndexOf("});}", start, StringComparison.Ordinal);
+                Assert.Equal(accepted || name == "Constraint" ? 0 : 1, diagnostics.Count(d => d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.Start < end));
+                if (name == "Constraint") Assert.Single(compiler, d => d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.Start < end);
+                if (name == "WrongRequest") Assert.Single(wrongRequests, d => d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.Start < end);
+            }
+        Assert.NotNull(output.GetTypeByMetadataName("AllGeneric.Generated.LegacyInternalGeneric.IZendiator"));
         var catalog = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single().TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
         var pipelines = catalog.Compositions.SelectMany(c => c.Pipelines).ToArray();
-        var wrapped = pipelines.Where(p => p.Stages.Any(s => s.Kind == FusionStageKind.Wrapper)).ToArray();
         foreach (var p in pipelines)
             foreach (var s in p.Stages.Where(s => s.Type.Contains(".MixedFull", StringComparison.Ordinal)))
             {
                 if (p.Family == BoundDispatchFamily.SendAllSync) Assert.Null(s.Capabilities); else Assert.NotNull(s.Capabilities);
                 Assert.Null(s.SyncEmission); Assert.Null(s.AsyncEmission);
             }
-        foreach (var c in AllGenericCases) Assert.Contains(wrapped, p => p.Stages.Any(s => s.Name == "global::GenericCases." + c.Name + ".Hook0" && (c.Async ? s.AsyncEmission != null : s.SyncEmission != null)));
+        foreach (var c in AllGenericCases) Assert.Contains(pipelines, p => !p.Stages.Any(s => s.Kind == FusionStageKind.Wrapper) && p.Handlers.Count == 3 && p.Handlers.All(h => h.ReceiverIsGeneric && h.ReceiverIsPublic) && p.Stages.Any(s => s.Name == "global::GenericCases." + c.Name + ".Hook0" && (c.Async ? s.AsyncEmission != null : s.SyncEmission != null)));
+        Assert.Contains(pipelines, r => r.RequestIsGeneric && r.Handlers.Any(h => h.ReceiverIsGeneric && !h.ReceiverIsPublic));
+        Assert.Contains(pipelines, r => !r.RequestIsGeneric && r.Handlers.Any(h => h.ReceiverIsGeneric && !h.ReceiverIsPublic));
+        Assert.Contains(pipelines, r => r.RequestIsGeneric && r.Handlers.Any(h => !h.ReceiverIsGeneric && !h.ReceiverIsPublic));
         Assert.Contains(pipelines, r => r.RequestIsGeneric && r.Handlers.Any(h => h.ReceiverIsGeneric));
         Assert.Contains(pipelines, r => r.RequestIsGeneric && r.Stages.Any(s => s.ReceiverIsGeneric));
         Assert.Contains(pipelines, r => r.RequestIsGeneric && r.Handlers.Any(h => h.Sessions.Any(f => f.FactoryIsGeneric)));
@@ -326,7 +346,7 @@ public sealed partial class GeneratorTests
         Assert.Contains(pipelines, r => !r.RequestIsGeneric && r.Stages.Any(s => s.ReceiverIsGeneric));
         Assert.Contains(pipelines, r => !r.RequestIsGeneric && r.Handlers.Any(h => h.Sessions.Any(f => f.FactoryIsGeneric)));
         Assert.Contains(pipelines, r => !r.RequestIsGeneric && r.Stages.Any(s => s.Sessions.Any(f => f.FactoryIsGeneric)));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, dispatches = 0, genericWrapperRoutes = 8, newlyAcceptedOldWrapperCases = 2, legacyGenericServiceRoutes = 4, rejectedPipelineDiagnostics = 29, incompleteExecutionDiagnostics = 28, synchronousBlockingDiagnostic = 1, familySpecificFullHookProof = true, partialMixedOnlyAndMultipleWrapperRejection = true, contract }));
+        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, dispatches = 0, genericHandlerRoutes = 8, newlyAcceptedOldHandlerCases = 2, acceptedOldWrapperCases = 2, publicNestedCases = 2, oldInternalPlainCases = 2, legacyInternalGenericCases = 1, legacyGenericServiceRoutes = 4, publicRejectedCases = 6, rejectedPipelineDiagnostics = 37, incompleteExecutionDiagnostics = 34, synchronousBlockingDiagnostic = 1, wrongRequestDiagnostics = 2, compilerConstraintErrors = 2, publicProofIncludesContainersAndArguments = true, genericHandlerWrapperRejected = true, familySpecificFullHookProof = true, contract }));
     }
     [Fact]
     public async Task AllGeneric_four_profiles_preserve_reference_locality_pending_ownership_and_failure_Span_commit()

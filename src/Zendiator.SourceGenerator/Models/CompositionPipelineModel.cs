@@ -26,6 +26,7 @@ internal sealed record BoundHandlerModel(string Anchor, string Type, string Name
     string Implementation, FusionOwnership ServiceOwnership, bool CompilerOwnsError, BoundCallbackModel? Callback)
 {
     public bool ReceiverIsGeneric { get; init; }
+    public bool ReceiverIsPublic { get; init; }
     public EquatableArray<BoundSessionModel> Sessions { get; init; }
     public BoundSyncHandlerEmission? SyncEmission { get; init; }
     public BoundAsyncHandlerEmission? AsyncEmission { get; init; }

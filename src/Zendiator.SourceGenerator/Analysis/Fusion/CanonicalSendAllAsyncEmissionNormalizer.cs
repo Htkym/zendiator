@@ -24,7 +24,7 @@ internal static class CanonicalSendAllAsyncEmissionNormalizer
                 r.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void)) continue;
             if (r.RequestIsGeneric && (r.RequestShape != BoundRequestShape.ClosedReference ||
                 r.Stages.Any(s => s.ReceiverIsGeneric || s.Sessions.Any(f => f.FactoryIsGeneric)) ||
-                r.Handlers.Any(h => h.ReceiverIsGeneric || h.Sessions.Any(f => f.FactoryIsGeneric)))) continue;
+                r.Handlers.Any(h => h.Sessions.Any(f => f.FactoryIsGeneric)))) continue;
             if (r.Stages.Any(s => s.Kind == FusionStageKind.Wrapper))
             {
                 var wrappers = CanonicalWrapperEmissionNormalizer.AllBranches(c, r, graph, i);
@@ -39,6 +39,7 @@ internal static class CanonicalSendAllAsyncEmissionNormalizer
             var stage = r.Stages[0];
             if (stage.CompilerOwnsError || stage.Kind != FusionStageKind.Hook || stage.AsyncEmission is not { HookIsValueType: false } hook ||
                 !TryFactory(stage.Sessions, stage.ServiceOwnership, out var hookFactory)) continue;
+            if (r.RequestIsGeneric && r.Handlers.Any(h => h.ReceiverIsGeneric && !h.ReceiverIsPublic)) continue;
             var branches = new List<CanonicalAsyncCompositionEmission>();
             foreach (var h in r.Handlers)
             {
