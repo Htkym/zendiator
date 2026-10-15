@@ -217,15 +217,17 @@ internal sealed class CompositionListBinding
                     open = CanonicalStreamOpenBinding.Create(request, handlerEntries[0].Type, _compilation, out error);
                 else if (family is (BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && handlerEntries.Length == 1)
                     open = CanonicalStreamOpenBinding.CreateSend(request, handlerEntries[0].Type, _compilation, family == BoundDispatchFamily.SendAsync, out error);
+                else if (family == BoundDispatchFamily.SendAllSync && handlerEntries.Length == 2 && handlerEntries.All(e => IsOpenDefinition(e.Type)))
+                    open = CanonicalStreamOpenBinding.CreateSend(request, handlerEntries[0].Type, _compilation, false, out error);
                 if (open == null)
                 {
-                    Reject("UnsupportedGenerationShape", declaration.Anchor, error ?? "An open request requires one supported handler-derived Stream, SendSync or SendAsync pattern.");
+                    Reject("UnsupportedGenerationShape", declaration.Anchor, error ?? "An open request requires one supported handler-derived Stream/Send pattern or two ordered open SendAllSync handlers.");
                     output.Add(Model(null, null, Array.Empty<BoundHandlerModel>(), Array.Empty<BoundStageModel>(), explicitHandlers != null));
                     continue;
                 }
                 request = open.Request;
             }
-            var openSend = open != null && family is (BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync);
+            var openSend = open != null && family is (BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllSync);
             if (!Eligible(request, declaration.Anchor, "Request", concrete: false, open: open, scopedRequest: family == BoundDispatchFamily.SendSync))
             {
                 output.Add(Model(null, null, Array.Empty<BoundHandlerModel>(), Array.Empty<BoundStageModel>(), explicitHandlers != null));
@@ -315,7 +317,7 @@ internal sealed class CompositionListBinding
                         new(implementation.Parameters.Select(p => new BoundParameterModel(Identity(p.Type), p.RefKind.ToString(), p.ScopedKind.ToString()))),
                         Identity(implementation.ReturnType), Constraints(implementation.TypeParameters),
                         family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync))
-                { ReceiverIsGeneric = entry.Type.IsGenericType, ReceiverIsPublic = Public(entry.Type) };
+                { ReceiverIsGeneric = entry.Type.IsGenericType, ReceiverIsPublic = open?.Public(entry.Type) ?? Public(entry.Type) };
                 if ((family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync) && declaration.Request.TypeKind is TypeKind.Class or TypeKind.Struct &&
                     entry.Type.TypeKind is (TypeKind.Class or TypeKind.Struct) && _compilation.IsSymbolAccessibleWithin(entry.Type, _compilation.Assembly) && implementation != null && member != null &&
                     (nextResult == null || nextResult is INamedTypeSymbol or IArrayTypeSymbol))
@@ -453,13 +455,20 @@ internal sealed class CompositionListBinding
                 stages[0].AsyncEmission == null || stages[0].AsyncEmission!.HookIsValueType ||
                 !declaration.HandlerList && declaration.Entries.Length != 1))
                 Reject("UnsupportedGenerationShape", declaration.Anchor, "Open SendAsync requires one class handler and one borrowed class full asynchronous hook.");
-            var openRegistration = open != null && generic != null && handlers.Count == 1 && handlerEntries.Length == 1
+            var openAllSync = open != null && family == BoundDispatchFamily.SendAllSync;
+            if (openAllSync && (handlers.Count != 2 || handlers.Any(h => h.SyncEmission is not { HandlerIsValueType: false, ResultName: "int" or "global::System.Int32" }) ||
+                resultKind != FusionResultKind.Response || stages.Count != 1 || stages[0].SyncEmission is not { HookIsValueType: false } ||
+                !declaration.HandlerList && declaration.Entries.Length != 1))
+                Reject("UnsupportedGenerationShape", declaration.Anchor, "Open SendAllSync requires two ordered class handlers, int response and one borrowed class full synchronous hook.");
+            var openRegistration = open != null && generic != null && handlers.Count == handlerEntries.Length &&
+                (handlers.Count == 1 || openAllSync && handlers.Count == 2)
                 ? new BoundStreamOpenRegistration(DefinitionName(declaration.Request), DefinitionName(handlerEntries[0].Type),
-                    new(new[] { Identity(handlerEntries[0].Type), handlers[0].Type }), new(registrationStages))
+                    new(handlerEntries.SelectMany((entry, i) => new[] { Identity(entry.Type), handlers[i].Type })), new(registrationStages))
                 {
                     FinalDefinitionName = declaration.StreamFinal == null ? null :
                         Name(declaration.StreamFinal.WithNullableAnnotation(NullableAnnotation.NotAnnotated)),
-                    HandlerFactoryDefinitionName = handlerEntries[0].Factory == null ? null : DefinitionName(handlerEntries[0].Factory!)
+                    HandlerFactoryDefinitionName = handlerEntries[0].Factory == null ? null : DefinitionName(handlerEntries[0].Factory!),
+                    HandlerDefinitionNames = openAllSync ? new(handlerEntries.Select(entry => DefinitionName(entry.Type))) : default
                 } : null;
             output.Add(Model(resultKind, result, handlers, stages, explicitHandlers != null) with
             {
@@ -488,6 +497,7 @@ internal sealed class CompositionListBinding
                     PipelineFamily = declaration.HandlerList ? null : declaration.Family,
                     RequestShape = open != null && family == BoundDispatchFamily.SendSync ? BoundRequestShape.OpenSyncReference :
                         open != null && family == BoundDispatchFamily.SendAsync ? BoundRequestShape.OpenAsyncReference :
+                        open != null && family == BoundDispatchFamily.SendAllSync ? BoundRequestShape.OpenAllSyncReference :
                         request.IsRefLikeType && !request.IsGenericType && !HasOpenShape(request) ? BoundRequestShape.ClosedRefLike :
                         request.TypeKind == TypeKind.Class && !HasOpenShape(request) ? BoundRequestShape.ClosedReference :
                         request.TypeKind == TypeKind.Struct && !request.IsRefLikeType && !request.IsGenericType && !HasOpenShape(request) ?

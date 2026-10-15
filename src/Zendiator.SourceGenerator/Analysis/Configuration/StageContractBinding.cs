@@ -154,7 +154,7 @@ internal static class StageContractBinding
             new(callbacks.OrderBy(c => c.Phase).ThenBy(c => c.Interface, StringComparer.Ordinal)), FusionOwnership.BorrowedService, compilerOwned)
         {
             ReceiverIsGeneric = type.IsGenericType,
-            ReceiverIsPublic = Public(type),
+            ReceiverIsPublic = open?.Public(type) ?? Public(type),
             ScopedObserver = facts.Count == before && !compilerOwned && callbacks.Count == 4 && scopedCallbacks.Count == 4
                 ? new(Name(type), scopedCallbacks[BoundCallbackPhase.ObserveBefore], scopedCallbacks[BoundCallbackPhase.ObserveSuccess],
                     scopedCallbacks[BoundCallbackPhase.ObserveException], scopedCallbacks[BoundCallbackPhase.ObserveFinally])

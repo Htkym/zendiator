@@ -1,7 +1,7 @@
 namespace Zendiator.SourceGenerator;
 
 internal enum BoundDispatchFamily { SendAsync, SendSync, SendAllAsync, SendAllSync, Stream, Notification }
-internal enum BoundRequestShape { Unsupported, ClosedReference, ClosedNonGenericValue, ClosedRefLike, OpenSyncReference, OpenAsyncReference }
+internal enum BoundRequestShape { Unsupported, ClosedReference, ClosedNonGenericValue, ClosedRefLike, OpenSyncReference, OpenAsyncReference, OpenAllSyncReference }
 internal enum BoundCallbackPhase { Before, Success, Exception, Finally, Filter, Map, Wrapper, Handler, SessionAcquire, SessionCleanup, ObserveBefore, ObserveSuccess, ObserveException, ObserveFinally }
 internal enum BoundCompletionKind { Synchronous, ValueTask, Enumerable }
 internal sealed record BoundParameterModel(string Type, string RefKind, string ScopedKind);
@@ -72,6 +72,7 @@ internal sealed record BoundStreamOpenRegistration(string RequestDefinitionName,
 {
     public string? FinalDefinitionName { get; init; }
     public string? HandlerFactoryDefinitionName { get; init; }
+    public EquatableArray<string> HandlerDefinitionNames { get; init; }
 }
 // Nullable-aware identities and callable C# names are retained separately from receiver shape.
 internal sealed record BoundStreamItemType(string Identity, string Name, bool IsValueType);

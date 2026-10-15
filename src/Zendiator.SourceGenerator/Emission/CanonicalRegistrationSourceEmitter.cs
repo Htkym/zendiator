@@ -52,7 +52,8 @@ internal static class CanonicalRegistrationSourceEmitter
         var c = route.Registration;
         if (route.Open is { } open)
         {
-            var entry = open.HandlerFactoryDefinitionName == null ? "typeof(" + open.HandlerDefinitionName + ")" :
+            var entry = open.HandlerDefinitionNames.Count != 0 ? string.Join(", ", open.HandlerDefinitionNames.Select(name => "typeof(" + name + ")")) :
+                open.HandlerFactoryDefinitionName == null ? "typeof(" + open.HandlerDefinitionName + ")" :
                 "global::Zendiator.HandlerEntry.Session(typeof(" + open.HandlerDefinitionName + "), typeof(" + open.HandlerFactoryDefinitionName + "))";
             b.AppendLine($$"""            expected.Handlers(typeof({{open.RequestDefinitionName}}), global::Zendiator.DispatchFamily.{{route.Family}}, {{entry}});""");
         }

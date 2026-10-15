@@ -12,7 +12,8 @@ internal sealed record CanonicalRouteRegistration(CanonicalSyncCompositionEmissi
 {
     public EquatableArray<CanonicalBranchRegistration> BranchHandlers { get; init; }
     internal IEnumerable<string> ServiceTypes => Open != null
-        ? Open.Stages.Select(s => s.FactoryName ?? s.TypeName).Concat(new[] { Open.HandlerFactoryDefinitionName ?? Open.HandlerDefinitionName })
+        ? Open.Stages.Select(s => s.FactoryName ?? s.TypeName).Concat(Open.HandlerDefinitionNames.Count == 0
+            ? new[] { Open.HandlerFactoryDefinitionName ?? Open.HandlerDefinitionName } : Open.HandlerDefinitionNames)
         : (Registration.RegistrationStages.Count == 0
             ? Registration.Hooks.Select(h => h.Factory?.FactoryName ?? h.HookName)
             : Registration.RegistrationStages.Select(s => s.FactoryName ?? s.TypeName))
@@ -22,7 +23,7 @@ internal sealed record CanonicalRouteRegistration(CanonicalSyncCompositionEmissi
 internal sealed record CanonicalRegistrationPlan(CanonicalSyncCompositionEmission Composition, EquatableArray<CanonicalRouteRegistration> Routes)
 {
     internal static CanonicalRegistrationPlan SendAllSync(CanonicalSendAllSyncCompositionEmission c) =>
-        new(c.Registration, new(new[] { new CanonicalRouteRegistration(c.Registration, BoundDispatchFamily.SendAllSync, 0, 0, null, null, default) { BranchHandlers = new(c.Branches.Select(b => new CanonicalBranchRegistration(b.Handler.HandlerName, b.Factory?.FactoryName))) } }));
+        new(c.Registration, new(new[] { new CanonicalRouteRegistration(c.Registration, BoundDispatchFamily.SendAllSync, 0, 0, c.Registration.OpenRegistration, null, default) { BranchHandlers = new(c.Branches.Select(b => new CanonicalBranchRegistration(b.Handler.HandlerName, b.Factory?.FactoryName))) } }));
     internal static CanonicalRegistrationPlan SendAllAsync(CanonicalSendAllAsyncCompositionEmission c) =>
         new(c.Registration, new(new[] { new CanonicalRouteRegistration(c.Registration, BoundDispatchFamily.SendAllAsync, 0, 0, null, null, default) { BranchHandlers = new(c.Branches.Select(b => new CanonicalBranchRegistration(b.Handler.HandlerName, b.Factory?.FactoryName))) } }));
     internal static CanonicalRegistrationPlan Single(CanonicalSyncCompositionEmission c, BoundDispatchFamily family,
