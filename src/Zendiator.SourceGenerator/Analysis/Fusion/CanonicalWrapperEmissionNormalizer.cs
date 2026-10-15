@@ -92,7 +92,7 @@ internal static class CanonicalWrapperEmissionNormalizer
             !route.Stages.Any(s => s.Kind == FusionStageKind.Hook) ||
             route.Stages.Any(s => s.ReceiverIsGeneric || s.Sessions.Any(f => f.FactoryIsGeneric) ||
                 s.Kind == FusionStageKind.Hook && (sync ? s.SyncEmission is not { HookIsValueType: false } : s.AsyncEmission is not { HookIsValueType: false })) ||
-            route.Handlers.Any(h => h.ReceiverIsGeneric || h.Sessions.Any(f => f.FactoryIsGeneric)))) return default;
+            route.Handlers.Any(h => h.ReceiverIsGeneric && !h.ReceiverIsPublic || h.Sessions.Any(f => f.FactoryIsGeneric)))) return default;
         bool Session(EquatableArray<BoundSessionModel> sessions, FusionOwnership ownership) => sessions.Count == 0
             ? ownership == FusionOwnership.BorrowedService
             : sessions.Count == 1 && ownership == sessions[0].Ownership &&

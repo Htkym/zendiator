@@ -59,11 +59,24 @@ public sealed partial class GeneratorTests
             public ValueTask BodyVoid(int value,int id){if(!Wait||id!=1)return default;var g=new AsyncOnceGate<int>(value);Gate=g;return g.Void;}
         }}
         """;
-    private static string AllGenericWrapperSource()
+    private static string AllClosedHandlerWrapperConsumerCase(AllGenericCase c)
+    {
+        var source = AllGenericConsumerCase(c).Replace(".ReferenceAll.Run", ".GenericReferenceAll.Run", StringComparison.Ordinal);
+        if (c.Name != "ARString") return source;
+        const string endMarker = "interleave=new{sync=reply.A,values};}";
+        var start = source.IndexOf("if(generated){dispatches++;", StringComparison.Ordinal); var end = source.IndexOf(endMarker, start, StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start); return source.Remove(start, end + endMarker.Length - start);
+    }
+    private static string AllClosedHandlerWrapperTypeCheck()
+    {
+        var cases = AllGenericWrapperCases.Select(c => "\"" + c.Name + "\"=>new[]{" + string.Join(",", (c.Name switch { "SRInt" => new[] { 2, 1, 1, 3 }, "SVInt" => new[] { 2, 3 }, "AVString" => new[] { 2, 1 }, _ => new[] { 2, 1, 3 } }).Select(id => "typeof(" + ClosedHandlerName(c, id) + ").ToString()")) + "}");
+        return "var expectedTypes=profile switch{" + string.Join(",", cases) + ",_=>throw new InvalidOperationException(profile)};var actualTypes=p.Trace.Where(e=>e.StartsWith(\"handler-type:\",StringComparison.Ordinal)).Select(e=>e.Substring(\"handler-type:\".Length)).ToArray();P.Check(actualTypes.SequenceEqual(expectedTypes),\"actual closed request arguments and branch tag DI identity including retry and bypass\");";
+    }
+    private static string AllGenericWrapperSource(bool closedHandlers = false)
     {
         var common = SendAllCompositionSource(false); common = common[..common.IndexOf("namespace AllMix {", StringComparison.Ordinal)];
         var definitions = "namespace GenericCases{" + AllGenericRequestDefinition("Response", false) + AllGenericRequestDefinition("Command", true) + "}";
-        return common + AllGenericWrapperProbeSource + definitions + string.Join("", AllGenericWrapperCases.Select(c => AllGenericModule(c, true))) + """
+        return common + AllGenericWrapperProbeSource + definitions + (closedHandlers ? AllClosedHandlerDefinitions(true) : "") + string.Join("", AllGenericWrapperCases.Select(c => AllGenericModule(c, true) + (closedHandlers ? AllClosedHandlerExtras(c, true) : ""))) + """
             namespace AllGeneric{
             using P=global::GenericCases.Probe;
             using S=global::Closed.AllMixStream;using R=global::Closed.AllMixSync;
@@ -83,8 +96,9 @@ public sealed partial class GeneratorTests
                         P.Check(originalValue==1,"original caller generic request remains unchanged");
                         var expected=profile switch{"SRInt"=>new[]{2,1,1,3},"SVInt"=>new[]{2,3},"AVString"=>new[]{2,1},_=>new[]{2,1,3}};
                         P.Check(p.Handlers.SequenceEqual(expected)&&p.Branch==(profile=="AVString"?2:3),"branch order, retry, omitted next and propagated failure");
+                        __CLOSED_TYPES__
                         if(profile=="SRInt")P.Check(results!.SequenceEqual(new[]{26,45,27})&&destination.SequenceEqual(new[]{26,45,27,-9})&&p.Throws==1,"retry succeeds and Span commits ordered complete result");
-                        if(profile=="SVInt")P.Check(!p.Factories.Contains("F1")&&p.Trace.Count(e=>e.StartsWith("K1.before:",StringComparison.Ordinal))==2&&p.Trace.Count(e=>e.StartsWith("W.skip:",StringComparison.Ordinal))==1,"omitted next does not acquire inner branch receiver");
+                        if(profile=="SVInt")P.Check(!p.Factories.Contains("__FACTORY_ONE__")&&p.Trace.Count(e=>e.StartsWith("K1.before:",StringComparison.Ordinal))==2&&p.Trace.Count(e=>e.StartsWith("W.skip:",StringComparison.Ordinal))==1,"omitted next does not acquire inner branch receiver");
                         if(profile=="ARString")P.Check(results!.SequenceEqual(new[]{26,25,27})&&callerValue==900&&p.Gate!.Consumptions==1,"pending single consumption across caller replacement");
                         if(profile=="AVString")P.Check(error=="sentinel"&&final=="Faulted"&&p.Throws==1&&!p.Resources.Values.Any(r=>r.Id=="H3")&&!p.Trace.Any(e=>e.StartsWith("W.caught:",StringComparison.Ordinal)),"failure escapes wrapper and stops later branch");
                         P.Check(shared.Version==(profile switch{"SRInt"=>23,"SVInt"=>15,"ARString"=>71,_=>9}),"shared reference changes across branch and retry");
@@ -94,7 +108,7 @@ public sealed partial class GeneratorTests
                         var beforeScope=p.Released.Select(r=>p.Resources[r].Id).ToArray();await scope.DisposeAsync();
                         P.Check(p.FactoryEnds.SequenceEqual(p.Factories.AsEnumerable().Reverse()),"DI factory reverse disposal order");
                         foreach(var resource in p.Resources)P.Check((resource.Value.Owned||resource.Value.Direct)==p.Released.Contains(resource.Key),"DI scope owns direct receivers; borrowed session remains external");
-                        var snapshot=JsonSerializer.Serialize(new{profile,results,destination,initial,final,error,p.Branch,p.Throws,p.Handlers,p.Events,p.Trace,p.Factories,p.FactoryEnds,created=p.Resources.Values.Select(r=>new{r.Id,r.Owned,r.Direct}),released=p.Released.Select(r=>p.Resources[r].Id),beforeScope,shared=shared.Version,callerValue,originalValue,waiting,consumptions=p.Gate?.Consumptions??0});
+                        var snapshot=JsonSerializer.Serialize(new{profile,results,destination,initial,final,error,p.Branch,p.Throws,p.Handlers,__TYPE_FIELDS__p.Events,p.Trace,p.Factories,p.FactoryEnds,created=p.Resources.Values.Select(r=>new{r.Id,r.Owned,r.Direct}),released=p.Released.Select(r=>p.Resources[r].Id),beforeScope,shared=shared.Version,callerValue,originalValue,waiting,consumptions=p.Gate?.Consumptions??0});
                         foreach(var resource in p.Resources.Keys.Where(r=>!p.Released.Contains(r)).ToArray()){if(profile[0]=='A')await ((IAsyncDisposable)resource).DisposeAsync();else ((IDisposable)resource).Dispose();}
                         P.Check(p.Released.Count==p.Resources.Count,"external borrowed owner cleanup");return(snapshot,interleave);
                     }finally{p.Token.Dispose();single.Token.Dispose();}
@@ -105,11 +119,13 @@ public sealed partial class GeneratorTests
                         var g=await Observe(profile,true);var r=await Observe(profile,false);P.Check(g.Snapshot==r.Snapshot,"generic wrapper generated/reference mismatch "+profile+"\n"+g.Snapshot+"\n"+r.Snapshot);
                         rows.Add(new{profile,generated=JsonDocument.Parse(g.Snapshot).RootElement.Clone(),reference=JsonDocument.Parse(r.Snapshot).RootElement.Clone()});if(g.Interleave!=null)interleave=g.Interleave;
                     }
-                    P.Check(dispatches==10,"four pairs and two interleaves");return JsonSerializer.Serialize(new{generatorInputs=1,pairedScenarios=4,pairedDispatches=8,interleaveDispatches=2,dispatches,rows,interleave});
+                    P.Check(dispatches==__DISPATCHES__,"four pairs and configured interleaves");return JsonSerializer.Serialize(new{generatorInputs=1,pairedScenarios=4,pairedDispatches=8,interleaveDispatches=__INTERLEAVES__,dispatches,rows,interleave});
                 }
             }}
-            """.Replace("__CONFIG__", AllGenericConfiguration(AllGenericWrapperCases, wrapper: true) + "c.Handlers<S.Items>(DispatchFamily.Stream,typeof(S.H));c.Handlers<R.Ping>(DispatchFamily.SendSync,HandlerEntry.Session<R.Handler,R.Factory>());c.Pipeline<S.Items>(DispatchFamily.Stream,Stage.Hook<S.F1>(),Stage.Hook<S.M>(),Stage.Hook<S.F2>());c.Pipeline<R.Ping>(DispatchFamily.SendSync,Stage.Hook<R.Hook>());")
-            .Replace("__CASES__", string.Join("", AllGenericWrapperCases.Select(AllGenericConsumerCase)));
+            """.Replace("__CONFIG__", (closedHandlers ? AllClosedHandlerConfiguration(AllGenericWrapperCases, true) : AllGenericConfiguration(AllGenericWrapperCases, wrapper: true)) + "c.Handlers<S.Items>(DispatchFamily.Stream,typeof(S.H));c.Handlers<R.Ping>(DispatchFamily.SendSync,HandlerEntry.Session<R.Handler,R.Factory>());c.Pipeline<S.Items>(DispatchFamily.Stream,Stage.Hook<S.F1>(),Stage.Hook<S.M>(),Stage.Hook<S.F2>());c.Pipeline<R.Ping>(DispatchFamily.SendSync,Stage.Hook<R.Hook>());")
+            .Replace("__CASES__", string.Join("", AllGenericWrapperCases.Select(c => closedHandlers ? AllClosedHandlerWrapperConsumerCase(c) : AllGenericConsumerCase(c))))
+            .Replace("__CLOSED_TYPES__", closedHandlers ? AllClosedHandlerWrapperTypeCheck() : "", StringComparison.Ordinal).Replace("__TYPE_FIELDS__", closedHandlers ? "actualTypes,expectedTypes," : "", StringComparison.Ordinal)
+            .Replace("__FACTORY_ONE__", closedHandlers ? "GF1" : "F1", StringComparison.Ordinal).Replace("__DISPATCHES__", closedHandlers ? "8" : "10", StringComparison.Ordinal).Replace("__INTERLEAVES__", closedHandlers ? "0" : "2", StringComparison.Ordinal);
     }
     [Fact]
     public async Task AllGenericWrapper_four_profiles_preserve_retry_bypass_pending_and_failure_propagation()
@@ -119,5 +135,14 @@ public sealed partial class GeneratorTests
         using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); if (folder != null) { File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); File.WriteAllText(Path.Combine(folder, "contract.json"), JsonSerializer.Serialize(contract)); }
         bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var result = await assembly.GetType("AllGeneric.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
         if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result); using var json = JsonDocument.Parse(result); Assert.Equal(10, json.RootElement.GetProperty("dispatches").GetInt32());
+    }
+    [Fact]
+    public async Task AllClosedHandlerWrapper_four_profiles_preserve_DI_types_retry_bypass_pending_and_failure()
+    {
+        var source = AllGenericWrapperSource(true); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllClosedHandlerWrapperRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); var folder = AllGenericFolder("handler-wrapper-runtime"); SaveSendAllSync(folder, source, driver, output, diagnostics);
+        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); var contract = AssertAllGenericContract(output, driver, false, AllGenericWrapperCases);
+        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); if (folder != null) { File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); File.WriteAllText(Path.Combine(folder, "contract.json"), JsonSerializer.Serialize(contract)); }
+        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var result = await assembly.GetType("AllGeneric.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
+        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result); using var json = JsonDocument.Parse(result); Assert.Equal(8, json.RootElement.GetProperty("dispatches").GetInt32()); Assert.Equal(0, json.RootElement.GetProperty("interleaveDispatches").GetInt32());
     }
 }

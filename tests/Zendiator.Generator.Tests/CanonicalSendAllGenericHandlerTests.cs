@@ -10,7 +10,7 @@ public sealed partial class GeneratorTests
 {
     private static AllGenericCase[] AllClosedHandlerCases => [AllGenericCases[0], AllGenericCases[2], AllGenericCases[5], AllGenericCases[7]];
     private static string ClosedHandlerName(AllGenericCase c, int id) => "global::GenericCases.Handlers." + (c.Async ? "Async" : "Sync") + (c.Void ? "Command" : "Response") + "<" + c.Argument + ",global::GenericCases.Tag" + id + ">";
-    private static string AllClosedHandlerDefinitions()
+    private static string AllClosedHandlerDefinitions(bool wrapper = false)
     {
         var text = "namespace GenericCases{public interface IBranchTag{int Id{get;}}" + string.Join("", new[] { 1, 2, 3 }.Select(id => "public sealed class Tag" + id + ":IBranchTag{public int Id=>" + id + ";}")) + "internal sealed class HiddenTag{}}namespace GenericCases.Handlers{";
         foreach (var c in AllGenericCases.Where(c => c.Argument == "int"))
@@ -23,7 +23,7 @@ public sealed partial class GeneratorTests
                     private readonly global::GenericCases.Probe p;private readonly int id;
                     public {{name}}(global::GenericCases.Probe p){this.p=p;id=new B().Id;p.Trace.Add("handler-type:"+GetType());p.Created(this,"H"+id,id==2,id==3);}
                     public {{ret}} {{(c.Async ? "HandleAsync" : "Handle")}}({{request}} r,CancellationToken t){
-                        r.Mark(p,"H"+id+".body",t);p.Handlers.Add(id);if(p.Fail&&id==1)throw p.Failure;
+                        r.Mark(p,"H"+id+".body",t);p.Handlers.Add(id);if({{(wrapper ? "p.FailBody(id)" : "p.Fail&&id==1")}})throw p.Failure;
                         var value=r.Value+id;r.Value+=100;r.Shared.Version+=5;r.Mark(p,"H"+id+".local",t);
                         {{(c.Async ? "return p." + (c.Void ? "BodyVoid" : "BodyResponse") + "(value,id);" : c.Void ? "" : "return value;")}}
                     }
@@ -42,7 +42,7 @@ public sealed partial class GeneratorTests
         [ZendiatorHandler]public sealed class ConstrainedH<T>:H3 where T:class{public ConstrainedH(Probe p):base(p){} }
         }
         """;
-    private static string AllClosedHandlerExtras(AllGenericCase c)
+    private static string AllClosedHandlerExtras(AllGenericCase c, bool wrapper = false)
     {
         var text = "namespace GenericCases." + c.Name + "{using Ping=" + c.Request + ";" + string.Join("", new[] { 1, 2, 3 }.Select(id => "using G" + id + "=" + ClosedHandlerName(c, id) + ";"));
         foreach (var id in new[] { 2, 1, 3 })
@@ -56,7 +56,7 @@ public sealed partial class GeneratorTests
                 }
                 """;
             var completion = c.Async ? "a" : "s";
-            var reference = CanonicalCapabilityReference.Source(c.Async, c.Void, completion, completion, completion, completion, false, AllGenericHookMode(c), mode);
+            var reference = CanonicalCapabilityReference.Source(c.Async, c.Void, completion, completion, completion, completion, false, wrapper ? "direct" : AllGenericHookMode(c), mode, wrapper);
             reference = Regex.Replace(reference, @"\bOracle\b", "GenericReference" + id); reference = Regex.Replace(reference, @"\bHandler\b", "G" + id); reference = Regex.Replace(reference, @"\bHFactory\b", "GF" + id);
             text += reference.Replace("namespace App {", "", StringComparison.Ordinal)[..^1];
         }
@@ -64,7 +64,7 @@ public sealed partial class GeneratorTests
         var calls = string.Join("", new[] { 2, 1, 3 }.Select((id, i) => (c.Void ? "" : "results[" + i + "]=") + (c.Async ? "await " : "") + "GenericReference" + id + ".Send(p,r,t)" + (c.Async ? ".ConfigureAwait(false)" : "") + ";"));
         return text + "public static class GenericReferenceAll{public static " + (c.Async ? "async " : "") + ret + " Run(IServiceProvider p,Ping r,CancellationToken t){ArgumentNullException.ThrowIfNull(r);t.ThrowIfCancellationRequested();" + (c.Void ? "" : "var results=new int[3];") + calls + (c.Void ? "" : "return results;") + "}}}";
     }
-    private static string AllClosedHandlerConfiguration(IEnumerable<AllGenericCase> cases)
+    private static string AllClosedHandlerConfiguration(IEnumerable<AllGenericCase> cases, bool wrapper = false)
     {
         var handlers = new List<string>(); var pipelines = new List<string>();
         foreach (var c in cases)
@@ -72,7 +72,7 @@ public sealed partial class GeneratorTests
             var a = "global::GenericCases." + c.Name + ".";
             var entries = new[] { 2, 1, 3 }.Select(id => id == 3 ? "typeof(" + ClosedHandlerName(c, id) + ")" : "HandlerEntry.Session<" + ClosedHandlerName(c, id) + "," + a + "GF" + id + ">()");
             handlers.Add($"c.Handlers<{c.Request}>(DispatchFamily.{c.Family},{string.Join(",", entries)});");
-            pipelines.Add($"c.Pipeline<{c.Request}>(DispatchFamily.{c.Family},Stage.Hook<{a}Hook0,{a}KFactory>());");
+            pipelines.Add($"c.Pipeline<{c.Request}>(DispatchFamily.{c.Family},Stage.Hook<{a}Hook0{(wrapper ? "" : "," + a + "KFactory")}>(){(wrapper ? ",Stage.Wrapper<" + a + "W>(),Stage.Hook<" + a + "Hook1>()" : "")});");
         }
         return string.Join("", handlers) + string.Join("", pipelines.AsEnumerable().Reverse());
     }
@@ -81,10 +81,11 @@ public sealed partial class GeneratorTests
         var text = "";
         foreach (var c in new[] { AllGenericCases[0], AllGenericCases[5] })
         {
-            foreach (var (name, type) in new[] { ("Internal", "InternalH<string>"), ("Containing", "InternalHost.Nested<string>"), ("Argument", "GenericH3<global::GenericCases.HiddenTag>"), ("PublicNested", "PublicHost.Nested<string>"), ("OldInternalPlain", "InternalPlain"), ("Constraint", "ConstrainedH<int>") })
+            foreach (var wrapped in new[] { false, true })
+            foreach (var (name, type) in new[] { ("Internal", "InternalH<string>"), ("Containing", "InternalHost.Nested<string>"), ("Argument", "GenericH3<global::GenericCases.HiddenTag>"), ("PublicNested", "PublicHost.Nested<string>"), ("OldInternalPlain", "InternalPlain"), ("Constraint", "ConstrainedH<int>") }.Where(p => !wrapped || p.Item1 != "Constraint"))
             {
-                var marker = "Visibility" + c.Name + name; var a = "global::GenericCases." + c.Name + ".";
-                var config = AllGenericConfiguration([c]).Replace("typeof(" + a + "H3)", "typeof(" + a + type + ")", StringComparison.Ordinal);
+                var marker = "Visibility" + c.Name + name + (wrapped ? "Wrapped" : ""); var a = "global::GenericCases." + c.Name + ".";
+                var config = AllGenericConfiguration([c], wrapped ? "wrapper" : "").Replace("typeof(" + a + "H3)", "typeof(" + a + type + ")", StringComparison.Ordinal);
                 text += "[ZendiatorComposition(\"" + marker + "\")]public sealed class " + marker + ";public static class " + marker + "Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<" + marker + ">(c=>{" + config + "});}";
             }
             var wrong = c with { Argument = c.Argument == "int" ? "string" : "int" }; var markerWrong = "Visibility" + c.Name + "WrongRequest";
