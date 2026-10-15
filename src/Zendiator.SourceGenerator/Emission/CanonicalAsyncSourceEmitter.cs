@@ -75,7 +75,7 @@ internal static class CanonicalAsyncSourceEmitter
         return b.ToString();
     }
 
-    private static void EmitHookScope(StringBuilder b, CanonicalAsyncCompositionEmission c, int index, string input)
+    internal static void EmitHookScope(StringBuilder b, CanonicalAsyncCompositionEmission c, int index, string input)
     {
         var h = c.Handler; var hook = c.Hooks[index];
         var receiver = "hook" + index; var saved = "saved" + index; var error = "error" + index; var success = "success" + index;

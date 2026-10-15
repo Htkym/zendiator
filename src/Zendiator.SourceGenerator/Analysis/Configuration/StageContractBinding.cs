@@ -155,7 +155,7 @@ internal static class StageContractBinding
                     ? new(Name(type), syncCallbacks[BoundCallbackPhase.Before], syncCallbacks[BoundCallbackPhase.Success],
                         syncCallbacks[BoundCallbackPhase.Exception], syncCallbacks[BoundCallbackPhase.Finally])
                     { HookIsValueType = type.IsValueType } : null,
-            AsyncEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.SendAsync &&
+            AsyncEmission = facts.Count == before && !compilerOwned && (family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync) &&
                 kind == FusionStageKind.Hook && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly) &&
                 callbacks.Count == 4 && asyncCallbacks.Count == 4 &&
                 asyncCallbacks.ContainsKey(BoundCallbackPhase.Before) && asyncCallbacks.ContainsKey(BoundCallbackPhase.Success) &&

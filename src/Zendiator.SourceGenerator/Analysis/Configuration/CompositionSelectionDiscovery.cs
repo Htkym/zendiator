@@ -205,7 +205,8 @@ internal static class CompositionSelectionDiscovery
         CanonicalCapabilityEmissionModel capabilities, CanonicalSyncInterceptorModel capabilityCallSites,
         CanonicalMultiEmissionModel multi, CanonicalSyncInterceptorModel multiCallSites,
         CanonicalStreamConnectionCatalog streams, CanonicalStreamPublicModel streamPublic, CanonicalSyncInterceptorModel streamPublicSites,
-        CanonicalSendAllSyncEmissionModel sendAllSync, CanonicalSyncInterceptorModel sendAllSyncSites)
+        CanonicalSendAllSyncEmissionModel sendAllSync, CanonicalSyncInterceptorModel sendAllSyncSites,
+        CanonicalSendAllAsyncEmissionModel sendAllAsync, CanonicalSyncInterceptorModel sendAllAsyncSites)
     {
         for (var index = 0; index < catalog.Compositions.Count; index++)
         {
@@ -231,6 +232,7 @@ internal static class CompositionSelectionDiscovery
                     if (fact.Key == "IncompleteExecutionContract")
                     {
                         if (sendAllSync.Compositions.Any(c => c.Registration.Index == index) && sendAllSyncSites.CallSites.Any(s => s.Namespace == composition.GeneratedNamespace && s.MarkerName == composition.MarkerName)) continue;
+                        if (sendAllAsync.Compositions.Any(c => c.Branch.Index == index) && sendAllAsyncSites.CallSites.Any(s => s.Namespace == composition.GeneratedNamespace && s.MarkerName == composition.MarkerName)) continue;
                         var streamEnabled = streamPublic.Compositions.FirstOrDefault(c => c.Registration.Index == index);
                         if (streamEnabled != null && CanonicalStreamPublicConnection.IsConnected(streamEnabled, streamPublicSites)) continue;
                         if (multi.Compositions.Any(c => c.Index == index) && multiCallSites.CallSites.Any(s => s.Namespace == composition.GeneratedNamespace && s.MarkerName == composition.MarkerName)) continue;

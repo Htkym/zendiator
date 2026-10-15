@@ -302,7 +302,7 @@ internal sealed class CompositionListBinding
                         new(implementation.Parameters.Select(p => new BoundParameterModel(Identity(p.Type), p.RefKind.ToString(), p.ScopedKind.ToString()))),
                         Identity(implementation.ReturnType), Constraints(implementation.TypeParameters),
                         family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync));
-                if ((family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAsync) && declaration.Request.TypeKind is TypeKind.Class or TypeKind.Struct &&
+                if ((family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync) && declaration.Request.TypeKind is TypeKind.Class or TypeKind.Struct &&
                     entry.Type.TypeKind is (TypeKind.Class or TypeKind.Struct) && _compilation.IsSymbolAccessibleWithin(entry.Type, _compilation.Assembly) && implementation != null && member != null &&
                     (nextResult == null || nextResult is INamedTypeSymbol or IArrayTypeSymbol))
                 {

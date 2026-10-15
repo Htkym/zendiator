@@ -11,6 +11,7 @@ internal sealed record CanonicalRouteBackend(CanonicalRouteGraph Route, Canonica
     CanonicalAsyncCompositionEmission? Async, CanonicalWrapperCompositionEmission? Wrapper, CanonicalCapabilityCompositionEmission? Capability)
 {
     public CanonicalSendAllSyncCompositionEmission? SendAllSync { get; init; }
+    public CanonicalSendAllAsyncCompositionEmission? SendAllAsync { get; init; }
     public CanonicalStreamPrototypeModel? StreamCandidate { get; init; }
     public CanonicalStreamFallbackModel? StreamCanonical { get; init; }
 }
@@ -71,6 +72,7 @@ internal static class CanonicalRouteIncremental
             wrapper.Compositions.SingleOrDefault(), capability.Compositions.SingleOrDefault())
         {
             SendAllSync = CanonicalSendAllSyncEmissionNormalizer.Create(catalog, graphs).Compositions.SingleOrDefault(),
+            SendAllAsync = CanonicalSendAllAsyncEmissionNormalizer.Create(catalog, graphs).Compositions.SingleOrDefault(),
             StreamCandidate = stream,
             StreamCanonical = stream == null ? CanonicalStreamFallbackProjection.Create(row) : null
         };
@@ -81,7 +83,8 @@ internal static class CanonicalRouteIncremental
             row.Async != null ? CanonicalAsyncSourceEmitter.Emit(new(new(new[] { row.Async }))) :
             row.Wrapper != null ? CanonicalWrapperSourceEmitter.Emit(new(new(new[] { row.Wrapper }))) :
             row.Capability != null ? CanonicalCapabilitySourceEmitter.Emit(new(new(new[] { row.Capability }))) :
-            row.SendAllSync != null ? CanonicalSendAllSyncSourceEmitter.Emit(row.SendAllSync) : "";
+            row.SendAllSync != null ? CanonicalSendAllSyncSourceEmitter.Emit(row.SendAllSync) :
+            row.SendAllAsync != null ? CanonicalSendAllAsyncSourceEmitter.Emit(row.SendAllAsync) : "";
         return new(row.Route.Input.Key, row.Route.Input.Composition.GeneratedNamespace ?? "", row.Route.Input.Route.RequestName,
             row.Route.Input.Route.Family, source)
         {
@@ -97,6 +100,8 @@ internal static class CanonicalRouteIncremental
         model.Compositions.Select(c => (c.Namespace, c.Handler.RequestName, (BoundDispatchFamily?)BoundDispatchFamily.SendSync, c.ExternAliases)), rows, true);
     internal static string SendAllSync(CanonicalSendAllSyncEmissionModel model, IEnumerable<CanonicalRouteText> rows) => Join(
         model.Compositions.Select(c => (c.Registration.Namespace, c.Registration.Handler.RequestName, (BoundDispatchFamily?)BoundDispatchFamily.SendAllSync, c.Registration.ExternAliases)), rows, false);
+    internal static string SendAllAsync(CanonicalSendAllAsyncEmissionModel model, IEnumerable<CanonicalRouteText> rows) => Join(
+        model.Compositions.Select(c => (c.Branch.Namespace, c.Branch.Handler.RequestName, (BoundDispatchFamily?)BoundDispatchFamily.SendAllAsync, c.Branch.ExternAliases)), rows, false);
     internal static string Async(CanonicalAsyncEmissionModel model, IEnumerable<CanonicalRouteText> rows) => Join(
         model.Compositions.Select(c => (c.Namespace, c.Handler.RequestName, (BoundDispatchFamily?)BoundDispatchFamily.SendAsync, c.ExternAliases)), rows, false);
     internal static string Wrapper(CanonicalWrapperEmissionModel model, IEnumerable<CanonicalRouteText> rows) => Join(
