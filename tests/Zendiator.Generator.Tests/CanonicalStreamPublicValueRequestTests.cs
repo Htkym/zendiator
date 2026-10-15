@@ -349,7 +349,8 @@ public sealed partial class GeneratorTests
     {
         // One generation input, no runtime: preserve the prior copy/DI/IL evidence.
         var source = PublicValueRequestSource(false) + "\n" +
-            ClosedModule(MixedStreamSendSource(false), "GateClass", "Items", "Probe", "ItemsHandler", "Positive", "DoubleItem", "Small") + """
+            ClosedModule(MixedStreamSendSource(false), "GateClass", "Items", "Probe", "ItemsHandler", "Positive", "DoubleItem", "Small") + "\n" +
+            ClosedModule(PublicValueRequestSource(false), "GateValue", "SharedState", "Items", "H", "F1", "M", "F2", "Source") + """
             namespace ValuePublic {
             public sealed record AsyncQuery(int Value):IRequest<int>;
             [ZendiatorHandler]public sealed class AH:IRequestHandler<AsyncQuery,int>{
@@ -366,6 +367,7 @@ public sealed partial class GeneratorTests
             [ZendiatorComposition("value-async")]public sealed class ValueAsync;
             [ZendiatorComposition("value-many")]public sealed class ValueMany;
             [ZendiatorComposition("value-streams")]public sealed class ValueStreams;
+            [ZendiatorComposition("two-value-streams")]public sealed class TwoValueStreams;
             [ZendiatorComposition("value-send-only")]public sealed class ValueSendOnly;
             [ZendiatorComposition("class-only")]public sealed class ClassOnly;
             public static class GateBridge {
@@ -388,6 +390,12 @@ public sealed partial class GeneratorTests
                     c.Handlers<global::Closed.GateClass.Items>(DispatchFamily.Stream,typeof(global::Closed.GateClass.ItemsHandler));
                     c.Pipeline<Items>(DispatchFamily.Stream,Stage.Hook<F1>(),Stage.Hook<M>(),Stage.Hook<F2>());
                     c.Pipeline<global::Closed.GateClass.Items>(DispatchFamily.Stream,Stage.Hook<global::Closed.GateClass.Positive>(),Stage.Hook<global::Closed.GateClass.DoubleItem>(),Stage.Hook<global::Closed.GateClass.Small>());
+                });
+                public static IServiceCollection TwoValues(IServiceCollection s)=>s.AddZendiator<TwoValueStreams>(c=>{
+                    c.Handlers<Items>(DispatchFamily.Stream,typeof(H));
+                    c.Handlers<global::Closed.GateValue.Items>(DispatchFamily.Stream,typeof(global::Closed.GateValue.H));
+                    c.Pipeline<Items>(DispatchFamily.Stream,Stage.Hook<F1>(),Stage.Hook<M>(),Stage.Hook<F2>());
+                    c.Pipeline<global::Closed.GateValue.Items>(DispatchFamily.Stream,Stage.Hook<global::Closed.GateValue.F1>(),Stage.Hook<global::Closed.GateValue.M>(),Stage.Hook<global::Closed.GateValue.F2>());
                 });
                 public static IServiceCollection ValueSends(IServiceCollection s)=>s.AddZendiator<ValueSendOnly>(c=>{
                     c.Handlers<ValueQuery>(DispatchFamily.SendSync,typeof(VH));
@@ -420,10 +428,10 @@ public sealed partial class GeneratorTests
                 compiler = output.GetDiagnostics().Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() })
             }));
         }
-        Assert.Equal(5, diagnostics.Length);
+        Assert.Equal(2, diagnostics.Length);
         Assert.All(diagnostics, d => { Assert.Equal("ZEN0037", d.Id); Assert.NotNull(d.Location.SourceTree); });
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        foreach (var name in new[] { "Single", "Mixed", "ClassOnly", "ValueSendOnly", "ValueAsync" })
+        foreach (var name in new[] { "Single", "Mixed", "ClassOnly", "ValueSendOnly", "ValueAsync", "ValueMany", "ValueStreams" })
         {
             var ns = "ValuePublic.Generated." + name;
             Assert.NotNull(output.GetTypeByMetadataName(ns + ".IZendiator"));
@@ -433,7 +441,9 @@ public sealed partial class GeneratorTests
         }
         var classes = output.GetTypeByMetadataName("ValuePublic.Generated.ClassOnly.IZendiator")!;
         Assert.Single(classes.GetMembers("StreamAsync")); Assert.Single(classes.GetMembers("Send")); Assert.Single(classes.GetMembers("SendAsync"));
-        foreach (var name in new[] { "ValueMany", "ValueStreams" })
+        Assert.Equal(2, output.GetTypeByMetadataName("ValuePublic.Generated.ValueMany.IZendiator")!.GetMembers("Send").Length);
+        Assert.Equal(2, output.GetTypeByMetadataName("ValuePublic.Generated.ValueStreams.IZendiator")!.GetMembers("StreamAsync").Length);
+        foreach (var name in new[] { "TwoValueStreams" })
         {
             var ns = "ValuePublic.Generated." + name;
             Assert.Null(output.GetTypeByMetadataName(ns + ".IZendiator"));
@@ -445,8 +455,8 @@ public sealed partial class GeneratorTests
         {
             generatorInputs = 1,
             runtimeOperations = 0,
-            accepted = new[] { "Single", "Mixed", "ClassOnly", "ValueSendOnly", "ValueAsync" },
-            rejected = new[] { "ValueMany", "ValueStreams" },
+            accepted = new[] { "Single", "Mixed", "ClassOnly", "ValueSendOnly", "ValueAsync", "ValueMany", "ValueStreams" },
+            rejected = new[] { "TwoValueStreams" },
             classOnlyIncludesSendAsyncAndThreeRoutes = true,
             reused = "v39 saved request copy/DI/IL/four-operation evidence"
         }));
