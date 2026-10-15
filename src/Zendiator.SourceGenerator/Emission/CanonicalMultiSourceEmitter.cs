@@ -76,11 +76,17 @@ internal static class CanonicalMultiSourceEmitter
             if (node.Parent is InvocationExpressionSyntax call && ReferenceEquals(call.Expression, node) && _methods.TryGetValue(node.Identifier.ValueText, out var method)) return node.WithIdentifier(Rename(node.Identifier, method));
             return base.VisitIdentifierName(node);
         }
+        public override SyntaxNode? VisitGenericName(GenericNameSyntax node)
+        {
+            var result = (GenericNameSyntax)base.VisitGenericName(node)!;
+            return node.Parent is InvocationExpressionSyntax call && ReferenceEquals(call.Expression, node) && _methods.TryGetValue(node.Identifier.ValueText, out var method)
+                ? result.WithIdentifier(Rename(result.Identifier, method)) : result;
+        }
         public override SyntaxNode? VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
         {
             var result = (MemberAccessExpressionSyntax)base.VisitMemberAccessExpression(node)!;
-            return node.Expression is IdentifierNameSyntax { Identifier.ValueText: "_owner" } && node.Name is IdentifierNameSyntax name && _methods.TryGetValue(name.Identifier.ValueText, out var method) ?
-                result.WithName(name.WithIdentifier(Rename(name.Identifier, method))) : result;
+            return node.Expression is IdentifierNameSyntax { Identifier.ValueText: "_owner" } && _methods.TryGetValue(node.Name.Identifier.ValueText, out var method) ?
+                result.WithName(result.Name.WithIdentifier(Rename(result.Name.Identifier, method))) : result;
         }
     }
 }

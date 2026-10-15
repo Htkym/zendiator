@@ -14,7 +14,7 @@ internal static class CanonicalMultiEmissionNormalizer
         for (var i = 0; i < catalog.Compositions.Count; i++)
         {
             var c = catalog.Compositions[i];
-            if (c.Pipelines.Any(r => r.RequestShape == BoundRequestShape.ClosedRefLike) || c.Pipelines.Count < 2 || c.GeneratedNamespace == null || c.Errors.Count != 0 || c.CompilerOwnsHandlerError ||
+            if (c.Pipelines.Any(r => r.RequestShape is BoundRequestShape.ClosedRefLike or BoundRequestShape.OpenSyncReference) || c.Pipelines.Count < 2 || c.GeneratedNamespace == null || c.Errors.Count != 0 || c.CompilerOwnsHandlerError ||
                 c.Facts.Count != c.Pipelines.Count || c.Facts.Any(f => f.Key != "IncompleteExecutionContract") ||
                 catalog.Compositions.Count(x => x.Identity == c.Identity || x.Key == c.Key || x.GeneratedNamespace == c.GeneratedNamespace) != 1) continue;
             var mixedStream = c.Pipelines.Any(r => r.Family == BoundDispatchFamily.Stream);

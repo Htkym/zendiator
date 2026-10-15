@@ -16,12 +16,14 @@ internal static class CanonicalSyncSourceEmitter
             if (c.ScopedObserver != null) { CanonicalScopedSyncSourceEmitter.Emit(b, c); continue; }
             var h = c.Handler;
             var result = h.ResultName ?? "void";
+            var typeParameters = c.Generic?.TypeParameters ?? "";
+            var constraints = c.Generic?.TypeConstraints ?? "";
             b.AppendLine($$"""
                 namespace {{c.Namespace}}
                 {
                     public interface IZendiator
                     {
-                        {{result}} Send({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default);
+                        {{result}} Send{{typeParameters}}({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default){{constraints}};
                     }
                     public sealed class Zendiator : IZendiator
                     {
@@ -31,11 +33,18 @@ internal static class CanonicalSyncSourceEmitter
                             global::System.ArgumentNullException.ThrowIfNull(provider);
                             _provider = provider;
                         }
-                        public {{result}} Send({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default)
+                        public {{result}} Send{{typeParameters}}({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default){{constraints}}
                         {
                             {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
                             cancellationToken.ThrowIfCancellationRequested();
                 """);
+            if (c.Generic != null)
+                b.AppendLine($$"""
+                            {{(h.ResultName == null ? "" : "return ")}}Execute{{typeParameters}}(request, cancellationToken);
+                        }
+                        private {{result}} Execute{{typeParameters}}({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken){{constraints}}
+                        {
+                    """);
             if (c.Hooks.Count != 0)
             {
                 if (c.Hooks.Count == 1) EmitHookSend(b, c);
@@ -207,7 +216,7 @@ internal static class CanonicalSyncSourceEmitter
     internal static void EmitRegistrar(StringBuilder b, CanonicalSyncCompositionEmission c, BoundDispatchFamily family = BoundDispatchFamily.SendSync,
         BoundStreamOpenRegistration? open = null, string? streamFinalItemName = null,
         EquatableArray<RegistrationStageEmission> streamDeclaredStages = default) =>
-        CanonicalRegistrationSourceEmitter.Emit(b, CanonicalRegistrationPlan.Single(c, family, open, streamFinalItemName, streamDeclaredStages));
+        CanonicalRegistrationSourceEmitter.Emit(b, CanonicalRegistrationPlan.Single(c, family, open ?? c.OpenRegistration, streamFinalItemName, streamDeclaredStages));
 
     internal static string EmitInterceptors(CanonicalSyncInterceptorModel model, string shimName = "CanonicalSyncShims")
     {

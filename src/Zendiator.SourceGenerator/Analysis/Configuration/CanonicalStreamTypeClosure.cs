@@ -11,6 +11,14 @@ namespace Zendiator.SourceGenerator;
 internal static class CanonicalStreamTypeClosure
 {
     internal sealed record Result(INamedTypeSymbol? Type, string? Error);
+    internal static Result SendSyncHandler(INamedTypeSymbol type, INamedTypeSymbol request,
+        Compilation compilation, CanonicalStreamOpenBinding open) => Close(type, request, null,
+        new[] { ContractNames.SyncHandler, ContractNames.SyncVoidHandler }, compilation, open, requestOnly: true);
+
+    internal static Result SendSyncHook(INamedTypeSymbol type, INamedTypeSymbol request,
+        Compilation compilation, CanonicalStreamOpenBinding open) => Close(type, request, null,
+        new[] { "Zendiator.ISendRequestTransform`1", "Zendiator.ISendResponseTransform`2", "Zendiator.ISendSuccessObserver`1",
+            "Zendiator.ISendExceptionObserver`1", "Zendiator.ISendFinallyObserver`1" }, compilation, open, requestOnly: true);
     internal static Result Handler(INamedTypeSymbol type, INamedTypeSymbol request, Compilation compilation, CanonicalStreamOpenBinding? open = null)
     {
         var assembly = compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly;
@@ -42,8 +50,8 @@ internal static class CanonicalStreamTypeClosure
         return open != null && open.ApplyConstraints(closed) != null ? null : closed;
     }
 
-    private static Result Close(INamedTypeSymbol type, INamedTypeSymbol request, ITypeSymbol item,
-        string[] names, Compilation compilation, CanonicalStreamOpenBinding? open)
+    private static Result Close(INamedTypeSymbol type, INamedTypeSymbol request, ITypeSymbol? item,
+        string[] names, Compilation compilation, CanonicalStreamOpenBinding? open, bool requestOnly = false)
     {
         if (!IsOpenDefinition(type))
         {
@@ -65,7 +73,7 @@ internal static class CanonicalStreamTypeClosure
         {
             var map = new Dictionary<ITypeParameterSymbol, ITypeSymbol>(SymbolEqualityComparer.Default);
             if (!Match(contract.TypeArguments[0], request, definition, map, compilation) ||
-                !Match(contract.TypeArguments[1], item, definition, map, compilation)) continue;
+                (!requestOnly && !Match(contract.TypeArguments[1], item!, definition, map, compilation))) continue;
             if (definition.TypeParameters.Any(p => !map.ContainsKey(p))) { missingArgument = true; continue; }
             var args = definition.TypeParameters.Select(p => map[p]).ToArray();
             if (open == null && (args.Any(HasOpenArguments) || !GenericConstraints.SatisfiesConstraints(definition, args, compilation)))

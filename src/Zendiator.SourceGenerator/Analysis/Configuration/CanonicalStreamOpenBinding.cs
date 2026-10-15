@@ -55,6 +55,37 @@ internal sealed class CanonicalStreamOpenBinding
         return error == null ? binding : null;
     }
     internal string Display(ITypeSymbol type) => CanonicalSymbolName.Display(type, _compilation, _names);
+    // Share symbol projection and constraint merging, not Stream's request/item contract.
+    internal static CanonicalStreamOpenBinding? CreateSendSync(INamedTypeSymbol definition, INamedTypeSymbol handler,
+        Compilation compilation, out string? error)
+    {
+        error = null;
+        handler = handler.OriginalDefinition;
+        var assembly = compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly;
+        var contracts = new[] { ContractNames.SyncHandler, ContractNames.SyncVoidHandler }
+            .Select(n => assembly?.GetTypeByMetadataName(n)).ToArray();
+        var matches = handler.AllInterfaces.Where(i => contracts.Any(c => Same(i.OriginalDefinition, c)) &&
+            i.TypeArguments[0] is INamedTypeSymbol request && Same(request.OriginalDefinition, definition.OriginalDefinition)).ToArray();
+        if (matches.Length != 1 || !IsOpenDefinition(handler) || HasGenericContainer(handler) || HasGenericContainer(definition) ||
+            definition.TypeKind != TypeKind.Class || handler.TypeKind != TypeKind.Class)
+        { error = "An open SendSync route requires one generic class handler contract and a class request without generic containers."; return null; }
+        var contract = matches[0];
+        var pattern = (INamedTypeSymbol)contract.TypeArguments[0];
+        var binding = new CanonicalStreamOpenBinding(compilation, handler, pattern);
+        var used = Parameters(pattern).ToArray();
+        if (handler.TypeParameters.Any(p => !used.Any(u => Same(p, u)) || p.AllowsRefLikeType) ||
+            !binding.Contains(pattern) || !binding.Public(pattern) || !binding.Public(handler))
+        { error = "Every SendSync handler argument must be determined by the public, ownable request pattern."; return null; }
+        var response = contract.TypeArguments.Length == 2 ? contract.TypeArguments[1] : null;
+        var responseRequest = assembly?.GetTypeByMetadataName(ContractNames.SyncRequest);
+        var voidRequest = assembly?.GetTypeByMetadataName(ContractNames.SyncVoidRequest);
+        var responses = pattern.AllInterfaces.Where(i => Same(i.OriginalDefinition, responseRequest)).ToArray();
+        if (response == null ? responses.Length != 0 || !pattern.AllInterfaces.Any(i => Same(i, voidRequest)) :
+            response.SpecialType != SpecialType.System_Int32 || responses.Length != 1 || !Same(responses[0].TypeArguments[0], response))
+        { error = "The open SendSync handler must match the request's int response or void contract."; return null; }
+        error = binding.ApplyConstraints(pattern);
+        return error == null ? binding : null;
+    }
     internal bool Contains(ITypeSymbol type) => Parameters(type).All(p => _names.ContainsKey(p));
     internal bool Public(ITypeSymbol type) => type switch
     {

@@ -42,6 +42,12 @@ internal static class CanonicalSyncEmissionNormalizer
                 route.Stages.Count > 2 || route.Handlers.Count != 1 || !route.ExplicitHandlerOrder ||
                 route.ResultKind is not (FusionResultKind.Void or FusionResultKind.Response)) continue;
             var handler = route.Handlers[0];
+            if (route.RequestShape == BoundRequestShape.OpenSyncReference &&
+                (composition.MarkerName == null || route.SendGeneric == null || route.SendOpenRegistration is not { } open ||
+                route.Stages.Count != 1 || open.Stages.Count != 1 || handler.Sessions.Count != 0 ||
+                handler.SyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false } ||
+                route.Stages[0].Sessions.Count != 0 || route.Stages[0].SyncEmission is not { HookIsValueType: false } ||
+                composition.Handlers.Any(h => !open.HandlerMembership.Contains(h.Identity)))) continue;
             // Default membership may contain an open definition and its explicitly closed route.
             // Only the authoritative route participates in lowering or DI registration.
             if (handler.CompilerOwnsError || handler.SyncEmission == null || !composition.Handlers.Any(h => h.Identity == handler.Type)) continue;
@@ -75,7 +81,14 @@ internal static class CanonicalSyncEmissionNormalizer
             else if (handler.ServiceOwnership != FusionOwnership.BorrowedService) continue;
             output.Add(new(i, composition.GeneratedNamespace, composition.MarkerName, composition.UseLocalHandlers,
                 handler.SyncEmission, factory, route.HasEmptyPipeline, route.PipelineFamily, composition.MicrosoftDiProviderName ?? "")
-            { Hooks = new(hooks), ExplicitHandlerTypes = composition.ExplicitHandlerTypes, CatalogMarkerTypes = composition.CatalogMarkerTypes, ExternAliases = composition.ExternAliases });
+            {
+                Generic = route.SendGeneric,
+                OpenRegistration = route.SendOpenRegistration,
+                Hooks = new(hooks),
+                ExplicitHandlerTypes = composition.ExplicitHandlerTypes,
+                CatalogMarkerTypes = composition.CatalogMarkerTypes,
+                ExternAliases = composition.ExternAliases
+            });
         }
         return new(new(output));
     }
