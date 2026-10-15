@@ -41,6 +41,7 @@ internal sealed record BoundSessionModel(string FactoryServiceType, string Resou
     // A factory-produced callback receiver cannot be lowered as a separately resolved DI service.
     public bool SuppliesCallbackReceiver { get; init; }
     public bool FactoryIsGeneric { get; init; }
+    public bool FactoryIsPublic { get; init; }
     public EquatableArray<string> FactoryHierarchy { get; init; }
     public BoundSyncFactoryEmission? SyncEmission { get; init; }
     public BoundAsyncFactoryEmission? AsyncEmission { get; init; }

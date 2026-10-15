@@ -23,8 +23,8 @@ internal static class CanonicalSendAllAsyncEmissionNormalizer
                 r.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue) || !r.ExplicitHandlerOrder || r.Handlers.Count == 0 ||
                 r.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void)) continue;
             if (r.RequestIsGeneric && (r.RequestShape != BoundRequestShape.ClosedReference ||
-                r.Stages.Any(s => s.Sessions.Any(f => f.FactoryIsGeneric)) ||
-                r.Handlers.Any(h => h.Sessions.Any(f => f.FactoryIsGeneric)))) continue;
+                r.Stages.Any(s => s.Sessions.Any(f => f.FactoryIsGeneric && !f.FactoryIsPublic)) ||
+                r.Handlers.Any(h => h.Sessions.Any(f => f.FactoryIsGeneric && !f.FactoryIsPublic)))) continue;
             if (r.Stages.Any(s => s.Kind == FusionStageKind.Wrapper))
             {
                 var wrappers = CanonicalWrapperEmissionNormalizer.AllBranches(c, r, graph, i);

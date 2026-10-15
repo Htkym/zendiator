@@ -81,6 +81,7 @@ internal static class SessionFactoryContractBinding
         {
             SuppliesCallbackReceiver = true,
             FactoryIsGeneric = factory.IsGenericType,
+            FactoryIsPublic = Public(factory),
             FactoryHierarchy = StageContractBinding.DescribeHierarchy(factory),
             SyncEmission = family is (BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync) && factory.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(factory, compilation.Assembly)
                     ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name, cleanupContractName)

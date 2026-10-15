@@ -90,9 +90,9 @@ internal static class CanonicalWrapperEmissionNormalizer
                         h.AsyncEmission.ResultName is not (null or "int" or "global::System.Int32")))) return default;
         if (route.RequestIsGeneric && (route.RequestShape != BoundRequestShape.ClosedReference ||
             !route.Stages.Any(s => s.Kind == FusionStageKind.Hook) ||
-            route.Stages.Any(s => s.ReceiverIsGeneric || s.Sessions.Any(f => f.FactoryIsGeneric) ||
+            route.Stages.Any(s => s.ReceiverIsGeneric && !s.ReceiverIsPublic || s.Sessions.Any(f => f.FactoryIsGeneric && !f.FactoryIsPublic) ||
                 s.Kind == FusionStageKind.Hook && (sync ? s.SyncEmission is not { HookIsValueType: false } : s.AsyncEmission is not { HookIsValueType: false })) ||
-            route.Handlers.Any(h => h.ReceiverIsGeneric && !h.ReceiverIsPublic || h.Sessions.Any(f => f.FactoryIsGeneric)))) return default;
+            route.Handlers.Any(h => h.ReceiverIsGeneric && !h.ReceiverIsPublic || h.Sessions.Any(f => f.FactoryIsGeneric && !f.FactoryIsPublic)))) return default;
         bool Session(EquatableArray<BoundSessionModel> sessions, FusionOwnership ownership) => sessions.Count == 0
             ? ownership == FusionOwnership.BorrowedService
             : sessions.Count == 1 && ownership == sessions[0].Ownership &&

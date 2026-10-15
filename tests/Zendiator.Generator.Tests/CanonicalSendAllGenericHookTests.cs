@@ -67,7 +67,7 @@ public sealed partial class GeneratorTests
             ("WrongRequest", ClosedHookName(c with { Argument = c.Argument == "int" ? "string" : "int" }), false, "ZEN0026"),
             ("Partial", a + "PartialGenericHook<string>", false, "ZEN0037")
         }) yield return (name, Config(type), accepted, diagnostic);
-        yield return ("GenericFactory", AllGenericConfiguration([c], "hook").Replace("Stage.Hook<" + a + "GenericHook<string>>()", "Stage.Hook<" + a + "GenericHook<string>," + a + "GenericHookResourceFactory<string>>()", StringComparison.Ordinal), false, "ZEN0037");
+        yield return ("GenericFactory", AllGenericConfiguration([c], "hook").Replace("Stage.Hook<" + a + "GenericHook<string>>()", "Stage.Hook<" + a + "GenericHook<string>," + a + "GenericHookResourceFactory<string>>()", StringComparison.Ordinal), true, "");
         yield return ("MultipleHooks", AllGenericConfiguration([c], "hook").Replace("Stage.Hook<" + a + "GenericHook<string>>()", "Stage.Hook<" + a + "GenericHook<string>>(),Stage.Hook<" + a + "OtherFullHook>()", StringComparison.Ordinal), false, "ZEN0037");
         yield return ("TwoHooksWrapper", AllGenericConfiguration([c], "wrapper").Replace("Stage.Wrapper<" + a + "W>()", "Stage.Wrapper<" + a + "W>(),Stage.Hook<" + a + "OtherFullHook>()", StringComparison.Ordinal), true, "");
     }

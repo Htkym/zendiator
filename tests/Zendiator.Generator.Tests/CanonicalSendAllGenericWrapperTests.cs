@@ -72,11 +72,11 @@ public sealed partial class GeneratorTests
         var cases = AllGenericWrapperCases.Select(c => "\"" + c.Name + "\"=>new[]{" + string.Join(",", (c.Name switch { "SRInt" => new[] { 2, 1, 1, 3 }, "SVInt" => new[] { 2, 3 }, "AVString" => new[] { 2, 1 }, _ => new[] { 2, 1, 3 } }).Select(id => "typeof(" + ClosedHandlerName(c, id) + ").ToString()")) + "}");
         return "var expectedTypes=profile switch{" + string.Join(",", cases) + ",_=>throw new InvalidOperationException(profile)};var actualTypes=p.Trace.Where(e=>e.StartsWith(\"handler-type:\",StringComparison.Ordinal)).Select(e=>e.Substring(\"handler-type:\".Length)).ToArray();P.Check(actualTypes.SequenceEqual(expectedTypes),\"actual closed request arguments and branch tag DI identity including retry and bypass\");";
     }
-    private static string AllGenericWrapperSource(bool closedHandlers = false)
+    private static string AllGenericWrapperSource(bool closedHandlers = false, bool genericComposition = false)
     {
         var common = SendAllCompositionSource(false); common = common[..common.IndexOf("namespace AllMix {", StringComparison.Ordinal)];
         var definitions = "namespace GenericCases{" + AllGenericRequestDefinition("Response", false) + AllGenericRequestDefinition("Command", true) + "}";
-        return common + AllGenericWrapperProbeSource + definitions + (closedHandlers ? AllClosedHandlerDefinitions(true) : "") + string.Join("", AllGenericWrapperCases.Select(c => AllGenericModule(c, true) + (closedHandlers ? AllClosedHandlerExtras(c, true) : ""))) + """
+        return common + (genericComposition ? AllGenericCompositionProbeSource() : AllGenericWrapperProbeSource) + definitions + (closedHandlers ? AllClosedHandlerDefinitions(true) : "") + (genericComposition ? AllGenericCompositionDefinitions() : "") + string.Join("", AllGenericWrapperCases.Select(c => AllGenericModule(c, true) + (genericComposition ? AllGenericCompositionExtras(c) : closedHandlers ? AllClosedHandlerExtras(c, true) : ""))) + """
             namespace AllGeneric{
             using P=global::GenericCases.Probe;
             using S=global::Closed.AllMixStream;using R=global::Closed.AllMixSync;
@@ -86,7 +86,7 @@ public sealed partial class GeneratorTests
                 public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<Many>(c=>{__CONFIG__});
                 private static int dispatches;
                 private static async Task<(string Snapshot,object? Interleave)> Observe(string profile,bool generated){
-                    var p=new P{Wait=profile=="ARString",Fail=profile is "SRInt" or "AVString",Retry=profile=="SRInt",Skip=profile=="SVInt"};var shared=new GenericCases.Shared();var single=new ManagedShapeProbe();var stream=new PublicValueRequestProbe();
+                    var p=new P{Wait=__WAIT__,Fail=profile is "SRInt" or "AVString",Retry=profile=="SRInt",Skip=profile=="SVInt"};var shared=new GenericCases.Shared();var single=new ManagedShapeProbe();var stream=new PublicValueRequestProbe();
                     try{
                         IServiceCollection services=new ServiceCollection();services.AddSingleton(p);services.AddSingleton(single);services.AddSingleton(stream);Register(services);
                         await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});await using var scope=provider.CreateAsyncScope();var sp=scope.ServiceProvider;
@@ -104,7 +104,7 @@ public sealed partial class GeneratorTests
                         P.Check(shared.Version==(profile switch{"SRInt"=>23,"SVInt"=>15,"ARString"=>71,_=>9}),"shared reference changes across branch and retry");
                         P.Check(p.FactoryEnds.Count==0,"borrowed factory services remain until scope");
                         foreach(var resource in p.Resources)P.Check(resource.Value.Owned==p.Released.Contains(resource.Key),"operation cleans only owned resources");
-                        P.Check(p.Trace.Where(e=>e.StartsWith("cleanup:",StringComparison.Ordinal)).SequenceEqual(new[]{"cleanup:H2"}),"inner owned cleanup before borrowed hooks and wrapper scope cleanup");
+                        __CLEANUP_CHECK__
                         var beforeScope=p.Released.Select(r=>p.Resources[r].Id).ToArray();await scope.DisposeAsync();
                         P.Check(p.FactoryEnds.SequenceEqual(p.Factories.AsEnumerable().Reverse()),"DI factory reverse disposal order");
                         foreach(var resource in p.Resources)P.Check((resource.Value.Owned||resource.Value.Direct)==p.Released.Contains(resource.Key),"DI scope owns direct receivers; borrowed session remains external");
@@ -122,10 +122,12 @@ public sealed partial class GeneratorTests
                     P.Check(dispatches==__DISPATCHES__,"four pairs and configured interleaves");return JsonSerializer.Serialize(new{generatorInputs=1,pairedScenarios=4,pairedDispatches=8,interleaveDispatches=__INTERLEAVES__,dispatches,rows,interleave});
                 }
             }}
-            """.Replace("__CONFIG__", (closedHandlers ? AllClosedHandlerConfiguration(AllGenericWrapperCases, true) : AllGenericConfiguration(AllGenericWrapperCases, wrapper: true)) + "c.Handlers<S.Items>(DispatchFamily.Stream,typeof(S.H));c.Handlers<R.Ping>(DispatchFamily.SendSync,HandlerEntry.Session<R.Handler,R.Factory>());c.Pipeline<S.Items>(DispatchFamily.Stream,Stage.Hook<S.F1>(),Stage.Hook<S.M>(),Stage.Hook<S.F2>());c.Pipeline<R.Ping>(DispatchFamily.SendSync,Stage.Hook<R.Hook>());")
+            """.Replace("__CONFIG__", (genericComposition ? AllGenericCompositionConfiguration(AllGenericWrapperCases) : closedHandlers ? AllClosedHandlerConfiguration(AllGenericWrapperCases, true) : AllGenericConfiguration(AllGenericWrapperCases, wrapper: true)) + "c.Handlers<S.Items>(DispatchFamily.Stream,typeof(S.H));c.Handlers<R.Ping>(DispatchFamily.SendSync,HandlerEntry.Session<R.Handler,R.Factory>());c.Pipeline<S.Items>(DispatchFamily.Stream,Stage.Hook<S.F1>(),Stage.Hook<S.M>(),Stage.Hook<S.F2>());c.Pipeline<R.Ping>(DispatchFamily.SendSync,Stage.Hook<R.Hook>());")
+            .Replace("__WAIT__", genericComposition ? "false" : "profile==\"ARString\"", StringComparison.Ordinal)
+            .Replace("__CLEANUP_CHECK__", genericComposition ? AllGenericCompositionCleanupCheck : "P.Check(p.Trace.Where(e=>e.StartsWith(\"cleanup:\",StringComparison.Ordinal)).SequenceEqual(new[]{\"cleanup:H2\"}),\"inner owned cleanup before borrowed hooks and wrapper scope cleanup\");", StringComparison.Ordinal)
             .Replace("__CASES__", string.Join("", AllGenericWrapperCases.Select(c => closedHandlers ? AllClosedHandlerWrapperConsumerCase(c) : AllGenericConsumerCase(c))))
-            .Replace("__CLOSED_TYPES__", closedHandlers ? AllClosedHandlerWrapperTypeCheck() : "", StringComparison.Ordinal).Replace("__TYPE_FIELDS__", closedHandlers ? "actualTypes,expectedTypes," : "", StringComparison.Ordinal)
-            .Replace("__FACTORY_ONE__", closedHandlers ? "GF1" : "F1", StringComparison.Ordinal).Replace("__DISPATCHES__", closedHandlers ? "8" : "10", StringComparison.Ordinal).Replace("__INTERLEAVES__", closedHandlers ? "0" : "2", StringComparison.Ordinal);
+            .Replace("__CLOSED_TYPES__", (closedHandlers ? AllClosedHandlerWrapperTypeCheck() : "") + (genericComposition ? AllGenericCompositionTypeCheck() : ""), StringComparison.Ordinal).Replace("__TYPE_FIELDS__", genericComposition ? "actualTypes,expectedTypes,actualResourceTypes,expectedResourceTypes,p.FactoryTypes,expectedFactoryTypes," : closedHandlers ? "actualTypes,expectedTypes," : "", StringComparison.Ordinal)
+            .Replace("__FACTORY_ONE__", genericComposition ? "GHF1" : closedHandlers ? "GF1" : "F1", StringComparison.Ordinal).Replace("__DISPATCHES__", closedHandlers ? "8" : "10", StringComparison.Ordinal).Replace("__INTERLEAVES__", closedHandlers ? "0" : "2", StringComparison.Ordinal);
     }
     [Fact]
     public async Task AllGenericWrapper_four_profiles_preserve_retry_bypass_pending_and_failure_propagation()

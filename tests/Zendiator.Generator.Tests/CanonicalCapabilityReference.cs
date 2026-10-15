@@ -4,7 +4,7 @@ namespace Zendiator.Generator.Tests;
 // No Roslyn model, graph, emitter output or runtime callback interpreter is consulted.
 internal static class CanonicalCapabilityReference
 {
-    internal static string Source(bool async, bool isVoid, string before, string after, string observer, string final, bool two, string hookFactory = "direct", string handlerFactory = "direct", bool wrapper = false)
+    internal static string Source(bool async, bool isVoid, string before, string after, string observer, string final, bool two, string hookFactory = "direct", string handlerFactory = "direct", bool wrapper = false, string wrapperFactory = "direct", string? innerHookFactory = null)
     {
         var result = async ? (isVoid ? "ValueTask" : "ValueTask<int>") : (isVoid ? "void" : "int"); var prefix = async ? "async " : "";
         string Call(string kind, string sync, string asynchronous) => kind == "a" ? "await " + asynchronous + ".ConfigureAwait(false)" : sync;
@@ -14,11 +14,22 @@ internal static class CanonicalCapabilityReference
         string Region(string tag, string input, bool inner)
         {
             var name = "h" + tag; var saved = "saved" + tag; var error = "error" + tag; var success = "success" + tag;
-            var ownHook = hookFactory.EndsWith("owned", StringComparison.Ordinal); var ownHandler = handlerFactory.EndsWith("owned", StringComparison.Ordinal);
-            var text = $"Hook{tag}? {name}={Acquire(hookFactory, "Hook" + tag, "KFactory", input)};" + (ownHook ? "try{" : "") + $"var {saved}={input};" + (final == "-" ? "" : $"var {success}=false;Exception? {error}=null;") + "try{";
+            var effectiveHookFactory = inner ? innerHookFactory ?? hookFactory : hookFactory;
+            var ownHook = effectiveHookFactory.EndsWith("owned", StringComparison.Ordinal); var ownHandler = handlerFactory.EndsWith("owned", StringComparison.Ordinal);
+            var text = $"Hook{tag}? {name}={Acquire(effectiveHookFactory, "Hook" + tag, inner && innerHookFactory != null ? "K1Factory" : "KFactory", input)};" + (ownHook ? "try{" : "") + $"var {saved}={input};" + (final == "-" ? "" : $"var {success}=false;Exception? {error}=null;") + "try{";
             if (before != "-") text += saved + "=" + Call(before, $"((ISendRequestTransform<Ping>){name}).Before({saved},t)", $"((IAsyncSendRequestTransform<Ping>){name}).BeforeAsync({saved},t)") + ";";
             text += $"ArgumentNullException.ThrowIfNull({saved},\"request\");t.ThrowIfCancellationRequested();";
-            if (wrapper && !inner) text += (isVoid ? "" : "response=") + (async ? "await " : "") + "p.GetRequiredService<W>()." + (async ? "InvokeAsync" : "Invoke") + "(" + saved + ",new Next(p),t)" + (async ? ".ConfigureAwait(false)" : "") + ";";
+            if (wrapper && !inner)
+            {
+                var invoke = (isVoid ? "" : "response=") + (async ? "await " : "") + (wrapperFactory == "direct" ? "p.GetRequiredService<W>()" : "w") + "." + (async ? "InvokeAsync" : "Invoke") + "(" + saved + ",new Next(p),t)" + (async ? ".ConfigureAwait(false)" : "") + ";";
+                if (wrapperFactory == "direct") text += invoke;
+                else
+                {
+                    var owned = wrapperFactory.EndsWith("owned", StringComparison.Ordinal);
+                    text += "W? w=" + Acquire(wrapperFactory, "W", "WFactory", saved) + ";" + (owned ? "try{" : "") + invoke;
+                    if (owned) text += "}finally{var detached=w;w=null;" + Dispose("detached") + "}";
+                }
+            }
             else if (two && !inner) text += Region("1", saved, true);
             else
             {
