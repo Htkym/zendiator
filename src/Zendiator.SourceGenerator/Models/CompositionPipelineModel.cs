@@ -1,7 +1,7 @@
 namespace Zendiator.SourceGenerator;
 
 internal enum BoundDispatchFamily { SendAsync, SendSync, SendAllAsync, SendAllSync, Stream, Notification }
-internal enum BoundRequestShape { Unsupported, ClosedReference, ClosedNonGenericValue, ClosedRefLike, OpenSyncReference, OpenAsyncReference, OpenAllSyncReference }
+internal enum BoundRequestShape { Unsupported, ClosedReference, ClosedNonGenericValue, ClosedRefLike, OpenSyncReference, OpenAsyncReference, OpenAllSyncReference, OpenAllAsyncReference }
 internal enum BoundCallbackPhase { Before, Success, Exception, Finally, Filter, Map, Wrapper, Handler, SessionAcquire, SessionCleanup, ObserveBefore, ObserveSuccess, ObserveException, ObserveFinally }
 internal enum BoundCompletionKind { Synchronous, ValueTask, Enumerable }
 internal sealed record BoundParameterModel(string Type, string RefKind, string ScopedKind);

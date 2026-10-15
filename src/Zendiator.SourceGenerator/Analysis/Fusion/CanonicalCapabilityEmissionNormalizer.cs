@@ -18,7 +18,7 @@ internal static class CanonicalCapabilityEmissionNormalizer
             if (c.GeneratedNamespace == null || c.Errors.Count != 0 || c.CompilerOwnsHandlerError || c.Pipelines.Count != 1 ||
                 c.Facts.Count != 1 || c.Facts[0].Key != "IncompleteExecutionContract" || catalog.Compositions.Count(x => x.Identity == c.Identity || x.Key == c.Key || x.GeneratedNamespace == c.GeneratedNamespace) != 1) continue;
             var route = c.Pipelines[0]; var graph = execution.Compositions[i].SingleOrDefault(g => g.Contract.Anchor == route.Anchor);
-            if (route.RequestShape is BoundRequestShape.OpenSyncReference or BoundRequestShape.OpenAsyncReference or BoundRequestShape.OpenAllSyncReference) continue; // Only explicit generic Send proofs emit these signatures.
+            if (route.RequestShape is BoundRequestShape.OpenSyncReference or BoundRequestShape.OpenAsyncReference or BoundRequestShape.OpenAllSyncReference or BoundRequestShape.OpenAllAsyncReference) continue; // Only explicit generic Send proofs emit these signatures.
             if (graph?.IsValid != true || graph.Schedule == null || route.Family is not (BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) ||
                 route.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void) || route.Handlers.Count != 1 || !route.ExplicitHandlerOrder || route.Stages.Count == 0) continue;
             var sync = route.Family == BoundDispatchFamily.SendSync; var h = route.Handlers[0];

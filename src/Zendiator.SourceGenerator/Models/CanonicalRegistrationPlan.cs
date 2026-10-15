@@ -25,7 +25,7 @@ internal sealed record CanonicalRegistrationPlan(CanonicalSyncCompositionEmissio
     internal static CanonicalRegistrationPlan SendAllSync(CanonicalSendAllSyncCompositionEmission c) =>
         new(c.Registration, new(new[] { new CanonicalRouteRegistration(c.Registration, BoundDispatchFamily.SendAllSync, 0, 0, c.Registration.OpenRegistration, null, default) { BranchHandlers = new(c.Branches.Select(b => new CanonicalBranchRegistration(b.Handler.HandlerName, b.Factory?.FactoryName))) } }));
     internal static CanonicalRegistrationPlan SendAllAsync(CanonicalSendAllAsyncCompositionEmission c) =>
-        new(c.Registration, new(new[] { new CanonicalRouteRegistration(c.Registration, BoundDispatchFamily.SendAllAsync, 0, 0, null, null, default) { BranchHandlers = new(c.Branches.Select(b => new CanonicalBranchRegistration(b.Handler.HandlerName, b.Factory?.FactoryName))) } }));
+        new(c.Registration, new(new[] { new CanonicalRouteRegistration(c.Registration, BoundDispatchFamily.SendAllAsync, 0, 0, c.Registration.OpenRegistration, null, default) { BranchHandlers = new(c.Branches.Select(b => new CanonicalBranchRegistration(b.Handler.HandlerName, b.Factory?.FactoryName))) } }));
     internal static CanonicalRegistrationPlan Single(CanonicalSyncCompositionEmission c, BoundDispatchFamily family,
         BoundStreamOpenRegistration? open, string? finalItemName, EquatableArray<RegistrationStageEmission> stages) =>
         new(c, new(new[] { new CanonicalRouteRegistration(c, family, 0, 0, open, finalItemName, stages) }));

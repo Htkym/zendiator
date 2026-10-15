@@ -20,9 +20,15 @@ internal static class CanonicalSendAllAsyncEmissionNormalizer
             var r = c.Pipelines[0];
             var graph = execution.Compositions[i].SingleOrDefault(g => g.Contract.Anchor == r.Anchor);
             if (graph?.IsValid != true || graph.Schedule == null || r.Family != BoundDispatchFamily.SendAllAsync ||
-                r.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue) || !r.ExplicitHandlerOrder || r.Handlers.Count == 0 ||
+                r.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue or BoundRequestShape.OpenAllAsyncReference) || !r.ExplicitHandlerOrder || r.Handlers.Count == 0 ||
                 r.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void)) continue;
-            if (r.RequestIsGeneric && (r.RequestShape != BoundRequestShape.ClosedReference ||
+            if (r.RequestShape == BoundRequestShape.OpenAllAsyncReference &&
+                (r.SendGeneric == null || r.SendOpenRegistration is not { } open || open.HandlerDefinitionNames.Count != 2 ||
+                r.Handlers.Count != 2 || r.Stages.Count != 1 || open.Stages.Count != 1 ||
+                r.Handlers.Any(h => h.Sessions.Count != 0 || h.AsyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false }) ||
+                r.Stages[0].Kind != FusionStageKind.Hook || r.Stages[0].Sessions.Count != 0 ||
+                r.Stages[0].AsyncEmission is not { HookIsValueType: false } || c.Handlers.Any(h => !open.HandlerMembership.Contains(h.Identity)))) continue;
+            if (r.RequestIsGeneric && (r.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.OpenAllAsyncReference) ||
                 r.Stages.Any(s => s.Sessions.Any(f => f.FactoryIsGeneric && !f.FactoryIsPublic)) ||
                 r.Handlers.Any(h => h.Sessions.Any(f => f.FactoryIsGeneric && !f.FactoryIsPublic)))) continue;
             if (r.Stages.Any(s => s.Kind == FusionStageKind.Wrapper))
@@ -51,6 +57,8 @@ internal static class CanonicalSendAllAsyncEmissionNormalizer
                 branches.Add(new(i, c.GeneratedNamespace, c.MarkerName, c.UseLocalHandlers, h.AsyncEmission, factory,
                     false, r.PipelineFamily, c.MicrosoftDiProviderName ?? "")
                 {
+                    Generic = r.SendGeneric,
+                    OpenRegistration = r.SendOpenRegistration,
                     Hooks = new(new[] { hookFactory == null ? hook : hook with { Factory = hookFactory } }),
                     ExplicitHandlerTypes = c.ExplicitHandlerTypes,
                     CatalogMarkerTypes = c.CatalogMarkerTypes,
