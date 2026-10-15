@@ -33,9 +33,9 @@ public sealed partial class GeneratorTests
             public void Mark(Probe p,string phase,CancellationToken t,Exception? error=null,SendExitInfo? exit=null)=>p.Record(this,phase,Value,Shared.Version,t,error,exit);
         }
         """;
-    private static string AllGenericModule(AllGenericCase c)
+    private static string AllGenericModule(AllGenericCase c, bool wrapper = false)
     {
-        var async = c.Async; var isVoid = c.Void; var hookMode = AllGenericHookMode(c);
+        var async = c.Async; var isVoid = c.Void; var hookMode = wrapper ? "direct" : AllGenericHookMode(c);
         var ret = async ? isVoid ? "ValueTask" : "ValueTask<int>" : isVoid ? "void" : "int";
         var prefix = async ? "IAsyncSend" : "ISend"; var disposable = async ? "IAsyncDisposable" : "IDisposable";
         var dispose = async ? "public ValueTask DisposeAsync(){p.Cleanup(this);return default;}" : "public void Dispose()=>p.Cleanup(this);";
@@ -56,8 +56,8 @@ public sealed partial class GeneratorTests
             namespace GenericCases.{{c.Name}}{
             using Ping={{c.Request}};
             public class Hook0:{{prefix}}RequestTransform<Ping>,{{prefix}}{{(isVoid ? "SuccessObserver<Ping>" : "ResponseTransform<Ping,int>")}},{{prefix}}ExceptionObserver<Ping>,{{prefix}}FinallyObserver<Ping>,{{disposable}}{
-                private readonly Probe p;public Hook0(Probe p){this.p=p;p.Created(this,"K0",true,false);}
-                public {{(async ? "ValueTask<Ping>" : "Ping")}} {{(async ? "BeforeAsync" : "Before")}}(Ping r,CancellationToken t){p.Branch++;r.Mark(p,"K0.before",t);var saved=r.Change(r.Value+10);p.Saved=saved;return {{(async ? "new(saved)" : "saved")}};}
+                private readonly Probe p;public Hook0(Probe p){this.p=p;p.Created(this,"K0",{{(wrapper ? "false,true" : "true,false")}});}
+                public {{(async ? "ValueTask<Ping>" : "Ping")}} {{(async ? "BeforeAsync" : "Before")}}(Ping r,CancellationToken t){p.Branch++;r.Mark(p,"K0.before",t);var saved=r.Change(r.Value+10);{{(wrapper ? "p.Save(0,saved);" : "p.Saved=saved;")}}return {{(async ? "new(saved)" : "saved")}};}
                 public {{ret}} {{(async ? "AfterAsync" : "After")}}(Ping r,{{(isVoid ? "" : "int value,")}}CancellationToken t){r.Mark(p,"K0.after",t);{{(isVoid ? async ? "return default;" : "" : async ? "return new(value+1);" : "return value+1;")}}}
                 public {{(async ? "ValueTask" : "void")}} {{(async ? "OnExceptionAsync" : "OnException")}}(Ping r,Exception e,CancellationToken t){r.Mark(p,"K0.exception",t,e);{{(async ? "return default;" : "")}}}
                 public {{(async ? "ValueTask" : "void")}} {{(async ? "FinallyAsync" : "Finally")}}(Ping r,SendExitInfo e,CancellationToken t){r.Mark(p,"K0.finally",t,exit:e);{{(async ? "return default;" : "")}}}
@@ -65,9 +65,24 @@ public sealed partial class GeneratorTests
             }
             public sealed class GenericHook<T>:Hook0{public GenericHook(Probe p):base(p){} }
             public sealed class BeforeOnly:{{prefix}}RequestTransform<Ping>{public {{(async ? "ValueTask<Ping> BeforeAsync" : "Ping Before")}}(Ping r,CancellationToken t)=>{{(async ? "new(r)" : "r")}};}
+            public sealed class MixedFull:{{prefix}}RequestTransform<Ping>,{{prefix}}{{(isVoid ? "SuccessObserver<Ping>" : "ResponseTransform<Ping,int>")}},{{prefix}}ExceptionObserver<Ping>,{{(async ? "ISend" : "IAsyncSend")}}FinallyObserver<Ping>{
+                public {{(async ? "ValueTask<Ping> BeforeAsync" : "Ping Before")}}(Ping r,CancellationToken t)=>{{(async ? "new(r)" : "r")}};
+                public {{ret}} {{(async ? "AfterAsync" : "After")}}(Ping r,{{(isVoid ? "" : "int value,")}}CancellationToken t){ {{(isVoid ? async ? "return default;" : "" : async ? "return new(value);" : "return value;")}} }
+                public {{(async ? "ValueTask OnExceptionAsync" : "void OnException")}}(Ping r,Exception e,CancellationToken t){ {{(async ? "return default;" : "")}} }
+                public {{(async ? "void Finally" : "ValueTask FinallyAsync")}}(Ping r,SendExitInfo e,CancellationToken t){ {{(async ? "" : "return default;")}} }
+            }
             public class W:{{prefix}}Wrapper<Ping{{(isVoid ? "" : ",int")}}>{public {{ret}} {{(async ? "InvokeAsync" : "Invoke")}}<N>(Ping r,N next,CancellationToken t)where N:{{(async ? "IAsyncSendContinuation" : "ISendContinuation")}}<Ping{{(isVoid ? "" : ",int")}}> { {{(isVoid && !async ? "next.Invoke(r,t);" : "return next." + (async ? "InvokeAsync" : "Invoke") + "(r,t);")}} } }
-            public sealed class GenericW<T>:W{}
+            public sealed class GenericW<T>:W{ {{(wrapper ? "public GenericW(Probe p):base(p){}" : "")}} }
+            public sealed class OtherW:W{ {{(wrapper ? "public OtherW(Probe p):base(p){}" : "")}} }
             """ + Factory(hookMode, "Hook0", "KFactory");
+        if (wrapper)
+        {
+            var start = text.IndexOf("public class Hook0:", StringComparison.Ordinal); var end = text.IndexOf("public sealed class GenericHook", start, StringComparison.Ordinal);
+            var inner = text[start..end].Replace("Hook0", "Hook1", StringComparison.Ordinal).Replace("K0", "K1", StringComparison.Ordinal).Replace("p.Branch++;", "", StringComparison.Ordinal).Replace("p.Save(0,saved)", "p.Save(1,saved)", StringComparison.Ordinal);
+            text = text.Insert(end, inner);
+            start = text.IndexOf("public class W:", StringComparison.Ordinal); end = text.IndexOf("public sealed class GenericW", start, StringComparison.Ordinal);
+            text = text[..start] + AllGenericWrapperDeclaration(c) + text[end..];
+        }
         foreach (var id in new[] { 2, 1, 3 })
         {
             var mode = AllGenericHandlerMode(c, id);
@@ -75,7 +90,7 @@ public sealed partial class GeneratorTests
                 [ZendiatorHandler]public class H{{id}}:{{(async ? "IRequestHandler" : "ISyncRequestHandler")}}<Ping{{(isVoid ? "" : ",int")}}>,{{disposable}}{
                     private readonly Probe p;public H{{id}}(Probe p){this.p=p;p.Created(this,"H{{id}}",{{(mode.EndsWith("owned", StringComparison.Ordinal) ? "true" : "false")}},{{(mode == "direct" ? "true" : "false")}});}
                     public {{ret}} {{(async ? "HandleAsync" : "Handle")}}(Ping r,CancellationToken t){
-                        r.Mark(p,"H{{id}}.body",t);p.Handlers.Add({{id}});if(p.Fail&&{{id}}==1)throw p.Failure;
+                        r.Mark(p,"H{{id}}.body",t);p.Handlers.Add({{id}});if({{(wrapper ? "p.FailBody(" + id + ")" : "p.Fail&&" + id + "==1")}})throw p.Failure;
                         var value=r.Value+{{id}};r.Value+=100;r.Shared.Version+=5;r.Mark(p,"H{{id}}.local",t);
                         {{(async ? "return p." + (isVoid ? "BodyVoid" : "BodyResponse") + "(value," + id + ");" : isVoid ? "" : "return value;")}}
                     }
@@ -83,7 +98,7 @@ public sealed partial class GeneratorTests
                 }
                 """ + Factory(mode, "H" + id, "F" + id);
             var completion = async ? "a" : "s";
-            var reference = CanonicalCapabilityReference.Source(async, isVoid, completion, completion, completion, completion, false, hookMode, mode);
+            var reference = CanonicalCapabilityReference.Source(async, isVoid, completion, completion, completion, completion, false, hookMode, mode, wrapper);
             reference = Regex.Replace(reference, @"\bOracle\b", "Reference" + id); reference = Regex.Replace(reference, @"\bHandler\b", "H" + id); reference = Regex.Replace(reference, @"\bHFactory\b", "F" + id);
             text += reference.Replace("namespace App {", "", StringComparison.Ordinal)[..^1];
         }
@@ -117,7 +132,7 @@ public sealed partial class GeneratorTests
             public ValueTask BodyVoid(int value,int id){if(!Wait||id!=1)return default;var g=new AsyncOnceGate<int>(value);Gate=g;return g.Void;}
         }}
         """;
-    private static string AllGenericConfiguration(IEnumerable<AllGenericCase> cases, string mutation = "")
+    private static string AllGenericConfiguration(IEnumerable<AllGenericCase> cases, string mutation = "", bool wrapper = false)
     {
         var handlers = new List<string>(); var pipelines = new List<string>();
         foreach (var c in cases)
@@ -129,10 +144,14 @@ public sealed partial class GeneratorTests
             {
                 "hook" => "Stage.Hook<" + a + "GenericHook<string>>()",
                 "hookFactory" => "Stage.Hook<" + a + "Hook0," + a + "GenericKFactory<string>>()",
-                "before" => "Stage.Hook<" + a + "BeforeOnly>()",
-                _ => "Stage.Hook<" + a + "Hook0," + a + "KFactory>()"
+                "before" or "partialWrapper" => "Stage.Hook<" + a + "BeforeOnly>()",
+                "mixedWrapper" => "Stage.Hook<" + a + "MixedFull>()",
+                "onlyWrapper" => "Stage.Wrapper<" + a + "W>()",
+                _ => "Stage.Hook<" + a + "Hook0" + (wrapper ? "" : "," + a + "KFactory") + ">()"
             };
-            if (mutation is "wrapper" or "genericWrapper") stage += ",Stage.Wrapper<" + a + (mutation == "wrapper" ? "W" : "GenericW<string>") + ">()";
+            if (mutation is "wrapper" or "genericWrapper" or "partialWrapper" or "mixedWrapper" or "multipleWrappers") stage += ",Stage.Wrapper<" + a + (mutation == "genericWrapper" ? "GenericW<string>" : "W") + ">()";
+            if (mutation == "multipleWrappers") stage += ",Stage.Wrapper<" + a + "OtherW>()";
+            if (wrapper) stage += ",Stage.Wrapper<" + a + "W>(),Stage.Hook<" + a + "Hook1>()";
             pipelines.Add($"c.Pipeline<{c.Request}>(DispatchFamily.{c.Family},{stage});");
         }
         return string.Join("", handlers) + string.Join("", pipelines.AsEnumerable().Reverse());
@@ -141,14 +160,14 @@ public sealed partial class GeneratorTests
     {
         var text = "";
         foreach (var c in new[] { AllGenericCases[0], AllGenericCases[5] })
-            foreach (var mutation in new[] { "handler", "hook", "factory", "hookFactory", "wrapper", "genericWrapper", "before", "default" })
+            foreach (var mutation in new[] { "handler", "hook", "factory", "hookFactory", "wrapper", "genericWrapper", "before", "default", "partialWrapper", "mixedWrapper", "onlyWrapper", "multipleWrappers" })
             {
                 if (mutation == "default" && c.Async) continue;
                 var marker = "Reject" + c.Name + mutation;
                 text += (mutation == "default" ? "" : "[ZendiatorComposition(\"" + marker + "\")]public sealed class " + marker + ";") +
                     "public static class " + marker + "Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator" + (mutation == "default" ? "" : "<" + marker + ">") + "(c=>{" + AllGenericConfiguration([c], mutation) + "});}";
             }
-        var whole = AllGenericConfiguration(AllGenericCases).Replace("typeof(global::GenericCases.SRInt.H3)", "typeof(global::GenericCases.SRInt.GenericH3<string>)", StringComparison.Ordinal);
+        var whole = AllGenericConfiguration(AllGenericCases, "wrapper").Replace("typeof(global::GenericCases.SRInt.H3)", "typeof(global::GenericCases.SRInt.GenericH3<string>)", StringComparison.Ordinal);
         text += "[ZendiatorComposition(\"whole-generic-boundary\")]public sealed class RejectWhole;public static class RejectWholeBridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<RejectWhole>(c=>{" + whole + "});}";
         foreach (var mutation in new[] { "handler", "hook", "factory", "hookFactory" })
         {
@@ -187,7 +206,7 @@ public sealed partial class GeneratorTests
         var common = SendAllCompositionSource(false); common = common[..common.IndexOf("namespace AllMix {", StringComparison.Ordinal)];
         var definitions = "namespace GenericCases{" + AllGenericRequestDefinition("Response", false) + AllGenericRequestDefinition("Command", true) + AllGenericRequestDefinition("LegacyResponse", false, true) + "}";
         var legacy = gate ? AllGenericModule(new("Legacy", false, false, "int", true)) : "";
-        return common + AllGenericProbeSource + definitions + string.Join("", cases.Select(AllGenericModule)) + legacy + """
+        return common + AllGenericProbeSource + definitions + string.Join("", cases.Select(c => AllGenericModule(c))) + legacy + """
             namespace AllGeneric{
             using P=global::GenericCases.Probe;
             using S=global::Closed.AllMixStream;using R=global::Closed.AllMixSync;using A=global::Closed.AllMixAsync;
@@ -199,7 +218,7 @@ public sealed partial class GeneratorTests
             }
             __REJECTED__
             }
-            """.Replace("__CONFIG__", AllGenericConfiguration(cases) + "c.Handlers<S.Items>(DispatchFamily.Stream,typeof(S.H));c.Handlers<R.Ping>(DispatchFamily.SendSync,HandlerEntry.Session<R.Handler,R.Factory>());c.Pipeline<S.Items>(DispatchFamily.Stream,Stage.Hook<S.F1>(),Stage.Hook<S.M>(),Stage.Hook<S.F2>());c.Pipeline<R.Ping>(DispatchFamily.SendSync,Stage.Hook<R.Hook>());")
+            """.Replace("__CONFIG__", AllGenericConfiguration(cases, gate ? "wrapper" : "") + "c.Handlers<S.Items>(DispatchFamily.Stream,typeof(S.H));c.Handlers<R.Ping>(DispatchFamily.SendSync,HandlerEntry.Session<R.Handler,R.Factory>());c.Pipeline<S.Items>(DispatchFamily.Stream,Stage.Hook<S.F1>(),Stage.Hook<S.M>(),Stage.Hook<S.F2>());c.Pipeline<R.Ping>(DispatchFamily.SendSync,Stage.Hook<R.Hook>());")
             .Replace("__REJECTED__", gate ? AllGenericRejectedSource() : "")
             .Replace("__CONSUMER__", gate ? "" : """
                 private static int dispatches;
@@ -239,9 +258,9 @@ public sealed partial class GeneratorTests
                 }
                 """.Replace("__CASES__", string.Join("", cases.Select(AllGenericConsumerCase))));
     }
-    private static object AssertAllGenericContract(Compilation output, GeneratorDriver driver, bool gate)
+    private static object AssertAllGenericContract(Compilation output, GeneratorDriver driver, bool gate, AllGenericCase[]? selected = null)
     {
-        var cases = gate ? AllGenericCases : AllGenericCases.Where(c => AllGenericRuntimeNames.Contains(c.Name)).ToArray();
+        var cases = selected ?? (gate ? AllGenericCases : AllGenericCases.Where(c => AllGenericRuntimeNames.Contains(c.Name)).ToArray());
         var api = output.GetTypeByMetadataName("AllGeneric.Generated.Many.IZendiator"); Assert.NotNull(api);
         var methods = api.GetMembers().OfType<IMethodSymbol>().Where(m => m.Name is "SendAll" or "SendAllAsync").ToArray();
         Assert.Equal(cases.Sum(c => !c.Async && !c.Void ? 2 : 1), methods.Length);
@@ -267,21 +286,38 @@ public sealed partial class GeneratorTests
     public void AllGeneric_gate_preserves_closed_type_identity_and_symbol_based_receiver_factory_boundaries()
     {
         var source = AllGenericSource(true); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllGenericGate_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); var folder = AllGenericFolder("gate"); SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Equal(23, diagnostics.Length); Assert.All(diagnostics, d => Assert.Equal("ZEN0037", d.Id));
+        Assert.Equal(29, diagnostics.Length);
+        var blocking = Assert.Single(diagnostics, d => d.Id == "ZEN0030"); Assert.Contains("SRInt.MixedFull", blocking.GetMessage());
+        Assert.All(diagnostics.Where(d => !ReferenceEquals(d, blocking)), d => Assert.Equal("ZEN0037", d.Id));
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); var contract = AssertAllGenericContract(output, driver, true);
         var files = driver.GetRunResult().Results.Single().GeneratedSources;
         foreach (var c in new[] { AllGenericCases[0], AllGenericCases[5] })
-            foreach (var mutation in new[] { "handler", "hook", "factory", "hookFactory", "wrapper", "genericWrapper", "before" })
+        {
+            var accepted = "AllGeneric.Generated.Reject" + c.Name + "wrapper";
+            Assert.NotNull(output.GetTypeByMetadataName(accepted + ".IZendiator")); Assert.NotNull(output.GetTypeByMetadataName(accepted + ".ZendiatorGeneratedRegistrar"));
+            Assert.Contains(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains(accepted + ".ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
+            foreach (var mutation in new[] { "handler", "hook", "factory", "hookFactory", "genericWrapper", "before", "partialWrapper", "mixedWrapper", "onlyWrapper", "multipleWrappers" })
             {
                 var ns = "AllGeneric.Generated.Reject" + c.Name + mutation;
                 Assert.Null(output.GetTypeByMetadataName(ns + ".IZendiator")); Assert.Null(output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar"));
                 Assert.DoesNotContain(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains(ns + ".ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
+                var start = source.IndexOf("public static class Reject" + c.Name + mutation + "Bridge", StringComparison.Ordinal); var end = source.IndexOf("});}", start, StringComparison.Ordinal);
+                Assert.Single(diagnostics, d => d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.Start < end);
             }
+        }
         Assert.Null(output.GetTypeByMetadataName("AllGeneric.Generated.RejectWhole.IZendiator")); Assert.Null(output.GetTypeByMetadataName("AllGeneric.Generated.RejectWhole.ZendiatorGeneratedRegistrar"));
         Assert.DoesNotContain(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains("AllGeneric.Generated.RejectWhole.ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
         foreach (var mutation in new[] { "handler", "hook", "factory", "hookFactory" }) Assert.NotNull(output.GetTypeByMetadataName("AllGeneric.Generated.Legacy" + mutation + ".IZendiator"));
         var catalog = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single().TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
         var pipelines = catalog.Compositions.SelectMany(c => c.Pipelines).ToArray();
+        var wrapped = pipelines.Where(p => p.Stages.Any(s => s.Kind == FusionStageKind.Wrapper)).ToArray();
+        foreach (var p in pipelines)
+            foreach (var s in p.Stages.Where(s => s.Type.Contains(".MixedFull", StringComparison.Ordinal)))
+            {
+                if (p.Family == BoundDispatchFamily.SendAllSync) Assert.Null(s.Capabilities); else Assert.NotNull(s.Capabilities);
+                Assert.Null(s.SyncEmission); Assert.Null(s.AsyncEmission);
+            }
+        foreach (var c in AllGenericCases) Assert.Contains(wrapped, p => p.Stages.Any(s => s.Name == "global::GenericCases." + c.Name + ".Hook0" && (c.Async ? s.AsyncEmission != null : s.SyncEmission != null)));
         Assert.Contains(pipelines, r => r.RequestIsGeneric && r.Handlers.Any(h => h.ReceiverIsGeneric));
         Assert.Contains(pipelines, r => r.RequestIsGeneric && r.Stages.Any(s => s.ReceiverIsGeneric));
         Assert.Contains(pipelines, r => r.RequestIsGeneric && r.Handlers.Any(h => h.Sessions.Any(f => f.FactoryIsGeneric)));
@@ -290,7 +326,7 @@ public sealed partial class GeneratorTests
         Assert.Contains(pipelines, r => !r.RequestIsGeneric && r.Stages.Any(s => s.ReceiverIsGeneric));
         Assert.Contains(pipelines, r => !r.RequestIsGeneric && r.Handlers.Any(h => h.Sessions.Any(f => f.FactoryIsGeneric)));
         Assert.Contains(pipelines, r => !r.RequestIsGeneric && r.Stages.Any(s => s.Sessions.Any(f => f.FactoryIsGeneric)));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, dispatches = 0, genericRoutes = 8, legacyGenericServiceRoutes = 4, rejectedPipelineDiagnostics = 23, contract }));
+        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, dispatches = 0, genericWrapperRoutes = 8, newlyAcceptedOldWrapperCases = 2, legacyGenericServiceRoutes = 4, rejectedPipelineDiagnostics = 29, incompleteExecutionDiagnostics = 28, synchronousBlockingDiagnostic = 1, familySpecificFullHookProof = true, partialMixedOnlyAndMultipleWrapperRejection = true, contract }));
     }
     [Fact]
     public async Task AllGeneric_four_profiles_preserve_reference_locality_pending_ownership_and_failure_Span_commit()

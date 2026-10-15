@@ -78,7 +78,7 @@ internal static class CanonicalWrapperEmissionNormalizer
     {
         var sync = route.Family == BoundDispatchFamily.SendAllSync;
         if (route.Family is not (BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAllAsync) ||
-            route.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue) || route.RequestIsGeneric ||
+            route.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue) ||
             route.Stages.Count(s => s.Kind == FusionStageKind.Wrapper) != 1 ||
             route.Stages.Any(s => s.CompilerOwnsError || !Session(s.Sessions, s.ServiceOwnership) ||
                 (s.Kind == FusionStageKind.Wrapper ? s.WrapperEmission is not { WrapperIsValueType: false } :
@@ -88,6 +88,11 @@ internal static class CanonicalWrapperEmissionNormalizer
                         h.SyncEmission.ResultName is not (null or "int" or "global::System.Int32") :
                     h.AsyncEmission is not { HandlerIsValueType: false } || h.AsyncEmission.RequestIsValueType != (route.RequestShape == BoundRequestShape.ClosedNonGenericValue) ||
                         h.AsyncEmission.ResultName is not (null or "int" or "global::System.Int32")))) return default;
+        if (route.RequestIsGeneric && (route.RequestShape != BoundRequestShape.ClosedReference ||
+            !route.Stages.Any(s => s.Kind == FusionStageKind.Hook) ||
+            route.Stages.Any(s => s.ReceiverIsGeneric || s.Sessions.Any(f => f.FactoryIsGeneric) ||
+                s.Kind == FusionStageKind.Hook && (sync ? s.SyncEmission is not { HookIsValueType: false } : s.AsyncEmission is not { HookIsValueType: false })) ||
+            route.Handlers.Any(h => h.ReceiverIsGeneric || h.Sessions.Any(f => f.FactoryIsGeneric)))) return default;
         bool Session(EquatableArray<BoundSessionModel> sessions, FusionOwnership ownership) => sessions.Count == 0
             ? ownership == FusionOwnership.BorrowedService
             : sessions.Count == 1 && ownership == sessions[0].Ownership &&
