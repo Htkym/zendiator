@@ -420,10 +420,10 @@ public sealed partial class GeneratorTests
                 compiler = output.GetDiagnostics().Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() })
             }));
         }
-        Assert.Equal(7, diagnostics.Length);
+        Assert.Equal(5, diagnostics.Length);
         Assert.All(diagnostics, d => { Assert.Equal("ZEN0037", d.Id); Assert.NotNull(d.Location.SourceTree); });
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        foreach (var name in new[] { "Single", "Mixed", "ClassOnly", "ValueSendOnly" })
+        foreach (var name in new[] { "Single", "Mixed", "ClassOnly", "ValueSendOnly", "ValueAsync" })
         {
             var ns = "ValuePublic.Generated." + name;
             Assert.NotNull(output.GetTypeByMetadataName(ns + ".IZendiator"));
@@ -433,7 +433,7 @@ public sealed partial class GeneratorTests
         }
         var classes = output.GetTypeByMetadataName("ValuePublic.Generated.ClassOnly.IZendiator")!;
         Assert.Single(classes.GetMembers("StreamAsync")); Assert.Single(classes.GetMembers("Send")); Assert.Single(classes.GetMembers("SendAsync"));
-        foreach (var name in new[] { "ValueAsync", "ValueMany", "ValueStreams" })
+        foreach (var name in new[] { "ValueMany", "ValueStreams" })
         {
             var ns = "ValuePublic.Generated." + name;
             Assert.Null(output.GetTypeByMetadataName(ns + ".IZendiator"));
@@ -445,8 +445,8 @@ public sealed partial class GeneratorTests
         {
             generatorInputs = 1,
             runtimeOperations = 0,
-            accepted = new[] { "Single", "Mixed", "ClassOnly", "ValueSendOnly" },
-            rejected = new[] { "ValueAsync", "ValueMany", "ValueStreams" },
+            accepted = new[] { "Single", "Mixed", "ClassOnly", "ValueSendOnly", "ValueAsync" },
+            rejected = new[] { "ValueMany", "ValueStreams" },
             classOnlyIncludesSendAsyncAndThreeRoutes = true,
             reused = "v39 saved request copy/DI/IL/four-operation evidence"
         }));

@@ -25,7 +25,7 @@ internal static class CanonicalMultiEmissionNormalizer
             if (c.Pipelines.Any(r => r.Family == BoundDispatchFamily.Stream && r.RequestShape == BoundRequestShape.ClosedNonGenericValue) &&
                 (c.Pipelines.Count != 2 ||
                 c.Pipelines.Count(r => r.Family == BoundDispatchFamily.Stream && r.RequestShape == BoundRequestShape.ClosedNonGenericValue) != 1 ||
-                c.Pipelines.Count(r => r.Family == BoundDispatchFamily.SendSync && r.RequestShape == BoundRequestShape.ClosedReference) != 1)) continue;
+                c.Pipelines.Count(r => (r.Family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && r.RequestShape == BoundRequestShape.ClosedReference) != 1)) continue;
             var routes = new List<CanonicalMultiRouteEmission>();
             foreach (var route in c.Pipelines)
             {
