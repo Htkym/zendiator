@@ -82,12 +82,12 @@ public sealed partial class GeneratorTests
         foreach (var c in new[] { AllGenericCases[0], AllGenericCases[5] })
         {
             foreach (var wrapped in new[] { false, true })
-            foreach (var (name, type) in new[] { ("Internal", "InternalH<string>"), ("Containing", "InternalHost.Nested<string>"), ("Argument", "GenericH3<global::GenericCases.HiddenTag>"), ("PublicNested", "PublicHost.Nested<string>"), ("OldInternalPlain", "InternalPlain"), ("Constraint", "ConstrainedH<int>") }.Where(p => !wrapped || p.Item1 != "Constraint"))
-            {
-                var marker = "Visibility" + c.Name + name + (wrapped ? "Wrapped" : ""); var a = "global::GenericCases." + c.Name + ".";
-                var config = AllGenericConfiguration([c], wrapped ? "wrapper" : "").Replace("typeof(" + a + "H3)", "typeof(" + a + type + ")", StringComparison.Ordinal);
-                text += "[ZendiatorComposition(\"" + marker + "\")]public sealed class " + marker + ";public static class " + marker + "Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<" + marker + ">(c=>{" + config + "});}";
-            }
+                foreach (var (name, type) in new[] { ("Internal", "InternalH<string>"), ("Containing", "InternalHost.Nested<string>"), ("Argument", "GenericH3<global::GenericCases.HiddenTag>"), ("PublicNested", "PublicHost.Nested<string>"), ("OldInternalPlain", "InternalPlain"), ("Constraint", "ConstrainedH<int>") }.Where(p => !wrapped || p.Item1 != "Constraint"))
+                {
+                    var marker = "Visibility" + c.Name + name + (wrapped ? "Wrapped" : ""); var a = "global::GenericCases." + c.Name + ".";
+                    var config = AllGenericConfiguration([c], wrapped ? "wrapper" : "").Replace("typeof(" + a + "H3)", "typeof(" + a + type + ")", StringComparison.Ordinal);
+                    text += "[ZendiatorComposition(\"" + marker + "\")]public sealed class " + marker + ";public static class " + marker + "Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<" + marker + ">(c=>{" + config + "});}";
+                }
             var wrong = c with { Argument = c.Argument == "int" ? "string" : "int" }; var markerWrong = "Visibility" + c.Name + "WrongRequest";
             var wrongConfig = AllGenericConfiguration([c]).Replace("typeof(global::GenericCases." + c.Name + ".H3)", "typeof(" + ClosedHandlerName(wrong, 3) + ")", StringComparison.Ordinal);
             text += "[ZendiatorComposition(\"" + markerWrong + "\")]public sealed class " + markerWrong + ";public static class " + markerWrong + "Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<" + markerWrong + ">(c=>{" + wrongConfig + "});}";

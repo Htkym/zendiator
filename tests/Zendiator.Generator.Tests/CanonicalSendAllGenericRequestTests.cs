@@ -324,16 +324,16 @@ public sealed partial class GeneratorTests
         foreach (var mutation in new[] { "handler", "hook", "factory", "hookFactory" }) Assert.NotNull(output.GetTypeByMetadataName("AllGeneric.Generated.Legacy" + mutation + ".IZendiator"));
         foreach (var c in new[] { AllGenericCases[0], AllGenericCases[5] })
             foreach (var wrapped in new[] { false, true })
-            foreach (var name in new[] { "Internal", "Containing", "Argument", "PublicNested", "OldInternalPlain", "Constraint", "WrongRequest" }.Where(n => !wrapped || n is not ("Constraint" or "WrongRequest")))
-            {
-                var marker = "Visibility" + c.Name + name + (wrapped ? "Wrapped" : ""); var ns = "AllGeneric.Generated." + marker; var accepted = name is "PublicNested" or "OldInternalPlain";
-                Assert.Equal(accepted, output.GetTypeByMetadataName(ns + ".IZendiator") != null); Assert.Equal(accepted, output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar") != null);
-                Assert.Equal(accepted, files.Any(f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains(ns + ".ZendiatorGeneratedRegistrar", StringComparison.Ordinal)));
-                var start = source.IndexOf("public static class " + marker + "Bridge", StringComparison.Ordinal); var end = source.IndexOf("});}", start, StringComparison.Ordinal);
-                Assert.Equal(accepted || name == "Constraint" ? 0 : 1, diagnostics.Count(d => d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.Start < end));
-                if (name == "Constraint") Assert.Single(compiler, d => d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.Start < end);
-                if (name == "WrongRequest") Assert.Single(wrongRequests, d => d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.Start < end);
-            }
+                foreach (var name in new[] { "Internal", "Containing", "Argument", "PublicNested", "OldInternalPlain", "Constraint", "WrongRequest" }.Where(n => !wrapped || n is not ("Constraint" or "WrongRequest")))
+                {
+                    var marker = "Visibility" + c.Name + name + (wrapped ? "Wrapped" : ""); var ns = "AllGeneric.Generated." + marker; var accepted = name is "PublicNested" or "OldInternalPlain";
+                    Assert.Equal(accepted, output.GetTypeByMetadataName(ns + ".IZendiator") != null); Assert.Equal(accepted, output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar") != null);
+                    Assert.Equal(accepted, files.Any(f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains(ns + ".ZendiatorGeneratedRegistrar", StringComparison.Ordinal)));
+                    var start = source.IndexOf("public static class " + marker + "Bridge", StringComparison.Ordinal); var end = source.IndexOf("});}", start, StringComparison.Ordinal);
+                    Assert.Equal(accepted || name == "Constraint" ? 0 : 1, diagnostics.Count(d => d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.Start < end));
+                    if (name == "Constraint") Assert.Single(compiler, d => d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.Start < end);
+                    if (name == "WrongRequest") Assert.Single(wrongRequests, d => d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.Start < end);
+                }
         Assert.NotNull(output.GetTypeByMetadataName("AllGeneric.Generated.LegacyInternalGeneric.IZendiator"));
         var catalog = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single().TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
         var pipelines = catalog.Compositions.SelectMany(c => c.Pipelines).ToArray();
