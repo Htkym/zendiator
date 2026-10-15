@@ -320,9 +320,7 @@ internal sealed class CompositionListBinding
                             Name(contract), member.Name, nextResult == null ? null : Name(nextResult))
                             {
                                 RequestIsValueType = declaration.Request.IsValueType,
-                                HandlerIsValueType = entry.Type.IsValueType,
-                                IsNonGenericReferencePair = declaration.Request is INamedTypeSymbol { TypeKind: TypeKind.Class, IsGenericType: false } &&
-                                    entry.Type is { TypeKind: TypeKind.Class, IsGenericType: false }
+                                HandlerIsValueType = entry.Type.IsValueType
                             }
                         };
                 }
@@ -451,7 +449,9 @@ internal sealed class CompositionListBinding
                     HandlerListOrdinal = explicitHandlers == null ? int.MaxValue : int.Parse(explicitHandlers.Anchor.Substring(5), System.Globalization.CultureInfo.InvariantCulture),
                     PipelineListOrdinal = declaration.HandlerList ? int.MaxValue : int.Parse(declaration.Anchor.Substring(5), System.Globalization.CultureInfo.InvariantCulture),
                     HasEmptyPipeline = !declaration.HandlerList && declaration.Entries.Length == 0,
-                    PipelineFamily = declaration.HandlerList ? null : declaration.Family
+                    PipelineFamily = declaration.HandlerList ? null : declaration.Family,
+                    ClosedReferenceRequest = request.TypeKind == TypeKind.Class && !HasOpenShape(request),
+                    RequestRuntimeIdentity = request.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                 };
         }
         return new(output);

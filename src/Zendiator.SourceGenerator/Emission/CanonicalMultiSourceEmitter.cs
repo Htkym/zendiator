@@ -28,8 +28,7 @@ internal static class CanonicalMultiSourceEmitter
         foreach (var composition in model.Compositions)
         {
             var interfaces = new List<MemberDeclarationSyntax>(); var methods = new List<MemberDeclarationSyntax>();
-            var handlerCalls = new List<(int Ordinal, StatementSyntax Call)>(); var pipelineCalls = new List<(int Ordinal, StatementSyntax Call)>();
-            var dependencies = new List<StatementSyntax>(); var seen = new HashSet<string>(StringComparer.Ordinal); BlockSyntax? registrar = null; var first = true;
+            var first = true;
             foreach (var route in composition.Routes)
             {
                 var root = CSharpSyntaxTree.ParseText(source(route)).GetCompilationUnitRoot();
@@ -42,37 +41,15 @@ internal static class CanonicalMultiSourceEmitter
                     if (member is FieldDeclarationSyntax or ConstructorDeclarationSyntax) { if (first) methods.Add(member); }
                     else methods.Add((MemberDeclarationSyntax)rewriter.Visit(member)!);
                 }
-                var add = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "ZendiatorGeneratedRegistrar").Members.OfType<MethodDeclarationSyntax>().Single();
-                registrar ??= add.Body!;
-                foreach (var statement in add.Body!.Statements)
-                {
-                    if (statement is ExpressionStatementSyntax { Expression: InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access } } && access.Expression is IdentifierNameSyntax { Identifier.ValueText: "expected" })
-                    {
-                        if (access.Name.Identifier.ValueText == "Handlers") handlerCalls.Add((route.HandlerOrdinal, statement));
-                        if (access.Name.Identifier.ValueText == "Pipeline") pipelineCalls.Add((route.PipelineOrdinal, statement));
-                    }
-                    else if (statement is ExpressionStatementSyntax { Expression: InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax method } } && method.Name.Identifier.ValueText == "TryAdd")
-                    { if (seen.Add(statement.ToString())) dependencies.Add(statement); }
-                }
                 first = false;
-            }
-            var statements = new List<StatementSyntax>(); var inserted = false;
-            foreach (var statement in registrar!.Statements)
-            {
-                if (statement is ExpressionStatementSyntax { Expression: InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access } } && access.Expression is IdentifierNameSyntax { Identifier.ValueText: "expected" } && access.Name.Identifier.ValueText is "Handlers" or "Pipeline")
-                {
-                    if (!inserted) { statements.AddRange(handlerCalls.OrderBy(x => x.Ordinal).Select(x => x.Call)); statements.AddRange(pipelineCalls.OrderBy(x => x.Ordinal).Select(x => x.Call)); inserted = true; }
-                    continue;
-                }
-                if (statement is ExpressionStatementSyntax { Expression: InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax method } } && method.Name.Identifier.ValueText == "TryAdd") continue;
-                if (statement is ReturnStatementSyntax) statements.AddRange(dependencies);
-                statements.Add(statement);
             }
             text.Append("namespace ").Append(composition.Namespace).AppendLine("{\npublic interface IZendiator{");
             foreach (var member in interfaces) text.Append(member.ToFullString());
-            text.AppendLine("}\npublic sealed class Zendiator:IZendiator{"); foreach (var member in methods) text.Append(member.ToFullString());
-            text.AppendLine("}\ninternal static class ZendiatorGeneratedRegistrar{\ninternal static global::Microsoft.Extensions.DependencyInjection.IServiceCollection Add(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services,global::Zendiator.DependencyInjection.ZendiatorConfigurationSnapshot snapshot)");
-            text.Append(registrar.WithStatements(SyntaxFactory.List(statements)).ToFullString()).AppendLine("\n}\n}");
+            text.AppendLine("}\npublic sealed class Zendiator:IZendiator{");
+            foreach (var member in methods) text.Append(member.ToFullString());
+            text.AppendLine("}");
+            CanonicalRegistrationSourceEmitter.Emit(text, CanonicalRegistrationPlan.Multi(composition));
+            text.AppendLine("}");
         }
         return text.ToString();
     }

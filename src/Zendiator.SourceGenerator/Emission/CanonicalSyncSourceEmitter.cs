@@ -205,71 +205,8 @@ internal static class CanonicalSyncSourceEmitter
 
     internal static void EmitRegistrar(StringBuilder b, CanonicalSyncCompositionEmission c, BoundDispatchFamily family = BoundDispatchFamily.SendSync,
         BoundStreamOpenRegistration? open = null, string? streamFinalItemName = null,
-        EquatableArray<RegistrationStageEmission> streamDeclaredStages = default)
-    {
-        var h = c.Handler;
-        b.AppendLine("""
-                internal static class ZendiatorGeneratedRegistrar
-                {
-                    internal static global::Microsoft.Extensions.DependencyInjection.IServiceCollection Add(
-                        global::Microsoft.Extensions.DependencyInjection.IServiceCollection services,
-                        global::Zendiator.DependencyInjection.ZendiatorConfigurationSnapshot snapshot)
-                    {
-                        global::System.ArgumentNullException.ThrowIfNull(services);
-                        global::System.ArgumentNullException.ThrowIfNull(snapshot);
-                        var expected = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
-            """);
-        if (c.UseLocalHandlers) b.AppendLine("            expected.UseLocalHandlers();");
-        foreach (var marker in c.CatalogMarkerTypes) b.AppendLine("            expected.UseCatalogFrom<" + marker + ">();");
-        foreach (var type in c.ExplicitHandlerTypes) b.AppendLine("            expected.AddHandler(typeof(" + type + "));");
-        if (open != null)
-        {
-            var handlerEntry = open.HandlerFactoryDefinitionName == null ? "typeof(" + open.HandlerDefinitionName + ")" :
-                "global::Zendiator.HandlerEntry.Session(typeof(" + open.HandlerDefinitionName + "), typeof(" + open.HandlerFactoryDefinitionName + "))";
-            var stages = string.Join(", ", open.Stages.Select(stage => "global::Zendiator.Stage." + stage.Kind + "(typeof(" + stage.TypeName + ")" +
-                (stage.FactoryName == null ? "" : ", typeof(" + stage.FactoryName + ")") + ")"));
-            b.AppendLine($$"""            expected.Handlers(typeof({{open.RequestDefinitionName}}), global::Zendiator.DispatchFamily.{{family}}, {{handlerEntry}});""");
-            if (open.FinalDefinitionName != null)
-                b.AppendLine($$"""            expected.StreamPipeline(typeof({{open.RequestDefinitionName}}), typeof({{open.FinalDefinitionName}}), {{stages}});""");
-            else
-                b.AppendLine($$"""            expected.Pipeline(typeof({{open.RequestDefinitionName}}), {{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + family + ", ")}}{{stages}});""");
-        }
-        else
-        {
-            var entry = c.Factory == null ? $$"""typeof({{h.HandlerName}})""" :
-                $$"""global::Zendiator.HandlerEntry.Session<{{h.HandlerName}}, {{c.Factory.FactoryName}}>()""";
-            b.AppendLine($$"""            expected.Handlers<{{h.RequestName}}>(global::Zendiator.DispatchFamily.{{family}}, {{entry}});""");
-            if (streamFinalItemName != null)
-                b.AppendLine($$"""            expected.StreamPipeline<{{h.RequestName}}, {{streamFinalItemName}}>({{string.Join(", ", streamDeclaredStages.Select(stage => "global::Zendiator.Stage." + stage.Kind + "(typeof(" + stage.TypeName + ")" + (stage.FactoryName == null ? "" : ", typeof(" + stage.FactoryName + ")") + ")"))}});""");
-            else if (c.RegistrationStages.Count != 0)
-                b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + family + ", ")}}{{string.Join(", ", c.RegistrationStages.Select(stage => "global::Zendiator.Stage." + stage.Kind + "<" + stage.TypeName + (stage.FactoryName == null ? "" : ", " + stage.FactoryName) + ">()"))}});""");
-            else if (c.Hooks.Count != 0)
-                b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + family + ", ")}}{{string.Join(", ", c.Hooks.Select(hook => hook.Factory == null ? "global::Zendiator.Stage.Hook<" + hook.HookName + ">()" : "global::Zendiator.Stage.Hook<" + hook.HookName + ", " + hook.Factory.FactoryName + ">()"))}});""");
-            else if (c.HasEmptyPipeline)
-                b.AppendLine($$"""            expected.Pipeline<{{h.RequestName}}>({{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + family)}});""");
-        }
-        b.AppendLine("""
-                        if (snapshot.GetFingerprint() != expected.Snapshot().GetFingerprint())
-                            throw new global::System.InvalidOperationException("AddZendiator configuration does not match this generated composition.");
-            """);
-        var services = open != null ? open.Stages.Select(stage => stage.FactoryName ?? stage.TypeName).Concat(new[] { open.HandlerFactoryDefinitionName ?? open.HandlerDefinitionName }) :
-            (c.RegistrationStages.Count == 0 ? c.Hooks.Select(hook => hook.Factory?.FactoryName ?? hook.HookName) :
-                c.RegistrationStages.Select(stage => stage.FactoryName ?? stage.TypeName)).Concat(new[] { c.Factory?.FactoryName ?? h.HandlerName });
-        var types = services.Concat(new[] { "global::" + c.Namespace + ".Zendiator" });
-        foreach (var type in types)
-            b.AppendLine($$"""
-                        global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services,
-                            global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Scoped(typeof({{type}}), typeof({{type}})));
-                """);
-        b.AppendLine($$"""
-                        global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services,
-                            global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Scoped(typeof(global::{{c.Namespace}}.IZendiator),
-                                provider => global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<global::{{c.Namespace}}.Zendiator>(provider)));
-                        return services;
-                    }
-                }
-            """);
-    }
+        EquatableArray<RegistrationStageEmission> streamDeclaredStages = default) =>
+        CanonicalRegistrationSourceEmitter.Emit(b, CanonicalRegistrationPlan.Single(c, family, open, streamFinalItemName, streamDeclaredStages));
 
     internal static string EmitInterceptors(CanonicalSyncInterceptorModel model, string shimName = "CanonicalSyncShims")
     {

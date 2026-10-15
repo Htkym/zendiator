@@ -48,6 +48,8 @@ internal sealed record BoundPipelineModel(string Anchor, string Request, string 
     public int PipelineListOrdinal { get; init; }
     public bool HasEmptyPipeline { get; init; }
     public BoundDispatchFamily? PipelineFamily { get; init; }
+    public bool ClosedReferenceRequest { get; init; }
+    public string RequestRuntimeIdentity { get; init; } = "";
     public BoundStreamGenericEmission? StreamGeneric { get; init; }
     public BoundStreamItemFlow? StreamItemFlow { get; init; }
     public BoundStreamOpenRegistration? StreamOpenRegistration { get; init; }

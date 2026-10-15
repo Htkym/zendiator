@@ -79,8 +79,8 @@ internal static class CanonicalStreamPublicConnection
             c.GeneratedNamespace == composition.GeneratedNamespace) != 1 ||
             route.Family != BoundDispatchFamily.Stream || route.Handlers.Count != 1) return null;
         var connection = connections.Routes.SingleOrDefault(c => c.CompositionIdentity == composition.Identity && c.Anchor == route.Anchor);
-        if (connection is not { Kind: CanonicalStreamConnectionKind.Candidate, Candidate: { Generic: null } candidate } ||
-            candidate.Handler.RequestIsValueType) return null;
+        if (connection is not { Kind: CanonicalStreamConnectionKind.Candidate or CanonicalStreamConnectionKind.CanonicalCandidate } ||
+            !route.ClosedReferenceRequest || route.StreamGeneric != null || route.StreamOpenRegistration != null) return null;
         var projected = composition with
         {
             Pipelines = new(new[] { route }),

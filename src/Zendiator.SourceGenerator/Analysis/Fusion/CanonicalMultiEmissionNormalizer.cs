@@ -18,9 +18,9 @@ internal static class CanonicalMultiEmissionNormalizer
                 c.Facts.Count != c.Pipelines.Count || c.Facts.Any(f => f.Key != "IncompleteExecutionContract") ||
                 catalog.Compositions.Count(x => x.Identity == c.Identity || x.Key == c.Key || x.GeneratedNamespace == c.GeneratedNamespace) != 1) continue;
             var mixedStream = c.Pipelines.Any(r => r.Family == BoundDispatchFamily.Stream);
-            if (mixedStream && (streams == null || c.ExternAliases.Count != 0 || c.Pipelines.Count != 2 ||
-                c.Pipelines.Count(r => r.Family == BoundDispatchFamily.Stream) != 1 ||
-                c.Pipelines.Count(r => r.Family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) != 1)) continue;
+            if (mixedStream && (streams == null || c.ExternAliases.Count != 0 ||
+                c.Pipelines.Any(r => !r.ClosedReferenceRequest || r.Family is not (BoundDispatchFamily.Stream or BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync)) ||
+                c.Pipelines.Select(r => r.Family + "|" + r.RequestRuntimeIdentity).Distinct(StringComparer.Ordinal).Count() != c.Pipelines.Count)) continue;
             var routes = new List<CanonicalMultiRouteEmission>();
             foreach (var route in c.Pipelines)
             {
@@ -44,24 +44,21 @@ internal static class CanonicalMultiEmissionNormalizer
                 var capability = CanonicalCapabilityEmissionNormalizer.Create(projected, graphs, sync, async, wrapper);
                 var s = sync.Compositions.SingleOrDefault(); var a = async.Compositions.SingleOrDefault(); var w = wrapper.Compositions.SingleOrDefault(); var h = capability.Compositions.SingleOrDefault();
                 if ((s == null ? 0 : 1) + (a == null ? 0 : 1) + (w == null ? 0 : 1) + (h == null ? 0 : 1) != 1) break;
-                var registration = s ?? (a == null ? null : CanonicalAsyncEmissionNormalizer.Registration(a)) ?? w?.Registration ?? h!.Registration;
-                if (mixedStream && ((s == null && a == null) || a != null && !a.Handler.IsNonGenericReferencePair ||
-                    registration.Handler.RequestIsValueType || registration.Handler.HandlerIsValueType ||
-                    registration.Handler.ResultName is not ("int" or "global::System.Int32") || registration.Factory != null ||
-                    route.Stages.Count != 0 || route.Handlers.Count != 1 || !route.HasEmptyPipeline)) break;
+                var registration = (s ?? (a == null ? null : CanonicalAsyncEmissionNormalizer.Registration(a)) ?? w?.Registration ?? h!.Registration) with { Index = i };
                 var key = c.Identity + "|" + route.Family + "|" + route.Request + "|" + route.Result;
                 routes.Add(new(key, route.HandlerListOrdinal, route.PipelineListOrdinal, registration, s, a, w, h));
             }
-            if (routes.Count == c.Pipelines.Count) result.Add(new(i, c.GeneratedNamespace, new(routes)));
+            var composition = new CanonicalMultiCompositionEmission(i, c.GeneratedNamespace, new(routes));
+            if (routes.Count == c.Pipelines.Count && CanonicalRegistrationPlan.Compatible(composition)) result.Add(composition);
         }
         return new(new(result));
     }
     internal static CanonicalMultiEmissionModel Connected(CanonicalMultiEmissionModel model, CanonicalSyncInterceptorModel sites) =>
-        new(new(model.Compositions.Where(c => !c.Routes.Any(r => r.Stream != null) ||
+        new(new(model.Compositions.Where(c =>
             sites.CallSites.Count(s => s.Namespace == c.Namespace && s.MarkerName == c.Routes[0].Registration.MarkerName) == 1)));
 
     internal static IEnumerable<CanonicalRouteText> StreamRouteTexts(CanonicalMultiEmissionModel model) =>
-        model.Compositions.SelectMany(c => c.Routes.Where(r => r.Stream != null).Select(r =>
+        model.Compositions.SelectMany(c => c.Routes.Where(r => r.Stream != null).OrderBy(r => r.Key, StringComparer.Ordinal).Select(r =>
             new CanonicalRouteText(r.Key, c.Namespace, r.Registration.Handler.RequestName, BoundDispatchFamily.Stream,
                 CanonicalStreamPublicConnection.Source(r.Stream!))
             { StableKey = r.StreamStableKey! }));
