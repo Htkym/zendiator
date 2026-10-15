@@ -223,7 +223,7 @@ internal sealed class CompositionListBinding
                 }
                 request = open.Request;
             }
-            if (!Eligible(request, declaration.Anchor, "Request", concrete: false, open: open))
+            if (!Eligible(request, declaration.Anchor, "Request", concrete: false, open: open, scopedRequest: family == BoundDispatchFamily.SendSync))
             {
                 output.Add(Model(null, null, Array.Empty<BoundHandlerModel>(), Array.Empty<BoundStageModel>(), explicitHandlers != null));
                 continue;
@@ -312,7 +312,7 @@ internal sealed class CompositionListBinding
                         {
                             SyncEmission = new(Name(declaration.Request), Name(entry.Type),
                             Name(contract), member.Name, nextResult == null ? null : Name(nextResult))
-                            { RequestIsValueType = declaration.Request.IsValueType, HandlerIsValueType = entry.Type.IsValueType }
+                            { RequestIsValueType = declaration.Request.IsValueType, RequestIsRefLike = declaration.Request.IsRefLikeType, HandlerIsValueType = entry.Type.IsValueType }
                         };
                     else
                         handlerModel = handlerModel with
@@ -451,7 +451,8 @@ internal sealed class CompositionListBinding
                     PipelineListOrdinal = declaration.HandlerList ? int.MaxValue : int.Parse(declaration.Anchor.Substring(5), System.Globalization.CultureInfo.InvariantCulture),
                     HasEmptyPipeline = !declaration.HandlerList && declaration.Entries.Length == 0,
                     PipelineFamily = declaration.HandlerList ? null : declaration.Family,
-                    RequestShape = request.TypeKind == TypeKind.Class && !HasOpenShape(request) ? BoundRequestShape.ClosedReference :
+                    RequestShape = request.IsRefLikeType && !request.IsGenericType && !HasOpenShape(request) ? BoundRequestShape.ClosedRefLike :
+                        request.TypeKind == TypeKind.Class && !HasOpenShape(request) ? BoundRequestShape.ClosedReference :
                         request.TypeKind == TypeKind.Struct && !request.IsRefLikeType && !request.IsGenericType && !HasOpenShape(request) ?
                             BoundRequestShape.ClosedNonGenericValue : BoundRequestShape.Unsupported,
                     RequestRuntimeIdentity = request.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
@@ -466,10 +467,10 @@ internal sealed class CompositionListBinding
 
     private string DefinitionName(INamedTypeSymbol type) => Name(type.Arity == 0 ? type : type.OriginalDefinition.ConstructUnboundGenericType());
 
-    private bool Eligible(INamedTypeSymbol type, string anchor, string role, bool concrete = true, CanonicalStreamOpenBinding? open = null)
+    private bool Eligible(INamedTypeSymbol type, string anchor, string role, bool concrete = true, CanonicalStreamOpenBinding? open = null, bool scopedRequest = false)
     {
         if (type.TypeKind == TypeKind.Error) return false; // Compiler owns unresolved types.
-        if (type.IsRefLikeType) { Reject("RefLikeCapture", anchor, $"{role} {Name(type)} cannot be captured in a DI route."); return false; }
+        if (type.IsRefLikeType && !scopedRequest) { Reject("RefLikeCapture", anchor, $"{role} {Name(type)} cannot be captured in a DI route."); return false; }
         if (type.IsUnboundGenericType || HasOpenShape(type) && (open == null || !open.Contains(type)) ||
             type.TypeKind is not (TypeKind.Class or TypeKind.Struct) || (concrete && (type.IsAbstract || type.IsStatic)))
         {

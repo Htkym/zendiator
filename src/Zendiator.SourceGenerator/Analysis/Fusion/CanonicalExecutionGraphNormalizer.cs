@@ -12,6 +12,8 @@ internal static class CanonicalExecutionGraphNormalizer
 
     internal static CanonicalExecutionGraphModel Create(BoundPipelineModel route)
     {
+        if (route.RequestShape == BoundRequestShape.ClosedRefLike || route.Stages.Any(s => s.Callbacks.Any(c => CanonicalScopedSyncNormalizer.IsObservation(c.Phase))))
+            return CanonicalScopedSyncNormalizer.Graph(route);
         if (route.Family == BoundDispatchFamily.Stream)
         {
             var streamFacts = CanonicalStreamGraphValidator.CheckContract(route);

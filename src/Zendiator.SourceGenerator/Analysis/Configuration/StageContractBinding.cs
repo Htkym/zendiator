@@ -11,9 +11,14 @@ namespace Zendiator.SourceGenerator;
 internal static class StageContractBinding
 {
     private sealed record Role(string Name, BoundCallbackPhase Phase, BoundCompletionKind Completion,
-        bool ResponseOnly = false, bool VoidOnly = false, bool Wrapper = false, bool Stream = false);
+        bool ResponseOnly = false, bool VoidOnly = false, bool Wrapper = false, bool Stream = false, bool ScopedObserver = false);
     private static readonly Role[] Roles =
     {
+        new("IScopedSendBeforeObserver`1", BoundCallbackPhase.ObserveBefore, BoundCompletionKind.Synchronous, ScopedObserver: true),
+        new("IScopedSendResponseObserver`2", BoundCallbackPhase.ObserveSuccess, BoundCompletionKind.Synchronous, ResponseOnly: true, ScopedObserver: true),
+        new("IScopedSendSuccessObserver`1", BoundCallbackPhase.ObserveSuccess, BoundCompletionKind.Synchronous, VoidOnly: true, ScopedObserver: true),
+        new("IScopedSendExceptionObserver`1", BoundCallbackPhase.ObserveException, BoundCompletionKind.Synchronous, ScopedObserver: true),
+        new("IScopedSendFinallyObserver`1", BoundCallbackPhase.ObserveFinally, BoundCompletionKind.Synchronous, ScopedObserver: true),
         new("ISendRequestTransform`1", BoundCallbackPhase.Before, BoundCompletionKind.Synchronous),
         new("ISendResponseTransform`2", BoundCallbackPhase.Success, BoundCompletionKind.Synchronous, ResponseOnly: true),
         new("ISendSuccessObserver`1", BoundCallbackPhase.Success, BoundCompletionKind.Synchronous, VoidOnly: true),
@@ -46,6 +51,7 @@ internal static class StageContractBinding
         var hierarchy = DescribeHierarchy(type);
         var callbacks = new List<BoundCallbackModel>();
         var syncCallbacks = new Dictionary<BoundCallbackPhase, BoundSyncHookCallbackEmission>();
+        var scopedCallbacks = new Dictionary<BoundCallbackPhase, BoundSyncHookCallbackEmission>();
         var asyncCallbacks = new Dictionary<BoundCallbackPhase, BoundAsyncHookCallbackEmission>();
         BoundWrapperEmission? wrapperEmission = null;
         BoundStreamHookEmission? streamEmission = null;
@@ -117,12 +123,18 @@ internal static class StageContractBinding
             var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
             var implementation = members.Length == 1 ? type.FindImplementationForInterfaceMember(members[0]) as IMethodSymbol : null;
             if (implementation == null) { compilerOwned = true; continue; }
+            if (role.ScopedObserver)
+            {
+                if (!implementation.ReturnsVoid || implementation.Parameters.Length == 0 || implementation.Parameters[0].ScopedKind != ScopedKind.ScopedValue)
+                    compilerOwned = true;
+                scopedCallbacks[role.Phase] = new(Name(contract), members[0].Name);
+            }
             if (role.Wrapper) wrapperEmission = new(Name(type), Name(contract), members[0].Name, role.Completion);
             if (role.Stream && !role.Wrapper && (role.Completion is BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask))
                 streamEmission = new(Name(type), Name(contract), members[0].Name, role.Phase, type.IsValueType, role.Completion)
                 { InputItemName = typedStream ? streamItems?.Input.Name : null, OutputItemName = typedStream ? streamItems?.Output.Name : null };
-            if (!role.Wrapper && !role.Stream) capabilityCalls[role.Phase] = new(Name(contract), members[0].Name, role.Completion);
-            if (role.Completion == BoundCompletionKind.Synchronous)
+            if (!role.Wrapper && !role.Stream && !role.ScopedObserver) capabilityCalls[role.Phase] = new(Name(contract), members[0].Name, role.Completion);
+            if (role.Completion == BoundCompletionKind.Synchronous && !role.ScopedObserver)
                 syncCallbacks[role.Phase] = new(Name(contract), members[0].Name);
             else if (role.Completion == BoundCompletionKind.ValueTask)
                 asyncCallbacks[role.Phase] = new(Name(contract), members[0].Name);
@@ -143,6 +155,10 @@ internal static class StageContractBinding
         {
             ReceiverIsGeneric = type.IsGenericType,
             ReceiverIsPublic = Public(type),
+            ScopedObserver = facts.Count == before && !compilerOwned && callbacks.Count == 4 && scopedCallbacks.Count == 4
+                ? new(Name(type), scopedCallbacks[BoundCallbackPhase.ObserveBefore], scopedCallbacks[BoundCallbackPhase.ObserveSuccess],
+                    scopedCallbacks[BoundCallbackPhase.ObserveException], scopedCallbacks[BoundCallbackPhase.ObserveFinally])
+                { ObserverIsValueType = type.IsValueType } : null,
             StreamItems = facts.Count == before && !compilerOwned && typedStream && callbacks.Count == 1 ? streamItems : null,
             StreamEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.Stream &&
                 kind == FusionStageKind.Hook && callbacks.Count == 1 ? streamEmission : null,

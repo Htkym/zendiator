@@ -23,6 +23,21 @@ internal static class CanonicalSyncEmissionNormalizer
                     c.GeneratedNamespace == composition.GeneratedNamespace) != 1) continue;
             var route = composition.Pipelines[0];
             var graph = execution.Compositions[i].SingleOrDefault(g => g.Contract.Anchor == route.Anchor);
+            if (route.RequestShape == BoundRequestShape.ClosedRefLike)
+            {
+                if (composition.MarkerName != null && graph is { IsValid: true, ScopedSync: { } proof } &&
+                    composition.Handlers.Any(h => h.Identity == route.Handlers[0].Type))
+                    output.Add(new(i, composition.GeneratedNamespace, composition.MarkerName, composition.UseLocalHandlers,
+                        proof.Handler, null, false, route.PipelineFamily, composition.MicrosoftDiProviderName ?? "")
+                    {
+                        ScopedObserver = proof.Observer,
+                        RegistrationStages = new(new[] { new RegistrationStageEmission(proof.Observer.ObserverName, "Hook", null) }),
+                        ExplicitHandlerTypes = composition.ExplicitHandlerTypes,
+                        CatalogMarkerTypes = composition.CatalogMarkerTypes,
+                        ExternAliases = composition.ExternAliases
+                    });
+                continue;
+            }
             if (graph?.IsValid != true || graph.Schedule == null || route.Family != BoundDispatchFamily.SendSync ||
                 route.Stages.Count > 2 || route.Handlers.Count != 1 || !route.ExplicitHandlerOrder ||
                 route.ResultKind is not (FusionResultKind.Void or FusionResultKind.Response)) continue;

@@ -56,6 +56,8 @@ internal static class CanonicalRegistrationSourceEmitter
                 "global::Zendiator.HandlerEntry.Session(typeof(" + open.HandlerDefinitionName + "), typeof(" + open.HandlerFactoryDefinitionName + "))";
             b.AppendLine($$"""            expected.Handlers(typeof({{open.RequestDefinitionName}}), global::Zendiator.DispatchFamily.{{route.Family}}, {{entry}});""");
         }
+        else if (c.Handler.RequestIsRefLike)
+            b.AppendLine($$"""            expected.Handlers(typeof({{c.Handler.RequestName}}), global::Zendiator.DispatchFamily.{{route.Family}}, typeof({{c.Handler.HandlerName}}));""");
         else if (route.BranchHandlers.Count != 0)
         {
             var entries = string.Join(", ", route.BranchHandlers.Select(h => h.FactoryName == null ? "typeof(" + h.HandlerName + ")" : "global::Zendiator.HandlerEntry.Session<" + h.HandlerName + ", " + h.FactoryName + ">()"));
@@ -78,6 +80,8 @@ internal static class CanonicalRegistrationSourceEmitter
             else
                 b.AppendLine($$"""            expected.Pipeline(typeof({{open.RequestDefinitionName}}), {{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + route.Family + ", ")}}{{Stages(open.Stages)}});""");
         }
+        else if (c.Handler.RequestIsRefLike)
+            b.AppendLine($$"""            expected.Pipeline(typeof({{c.Handler.RequestName}}), global::Zendiator.DispatchFamily.{{route.Family}}, {{Stages(c.RegistrationStages)}});""");
         else if (route.FinalItemName != null)
             b.AppendLine($$"""            expected.StreamPipeline<{{c.Handler.RequestName}}, {{route.FinalItemName}}>({{Stages(route.DeclaredStages)}});""");
         else if (c.RegistrationStages.Count != 0)

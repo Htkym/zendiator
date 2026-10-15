@@ -1,8 +1,8 @@
 namespace Zendiator.SourceGenerator;
 
 internal enum BoundDispatchFamily { SendAsync, SendSync, SendAllAsync, SendAllSync, Stream, Notification }
-internal enum BoundRequestShape { Unsupported, ClosedReference, ClosedNonGenericValue }
-internal enum BoundCallbackPhase { Before, Success, Exception, Finally, Filter, Map, Wrapper, Handler, SessionAcquire, SessionCleanup }
+internal enum BoundRequestShape { Unsupported, ClosedReference, ClosedNonGenericValue, ClosedRefLike }
+internal enum BoundCallbackPhase { Before, Success, Exception, Finally, Filter, Map, Wrapper, Handler, SessionAcquire, SessionCleanup, ObserveBefore, ObserveSuccess, ObserveException, ObserveFinally }
 internal enum BoundCompletionKind { Synchronous, ValueTask, Enumerable }
 internal sealed record BoundParameterModel(string Type, string RefKind, string ScopedKind);
 internal sealed record BoundCallbackModel(BoundCallbackPhase Phase, BoundCompletionKind Completion,
@@ -16,6 +16,7 @@ internal sealed record BoundStageModel(string Anchor, string Type, string Name, 
     public bool ReceiverIsPublic { get; init; }
     public EquatableArray<BoundSessionModel> Sessions { get; init; }
     public BoundSyncHookEmission? SyncEmission { get; init; }
+    public BoundScopedObserverEmission? ScopedObserver { get; init; }
     public BoundAsyncHookEmission? AsyncEmission { get; init; }
     public BoundWrapperEmission? WrapperEmission { get; init; }
     public HookCapabilityEmission? Capabilities { get; init; }

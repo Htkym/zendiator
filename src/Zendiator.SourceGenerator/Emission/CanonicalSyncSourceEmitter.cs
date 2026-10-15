@@ -13,6 +13,7 @@ internal static class CanonicalSyncSourceEmitter
         b.Append(CanonicalSymbolName.Declarations(model.Compositions.SelectMany(c => c.ExternAliases)));
         foreach (var c in model.Compositions)
         {
+            if (c.ScopedObserver != null) { CanonicalScopedSyncSourceEmitter.Emit(b, c); continue; }
             var h = c.Handler;
             var result = h.ResultName ?? "void";
             b.AppendLine($$"""

@@ -77,7 +77,8 @@ internal sealed record CanonicalExecutionGraphModel(BoundPipelineModel Contract,
 {
     public CanonicalStreamExecutionSchedule? StreamSchedule { get; init; }
     public CanonicalStreamWrapperSchedule? StreamWrapperSchedule { get; init; }
-    public bool IsValid => (Schedule != null || StreamSchedule != null || StreamWrapperSchedule != null) && Facts.Count == 0;
+    public CanonicalScopedSyncProof? ScopedSync { get; init; }
+    public bool IsValid => (ScopedSync != null || Schedule != null || StreamSchedule != null || StreamWrapperSchedule != null) && Facts.Count == 0;
 }
 internal sealed record CanonicalExecutionGraphCatalog(EquatableArray<EquatableArray<CanonicalExecutionGraphModel>> Compositions);
 
