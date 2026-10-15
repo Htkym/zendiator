@@ -12,6 +12,7 @@ internal sealed record BoundStageModel(string Anchor, string Type, string Name, 
     EquatableArray<string> Hierarchy, EquatableArray<BoundCallbackModel> Callbacks,
     FusionOwnership ServiceOwnership, bool CompilerOwnsError)
 {
+    public bool ReceiverIsGeneric { get; init; }
     public EquatableArray<BoundSessionModel> Sessions { get; init; }
     public BoundSyncHookEmission? SyncEmission { get; init; }
     public BoundAsyncHookEmission? AsyncEmission { get; init; }
@@ -24,6 +25,7 @@ internal sealed record BoundStageModel(string Anchor, string Type, string Name, 
 internal sealed record BoundHandlerModel(string Anchor, string Type, string Name, string Contract, string? Result,
     string Implementation, FusionOwnership ServiceOwnership, bool CompilerOwnsError, BoundCallbackModel? Callback)
 {
+    public bool ReceiverIsGeneric { get; init; }
     public EquatableArray<BoundSessionModel> Sessions { get; init; }
     public BoundSyncHandlerEmission? SyncEmission { get; init; }
     public BoundAsyncHandlerEmission? AsyncEmission { get; init; }
@@ -36,6 +38,7 @@ internal sealed record BoundSessionModel(string FactoryServiceType, string Resou
 {
     // A factory-produced callback receiver cannot be lowered as a separately resolved DI service.
     public bool SuppliesCallbackReceiver { get; init; }
+    public bool FactoryIsGeneric { get; init; }
     public EquatableArray<string> FactoryHierarchy { get; init; }
     public BoundSyncFactoryEmission? SyncEmission { get; init; }
     public BoundAsyncFactoryEmission? AsyncEmission { get; init; }

@@ -20,8 +20,11 @@ internal static class CanonicalSendAllAsyncEmissionNormalizer
             var r = c.Pipelines[0];
             var graph = execution.Compositions[i].SingleOrDefault(g => g.Contract.Anchor == r.Anchor);
             if (graph?.IsValid != true || graph.Schedule == null || r.Family != BoundDispatchFamily.SendAllAsync ||
-                r.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue) || r.RequestIsGeneric || !r.ExplicitHandlerOrder || r.Handlers.Count == 0 ||
+                r.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue) || !r.ExplicitHandlerOrder || r.Handlers.Count == 0 ||
                 r.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void)) continue;
+            if (r.RequestIsGeneric && (r.RequestShape != BoundRequestShape.ClosedReference ||
+                r.Stages.Any(s => s.ReceiverIsGeneric || s.Sessions.Any(f => f.FactoryIsGeneric)) ||
+                r.Handlers.Any(h => h.ReceiverIsGeneric || h.Sessions.Any(f => f.FactoryIsGeneric)))) continue;
             if (r.Stages.Any(s => s.Kind == FusionStageKind.Wrapper))
             {
                 var wrappers = CanonicalWrapperEmissionNormalizer.AllBranches(c, r, graph, i);

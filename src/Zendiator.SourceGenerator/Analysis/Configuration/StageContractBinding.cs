@@ -141,6 +141,7 @@ internal static class StageContractBinding
         BoundStageModel Value() => new(anchor, Identity(type), Name(type), kind, hierarchy,
             new(callbacks.OrderBy(c => c.Phase).ThenBy(c => c.Interface, StringComparer.Ordinal)), FusionOwnership.BorrowedService, compilerOwned)
         {
+            ReceiverIsGeneric = type.IsGenericType,
             StreamItems = facts.Count == before && !compilerOwned && typedStream && callbacks.Count == 1 ? streamItems : null,
             StreamEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.Stream &&
                 kind == FusionStageKind.Hook && callbacks.Count == 1 ? streamEmission : null,
