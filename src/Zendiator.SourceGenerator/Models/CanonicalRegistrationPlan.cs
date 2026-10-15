@@ -9,16 +9,19 @@ internal sealed record CanonicalRouteRegistration(CanonicalSyncCompositionEmissi
     int HandlerOrdinal, int PipelineOrdinal, BoundStreamOpenRegistration? Open,
     string? FinalItemName, EquatableArray<RegistrationStageEmission> DeclaredStages)
 {
+    public EquatableArray<BoundSyncHandlerEmission> BranchHandlers { get; init; }
     internal IEnumerable<string> ServiceTypes => Open != null
         ? Open.Stages.Select(s => s.FactoryName ?? s.TypeName).Concat(new[] { Open.HandlerFactoryDefinitionName ?? Open.HandlerDefinitionName })
         : (Registration.RegistrationStages.Count == 0
             ? Registration.Hooks.Select(h => h.Factory?.FactoryName ?? h.HookName)
             : Registration.RegistrationStages.Select(s => s.FactoryName ?? s.TypeName))
-            .Concat(new[] { Registration.Factory?.FactoryName ?? Registration.Handler.HandlerName });
+            .Concat(BranchHandlers.Count == 0 ? new[] { Registration.Factory?.FactoryName ?? Registration.Handler.HandlerName } : BranchHandlers.Select(h => h.HandlerName));
 }
 
 internal sealed record CanonicalRegistrationPlan(CanonicalSyncCompositionEmission Composition, EquatableArray<CanonicalRouteRegistration> Routes)
 {
+    internal static CanonicalRegistrationPlan SendAllSync(CanonicalSendAllSyncCompositionEmission c) =>
+        new(c.Registration, new(new[] { new CanonicalRouteRegistration(c.Registration, BoundDispatchFamily.SendAllSync, 0, 0, null, null, default) { BranchHandlers = c.Handlers } }));
     internal static CanonicalRegistrationPlan Single(CanonicalSyncCompositionEmission c, BoundDispatchFamily family,
         BoundStreamOpenRegistration? open, string? finalItemName, EquatableArray<RegistrationStageEmission> stages) =>
         new(c, new(new[] { new CanonicalRouteRegistration(c, family, 0, 0, open, finalItemName, stages) }));

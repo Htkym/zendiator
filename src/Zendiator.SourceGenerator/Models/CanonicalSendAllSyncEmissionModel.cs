@@ -1,0 +1,5 @@
+namespace Zendiator.SourceGenerator;
+
+internal sealed record CanonicalSendAllSyncCompositionEmission(CanonicalSyncCompositionEmission Registration,
+    EquatableArray<BoundSyncHandlerEmission> Handlers);
+internal sealed record CanonicalSendAllSyncEmissionModel(EquatableArray<CanonicalSendAllSyncCompositionEmission> Compositions);

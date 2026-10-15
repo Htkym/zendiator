@@ -56,6 +56,11 @@ internal static class CanonicalRegistrationSourceEmitter
                 "global::Zendiator.HandlerEntry.Session(typeof(" + open.HandlerDefinitionName + "), typeof(" + open.HandlerFactoryDefinitionName + "))";
             b.AppendLine($$"""            expected.Handlers(typeof({{open.RequestDefinitionName}}), global::Zendiator.DispatchFamily.{{route.Family}}, {{entry}});""");
         }
+        else if (route.BranchHandlers.Count != 0)
+        {
+            var entries = string.Join(", ", route.BranchHandlers.Select(h => "typeof(" + h.HandlerName + ")"));
+            b.AppendLine($$"""            expected.Handlers<{{c.Handler.RequestName}}>(global::Zendiator.DispatchFamily.SendAllSync, {{entries}});""");
+        }
         else
         {
             var entry = c.Factory == null ? "typeof(" + c.Handler.HandlerName + ")" : "global::Zendiator.HandlerEntry.Session<" + c.Handler.HandlerName + ", " + c.Factory.FactoryName + ">()";

@@ -93,6 +93,17 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         {
             if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.SendSync.Interceptors.g.cs", SourceText.From(text, Encoding.UTF8));
         });
+        var allSyncCandidate = compositionModel.Combine(executionModel)
+            .Select(static (input, _) => CanonicalSendAllSyncEmissionNormalizer.Create(input.Left, input.Right));
+        var allSyncSites = allSyncCandidate.Combine(compositions).Combine(context.CompilationProvider)
+            .Select(static (input, ct) => CanonicalSendAllSyncEmissionNormalizer.BindCallSites(input.Left.Left, input.Left.Right, input.Right, ct));
+        var allSync = allSyncCandidate.Combine(allSyncSites).Select(static (input, _) => CanonicalSendAllSyncEmissionNormalizer.Connected(input.Left, input.Right))
+            .WithTrackingName("CanonicalSendAllSyncEmissionModel");
+        var allSyncSource = allSync.Combine(routeTexts).Select(static (input, _) => CanonicalRouteIncremental.SendAllSync(input.Left, input.Right));
+        var allSyncFiles = allSyncSource.SelectMany(static (text, _) => CanonicalSplitSourceEmitter.Composition(text));
+        context.RegisterSourceOutput(allSyncFiles, static (ctx, file) => ctx.AddSource(file.HintName, SourceText.From(file.Source, Encoding.UTF8)));
+        var allSyncInterceptors = allSyncSites.Select(static (model, _) => CanonicalSyncSourceEmitter.EmitInterceptors(model, "CanonicalSendAllSyncShims"));
+        context.RegisterSourceOutput(allSyncInterceptors, static (ctx, text) => { if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.SendAllSync.Interceptors.g.cs", SourceText.From(text, Encoding.UTF8)); });
         var canonicalAsync = compositionModel.Combine(executionModel)
             .Select(static (input, _) => CanonicalAsyncEmissionNormalizer.Create(input.Left, input.Right)).WithTrackingName("CanonicalAsyncEmissionModel");
         var canonicalAsyncSource = canonicalAsync.Combine(routeTexts).Select(static (input, _) => CanonicalRouteIncremental.Async(input.Left, input.Right)).WithTrackingName("CanonicalAsyncSourceEmission");
@@ -135,8 +146,10 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
                 CanonicalRouteIncremental.Find(input.Right, r.Registration.Namespace, r.Registration.Handler.RequestName, r.Family))).WithTrackingName("CanonicalMultiSourceEmission");
         var multiSourceFiles = multiSource.SelectMany(static (text, _) => CanonicalSplitSourceEmitter.Composition(text)).WithTrackingName("multiSourceCompositionFiles");
         context.RegisterSourceOutput(multiSourceFiles, static (ctx, file) => ctx.AddSource(file.HintName, SourceText.From(file.Source, Encoding.UTF8)));
-        var acceptedRoutes = canonicalSync.Combine(canonicalAsync).Combine(canonicalWrapper).Combine(capabilities).Combine(multi)
-            .Select(static (input, _) => CanonicalSplitSourceEmitter.Accepted(input.Left.Left.Left.Left, input.Left.Left.Left.Right, input.Left.Left.Right, input.Left.Right, input.Right)).WithTrackingName("CanonicalAcceptedRouteFiles");
+        var acceptedBaseRoutes = canonicalSync.Combine(canonicalAsync).Combine(canonicalWrapper).Combine(capabilities).Combine(multi)
+            .Select(static (input, _) => CanonicalSplitSourceEmitter.Accepted(input.Left.Left.Left.Left, input.Left.Left.Left.Right, input.Left.Left.Right, input.Left.Right, input.Right));
+        var acceptedRoutes = acceptedBaseRoutes.Combine(allSync).Select(static (input, _) => new EquatableArray<CanonicalOutputSelection>(input.Left.Concat(input.Right.Compositions.Select(c =>
+            new CanonicalOutputSelection(c.Registration.Namespace, c.Registration.Handler.RequestName, BoundDispatchFamily.SendAllSync))))).WithTrackingName("CanonicalAcceptedRouteFiles");
         var selectedRouteFiles = splitRouteEntries.Combine(acceptedRoutes)
             .Select(static (input, _) => CanonicalSplitSourceEmitter.SelectRoute(input.Left.Route, input.Left.File, input.Right))
             .Where(static (file) => file != null).Select(static (file, _) => file!).WithTrackingName("CanonicalRouteOutputFile");
@@ -144,12 +157,13 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         var multiInterceptors = multiSites.Select(static (model, _) => CanonicalSyncSourceEmitter.EmitInterceptors(model, "CanonicalMultiShims"));
         context.RegisterSourceOutput(multiInterceptors, static (ctx, text) => { if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.Multiple.Interceptors.g.cs", SourceText.From(text, Encoding.UTF8)); });
         context.RegisterSourceOutput(compositionModel.Combine(executionModel).Combine(compositions).Combine(canonicalSync).Combine(canonicalSyncSites)
-            .Combine(canonicalAsync).Combine(canonicalAsyncSites).Combine(canonicalWrapper).Combine(wrapperSites).Combine(capabilities).Combine(capabilitySites).Combine(multi).Combine(multiSites).Combine(streamConnections).Combine(streamPublic).Combine(streamPublicSites), static (ctx, connected) =>
+            .Combine(canonicalAsync).Combine(canonicalAsyncSites).Combine(canonicalWrapper).Combine(wrapperSites).Combine(capabilities).Combine(capabilitySites).Combine(multi).Combine(multiSites).Combine(streamConnections).Combine(streamPublic).Combine(streamPublicSites).Combine(allSync).Combine(allSyncSites), static (ctx, extended) =>
         {
+            var connected = extended.Left.Left;
             var input = connected.Left.Left.Left;
             var originalInput = input.Left.Left; var wrapperInput = originalInput.Left.Left; var original = wrapperInput.Left.Left; var sync = original.Left.Left;
             CompositionSelectionDiscovery.Report(ctx, sync.Left.Left.Left.Left, sync.Left.Left.Right, sync.Left.Left.Left.Right, sync.Left.Right, sync.Right,
-                original.Left.Right, original.Right, wrapperInput.Left.Right, wrapperInput.Right, originalInput.Left.Right, originalInput.Right, input.Left.Right, input.Right, connected.Left.Left.Right, connected.Left.Right, connected.Right);
+                original.Left.Right, original.Right, wrapperInput.Left.Right, wrapperInput.Right, originalInput.Left.Right, originalInput.Right, input.Left.Right, input.Right, connected.Left.Left.Right, connected.Left.Right, connected.Right, extended.Left.Right, extended.Right);
         });
         var legacyInvocations = invocationBindings.Combine(compositions)
             .Select(static (input, _) => CompositionSelectionDiscovery.LegacyInvocations(input.Left, input.Right));

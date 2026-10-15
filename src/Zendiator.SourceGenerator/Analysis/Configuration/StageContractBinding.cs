@@ -147,7 +147,7 @@ internal static class StageContractBinding
             StreamWrapperEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.Stream &&
                 kind == FusionStageKind.Wrapper && callbacks.Count == 1 && wrapperEmission != null
                     ? wrapperEmission with { WrapperIsValueType = type.IsValueType } : null,
-            SyncEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.SendSync &&
+            SyncEmission = facts.Count == before && !compilerOwned && (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync) &&
                 kind == FusionStageKind.Hook && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly) &&
                 callbacks.Count == 4 && syncCallbacks.Count == 4 &&
                 syncCallbacks.ContainsKey(BoundCallbackPhase.Before) && syncCallbacks.ContainsKey(BoundCallbackPhase.Success) &&

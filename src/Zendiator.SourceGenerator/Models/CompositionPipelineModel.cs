@@ -50,6 +50,7 @@ internal sealed record BoundPipelineModel(string Anchor, string Request, string 
     public bool HasEmptyPipeline { get; init; }
     public BoundDispatchFamily? PipelineFamily { get; init; }
     public BoundRequestShape RequestShape { get; init; }
+    public bool RequestIsGeneric { get; init; }
     public string RequestRuntimeIdentity { get; init; } = "";
     public BoundStreamGenericEmission? StreamGeneric { get; init; }
     public BoundStreamItemFlow? StreamItemFlow { get; init; }

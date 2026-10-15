@@ -72,7 +72,7 @@ internal static class CanonicalSyncSourceEmitter
         return b.ToString();
     }
 
-    private static void EmitHookSend(StringBuilder b, CanonicalSyncCompositionEmission c)
+    internal static void EmitHookSend(StringBuilder b, CanonicalSyncCompositionEmission c)
     {
         var h = c.Handler;
         var hook = c.Hooks[0];
