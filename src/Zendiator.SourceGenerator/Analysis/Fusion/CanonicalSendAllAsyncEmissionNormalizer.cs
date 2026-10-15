@@ -20,7 +20,7 @@ internal static class CanonicalSendAllAsyncEmissionNormalizer
             var r = c.Pipelines[0];
             var graph = execution.Compositions[i].SingleOrDefault(g => g.Contract.Anchor == r.Anchor);
             if (graph?.IsValid != true || graph.Schedule == null || r.Family != BoundDispatchFamily.SendAllAsync ||
-                r.RequestShape != BoundRequestShape.ClosedReference || r.RequestIsGeneric || !r.ExplicitHandlerOrder || r.Handlers.Count == 0 ||
+                r.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue) || r.RequestIsGeneric || !r.ExplicitHandlerOrder || r.Handlers.Count == 0 ||
                 r.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void)) continue;
             if (r.Stages.Any(s => s.Kind == FusionStageKind.Wrapper))
             {
@@ -40,7 +40,7 @@ internal static class CanonicalSendAllAsyncEmissionNormalizer
             foreach (var h in r.Handlers)
             {
                 if (h.CompilerOwnsError || h.Callback?.Completion != BoundCompletionKind.ValueTask ||
-                    h.AsyncEmission is not { RequestIsValueType: false, HandlerIsValueType: false } ||
+                    h.AsyncEmission is not { HandlerIsValueType: false } || h.AsyncEmission.RequestIsValueType != (r.RequestShape == BoundRequestShape.ClosedNonGenericValue) ||
                     h.AsyncEmission.ResultName is not (null or "int" or "global::System.Int32") || !c.Handlers.Any(m => m.Identity == h.Type) ||
                     !TryFactory(h.Sessions, h.ServiceOwnership, out var factory)) break;
                 branches.Add(new(i, c.GeneratedNamespace, c.MarkerName, c.UseLocalHandlers, h.AsyncEmission, factory,

@@ -20,7 +20,7 @@ internal static class CanonicalSendAllSyncEmissionNormalizer
             var r = c.Pipelines[0];
             var graph = execution.Compositions[i].SingleOrDefault(g => g.Contract.Anchor == r.Anchor);
             if (graph?.IsValid != true || graph.Schedule == null || r.Family != BoundDispatchFamily.SendAllSync ||
-                r.RequestShape != BoundRequestShape.ClosedReference || r.RequestIsGeneric || !r.ExplicitHandlerOrder || r.Handlers.Count == 0 ||
+                r.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue) || r.RequestIsGeneric || !r.ExplicitHandlerOrder || r.Handlers.Count == 0 ||
                 r.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void)) continue;
             if (r.Stages.Any(s => s.Kind == FusionStageKind.Wrapper))
             {
@@ -37,7 +37,7 @@ internal static class CanonicalSendAllSyncEmissionNormalizer
             foreach (var h in r.Handlers)
             {
                 if (h.CompilerOwnsError || h.Callback?.Completion != BoundCompletionKind.Synchronous ||
-                    h.SyncEmission is not { RequestIsValueType: false, HandlerIsValueType: false } ||
+                    h.SyncEmission is not { HandlerIsValueType: false } || h.SyncEmission.RequestIsValueType != (r.RequestShape == BoundRequestShape.ClosedNonGenericValue) ||
                     h.SyncEmission.ResultName is not (null or "int" or "global::System.Int32") || !c.Handlers.Any(m => m.Identity == h.Type) ||
                     !TryFactory(h.Sessions, h.ServiceOwnership, out var factory)) break;
                 branches.Add(new(i, c.GeneratedNamespace, c.MarkerName, c.UseLocalHandlers, h.SyncEmission, factory,

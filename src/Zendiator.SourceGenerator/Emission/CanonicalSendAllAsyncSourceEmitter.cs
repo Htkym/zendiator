@@ -27,7 +27,7 @@ internal static class CanonicalSendAllAsyncSourceEmitter
                     }
                     public {{result}} SendAllAsync({{request}} request, global::System.Threading.CancellationToken cancellationToken = default)
                     {
-                        global::System.ArgumentNullException.ThrowIfNull(request);
+                        {{CanonicalCapabilitySourceEmitter.RequestGuard(branch.Handler.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
                         return ExecuteAllAsync(request, cancellationToken);
                     }
                     private async {{result}} ExecuteAllAsync({{request}} request, global::System.Threading.CancellationToken cancellationToken)
@@ -48,7 +48,7 @@ internal static class CanonicalSendAllAsyncSourceEmitter
             b.AppendLine($$"""
                     private async {{branchResult}} Branch{{i}}Async({{request}} request, global::System.Threading.CancellationToken cancellationToken)
                     {
-                        global::System.ArgumentNullException.ThrowIfNull(request);
+                        {{CanonicalCapabilitySourceEmitter.RequestGuard(branch.Handler.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
                         cancellationToken.ThrowIfCancellationRequested();
                 """);
             if (response != null) b.AppendLine($"            {response} response;");

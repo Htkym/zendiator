@@ -29,7 +29,7 @@ internal static class CanonicalSendAllSyncSourceEmitter
                     }
                     public {{result}} SendAll({{request}} request, global::System.Threading.CancellationToken cancellationToken = default)
                     {
-                        global::System.ArgumentNullException.ThrowIfNull(request);
+                        {{CanonicalCapabilitySourceEmitter.RequestGuard(registration.Handler.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
                         cancellationToken.ThrowIfCancellationRequested();
             """);
         if (response != null) b.AppendLine($"            var results = new {response}[{c.Branches.Count}];");
@@ -39,7 +39,7 @@ internal static class CanonicalSendAllSyncSourceEmitter
         if (response != null) b.AppendLine($$"""
                     public int SendAll({{request}} request, scoped global::System.Span<{{response}}> destination, global::System.Threading.CancellationToken cancellationToken = default)
                     {
-                        global::System.ArgumentNullException.ThrowIfNull(request);
+                        {{CanonicalCapabilitySourceEmitter.RequestGuard(registration.Handler.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
                         if (destination.Length < {{c.Branches.Count}}) throw new global::System.ArgumentException("Destination is too short.", nameof(destination));
                         var results = SendAll(request, cancellationToken);
                         global::System.MemoryExtensions.AsSpan(results).CopyTo(destination);
@@ -56,7 +56,7 @@ internal static class CanonicalSendAllSyncSourceEmitter
             b.AppendLine($$"""
                     private {{response ?? "void"}} Branch{{i}}({{request}} request, global::System.Threading.CancellationToken cancellationToken)
                     {
-                        global::System.ArgumentNullException.ThrowIfNull(request);
+                        {{CanonicalCapabilitySourceEmitter.RequestGuard(registration.Handler.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
                         cancellationToken.ThrowIfCancellationRequested();
                 """);
             CanonicalSyncSourceEmitter.EmitHookSend(b, c.Branches[i]);

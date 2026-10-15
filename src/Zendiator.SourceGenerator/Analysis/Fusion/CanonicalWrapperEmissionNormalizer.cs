@@ -78,15 +78,15 @@ internal static class CanonicalWrapperEmissionNormalizer
     {
         var sync = route.Family == BoundDispatchFamily.SendAllSync;
         if (route.Family is not (BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAllAsync) ||
-            route.RequestShape != BoundRequestShape.ClosedReference || route.RequestIsGeneric ||
+            route.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue) || route.RequestIsGeneric ||
             route.Stages.Count(s => s.Kind == FusionStageKind.Wrapper) != 1 ||
             route.Stages.Any(s => s.CompilerOwnsError || !Session(s.Sessions, s.ServiceOwnership) ||
                 (s.Kind == FusionStageKind.Wrapper ? s.WrapperEmission is not { WrapperIsValueType: false } :
                     s.Kind != FusionStageKind.Hook || s.Capabilities is not { HookIsValueType: false })) ||
             route.Handlers.Any(h => h.CompilerOwnsError || !Session(h.Sessions, h.ServiceOwnership) ||
-                (sync ? h.SyncEmission is not { RequestIsValueType: false, HandlerIsValueType: false } ||
+                (sync ? h.SyncEmission is not { HandlerIsValueType: false } || h.SyncEmission.RequestIsValueType != (route.RequestShape == BoundRequestShape.ClosedNonGenericValue) ||
                         h.SyncEmission.ResultName is not (null or "int" or "global::System.Int32") :
-                    h.AsyncEmission is not { RequestIsValueType: false, HandlerIsValueType: false } ||
+                    h.AsyncEmission is not { HandlerIsValueType: false } || h.AsyncEmission.RequestIsValueType != (route.RequestShape == BoundRequestShape.ClosedNonGenericValue) ||
                         h.AsyncEmission.ResultName is not (null or "int" or "global::System.Int32")))) return default;
         bool Session(EquatableArray<BoundSessionModel> sessions, FusionOwnership ownership) => sessions.Count == 0
             ? ownership == FusionOwnership.BorrowedService
