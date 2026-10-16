@@ -180,9 +180,23 @@ Send系の`Before`はリストの先頭から、`After`は末尾から呼びま�
 
 `[ZendiatorComposition]`を付けた`App`から、`GettingStarted.Generated.App`名前空間の登録メソッドと呼び出しメソッドを生成します。属性の文字列はcompositionの識別子です。
 
+## 例外と取消
+
+`Send`の例外は呼出し元へ伝わります。`SendAsync`の処理中の例外は`await`で、StreamのHandlerやHookの例外は列挙時に受け取ります。`request`がnullの場合は呼出し時に例外が出るため、`try`には呼出しと待機・列挙を含めてください。
+
+取消tokenは各入口の`CancellationToken`引数で渡します。この例で取消が検出されると、`OperationCanceledException`が伝わります。Streamは列挙時のtokenも受け取り、呼出し時・列挙時のどちらの取消も反映します。既に取消済みの場合も、Streamでの通知は最初の項目を要求したときです。
+
+## Streamの開始と再列挙
+
+`StreamAsync`の呼出しや列挙子の取得だけでは、HandlerやHookは動きません。`await foreach`が最初の項目を要求したときに処理を始めます。
+
+同じ返り値をもう一度列挙すると、新しい列挙子でHandlerとHookの処理をやり直します。結果のキャッシュとしては使えません。
+
 ## DI scopeの所有
 
 標準DIが、この例のHandlerとHookの生成・破棄を受け持ちます。呼び出し側はscopeを作り、そのscopeから`IZendiator`を取得します。非同期処理の完了とStreamの列挙終了までscopeを保持し、その後に破棄します。HandlerやHookを呼び出し側で個別に破棄する必要はありません。
+
+Streamの返り値をscopeの外へ持ち出し、scopeを破棄してから列挙を始めないでください。途中で`break`した場合も、`await foreach`による列挙子の後始末が終わるまでscopeを保持します。
 
 `SendAsync`が返す`ValueTask`は、例のように1回だけ`await`します。同じ`ValueTask`を保存して複数回消費しないでください。
 
@@ -193,3 +207,9 @@ Send系の`Before`はリストの先頭から、`After`は末尾から呼びま�
 Behaviorの並びは`Pipeline`の順序付きリストで指定します。この例のHookは、要求の変換、応答の変換、Streamの項目処理という専用の契約を実装しています。既存Behaviorのretryやcacheなどの意味を、自動でHookへ置き換えるものではありません。継続の呼び出しを制御するBehaviorを移す際は、`Stage.Wrapper<T>()`の契約と対象経路を確認してください。
 
 この例は、型引数を持たないclassのrequest、`int`または`string`の応答、`int`のStream、DIが所有するHandlerとHookを使います。ほかの型や経路を網羅する例ではありません。0.5.0候補のAPIと公開範囲は開発中です。
+
+### Handler属性の付け忘れ
+
+プロジェクト内で定義したHandlerを属性なしで明示登録すると、ZEN0035で登録箇所が示されます。ZEN0035はほかの生成条件の不備にも使います。診断文が属性不足を示している場合は、上の`AddNumbersHandler`のようにクラス宣言へ`[ZendiatorHandler]`を付けてください。
+
+属性追加のCodeFixは実装されていますが、利用者向けの配布とIDEでの動作確認はまだ完了していません。
