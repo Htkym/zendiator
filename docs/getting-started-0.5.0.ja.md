@@ -212,4 +212,8 @@ Behaviorの並びは`Pipeline`の順序付きリストで指定します。こ�
 
 プロジェクト内で定義したHandlerを属性なしで明示登録すると、ZEN0035で登録箇所が示されます。ZEN0035はほかの生成条件の不備にも使います。診断文が属性不足を示している場合は、上の`AddNumbersHandler`のようにクラス宣言へ`[ZendiatorHandler]`を付けてください。
 
-属性追加のCodeFixは実装されていますが、利用者向けの配布とIDEでの動作確認はまだ完了していません。
+`Zendiator.CodeFixes`は任意で追加するパッケージです。利用する場合は、`Zendiator`と同じ候補バージョンを用意し、プロジェクトの`ZendiatorPackageVersion`をそのバージョンに合わせてください。[導入例](../src/Zendiator.CodeFixes/README.md)のように`PrivateAssets="all"`を指定します。CodeFixの候補パッケージはNuGet.orgには公開していません。
+
+CodeFixの対象は属性不足と判断できるZEN0035だけです。Fix Allの対象は現在の文書だけです。
+
+Visual Studio 2026 Insiders 18.11ではこの属性追加の1例で候補の表示・適用・ビルドを確認済みです。最低対応IDEのバージョンと他のIDEでの動作は未確認です。
