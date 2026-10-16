@@ -266,6 +266,19 @@ internal sealed class CompositionListBinding
                 if (candidate == null)
                 {
                     Reject("UnsupportedGenerationShape", entry.Anchor, $"Handler {Name(entry.Type)} requires a source ZendiatorHandler marker or a supported explicitly supplied metadata type.");
+                    if (Sources.TryGetValue(entry.Anchor, out var source) && source.SourceTree != null &&
+                        Zendiator.Tooling.MissingHandlerAttribute.Find(_compilation, source.SourceTree, source.SourceSpan, _ct) is { } fix)
+                    {
+                        var targetAnchor = entry.Anchor + "/missing-marker";
+                        Sources[targetAnchor] = fix.Declaration.Identifier.GetLocation();
+                        Facts[Facts.Count - 1] = Facts[Facts.Count - 1] with
+                        {
+                            AdditionalAnchor = targetAnchor,
+                            FixHandler = fix.Properties[Zendiator.Tooling.MissingHandlerAttribute.HandlerKey],
+                            FixSourceChecksum = fix.Properties[Zendiator.Tooling.MissingHandlerAttribute.SourceChecksumKey],
+                            FixTargetChecksum = fix.Properties[Zendiator.Tooling.MissingHandlerAttribute.TargetChecksumKey]
+                        };
+                    }
                     continue;
                 }
                 if (candidate.Model.CompilerOwnsMarkerError) continue;

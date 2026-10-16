@@ -255,7 +255,12 @@ internal static class CompositionSelectionDiscovery
                         var stream = streams.Routes.FirstOrDefault(r => r.CompositionIdentity == composition.Identity && r.Anchor == fact.Anchor);
                         if (stream != null && stream.Kind != CanonicalStreamConnectionKind.InvalidContract) message = stream.Reason;
                     }
-                    context.ReportDiagnostic(Diagnostic.Create(Descriptor(fact.Key), primary, additional, null, message));
+                    var properties = fact.FixHandler == null ? null : System.Collections.Immutable.ImmutableDictionary<string, string?>.Empty
+                        .Add(Zendiator.Tooling.MissingHandlerAttribute.ReasonKey, Zendiator.Tooling.MissingHandlerAttribute.Reason)
+                        .Add(Zendiator.Tooling.MissingHandlerAttribute.HandlerKey, fact.FixHandler)
+                        .Add(Zendiator.Tooling.MissingHandlerAttribute.SourceChecksumKey, fact.FixSourceChecksum)
+                        .Add(Zendiator.Tooling.MissingHandlerAttribute.TargetChecksumKey, fact.FixTargetChecksum);
+                    context.ReportDiagnostic(Diagnostic.Create(Descriptor(fact.Key), primary, additional, properties, message));
                 }
                 if (composition.Errors.Count == 0 && composition.Facts.Count == 0 && composition.Pipelines.Count == 0 &&
                     (!composition.CompilerOwnsHandlerError || composition.Handlers.Count != 0))

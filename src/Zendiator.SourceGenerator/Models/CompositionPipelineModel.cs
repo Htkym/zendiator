@@ -85,4 +85,9 @@ internal sealed record BoundStreamGenericEmission(EquatableArray<string> Paramet
     public string TypeParameters => "<" + string.Join(", ", Parameters) + ">";
     public string TypeConstraints => string.Concat(Constraints);
 }
-internal sealed record CompositionDiagnosticFact(string Key, string Anchor, string Message, string? AdditionalAnchor = null);
+internal sealed record CompositionDiagnosticFact(string Key, string Anchor, string Message, string? AdditionalAnchor = null)
+{
+    public string? FixHandler { get; init; }
+    public string? FixSourceChecksum { get; init; }
+    public string? FixTargetChecksum { get; init; }
+}
