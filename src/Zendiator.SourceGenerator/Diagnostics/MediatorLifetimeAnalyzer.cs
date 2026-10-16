@@ -29,13 +29,17 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterSyntaxNodeAction(AnalyzeDisposable,
-            SyntaxKind.CastExpression, SyntaxKind.AsExpression, SyntaxKind.IsExpression, SyntaxKind.IsPatternExpression);
-        context.RegisterSyntaxNodeAction(AnalyzeReturn, SyntaxKind.ReturnStatement);
-        context.RegisterSyntaxNodeAction(AnalyzeSend, SyntaxKind.InvocationExpression);
+        context.RegisterCompilationStartAction(start =>
+        {
+            var canonical = CanonicalMediatorIdentity.Discover(start.Compilation, start.CancellationToken);
+            start.RegisterSyntaxNodeAction(c => AnalyzeDisposable(c, canonical),
+                SyntaxKind.CastExpression, SyntaxKind.AsExpression, SyntaxKind.IsExpression, SyntaxKind.IsPatternExpression);
+            start.RegisterSyntaxNodeAction(c => AnalyzeReturn(c, canonical), SyntaxKind.ReturnStatement);
+            start.RegisterSyntaxNodeAction(c => AnalyzeSend(c, canonical), SyntaxKind.InvocationExpression);
+        });
     }
 
-    private static void AnalyzeDisposable(SyntaxNodeAnalysisContext context)
+    private static void AnalyzeDisposable(SyntaxNodeAnalysisContext context, ImmutableHashSet<ITypeSymbol> canonical)
     {
         ExpressionSyntax? expression = null;
         TypeSyntax? target = null;
@@ -60,11 +64,11 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
         var disposableType = target is null ? null : context.SemanticModel.GetTypeInfo(target, context.CancellationToken).Type;
         if (expression is null || disposableType is not INamedTypeSymbol { Name: "IDisposable" } namedDisposable ||
             namedDisposable.ContainingNamespace.ToDisplayString() != "System" ||
-            !IsMediator(context.SemanticModel.GetTypeInfo(expression, context.CancellationToken).Type)) return;
+            !IsMediator(context.SemanticModel.GetTypeInfo(expression, context.CancellationToken).Type, canonical)) return;
         context.ReportDiagnostic(Diagnostic.Create(Disposable, context.Node.GetLocation()));
     }
 
-    private static void AnalyzeReturn(SyntaxNodeAnalysisContext context)
+    private static void AnalyzeReturn(SyntaxNodeAnalysisContext context, ImmutableHashSet<ITypeSymbol> canonical)
     {
         var statement = (ReturnStatementSyntax)context.Node;
         if (statement.Expression is null || statement.Ancestors().Any(a =>
@@ -73,25 +77,29 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
         ILocalSymbol? scope = null;
         if (expression is IdentifierNameSyntax identifier &&
             context.SemanticModel.GetSymbolInfo(identifier, context.CancellationToken).Symbol is ILocalSymbol mediator &&
-            IsMediator(mediator.Type) && TryMediatorScope(mediator, context.SemanticModel, out var localScope) &&
+            IsMediator(mediator.Type, canonical) && TryMediatorScope(mediator, context.SemanticModel, canonical, out var localScope) &&
             !WasReassigned(mediator, mediator.DeclaringSyntaxReferences[0].Span.Start, statement.SpanStart,
                 statement.Ancestors().OfType<BaseMethodDeclarationSyntax>().FirstOrDefault() ?? (SyntaxNode)statement,
                 context.SemanticModel))
             scope = localScope;
-        else if (TryResolutionScope(expression, context.SemanticModel, out var directScope))
+        else if (TryResolutionScope(expression, context.SemanticModel, canonical, out var directScope))
             scope = directScope;
 
         if (scope is null || !UsingScopeContains(scope, statement)) return;
         context.ReportDiagnostic(Diagnostic.Create(EscapesScope, statement.GetLocation()));
     }
 
-    private static void AnalyzeSend(SyntaxNodeAnalysisContext context)
+    private static void AnalyzeSend(SyntaxNodeAnalysisContext context, ImmutableHashSet<ITypeSymbol> canonical)
     {
         if (context.Node is not InvocationExpressionSyntax send ||
             send.Ancestors().Any(a => a is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax) ||
-            send.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: "SendAsync", Expression: IdentifierNameSyntax receiver } ||
+            send.Expression is not MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax receiver } member ||
             context.SemanticModel.GetSymbolInfo(receiver, context.CancellationToken).Symbol is not ILocalSymbol mediator ||
-            !IsMediator(mediator.Type) || !TryMediatorScope(mediator, context.SemanticModel, out var scope) ||
+            !IsMediator(mediator.Type, canonical) ||
+            !IsDispatch(member.Name.Identifier.ValueText, canonical.Contains(mediator.Type)) ||
+            context.SemanticModel.GetSymbolInfo(send, context.CancellationToken).Symbol is not IMethodSymbol { IsExtensionMethod: false } dispatch ||
+            !SymbolEqualityComparer.Default.Equals(dispatch.ContainingType, mediator.Type) ||
+            !TryMediatorScope(mediator, context.SemanticModel, canonical, out var scope) ||
             send.Ancestors().OfType<StatementSyntax>().FirstOrDefault(s => s.Parent is BlockSyntax) is not { Parent: BlockSyntax block } sendStatement)
             return;
 
@@ -120,14 +128,17 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
             method.Parameters.Length == 0 && (method.Name == "Dispose" || awaitedDispose);
     }
 
-    private static bool TryMediatorScope(ILocalSymbol mediator, SemanticModel model, out ILocalSymbol scope)
+    private static bool IsDispatch(string name, bool canonical) => name == "SendAsync" ||
+        canonical && name is "Send" or "SendAll" or "SendAllAsync" or "StreamAsync";
+
+    private static bool TryMediatorScope(ILocalSymbol mediator, SemanticModel model, ImmutableHashSet<ITypeSymbol> canonical, out ILocalSymbol scope)
     {
         scope = null!;
         return mediator.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is VariableDeclaratorSyntax
-        { Initializer.Value: ExpressionSyntax initializer } && TryResolutionScope(initializer, model, out scope);
+        { Initializer.Value: ExpressionSyntax initializer } && TryResolutionScope(initializer, model, canonical, out scope);
     }
 
-    private static bool TryResolutionScope(ExpressionSyntax expression, SemanticModel model, out ILocalSymbol scope)
+    private static bool TryResolutionScope(ExpressionSyntax expression, SemanticModel model, ImmutableHashSet<ITypeSymbol> canonical, out ILocalSymbol scope)
     {
         scope = null!;
         expression = Unwrap(expression);
@@ -138,18 +149,21 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
             model.GetSymbolInfo(scopeName).Symbol is not ILocalSymbol local ||
             model.GetSymbolInfo(invocation).Symbol is not IMethodSymbol method ||
             method.Name is not ("GetRequiredService" or "GetService") ||
-            !IsMediator(model.GetTypeInfo(invocation).Type) || !IsScope(local)) return false;
+            !SymbolEqualityComparer.Default.Equals(method.ContainingType, model.Compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions")) ||
+            !IsMediator(model.GetTypeInfo(invocation).Type, canonical) || !IsScope(local, model)) return false;
         scope = local;
         return true;
     }
 
-    private static bool IsScope(ILocalSymbol local) =>
+    private static bool IsScope(ILocalSymbol local, SemanticModel model) =>
         local.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is VariableDeclaratorSyntax
         { Initializer.Value: InvocationExpressionSyntax invocation } &&
         invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: "CreateScope" or "CreateAsyncScope" } &&
-        local.Type is INamedTypeSymbol scopeType &&
-        scopeType.ContainingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection" &&
-        scopeType.Name is "IServiceScope" or "AsyncServiceScope";
+        model.GetSymbolInfo(invocation).Symbol is IMethodSymbol creator &&
+        (SymbolEqualityComparer.Default.Equals(creator.ContainingType, model.Compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions")) ||
+         SymbolEqualityComparer.Default.Equals(creator.ContainingType, model.Compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.IServiceScopeFactory"))) &&
+        (SymbolEqualityComparer.Default.Equals(local.Type, model.Compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.IServiceScope")) ||
+         SymbolEqualityComparer.Default.Equals(local.Type, model.Compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.AsyncServiceScope")));
 
     private static bool UsingScopeContains(ILocalSymbol scope, ReturnStatementSyntax statement)
     {
@@ -179,9 +193,10 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    private static bool IsMediator(ITypeSymbol? type)
+    private static bool IsMediator(ITypeSymbol? type, ImmutableHashSet<ITypeSymbol> canonical)
     {
         if (type is not INamedTypeSymbol named) return false;
+        if (canonical.Contains(type)) return true;
         if (named.Name is not ("Zendiator" or "IZendiator")) return false;
         return named.GetAttributes().Any(attribute =>
             attribute.AttributeClass?.ToDisplayString() == "System.CodeDom.Compiler.GeneratedCodeAttribute" &&
