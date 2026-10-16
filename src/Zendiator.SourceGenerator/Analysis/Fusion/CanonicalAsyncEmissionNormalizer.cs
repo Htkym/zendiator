@@ -24,9 +24,10 @@ internal static class CanonicalAsyncEmissionNormalizer
             var h = route.Handlers[0];
             if (route.RequestShape == BoundRequestShape.OpenAsyncReference &&
                 (c.MarkerName == null || route.SendGeneric == null || route.SendOpenRegistration is not { } open ||
-                route.Stages.Count != 1 || open.Stages.Count != 1 || h.Sessions.Count != 0 ||
+                route.Stages.Count != 1 && !(route.ResultKind == FusionResultKind.Response && route.Stages.Count == 2) ||
+                open.Stages.Count != route.Stages.Count || h.Sessions.Count != 0 ||
                 h.AsyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false } ||
-                route.Stages[0].Sessions.Count != 0 || route.Stages[0].AsyncEmission is not { HookIsValueType: false } ||
+                route.Stages.Any(s => s.Sessions.Count != 0 || s.AsyncEmission is not { HookIsValueType: false }) ||
                 c.Handlers.Any(member => !open.HandlerMembership.Contains(member.Identity)))) continue;
             if (h.CompilerOwnsError || h.AsyncEmission == null || h.Callback?.Completion != BoundCompletionKind.ValueTask ||
                 !c.Handlers.Any(handler => handler.Identity == h.Type)) continue;

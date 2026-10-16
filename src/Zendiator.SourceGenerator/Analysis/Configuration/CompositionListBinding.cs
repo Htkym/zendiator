@@ -452,10 +452,11 @@ internal sealed class CompositionListBinding
                 !declaration.HandlerList && declaration.Entries.Length != 1))
                 Reject("UnsupportedGenerationShape", declaration.Anchor, "Open SendSync requires one class handler and one borrowed class full synchronous hook.");
             if (open != null && family == BoundDispatchFamily.SendAsync &&
-                (handlers.Count != 1 || handlers[0].AsyncEmission == null || stages.Count != 1 ||
-                stages[0].AsyncEmission == null || stages[0].AsyncEmission!.HookIsValueType ||
-                !declaration.HandlerList && declaration.Entries.Length != 1))
-                Reject("UnsupportedGenerationShape", declaration.Anchor, "Open SendAsync requires one class handler and one borrowed class full asynchronous hook.");
+                (handlers.Count != 1 || handlers[0].AsyncEmission == null ||
+                stages.Count != 1 && !(resultKind == FusionResultKind.Response && stages.Count == 2) ||
+                stages.Any(s => s.AsyncEmission is not { HookIsValueType: false }) ||
+                !declaration.HandlerList && declaration.Entries.Length != stages.Count))
+                Reject("UnsupportedGenerationShape", declaration.Anchor, "Open SendAsync requires one class handler and one borrowed class full asynchronous hook, or two hooks for a response route.");
             var openAllSync = open != null && family == BoundDispatchFamily.SendAllSync;
             if (openAllSync && (handlers.Count != 2 || handlers.Any(h => h.SyncEmission is not { HandlerIsValueType: false, ResultName: "int" or "global::System.Int32" }) ||
                 resultKind != FusionResultKind.Response || stages.Count != 1 || stages[0].SyncEmission is not { HookIsValueType: false } ||
