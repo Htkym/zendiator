@@ -5,7 +5,8 @@ namespace Zendiator.SourceGenerator;
 internal static class GeneratorDiagnostics
 {
     internal static readonly DiagnosticDescriptor StreamValidator = Rule("ZEN0024", "Invalid stream validator");
-    internal static readonly DiagnosticDescriptor UnsupportedGenerationShape = Rule("ZEN0035", "Unsupported generation shape");
+    internal static readonly DiagnosticDescriptor UnsupportedGenerationShape = Rule("ZEN0035", "Unsupported generation shape",
+        helpLinkUri: "https://github.com/Htkym/zendiator/blob/feature/0.5.0/docs/diagnostics/ZEN0035.md");
     internal static readonly DiagnosticDescriptor StageContractMismatch = Rule("ZEN0025", "Stage contract mismatch");
     internal static readonly DiagnosticDescriptor StageTypeMismatch = Rule("ZEN0026", "Stage type mismatch");
     internal static readonly DiagnosticDescriptor AmbiguousStageContract = Rule("ZEN0027", "Ambiguous stage contract");
@@ -32,6 +33,6 @@ internal static class GeneratorDiagnostics
         Rule("ZEN0020", "Interception connection failure"), StreamValidator
     };
 
-    internal static DiagnosticDescriptor Rule(string id, string title) =>
-        new(id, title, "{0}", "Zendiator", DiagnosticSeverity.Error, true);
+    internal static DiagnosticDescriptor Rule(string id, string title, string? helpLinkUri = null) =>
+        new(id, title, "{0}", "Zendiator", DiagnosticSeverity.Error, true, helpLinkUri: helpLinkUri);
 }
