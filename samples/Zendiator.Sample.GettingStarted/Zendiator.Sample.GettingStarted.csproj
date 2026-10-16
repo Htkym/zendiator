@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ZendiatorPackageVersion Condition="'$(ZendiatorPackageVersion)' == ''">0.5.0-u01</ZendiatorPackageVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Zendiator" Version="$(ZendiatorPackageVersion)" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+  </ItemGroup>
+</Project>
