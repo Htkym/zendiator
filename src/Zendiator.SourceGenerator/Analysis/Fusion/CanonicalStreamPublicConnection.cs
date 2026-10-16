@@ -108,7 +108,6 @@ internal static class CanonicalStreamPublicConnection
             segment.Hooks.Select(h => h.Completion).SequenceEqual(new[] { BoundCompletionKind.ValueTask, BoundCompletionKind.ValueTask, BoundCompletionKind.Synchronous });
     }
 
-    // First public owned-session unit: the already accepted closed plain three-Map schedule.
     // Factory acquisition/cleanup is still entirely emitted by the existing canonical cursor.
     private static bool PlainOwnedSessionShape(CanonicalStreamFallbackModel model)
     {
@@ -151,7 +150,6 @@ internal static class CanonicalStreamPublicConnection
             flow.Stages[1].Input.Identity == flow.Stages[0].Output.Identity && flow.Stages[1].Output.Identity == flow.Final.Identity;
     }
 
-    // Closed int -> value-item Map, opaque same-item Wrapper, async same-item Map.
     // The existing typed cursor owns sessions; the registrar owns only their borrowed DI factories.
     private static bool ClosedTypedWrapperSessionShape(CanonicalStreamFallbackModel model)
     {

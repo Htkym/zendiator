@@ -2,10 +2,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Zendiator.Tests.Contracts;
 
-// C02 reference for F1 -> opaque W -> F2. W alone decides how often and with which inputs to Open.
+// F1 -> opaque W -> F2. W decides how often and with which inputs to open upstream.
 internal static class CanonicalStreamWrapperReference
 {
-    // C10 extension of the independent wrapper control: async intervals on each side.
+    // Async intervals remain on their own side of the opaque wrapper.
     public static IAsyncEnumerable<TItem> AsyncFilterWrapperMap<TRequest, TItem, TBefore, TWrapper, TAfter>(
         IServiceProvider services, TRequest request, Func<TRequest, CancellationToken, IAsyncEnumerable<TItem>> start,
         CancellationToken api = default)
@@ -123,7 +123,6 @@ internal static class CanonicalStreamWrapperReference
             => new FilterCursor<TRequest, TItem, TFilter>(services, request, start, api, enumeration, events, stage);
     }
 
-    // One synchronous hook interval per side of the opaque boundary. No legacy adapter or IR.
     private sealed class FilterCursor<TRequest, TItem, TFilter>(IServiceProvider services, TRequest request,
         Func<TRequest, CancellationToken, IAsyncEnumerator<TItem>> start,
         CancellationToken api, CancellationToken enumeration, ContractEvents? events, string stage)

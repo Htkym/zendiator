@@ -65,7 +65,7 @@ public sealed partial class GeneratorTests
         Assert.Equal(schedule.States.Count, schedule.States.Select(s => s.StartTokenSlot).Distinct().Count());
         Assert.All(schedule.States, s => Assert.Equal(isVoid, s.ResponseSlot == null));
         Assert.All(schedule.Awaits, a => { Assert.True(a.ConsumeOnce); Assert.True(a.ConfigureAwaitFalse); });
-        Assert.Equal(sync ? 0 : (all ? 2 : 1) * 4, schedule.Awaits.Count); // Two Finally, opaque wrapper, handler per branch.
+        Assert.Equal(sync ? 0 : (all ? 2 : 1) * 4, schedule.Awaits.Count);
         Assert.All(schedule.Awaits.Where(a => a.Producer.Phase == SendExecutionPhase.Finally), a => Assert.Equal("void", a.ResultType));
         Assert.All(schedule.Awaits.Where(a => a.Producer.Phase is SendExecutionPhase.InvokeHandler or SendExecutionPhase.InvokeWrapper),
             a => Assert.Equal(isVoid ? "void" : graph.Contract.Result, a.ResultType));

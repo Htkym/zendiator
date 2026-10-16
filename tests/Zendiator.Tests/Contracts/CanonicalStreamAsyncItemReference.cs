@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Zendiator.Tests.Contracts;
 
-// C10 limited control: ordinary compiler async iterator, no generator/IR/cursor adapter.
+// Independent compiler async iterator; no generator, IR or cursor adapter.
 internal static class CanonicalStreamAsyncItemReference
 {
     public static IAsyncEnumerable<TItem> FilterMapFilter<TRequest, TItem, TFirst, TMap, TLast>(

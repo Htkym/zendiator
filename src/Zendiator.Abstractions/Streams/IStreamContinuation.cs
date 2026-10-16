@@ -4,6 +4,5 @@ namespace Zendiator;
 public interface IStreamContinuation<TRequest, TItem>
     where TRequest : IStreamRequest<TItem>
 {
-    /// <summary>Invokes the next node with the supplied request and token.</summary>
     IAsyncEnumerable<TItem> InvokeAsync(TRequest request, CancellationToken cancellationToken);
 }

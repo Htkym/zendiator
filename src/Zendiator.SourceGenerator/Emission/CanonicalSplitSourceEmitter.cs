@@ -14,7 +14,7 @@ internal sealed record CanonicalSourceFile(string HintName, string Source);
 internal sealed record CanonicalRouteFile(CanonicalRouteText Route, CanonicalSourceFile File);
 internal sealed record CanonicalOutputSelection(string Namespace, string RequestName, BoundDispatchFamily? Family);
 
-// H05: route text owns executable members; composition text owns provider construction and DI registration.
+// Route text owns execution; composition text owns provider construction and DI registration.
 // IDs contain type/dispatch identity, never position or an enumeration ordinal.
 internal static class CanonicalSplitSourceEmitter
 {
@@ -45,8 +45,6 @@ internal static class CanonicalSplitSourceEmitter
     internal static CanonicalSourceFile? SelectRoute(CanonicalRouteText route, CanonicalSourceFile file, EquatableArray<CanonicalOutputSelection> selected) =>
         file.Source.Length != 0 && selected.Any(s => s.Namespace == route.Namespace && s.RequestName == route.RequestName && s.Family == route.Family) ? file : null;
 
-    // Preserve the accepted recorder ordering, shared TryAdd deduplication and lifetime rules from the current emitter.
-    // Only the shared members are retained here; execution templates were already cached per route by H04.
     internal static IEnumerable<CanonicalSourceFile> Composition(string source)
     {
         if (source.Length == 0) yield break;

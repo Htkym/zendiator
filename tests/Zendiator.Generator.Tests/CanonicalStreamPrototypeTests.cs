@@ -118,7 +118,7 @@ public sealed partial class GeneratorTests
             foreach (var file in driver.GetRunResult().Results.Single().GeneratedSources)
                 File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
         }
-        Assert.Empty(diagnostics); // The accepted facade keeps this same internal fusion candidate.
+        Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         var generated = Assert.Single(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.StreamPrototype.", StringComparison.Ordinal));
         var projection = Assert.IsType<CanonicalStreamPrototypeModel>(Assert.Single(driver.GetRunResult().Results.Single()

@@ -137,7 +137,7 @@ public sealed partial class GeneratorTests
                     }
                     catch (Exception error)
                     { failure = error; canceled = completion.IsCanceled; faulted = completion.IsFaulted; Observe("consumer.move.failed", null, default); break; }
-                    if (pendingContext) break; // explicit pending Dispose below
+                    if (pendingContext) break;
                 }
                 SynchronizationContext.SetSynchronizationContext(callerContext ?? beforeContext);
                 CanonicalStreamPrototypeProbe.Ambient.Value = "dispose-caller"; Observe("consumer.dispose.enter", null, default);

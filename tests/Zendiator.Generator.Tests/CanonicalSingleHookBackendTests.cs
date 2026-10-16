@@ -260,7 +260,6 @@ public sealed partial class GeneratorTests
     {
         var source = SingleHookBackendSource(isVoid, shape);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "UnsupportedHook_" + shape + isVoid), out var output, out var diagnostics);
-        // Partial callbacks, struct/metadata receivers, sessions and opaque wrappers are accepted Send shapes.
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         AssertAcceptedSendEmission(driver, diagnostics, BoundDispatchFamily.SendSync, isVoid);
     }

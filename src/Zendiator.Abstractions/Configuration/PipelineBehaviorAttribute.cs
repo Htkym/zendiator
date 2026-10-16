@@ -4,7 +4,6 @@ namespace Zendiator;
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Assembly, AllowMultiple = true, Inherited = false)]
 public sealed class PipelineBehaviorAttribute(Type behaviorType) : Attribute
 {
-    /// <summary>Gets the behavior implementation type.</summary>
     public Type BehaviorType { get; } = behaviorType;
 
     /// <summary>Gets or sets the unique order. Lower values run outside higher values.</summary>

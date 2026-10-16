@@ -17,7 +17,7 @@ internal sealed record CanonicalStreamSourceCleanupRegion(EquatableArray<StreamE
     StreamExecutionAwait DisposeAwait, StreamValueTransfer DetachTransfer, StreamExecutionOwner SourceOwner);
 
 // Selected region views reuse the existing sites/edges/operands, not a new generic IR.
-// This is an unregistered C04 prototype; it does not accept a public canonical runtime route.
+// A prototype projection does not authorize public route registration.
 internal sealed record CanonicalStreamPrototypeModel(string Namespace, string ClassName, string HintName,
     CanonicalStreamExecutionSchedule Schedule, StreamSiteId TerminalCleanupEntry,
     BoundStreamHandlerEmission Handler, EquatableArray<BoundStreamHookEmission> Hooks,

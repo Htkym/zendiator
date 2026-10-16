@@ -42,7 +42,7 @@ internal static class BehaviorFusionPlanner
                     EnterAfterGuardAndResolution: true, InnerStatePerContinuationInvocation: true));
             return new(core, new(core, new(scopes), input.DeclaredStages.Count), null);
         }
-        // C01 defines the Stream list in source-to-consumer item order.
+        // Stream stages are ordered from source to consumer.
         var flow = segments.Select(s => new StreamItemSegment(s,
             new(Enumerable.Range(s.Start, s.Length))));
         var transitions = Enumerable.Range(0, input.DeclaredStages.Count)
@@ -102,7 +102,6 @@ internal static class BehaviorFusionPlanner
                 if ((stage.Capabilities & (FusionCapabilities.Filter | FusionCapabilities.Map)) ==
                     (FusionCapabilities.Filter | FusionCapabilities.Map)) Reject("AmbiguousStageContract", i);
                 if (stage.InputItem is null || stage.OutputItem is null) Reject("MissingItemTypes", i);
-                // Type-changing/async Stream is represented in the input, but awaits C10/C11 support.
                 else if (stage.InputItem != input.Result || stage.OutputItem != input.Result) Reject("UnsupportedItemTransition", i);
                 if ((stage.Capabilities & FusionCapabilities.Async) != 0) Reject("AsyncStreamRequiresBackend", i);
             }

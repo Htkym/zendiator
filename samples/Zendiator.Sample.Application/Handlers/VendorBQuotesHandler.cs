@@ -3,7 +3,6 @@ using Zendiator.Sample.Contracts;
 
 namespace Zendiator.Sample.Application;
 
-/// <summary>Quotes from vendor B.</summary>
 [HandlerOrder(Order = 1)]
 public sealed class VendorBQuotesHandler : IRequestHandler<GetHouseholdQuotes, HouseholdQuote>
 {

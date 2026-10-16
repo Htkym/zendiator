@@ -62,7 +62,7 @@ internal sealed class RequiredStreamWrapperContract
             required.Awaits.Add(new(Site(release, StreamWrapperPhase.MoveUpstream), "bool", true, true, true, true, true, false));
             required.Awaits.Add(new(Site(release, StreamWrapperPhase.DisposeCursor), "void", true, true, true, true, true, true));
         }
-        // C01 direct-return delegation is framework acquisition, not an explicit user token.
+        // Direct-return delegation is framework acquisition, not an explicit user token.
         var delegated = StreamWrapperProgram.AcquireDelegatedOutput;
         Add(delegated, StreamWrapperPhase.AcquireCursor, StreamWrapperPhase.AssignOwner, StreamWrapperPhase.CursorReturn, StreamWrapperPhase.AcquireFailure);
         Transfer(delegated, StreamWrapperPhase.AcquireCursor, input + "/envelope/request", input + "/cursor/request", StreamWrapperOutcome.Success);

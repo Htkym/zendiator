@@ -202,8 +202,6 @@ internal sealed partial class GenerationAnalysis
             }
         }
 
-        // DI backend inputs. Built from the single analyzed structure; the shared
-        // discovery, route, and emit machinery below runs unchanged afterwards.
         diMode = !hasAttributeConfig && (hasBareDiCall || hasLambdaDiCall);
 
         diNamespace = null;

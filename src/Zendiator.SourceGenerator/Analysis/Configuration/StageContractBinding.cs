@@ -85,7 +85,6 @@ internal static class StageContractBinding
         if (kind == FusionStageKind.Wrapper && relevant.Length != 0)
         {
             // Hook completion and wrapper continuation are independent contracts.
-            // S01 rejects synchronous/asynchronous contracts for one phase in the MVP.
             if (relevant.Select(m => m.Role.Completion).Distinct().Count() > 1)
             {
                 Reject("AmbiguousStageContract", $"Wrapper {Name(type)} has synchronous and asynchronous contracts for the same phase. Declare separate stage types or an explicit adaptor.");

@@ -63,8 +63,7 @@ internal sealed class RequiredStreamExecutionContract
         AddTransfer(StreamProgram.Move, factory, "cursor/request", sourceName + "/request", StreamOutcome.Success);
         AddTransfer(StreamProgram.Move, factory, "cursor/start-token", sourceName + "/token", StreamOutcome.Success);
         AddTransfer(StreamProgram.Move, StreamPhase.AcquireSource, sourceName + "/enumerable", "cursor/source", StreamOutcome.Success);
-        // D02 applies to an explicit enumerator argument. C01 does not apply the outer Wrap
-        // token again when the framework acquires Wrapper output, including direct Open returns.
+        // Apply explicit enumerator tokens, but do not reapply the outer Wrap token to delegated output.
         AddTransfer(StreamProgram.Move, StreamPhase.AcquireSource, contract.SourceKind == StreamSourceKind.Handler ? "cursor/start-token" : "CancellationToken.None", "source/token", StreamOutcome.Success);
         AddTransfer(StreamProgram.Move, StreamPhase.SourceCurrent, "source/Current", "cursor/item", StreamOutcome.Success);
         for (var i = 0; i < contract.Hooks.Count; i++)

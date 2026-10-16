@@ -188,7 +188,7 @@ public sealed partial class GeneratorTests
     private static ServiceProvider SyncProvider(SyncFixture f, CanonicalSyncRuntimeProbe probe, bool recording = true, ServiceLifetime? lifetime = null)
     {
         IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe);
-        // Observe resolution through a real Microsoft DI registration, not through the old candidate-only provider decorator.
+        // Resolve through real Microsoft DI registrations.
         if (recording) services.AddScoped(f.Service, f.ResolveService.CreateDelegate<Func<IServiceProvider, object>>());
         if (lifetime != null) services.Add(ServiceDescriptor.Describe(f.Service, f.Service, lifetime.Value));
         Assert.Same(services, f.Register.Invoke(null, [services]));
@@ -243,7 +243,7 @@ public sealed partial class GeneratorTests
                 Assert.Same(mediator, scope.ServiceProvider.GetRequiredService(f.Mediator));
                 var request = scenario == "null-request" ? null : Activator.CreateInstance(f.Request)!;
                 var actual = InvokeSync(f, mediator, request, probe.Cancellation.Token);
-                // Independent expected trace table, derived from D03/D04, not from generated text or the graph.
+                // Expected traces are independent of generated text and execution graphs.
                 var resolution = receiver == "direct" ? "resolve-handler" : "resolve-factory";
                 string[] expected = scenario switch
                 {

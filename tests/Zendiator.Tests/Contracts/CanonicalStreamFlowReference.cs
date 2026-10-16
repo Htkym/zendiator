@@ -2,8 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Zendiator.Tests.Contracts;
 
-// First C02 unit: one synchronous same-item interval. No SG/IR or legacy Behavior adapter is used.
-// An opaque wrapper boundary is a separate follow-on, not implicitly crossed by this reference.
+// Independent synchronous same-item reference; no SG, IR or legacy adapter.
 internal static class CanonicalStreamFlowReference
 {
     public static IAsyncEnumerable<TItem> FilterMap<TRequest, TItem, TFilter, TMap>(IServiceProvider services,

@@ -67,7 +67,7 @@ public sealed partial class GeneratorTests
         Assert.Contains(inspection.Paths, p => p.Program == StreamProgram.Move && p.Terminal == StreamPhase.MoveFailure && p.Started &&
             p.Live.SequenceEqual(new[] { position }) && p.Released.Count == 0);
         Assert.Contains(inspection.Paths, p => p.Program == StreamProgram.Move && p.Terminal == StreamPhase.MoveTrue &&
-            !p.Visited.Any(s => s.Phase == StreamPhase.AcquireSession)); // subsequent Move uses the held session
+            !p.Visited.Any(s => s.Phase == StreamPhase.AcquireSession));
         if (!owned) Assert.All(inspection.Paths, p => Assert.Empty(p.Released));
         if (wrapper)
         {

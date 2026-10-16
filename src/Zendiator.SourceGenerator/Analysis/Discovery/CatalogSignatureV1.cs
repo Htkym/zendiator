@@ -13,7 +13,7 @@ namespace Zendiator.SourceGenerator;
 internal sealed record CatalogHandlerContract(BoundDispatchFamily Family, ITypeSymbol Request, ITypeSymbol? Response);
 internal sealed record CatalogHandlerFact(INamedTypeSymbol Type, CatalogHandlerContract[] Contracts, string[] Errors);
 
-// Exact H01 v1 signature encoding; no method bodies, tokens, MVIDs or syntax positions.
+// Catalog signatures exclude method bodies, tokens, MVIDs and syntax positions.
 internal static class CatalogSignatureV1
 {
     internal const string Algorithm = "zendiator.handler-contract/1";
@@ -103,8 +103,7 @@ internal static class CatalogSignatureV1
         using var hash = SHA256.Create();
         return string.Concat(hash.ComputeHash(Encoding.UTF8.GetBytes(Json(rows))).Select(b => b.ToString("X2", CultureInfo.InvariantCulture)));
     }
-    // H01 uses System.Text.Json's default BasicLatin/HTML-safe JSON encoding.
-    // Keep the netstandard analyzer dependency-free and validate against that reference in tests.
+    // Match System.Text.Json's BasicLatin/HTML-safe encoding without an analyzer dependency.
     internal static string Json(object? value)
     {
         if (value == null) return "null";

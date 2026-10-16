@@ -10,7 +10,6 @@ namespace Zendiator;
 /// </remarks>
 public interface IOwnedSessionFactory<TRequest, TSession> where TSession : class
 {
-    /// <summary>Creates a nonnull session for this operation's request and start token.</summary>
     TSession Create(TRequest request, CancellationToken cancellationToken);
 }
 
@@ -28,7 +27,6 @@ public interface IAsyncOwnedSessionFactory<TRequest, TSession> where TSession : 
 /// </remarks>
 public interface IBorrowedSessionFactory<TRequest, TSession> where TSession : class
 {
-    /// <summary>Returns a nonnull session for this operation's request and start token.</summary>
     TSession Create(TRequest request, CancellationToken cancellationToken);
 }
 

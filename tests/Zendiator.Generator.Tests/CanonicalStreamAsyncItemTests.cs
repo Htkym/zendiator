@@ -62,7 +62,7 @@ public sealed partial class GeneratorTests
     {
         var source = AsyncItemFixtureSource();
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AsyncItem_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        Assert.Empty(diagnostics); // Public registration is accepted; this existing test still exercises the internal/reference pair.
+        Assert.Empty(diagnostics);
         var graph = Graph(driver); Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         var schedule = Assert.IsType<CanonicalStreamExecutionSchedule>(graph.StreamSchedule);
         var hookAwaits = schedule.Awaits.Where(a => a.Producer.Phase is StreamPhase.Filter or StreamPhase.Map).ToArray();

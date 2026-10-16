@@ -11,7 +11,6 @@ using Xunit;
 
 namespace Zendiator.Generator.Tests;
 
-// Keep the existing ownership/once-source probe; add only All branch and context observations.
 public sealed class AllWrapperProbe
 {
     public readonly NestedWrapperProbe Core = new();

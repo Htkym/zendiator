@@ -3,9 +3,7 @@ using Xunit;
 
 namespace Zendiator.Tests;
 
-// Covers the enumerator lifecycle of the generated StreamRoute{N}Enumerable,
-// in particular the P0 split of first-call startup (StartAndMoveNextAsync)
-// and steady-state forwarding MoveNextAsync.
+// Covers first-call startup and steady-state MoveNext forwarding.
 public sealed class StreamLifecycleTests
 {
     [Fact]

@@ -8,7 +8,7 @@ namespace Zendiator.DependencyInjection;
 [EditorBrowsable(EditorBrowsableState.Never)]
 public class ZendiatorSingleServiceResolver<T> where T : class
 {
-    // ponytail: cold waiters share one monitor per Handler type; shard only if contention warrants it.
+    // One monitor per Handler type coordinates cold waiters.
     private static readonly object WaitMonitor = new();
     private readonly IServiceProvider _provider;
     private T? _value;

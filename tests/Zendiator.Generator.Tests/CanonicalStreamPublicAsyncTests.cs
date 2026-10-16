@@ -95,7 +95,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public async Task Stream_public_async_entry_preserves_completion_pending_cancellation_and_borrowed_scope()
     {
-        CompilePublicAsyncInput("sync-compile-only", PublicStreamSource("accepted")); // No replay of v9's three synchronous enumerations.
+        CompilePublicAsyncInput("sync-compile-only", PublicStreamSource("accepted"));
         var assembly = CompilePublicAsyncInput("async-public", PublicAsyncSource());
         var entry = assembly.GetType("App.PublicAsyncEntry")!;
         // The test host loads typed consumer delegates; it never calls or reflects over internal Create.

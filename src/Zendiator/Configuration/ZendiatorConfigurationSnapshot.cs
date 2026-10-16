@@ -45,7 +45,6 @@ public sealed class ZendiatorConfigurationSnapshot
     /// <summary>Gets the generation namespace, or null for the default.</summary>
     public string? Namespace { get; }
 
-    /// <summary>Gets the mediator lifetime.</summary>
     public ServiceLifetime ServiceLifetime { get; }
 
     /// <summary>Gets the optional Handler, Behavior and Validator registration lifetime override.</summary>

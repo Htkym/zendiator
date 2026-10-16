@@ -10,8 +10,7 @@ internal sealed record CanonicalStreamConnection(string RouteKey, string Composi
 { public CanonicalStreamFallbackModel? Canonical { get; init; } }
 internal sealed record CanonicalStreamConnectionCatalog(EquatableArray<CanonicalStreamConnection> Routes);
 
-// C05 connects the reviewed candidate to route lowering/rendering. Deferred canonical
-// generation is explicit; neither diagnostics nor their suppression select a legacy adapter.
+// Deferred canonical routes never fall back to the legacy adapter, even when diagnostics are suppressed.
 internal static class CanonicalStreamEmissionNormalizer
 {
     private const string ValidGraph = "The Stream execution graph satisfies its structural contract. ";

@@ -6,7 +6,6 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace Zendiator.SourceGenerator;
 
-/// <summary>Generates concrete request overloads, continuations and DI registration.</summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class ZendiatorGenerator : IIncrementalGenerator
 {

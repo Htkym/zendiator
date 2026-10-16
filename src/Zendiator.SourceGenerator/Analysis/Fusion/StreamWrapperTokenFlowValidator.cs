@@ -129,6 +129,6 @@ internal static class StreamWrapperTokenFlowValidator
             };
         }
     }
-    // Direct C01/D02 oracle; deliberately does not read builder or RequiredStream* tables.
+    // Derive token-flow expectations independently of the builder and RequiredStream tables.
     private static string ExpectedMerge(string api, string enumeration) => api == "" ? enumeration : enumeration == "" || api == enumeration ? api : "link(" + api + ";" + enumeration + ")";
 }

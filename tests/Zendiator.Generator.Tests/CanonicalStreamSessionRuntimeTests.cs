@@ -93,7 +93,7 @@ public sealed partial class GeneratorTests
                 productionEnabled = false
             }));
         }
-        if (owned) Assert.Empty(diagnostics); // This accepted closed plain session shape now has a public connection.
+        if (owned) Assert.Empty(diagnostics);
         else Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));

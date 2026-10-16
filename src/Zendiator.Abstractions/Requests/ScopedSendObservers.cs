@@ -4,7 +4,6 @@ namespace Zendiator;
 /// <typeparam name="R">The request, which must not be retained by the callback.</typeparam>
 public interface IScopedSendBeforeObserver<R> where R : allows ref struct
 {
-    /// <summary>Observes the request without returning a replacement.</summary>
     void Before(scoped R request, CancellationToken token);
 }
 
@@ -13,7 +12,6 @@ public interface IScopedSendBeforeObserver<R> where R : allows ref struct
 /// <typeparam name="T">The response.</typeparam>
 public interface IScopedSendResponseObserver<R, T> where R : allows ref struct
 {
-    /// <summary>Observes the request and successful response.</summary>
     void After(scoped R request, T response, CancellationToken token);
 }
 
@@ -21,7 +19,6 @@ public interface IScopedSendResponseObserver<R, T> where R : allows ref struct
 /// <typeparam name="R">The request, which must not escape the callback.</typeparam>
 public interface IScopedSendSuccessObserver<R> where R : allows ref struct
 {
-    /// <summary>Observes successful inner completion.</summary>
     void After(scoped R request, CancellationToken token);
 }
 
@@ -37,6 +34,5 @@ public interface IScopedSendExceptionObserver<R> where R : allows ref struct
 /// <typeparam name="R">The request, which must not escape the callback.</typeparam>
 public interface IScopedSendFinallyObserver<R> where R : allows ref struct
 {
-    /// <summary>Observes the outcome immediately before this callback.</summary>
     void Finally(scoped R request, SendExitInfo exit, CancellationToken token);
 }

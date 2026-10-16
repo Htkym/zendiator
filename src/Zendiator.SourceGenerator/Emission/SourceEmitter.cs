@@ -14,7 +14,7 @@ internal sealed partial class SourceEmitter
     internal SourceEmitter(FusionGenerationModel normalized)
     {
         var model = normalized.Emission;
-        // Until canonical lowering is bound, only the explicit existing typed boundary is renderable.
+        // Only routes with executable lowering may be rendered.
         if (normalized.Routes.Any(plan => plan.Core.Input.ContractOrigin != FusionContractOrigin.LegacyEmissionBoundary ||
             plan.Send != null || plan.Stream != null))
             throw new InvalidOperationException("Canonical fusion lowering is not bound for this emitter.");

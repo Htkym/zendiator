@@ -347,7 +347,6 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Public_struct_Stream_gate_accepts_multiple_value_routes_and_rejects_generic_mixture()
     {
-        // One generation input, no runtime: preserve the prior copy/DI/IL evidence.
         var source = PublicValueRequestSource(false) + "\n" +
             ClosedModule(MixedStreamSendSource(false), "GateClass", "Items", "Probe", "ItemsHandler", "Positive", "DoubleItem", "Small") + "\n" +
             ClosedModule(PublicValueRequestSource(false), "GateValue", "SharedState", "Items", "H", "F1", "M", "F2", "Source") + """

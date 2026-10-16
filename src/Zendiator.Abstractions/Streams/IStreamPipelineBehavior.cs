@@ -4,7 +4,6 @@ namespace Zendiator;
 public interface IStreamPipelineBehavior<TRequest, TItem>
     where TRequest : IStreamRequest<TItem>
 {
-    /// <summary>Executes this behavior without boxing or allocating a continuation delegate.</summary>
     IAsyncEnumerable<TItem> HandleAsync<TNext>(TRequest request, TNext next, CancellationToken cancellationToken)
         where TNext : struct, IStreamContinuation<TRequest, TItem>;
 }

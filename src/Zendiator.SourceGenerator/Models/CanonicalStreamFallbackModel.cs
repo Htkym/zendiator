@@ -1,6 +1,5 @@
 namespace Zendiator.SourceGenerator;
 
-// Typed projection of the existing validated Stream/Wrapper segments.
 internal sealed record CanonicalStreamFallbackSegment(int Id, int? Upstream,
     BoundWrapperEmission? Wrapper, EquatableArray<BoundStreamHookEmission> Hooks,
     CanonicalStreamExecutionSchedule Schedule)

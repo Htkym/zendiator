@@ -6,7 +6,6 @@ internal sealed partial class SourceEmitter
 {
     private void EmitStreamTokenMerge(StringBuilder b)
     {
-        // Shared token-merge helper: link only when both tokens are cancellable and different.
         if (_model.Routes.Streams.Count != 0)
         {
             b.AppendLine("""
@@ -29,7 +28,6 @@ internal sealed partial class SourceEmitter
         var req = route.IsOpen ? route.RequestDisplay : Name(route.Request);
         var item = route.IsOpen ? route.ResponseDisplay : Name(route.Response);
         var enumerable = $"StreamRoute{index}Enumerable";
-        // Typed enumerable: lightweight, no shared mutable state on the mediator.
         // The creating thread's first enumeration reuses this instance, like a compiler-generated iterator.
         // Typed enumerator: resolves pipeline once on first MoveNext, merges tokens only when different.
         b.AppendLine($$"""

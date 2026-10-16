@@ -2,7 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Zendiator.Tests.Contracts;
 
-// C02 same-type F1 -> Map -> F2, in one Move boundary. No wrapper, SG, or IR adapter.
+// Same-type F1 -> Map -> F2 in one Move boundary, without a wrapper or adapter.
 internal static class CanonicalStreamItemReference
 {
     public static IAsyncEnumerable<TItem> FilterMapFilter<TRequest, TItem, TFirst, TMap, TLast>(

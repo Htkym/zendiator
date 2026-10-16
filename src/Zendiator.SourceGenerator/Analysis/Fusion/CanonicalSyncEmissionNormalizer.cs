@@ -7,7 +7,6 @@ using Microsoft.CodeAnalysis.CSharp;
 
 namespace Zendiator.SourceGenerator;
 
-/// <summary>Limits the first runtime candidate to the matrix whose execution tests can prove its behavior.</summary>
 internal static class CanonicalSyncEmissionNormalizer
 {
     internal static CanonicalSyncEmissionModel Create(CompositionSelectionCatalog catalog, CanonicalExecutionGraphCatalog execution)

@@ -34,7 +34,6 @@ internal static class CompositionSelectionDiscovery
                 !Same(method.ContainingType, entryType)) continue;
             var lambda = invocation.ArgumentList.Arguments.Select(a => a.Expression).OfType<LambdaExpressionSyntax>().SingleOrDefault();
             // During migration, old nongeneric configuration remains the legacy adapter.
-            // An explicit new selection operation identifies a new default composition.
             var explicitDefault = method.Arity == 0 && lambda != null && lambda.DescendantNodes().OfType<InvocationExpressionSyntax>().Any(call =>
                 semantic.GetSymbolInfo(call, ct).Symbol is IMethodSymbol operation && Same(operation.ContainingType, configuration) &&
                 operation.Name is "UseLocalHandlers" or "UseCatalogFrom" or "AddHandler" or "Pipeline" or "StreamPipeline" or "Handlers");
@@ -239,7 +238,7 @@ internal static class CompositionSelectionDiscovery
                         var enabled = canonicalSync.Compositions.FirstOrDefault(c => c.Index == index);
                         if (enabled != null &&
                             syncCallSites.CallSites.Any(s => s.Namespace == enabled.Namespace && s.MarkerName == enabled.MarkerName))
-                            continue; // Only the runtime matrix accepted by review and its actual registration call site are enabled.
+                            continue;
                         var asyncEnabled = canonicalAsync.Compositions.FirstOrDefault(c => c.Index == index);
                         if (asyncEnabled != null && asyncCallSites.CallSites.Any(s => s.Namespace == asyncEnabled.Namespace && s.MarkerName == asyncEnabled.MarkerName))
                             continue;

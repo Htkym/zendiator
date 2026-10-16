@@ -127,7 +127,7 @@ internal static class Program
             var generated = driver.GetRunResult().Results.Single().GeneratedSources;
             foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
             File.WriteAllText(Path.Combine(folder, "generator-diagnostics.json"), JsonSerializer.Serialize(diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), text = d.ToString() })));
-            var expected = shape == "zero-hook-sentinel" ? 0 : 2; // Preflight + measurement compositions.
+            var expected = shape == "zero-hook-sentinel" ? 0 : 2;
             if (diagnostics.Length != expected || diagnostics.Any(d => d.Id != "ZEN0037"))
                 throw new InvalidOperationException("Unexpected SG diagnostics: " + string.Join(";", diagnostics.Select(d => d.ToString())));
             string Helper(string mode)

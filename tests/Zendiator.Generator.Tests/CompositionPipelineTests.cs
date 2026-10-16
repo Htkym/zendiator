@@ -352,7 +352,7 @@ public sealed partial class GeneratorTests
                     Assert.Equal(diagnostic.Location.SourceSpan.Start + 2, current.Location.SourceSpan.Start);
                 }
 
-                // S01 keeps both wrapper contracts ambiguous, even if this route has a matching one.
+                // Reject ambiguous wrapper contracts even if one matches this route.
                 var dual = BindLists(FamilyFixture(Body("DualOpaque"), sync, isVoid), "ZEN0027");
                 Assert.Contains("same phase", Assert.Single(dual.GetRunResult().Diagnostics).GetMessage());
                 Assert.Empty(Assert.Single(Selection(dual).Pipelines).Stages[1].Callbacks);

@@ -83,7 +83,7 @@ public sealed partial class GeneratorTests
                     d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan).StartsWith(expected, StringComparison.Ordinal));
                 Assert.DoesNotContain(generated, s => s.HintName.StartsWith("Zendiator.Stream", StringComparison.Ordinal)); continue;
             }
-            Assert.Empty(diagnostics); // This closed borrowed int/string?/long pipeline now connects publicly.
+            Assert.Empty(diagnostics);
             var flow = Assert.IsType<BoundStreamItemFlow>(route.StreamItemFlow); Assert.Equal("int", flow.Source.Name); Assert.Equal("long", flow.Final.Name);
             Assert.Equal(new[] { "int", "string?" }, flow.Stages.Select(s => s.Input.Name)); Assert.Equal(new[] { "string?", "long" }, flow.Stages.Select(s => s.Output.Name));
             Assert.Equal(flow.Final.Identity, route.Result); Assert.Contains("ToReference<int>", route.Stages[0].Name);

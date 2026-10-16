@@ -3,7 +3,6 @@ using System.Threading.Tasks.Sources;
 
 namespace Zendiator.Tests.Contracts;
 
-// Test-only trace shared by canonical controls and future generated backend adapters.
 // Values keep their declared type and boxed copy; references use recorder-local identity.
 internal sealed record ContractRequest(Type Type, object? Value, int Reference);
 internal sealed record ContractEvent(string Family, int Branch, int Invocation, string Stage, string Kind,

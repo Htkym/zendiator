@@ -4,6 +4,5 @@ namespace Zendiator;
 public interface IStreamRequestHandler<TRequest, TItem>
     where TRequest : IStreamRequest<TItem>
 {
-    /// <summary>Handles the streaming request. Enumeration starts only when the returned enumerable is enumerated.</summary>
     IAsyncEnumerable<TItem> HandleAsync(TRequest request, CancellationToken cancellationToken);
 }

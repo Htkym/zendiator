@@ -4,7 +4,7 @@ using System.Text.Json;
 using Microsoft.CodeAnalysis;
 namespace Zendiator.Generator.Tests;
 
-// Independent H01 v1 reference: accepted Semantic.cs encoding, real product contract names.
+// Independent reference for the v1 catalog encoding and product contracts.
 internal static class CatalogV1Reference
 {
     private const string Algorithm = "zendiator.handler-contract/1";

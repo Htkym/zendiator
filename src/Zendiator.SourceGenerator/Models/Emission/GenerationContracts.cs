@@ -2,7 +2,6 @@ using Microsoft.CodeAnalysis;
 
 namespace Zendiator.SourceGenerator;
 
-/// <summary>Resolved interface definitions, grouped by dispatch family.</summary>
 internal sealed class GenerationContracts(
     RequestContracts requests,
     RequestContracts synchronous,

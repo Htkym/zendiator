@@ -2,8 +2,6 @@ using System.Text;
 
 namespace Zendiator.SourceGenerator;
 
-// C04 first candidate: one async iterator loop for the validated same-item interval.
-// The facade supplies the existing public cursor protocol; no custom IValueTaskSource is written.
 internal static class CanonicalStreamPrototypeEmitter
 {
     internal static CanonicalSourceFile Emit(CanonicalStreamPrototypeModel model)

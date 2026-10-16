@@ -73,7 +73,7 @@ internal static class CanonicalStreamControlValidator
                 {
                     foreach (var end in Run(flows[program], new(life), linked))
                         if (end != life) pending.Enqueue(end);
-                    Run(flows[program], new(life, Busy: true), linked); // actual pending Move/Dispose misuse
+                    Run(flows[program], new(life, Busy: true), linked);
                 }
             }
         }

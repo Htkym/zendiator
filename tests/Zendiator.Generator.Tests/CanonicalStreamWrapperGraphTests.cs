@@ -233,7 +233,7 @@ public sealed partial class GeneratorTests
                 }
             } : segment))
         };
-        // This check deliberately bypasses the Required matrices that copied the bug in cc811fe.
+        // Keep token-flow expectations independent of the Required matrices.
         var result = StreamWrapperTokenFlowValidator.Trace(graph.Contract, oldBug);
         Assert.Contains(result.Facts, f => f.Reason == "ImplicitWrapperTokenRecombinedWithOpenSelection");
         Assert.Equal("link(token:open:1;token:outer)", Assert.Single(result.Traces).InputStartToken);

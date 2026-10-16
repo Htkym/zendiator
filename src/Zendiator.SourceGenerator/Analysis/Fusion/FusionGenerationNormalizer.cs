@@ -20,7 +20,7 @@ internal static class FusionGenerationNormalizer
             plans.Add(Legacy(emission, FusionDispatchKind.Stream, route.Request,
                 route.Response, route.Handler, false, route.Behaviors, route.MethodConstraints));
         }
-        // Notification has no fusion family in G02; its existing typed route stays in Emission.
+        // Notification uses its existing typed route; it has no fusion family.
         return new(emission, new(plans));
     }
 

@@ -79,7 +79,7 @@ public sealed partial class GeneratorTests
                 productionEnabled = false
             }));
         }
-        Assert.Empty(diagnostics); // This closed, same-item owned wrapper shape now connects publicly.
+        Assert.Empty(diagnostics);
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         Assert.Equal(2, graph.StreamWrapperSchedule!.Segments.Count); Assert.All(graph.StreamWrapperSchedule.Segments, s => Assert.Equal(2, s.Cursor.Owners.Count(o => o.Kind == StreamOwnerKind.Session)));
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
