@@ -158,7 +158,7 @@ public sealed partial class GeneratorTests
         foreach (var shape in new[] { "unsupported", "duplicate" })
         {
             var rejected = MixedStreamAsyncSource(false);
-            rejected = shape == "unsupported" ? rejected.Replace("Stage.Hook<Positive>(),Stage.Hook<DoubleItem>(),Stage.Hook<Small>()", "Stage.Hook<DoubleItem>()") :
+            rejected = shape == "unsupported" ? rejected.Replace("Stage.Hook<Positive>(),Stage.Hook<DoubleItem>(),Stage.Hook<Small>()", "Stage.Hook<Positive>(),Stage.Hook<Small>(),Stage.Hook<DoubleItem>()") :
                 rejected.Replace("public static partial class Bridge{", "public static partial class Bridge{public static IServiceCollection Duplicate(IServiceCollection s)=>s.AddZendiator<Reads>(c=>{" + MixedStreamAsyncConfiguration + "});");
             var rejectedDriver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(rejected, "MixedAsyncRejected_" + shape), out var rejectedOutput, out var rejectedDiagnostics);
             Save(shape, rejected, rejectedDriver, rejectedOutput, rejectedDiagnostics);

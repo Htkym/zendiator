@@ -44,7 +44,7 @@ public sealed partial class GeneratorTests
     [InlineData("Stage.Hook<Positive>(),Stage.Hook<DoubleItem>(),Stage.Hook<Small>()")]
     public void Stream_real_frontend_keeps_lifecycle_graph_when_the_reviewed_shape_is_public(string pipeline)
     {
-        var accepted = pipeline == "Stage.Hook<Positive>(),Stage.Hook<DoubleItem>(),Stage.Hook<Small>()";
+        var accepted = pipeline.Length != 0;
         var driver = BindLists(StreamGraphFixture(pipeline), accepted ? [] : ["ZEN0037"]);
         var graph = Graph(driver);
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));

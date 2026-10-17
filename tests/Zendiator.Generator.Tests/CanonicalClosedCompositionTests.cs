@@ -43,7 +43,7 @@ public sealed partial class GeneratorTests
             ClosedModule(ManagedShapeSource(true, false, "array", true), "Query", "Ping", "Hook", "Handler", "Factory", "W");
         var pipelines = shape == "reordered" ? ClosedPipelines.Reverse() : ClosedPipelines.AsEnumerable();
         var config = ClosedHandlers + "\n" + string.Join("\n", pipelines);
-        if (shape == "unsupported") config = config.Replace("Stage.Hook<Plain.Positive>(),Stage.Hook<Plain.DoubleItem>(),Stage.Hook<Plain.Small>()", "Stage.Hook<Plain.DoubleItem>()");
+        if (shape == "unsupported") config = config.Replace("Stage.Hook<Plain.Positive>(),Stage.Hook<Plain.DoubleItem>(),Stage.Hook<Plain.Small>()", "Stage.Hook<Plain.Positive>(),Stage.Hook<Plain.Small>(),Stage.Hook<Plain.DoubleItem>()");
         var duplicate = shape == "duplicate" ? "public static IServiceCollection Duplicate(IServiceCollection s)=>s.AddZendiator<Reads>(c=>{" + config + "});" : "";
         return modules + "\nnamespace Closed{using System;using System.Collections.Generic;using System.Threading;using System.Threading.Tasks;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;" +
             "[ZendiatorComposition(\"closed-set\")]public sealed class Reads;public static class Bridge{" + duplicate +
