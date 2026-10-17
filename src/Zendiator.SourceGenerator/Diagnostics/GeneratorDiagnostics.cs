@@ -7,7 +7,8 @@ internal static class GeneratorDiagnostics
     internal static readonly DiagnosticDescriptor StreamValidator = Rule("ZEN0024", "Invalid stream validator");
     internal static readonly DiagnosticDescriptor UnsupportedGenerationShape = Rule("ZEN0035", "Unsupported generation shape",
         helpLinkUri: "https://github.com/Htkym/zendiator/blob/feature/0.5.0/docs/diagnostics/ZEN0035.md");
-    internal static readonly DiagnosticDescriptor StageContractMismatch = Rule("ZEN0025", "Stage contract mismatch");
+    internal static readonly DiagnosticDescriptor StageContractMismatch = Rule("ZEN0025", "Stage contract mismatch",
+        helpLinkUri: "https://github.com/Htkym/zendiator/blob/feature/0.5.0/docs/diagnostics/ZEN0025.md");
     internal static readonly DiagnosticDescriptor StageTypeMismatch = Rule("ZEN0026", "Stage type mismatch");
     internal static readonly DiagnosticDescriptor AmbiguousStageContract = Rule("ZEN0027", "Ambiguous stage contract");
     internal static readonly DiagnosticDescriptor AmbiguousPipelineOrder = Rule("ZEN0028", "Ambiguous pipeline order");
