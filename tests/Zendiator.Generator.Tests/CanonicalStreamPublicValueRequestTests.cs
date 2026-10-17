@@ -176,6 +176,7 @@ public sealed partial class GeneratorTests
         {
             var owner = t; while (owner.DeclaringType != null) owner = owner.DeclaringType;
             var match = owner.Name.StartsWith("__ZendiatorStreamPrototype_", StringComparison.Ordinal) ||
+                owner.Name.StartsWith("__ZendiatorStreamCanonical_", StringComparison.Ordinal) ||
                 owner.FullName is "ValuePublic.Generated.Single.Zendiator" or "ValuePublic.Generated.Mixed.Zendiator";
             if (match) owners.Add(owner.FullName!);
             return match;
@@ -211,8 +212,68 @@ public sealed partial class GeneratorTests
                 }
             }
         }
-        return new("public generated mediators, existing prototypes and compiler descendants; request-specific box and typed storage/calls; no JIT/performance claim",
+        return new("public generated mediators, existing Stream backends and compiler descendants; request-specific box and typed storage/calls; no JIT/performance claim",
             owners.OrderBy(x => x, StringComparer.Ordinal).ToArray(), boxes.ToArray(), fields.Distinct().ToArray(), calls.ToArray());
+    }
+
+    [Fact]
+    public async Task Public_zero_stage_struct_Stream_connects_canonical_with_typed_copy_and_rejects_generic_mixture()
+    {
+        static string ZeroStages(string source) => source
+            .Replace("DispatchFamily.Stream,Stage.Hook<F1>(),Stage.Hook<M>(),Stage.Hook<F2>()", "DispatchFamily.Stream")
+            .Replace("DispatchFamily.Stream,Stage.Hook<GF1<int>>(),Stage.Hook<GM<int>>(),Stage.Hook<GF2<int>>()", "DispatchFamily.Stream")
+            .Replace("p.Seen.Count==10", "p.Seen.Count==1")
+            .Replace("new[]{\"H\",\"F1\",\"M\",\"F2\",\"F1\",\"M\",\"F2\",\"F1\",\"M\",\"F2\"}", "new[]{\"H\"}")
+            .Replace("new[]{2,4}", "new[]{1,2,3}")
+            .Replace("new[]{\"F2\",\"M\",\"F1\",\"H\"}", "new[]{\"H\"}")
+            .Replace("new[]{\"F2\",\"M\",\"F1\",\"H\",\"Q\"}", "new[]{\"H\",\"Q\"}")
+            .Replace("singleProbe.Resolved.Count==4", "singleProbe.Resolved.Count==1");
+        var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
+        void Save(string name, string input, GeneratorDriver driver, Compilation output, IEnumerable<Diagnostic> diagnostics, byte[]? dll = null)
+        {
+            if (string.IsNullOrEmpty(evidence)) return;
+            var folder = Path.Combine(evidence, "stream-zero-value-public", name);Directory.CreateDirectory(folder);
+            File.WriteAllText(Path.Combine(folder, "input.cs"), input);
+            foreach (var file in driver.GetRunResult().Results.Single().GeneratedSources) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
+            if (dll != null) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), dll);
+            File.WriteAllText(Path.Combine(folder, "compile.json"), JsonSerializer.Serialize(new
+            {
+                diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }),
+                compiler = output.GetDiagnostics().Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
+                sources = driver.GetRunResult().Results.Single().GeneratedSources.Select(f => f.HintName)
+            }));
+        }
+        var source = ZeroStages(PublicValueRequestSource(false));
+        var assemblyName = "PublicZeroValue_" + Guid.NewGuid().ToString("N");
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, assemblyName), out var output, out var diagnostics);
+        using var bytes = new MemoryStream();var emitted = output.Emit(bytes);
+        Save("accepted", source, driver, output, diagnostics, bytes.ToArray());
+        Assert.Empty(diagnostics);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        Assert.Empty(emitted.Diagnostics.Where(d => d.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error));
+        var files = driver.GetRunResult().Results.Single().GeneratedSources;
+        Assert.Equal(2, files.Count(f => f.HintName.StartsWith("Zendiator.StreamCanonical.", StringComparison.Ordinal)));
+        Assert.DoesNotContain(files, f => f.HintName.StartsWith("Zendiator.StreamPrototype.", StringComparison.Ordinal));
+        var rejected = ZeroStages(PublicValueRequestSource(true));
+        var rd = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(rejected, assemblyName), out var ro, out var errors);
+        Save("generic-rejected", rejected, rd, ro, errors);
+        Assert.Equal(2, errors.Length);
+        Assert.All(errors, d => Assert.Equal("ZEN0037", d.Id));
+        Assert.Empty(ro.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        Assert.NotNull(ro.GetTypeByMetadataName("ValuePublic.Generated.Single.IZendiator"));
+        Assert.Null(ro.GetTypeByMetadataName("ValuePublic.Generated.Mixed.IZendiator"));
+        Assert.Null(ro.GetTypeByMetadataName("ValuePublic.Generated.Mixed.ZendiatorGeneratedRegistrar"));
+        bytes.Position = 0;var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var inventory = PublicValueRequestIl(assembly);
+        if (!string.IsNullOrEmpty(evidence)) File.WriteAllText(Path.Combine(evidence, "stream-zero-value-public", "accepted", "request-il.json"), JsonSerializer.Serialize(inventory));
+        Assert.Equal(4, inventory.Owners.Length);Assert.Empty(inventory.Boxes);Assert.NotEmpty(inventory.TypedFields);
+        var run = assembly.GetType("ValuePublic.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>();
+        var runtime = await run().WaitAsync(TimeSpan.FromSeconds(15));
+        if (!string.IsNullOrEmpty(evidence)) File.WriteAllText(Path.Combine(evidence, "stream-zero-value-public", "accepted", "runtime.json"), runtime);
+        using var observed = JsonDocument.Parse(runtime);
+        Assert.True(observed.RootElement.GetProperty("defaultFailedAtDI").GetBoolean());
+        Assert.Equal(new[] { 1, 2, 3 }, observed.RootElement.GetProperty("singleValues").EnumerateArray().Select(x => x.GetInt32()));
+        Assert.Equal(new[] { 1, 2, 3 }, observed.RootElement.GetProperty("mixedValues").EnumerateArray().Select(x => x.GetInt32()));
     }
 
     [Fact]

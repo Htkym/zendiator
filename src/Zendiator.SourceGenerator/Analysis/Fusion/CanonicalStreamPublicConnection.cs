@@ -44,9 +44,9 @@ internal static class CanonicalStreamPublicConnection
             var generic = prototype?.Generic ?? canonical?.Generic;
             var open = generic == null ? null : route.StreamOpenRegistration;
             if (route.StreamItemFlow != null && !itemChange || !route.ExplicitHandlerOrder || route.Handlers.Count != 1) continue;
-            if (h.RequestIsValueType && (route.RequestShape != BoundRequestShape.ClosedNonGenericValue || prototype == null || generic != null ||
+            if (h.RequestIsValueType && (route.RequestShape != BoundRequestShape.ClosedNonGenericValue || prototype == null && !zeroStage || generic != null ||
                 h.HandlerIsValueType || route.Handlers[0].Sessions.Count != 0 ||
-                prototype.Hooks.Any(hook => hook.HookIsValueType || hook.Factory != null))) continue;
+                prototype != null && prototype.Hooks.Any(hook => hook.HookIsValueType || hook.Factory != null))) continue;
             if (generic == null)
             {
                 if (c.Handlers.Count != 1 || c.Handlers[0].Identity != route.Handlers[0].Type) continue;
