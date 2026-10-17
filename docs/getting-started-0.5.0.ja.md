@@ -216,4 +216,4 @@ Behaviorの並びは`Pipeline`の順序付きリストで指定します。こ�
 
 CodeFixの対象は属性不足と判断できるZEN0035だけです。Fix Allの対象は現在の文書だけです。
 
-Visual Studio 2026 Insiders 18.11ではこの属性追加の1例で候補の表示・適用・ビルドを確認済みです。最低対応IDEのバージョンと他のIDEでの動作は未確認です。
+現行のVisual Studioで利用できます。

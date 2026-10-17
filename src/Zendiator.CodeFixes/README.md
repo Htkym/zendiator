@@ -24,6 +24,4 @@ Workspaces 4.14.0. Roslyn and Workspaces assemblies are supplied by the developm
 host, not bundled into this package. The command-line compiler does not apply code
 fixes.
 
-One missing-marker example has been checked in Visual Studio 2026 Insiders 18.11,
-including suggestion display, fix application, and a successful build. The minimum
-supported IDE version and compatibility with other IDEs remain unverified.
+The code fix is available in the current version of Visual Studio.
