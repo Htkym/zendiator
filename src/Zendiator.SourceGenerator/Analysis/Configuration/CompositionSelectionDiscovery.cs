@@ -1,0 +1,286 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
+using System.Threading;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using static Zendiator.SourceGenerator.SymbolUtilities;
+
+namespace Zendiator.SourceGenerator;
+
+/// <summary>Binds explicit composition membership before either generation backend is chosen.</summary>
+internal static class CompositionSelectionDiscovery
+{
+    internal sealed record Binding(CompositionSelectionModel Model, InvocationExpressionSyntax Invocation,
+        ImmutableDictionary<string, Location> Sources);
+
+    internal static ImmutableArray<Binding> Bind(ImmutableArray<InvocationExpressionSyntax> invocations,
+        Compilation compilation, ImmutableArray<MarkedHandlerDiscovery.Candidate> marked, MarkedHandlerCatalog catalog, CancellationToken ct)
+    {
+        string Name(ITypeSymbol type) => CanonicalSymbolName.Display(type, compilation);
+        var configuration = compilation.GetTypeByMetadataName("Zendiator.DependencyInjection.ZendiatorConfiguration");
+        var entryType = configuration?.ContainingAssembly.GetTypeByMetadataName("Zendiator.DependencyInjection.ZendiatorServiceCollectionExtensions");
+        var compositionAttribute = compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly
+            .GetTypeByMetadataName("Zendiator.ZendiatorCompositionAttribute");
+        var result = ImmutableArray.CreateBuilder<Binding>();
+        foreach (var invocation in invocations)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (invocation.ContainsDiagnostics) continue; // Incomplete call syntax belongs to the compiler.
+            var semantic = compilation.GetSemanticModel(invocation.SyntaxTree);
+            if (semantic.GetSymbolInfo(invocation, ct).Symbol is not IMethodSymbol method ||
+                !Same(method.ContainingType, entryType)) continue;
+            var lambda = invocation.ArgumentList.Arguments.Select(a => a.Expression).OfType<LambdaExpressionSyntax>().SingleOrDefault();
+            // During migration, old nongeneric configuration remains the legacy adapter.
+            var explicitDefault = method.Arity == 0 && lambda != null && lambda.DescendantNodes().OfType<InvocationExpressionSyntax>().Any(call =>
+                semantic.GetSymbolInfo(call, ct).Symbol is IMethodSymbol operation && Same(operation.ContainingType, configuration) &&
+                operation.Name is "UseLocalHandlers" or "UseCatalogFrom" or "AddHandler" or "Pipeline" or "StreamPipeline" or "Handlers");
+            if (method.Arity == 0 && !explicitDefault) continue;
+
+            var errors = new List<string>();
+            var key = "default";
+            var identity = "default";
+            string? markerName = null;
+            string? generatedNamespace = "Zendiator.Generated.Default";
+            var useLocalHandlers = false;
+            var hasExplicitSelection = false;
+            var compilerOwned = false;
+            if (method.Arity == 1 && method.TypeArguments[0] is INamedTypeSymbol composition)
+            {
+                identity = MarkedHandlerDiscovery.Identity(composition);
+                markerName = Name(composition);
+                var ns = composition.ContainingNamespace.ToDisplayString(new SymbolDisplayFormat(
+                    globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
+                    typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+                    miscellaneousOptions: SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers));
+                var identifier = SyntaxFacts.GetKeywordKind(composition.Name) != SyntaxKind.None ? "@" + composition.Name : composition.Name;
+                generatedNamespace = composition.ContainingType != null ? null :
+                    (composition.ContainingNamespace.IsGlobalNamespace ? "Zendiator" : ns) + ".Generated." + identifier;
+                var attributes = composition.GetAttributes().Where(a => Same(a.AttributeClass, compositionAttribute)).ToArray();
+                compilerOwned = attributes.Length > 1;
+                if (!compilerOwned && (attributes.Length != 1 || composition.TypeKind != TypeKind.Class ||
+                    !composition.IsSealed || composition.IsStatic || HasParameters(composition) || !Public(composition)))
+                    errors.Add("A composition marker must be a public sealed nongeneric class with one ZendiatorComposition attribute.");
+                if (attributes.Length == 1)
+                {
+                    var arguments = attributes[0].ConstructorArguments;
+                    if (arguments.Length != 1 || arguments[0].Value is not string value || value.Length == 0 ||
+                        value.Trim() != value || value.Any(char.IsControl) || value == "default")
+                        errors.Add("The composition key must be nonempty, trimmed, free of control characters and different from default.");
+                    else key = value;
+                }
+            }
+            else if (method.Arity != 0) errors.Add("The composition marker could not be bound.");
+
+            var selected = new Dictionary<INamedTypeSymbol, SelectedHandlerModel>(SymbolEqualityComparer.Default);
+            var explicitTypes = new HashSet<string>(StringComparer.Ordinal);
+            var explicitHandlerNames = new List<string>();
+            var catalogMarkerNames = new List<string>();
+            var catalogAssemblies = new Dictionary<IAssemblySymbol, string>(SymbolEqualityComparer.Default);
+            var lists = new CompositionListBinding(compilation, semantic, marked, Select, ct);
+            if (explicitDefault) SelectLocal(); // The new default composition has implicit local membership.
+            var parameter = lambda switch
+            {
+                SimpleLambdaExpressionSyntax simple => simple.Parameter,
+                ParenthesizedLambdaExpressionSyntax parenthesized when parenthesized.ParameterList.Parameters.Count == 1 =>
+                    parenthesized.ParameterList.Parameters[0],
+                _ => null
+            };
+            var parameterSymbol = parameter == null ? null : semantic.GetDeclaredSymbol(parameter, ct);
+            var calls = lambda?.Body switch
+            {
+                InvocationExpressionSyntax call => new[] { call },
+                BlockSyntax block when block.Statements.All(s => s is ExpressionStatementSyntax { Expression: InvocationExpressionSyntax }) =>
+                    block.Statements.Cast<ExpressionStatementSyntax>().Select(s => (InvocationExpressionSyntax)s.Expression).ToArray(),
+                _ => null
+            };
+            if (calls == null || parameterSymbol == null || lambda!.AsyncKeyword != default)
+                errors.Add("Composition selection requires a direct configuration lambda with supported selection calls; helpers and control flow are not evaluated.");
+            else for (var ordinal = 0; ordinal < calls.Length; ordinal++)
+            {
+                var call = calls[ordinal];
+                ct.ThrowIfCancellationRequested();
+                if (call.Expression is not MemberAccessExpressionSyntax member ||
+                    !Same(semantic.GetSymbolInfo(member.Expression, ct).Symbol, parameterSymbol) ||
+                    semantic.GetSymbolInfo(call, ct).Symbol is not IMethodSymbol operation || !Same(operation.ContainingType, configuration))
+                {
+                    errors.Add("Composition selection must call supported methods directly on the configuration parameter.");
+                    continue;
+                }
+                if (operation.Name == "UseLocalHandlers" && call.ArgumentList.Arguments.Count == 0) { useLocalHandlers = true; SelectLocal(); }
+                else if (operation.Name == "UseCatalogFrom" && operation.Arity == 1 && call.ArgumentList.Arguments.Count == 0 && operation.TypeArguments[0] is INamedTypeSymbol catalogMarker)
+                {
+                    var anchor = "catalog:" + ordinal; lists.Sources.Add(anchor, call.GetLocation()); var assembly = catalogMarker.ContainingAssembly;
+                    if (catalogAssemblies.TryGetValue(assembly, out var original)) lists.Facts.Add(new("DuplicateCatalogSelection", anchor, "DuplicateCatalogSelection: " + assembly.Identity, original));
+                    else
+                    {
+                        catalogAssemblies.Add(assembly, anchor); catalogMarkerNames.Add(Name(catalogMarker));
+                        foreach (var candidate in GeneratedHandlerCatalog.Read(compilation, assembly, ct, message => lists.Facts.Add(new("CatalogError", anchor, assembly.Identity + ": " + message))))
+                            selected[candidate.Symbol] = new(MarkedHandlerDiscovery.Identity(candidate.Symbol), candidate.Model);
+                    }
+                }
+                else if (operation.Name == "AddHandler")
+                {
+                    hasExplicitSelection = true;
+                    var type = operation.Arity == 1 ? operation.TypeArguments[0] as INamedTypeSymbol :
+                        call.ArgumentList.Arguments.Count == 1 && call.ArgumentList.Arguments[0].Expression is TypeOfExpressionSyntax typeOf
+                            ? semantic.GetTypeInfo(typeOf.Type, ct).Type as INamedTypeSymbol : null;
+                    if (type == null) errors.Add("AddHandler requires a known handler type or a typeof expression.");
+                    else
+                    {
+                        // Keep the symbol's typeof spelling before normalizing membership to its definition.
+                        var registrationName = Name(type.WithNullableAnnotation(NullableAnnotation.NotAnnotated));
+                        if (type.IsUnboundGenericType) type = type.OriginalDefinition;
+                        if (!explicitTypes.Add(MarkedHandlerDiscovery.RegistrationIdentity(type, compilation)))
+                            errors.Add($"Handler {Name(type)} is explicitly selected more than once.");
+                        explicitHandlerNames.Add(registrationName);
+                        Select(type);
+                    }
+                }
+                else if (operation.Name is "Pipeline" or "StreamPipeline" or "Handlers") lists.Parse(call, operation, ordinal);
+                else errors.Add($"Composition selection operation {operation.Name} is not connected yet.");
+            }
+            var pipelines = lists.Bind(selected.Keys);
+            if (lists.Facts.Any(f => f.Anchor.StartsWith("catalog:", StringComparison.Ordinal))) lists.Facts.RemoveAll(f => f.Key == "IncompleteExecutionContract");
+            if (generatedNamespace != null && GeneratedTypeConflict(compilation, generatedNamespace)) generatedNamespace = null;
+            var model = new CompositionSelectionModel(identity, key,
+                new(selected.Values.OrderBy(h => h.Identity, StringComparer.Ordinal)), new(errors), compilerOwned,
+                pipelines, new(lists.Facts))
+            {
+                GeneratedNamespace = generatedNamespace,
+                MarkerName = markerName,
+                MicrosoftDiProviderName = compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.ServiceProvider") is { TypeKind: TypeKind.Class } provider &&
+                        provider.ContainingAssembly.Identity.Name == "Microsoft.Extensions.DependencyInjection" && provider.Locations.All(l => !l.IsInSource) ? Name(provider) : null,
+                UseLocalHandlers = useLocalHandlers,
+                HasExplicitSelection = hasExplicitSelection,
+                ExplicitHandlerTypes = new(explicitHandlerNames),
+                CatalogMarkerTypes = new(catalogMarkerNames),
+                ExternAliases = CanonicalSymbolName.Aliases(compilation)
+            };
+            result.Add(new(model, invocation, lists.Sources.ToImmutableDictionary(StringComparer.Ordinal)));
+
+            void SelectLocal()
+            {
+                foreach (var candidate in marked) Select(candidate.Symbol);
+            }
+            void Select(INamedTypeSymbol type)
+            {
+                var candidate = marked.FirstOrDefault(c => Same(c.Symbol, type.OriginalDefinition)) ??
+                    MarkedHandlerDiscovery.BindExplicitMetadata(compilation, type, ct);
+                if (candidate == null)
+                {
+                    errors.Add($"Handler {Name(type)} requires a source ZendiatorHandler marker or a supported explicitly supplied metadata type.");
+                    return;
+                }
+                var definition = candidate.Model;
+                if (definition.CompilerOwnsMarkerError) { compilerOwned = true; return; }
+                selected[type] = new(MarkedHandlerDiscovery.Identity(type), definition);
+            }
+        }
+        return result.ToImmutable();
+    }
+
+    internal static CompositionSelectionCatalog Normalize(ImmutableArray<Binding> bindings) => new(new(bindings.Select(b => b.Model)));
+
+    private static bool GeneratedTypeConflict(Compilation compilation, string generatedNamespace)
+    {
+        var parts = generatedNamespace.Replace("@", "").Split('.');
+        // A type at any namespace component, including the full namespace, conflicts with its declaration.
+        for (var length = 1; length <= parts.Length; length++)
+            if (compilation.GetTypeByMetadataName(string.Join(".", parts.Take(length))) != null) return true;
+        return new[] { "Zendiator", "IZendiator", "ZendiatorGeneratedRegistrar" }.Any(name =>
+            compilation.GetTypeByMetadataName(string.Join(".", parts) + "." + name) != null);
+    }
+
+    internal static ImmutableArray<InvocationExpressionSyntax> LegacyInvocations(ImmutableArray<InvocationExpressionSyntax> invocations,
+        ImmutableArray<Binding> compositions) => invocations.Where(i => !compositions.Any(c => c.Invocation == i)).ToImmutableArray();
+
+    internal static void Report(SourceProductionContext context, CompositionSelectionCatalog catalog, ImmutableArray<Binding> current,
+        CanonicalExecutionGraphCatalog execution, CanonicalSyncEmissionModel canonicalSync, CanonicalSyncInterceptorModel syncCallSites,
+        CanonicalAsyncEmissionModel canonicalAsync, CanonicalSyncInterceptorModel asyncCallSites,
+        CanonicalWrapperEmissionModel wrappers, CanonicalSyncInterceptorModel wrapperCallSites,
+        CanonicalCapabilityEmissionModel capabilities, CanonicalSyncInterceptorModel capabilityCallSites,
+        CanonicalMultiEmissionModel multi, CanonicalSyncInterceptorModel multiCallSites,
+        CanonicalStreamConnectionCatalog streams, CanonicalStreamPublicModel streamPublic, CanonicalSyncInterceptorModel streamPublicSites,
+        CanonicalSendAllSyncEmissionModel sendAllSync, CanonicalSyncInterceptorModel sendAllSyncSites,
+        CanonicalSendAllAsyncEmissionModel sendAllAsync, CanonicalSyncInterceptorModel sendAllAsyncSites)
+    {
+        for (var index = 0; index < catalog.Compositions.Count; index++)
+        {
+            var composition = catalog.Compositions[index];
+            var location = current[index].Invocation.GetLocation();
+            var prior = Enumerable.Range(0, index).Where(i => catalog.Compositions[i].Identity == composition.Identity ||
+                catalog.Compositions[i].Key == composition.Key).DefaultIfEmpty(-1).First();
+            if (prior >= 0)
+                context.ReportDiagnostic(Diagnostic.Create(GeneratorDiagnostics.UnsupportedGenerationShape, location,
+                    new[] { current[prior].Invocation.GetLocation() }, null,
+                    $"Composition {composition.Key} requires one authoritative configuration call site and a unique marker/key."));
+            else
+            {
+                foreach (var error in composition.Errors)
+                    context.ReportDiagnostic(Diagnostic.Create(GeneratorDiagnostics.UnsupportedGenerationShape, location, error));
+                foreach (var fact in composition.Facts)
+                {
+                    var sources = current[index].Sources;
+                    var primary = sources.TryGetValue(fact.Anchor, out var source) ? source : location;
+                    var additional = fact.AdditionalAnchor != null && sources.TryGetValue(fact.AdditionalAnchor, out var original)
+                        ? new[] { original } : System.Array.Empty<Location>();
+                    var message = fact.Message;
+                    if (fact.Key == "IncompleteExecutionContract")
+                    {
+                        if (sendAllSync.Compositions.Any(c => c.Registration.Index == index) && sendAllSyncSites.CallSites.Any(s => s.Namespace == composition.GeneratedNamespace && s.MarkerName == composition.MarkerName)) continue;
+                        if (sendAllAsync.Compositions.Any(c => c.Branch.Index == index) && sendAllAsyncSites.CallSites.Any(s => s.Namespace == composition.GeneratedNamespace && s.MarkerName == composition.MarkerName)) continue;
+                        var streamEnabled = streamPublic.Compositions.FirstOrDefault(c => c.Registration.Index == index);
+                        if (streamEnabled != null && CanonicalStreamPublicConnection.IsConnected(streamEnabled, streamPublicSites)) continue;
+                        if (multi.Compositions.Any(c => c.Index == index) && multiCallSites.CallSites.Any(s => s.Namespace == composition.GeneratedNamespace && s.MarkerName == composition.MarkerName)) continue;
+                        var enabled = canonicalSync.Compositions.FirstOrDefault(c => c.Index == index);
+                        if (enabled != null &&
+                            syncCallSites.CallSites.Any(s => s.Namespace == enabled.Namespace && s.MarkerName == enabled.MarkerName))
+                            continue;
+                        var asyncEnabled = canonicalAsync.Compositions.FirstOrDefault(c => c.Index == index);
+                        if (asyncEnabled != null && asyncCallSites.CallSites.Any(s => s.Namespace == asyncEnabled.Namespace && s.MarkerName == asyncEnabled.MarkerName))
+                            continue;
+                        var wrapperEnabled = wrappers.Compositions.FirstOrDefault(c => c.Registration.Index == index);
+                        if (wrapperEnabled != null && wrapperCallSites.CallSites.Any(s => s.Namespace == wrapperEnabled.Registration.Namespace && s.MarkerName == wrapperEnabled.Registration.MarkerName)) continue;
+                        var capabilityEnabled = capabilities.Compositions.FirstOrDefault(c => c.Registration.Index == index);
+                        if (capabilityEnabled != null && capabilityCallSites.CallSites.Any(s => s.Namespace == capabilityEnabled.Registration.Namespace && s.MarkerName == capabilityEnabled.Registration.MarkerName)) continue;
+                        var graph = execution.Compositions[index].FirstOrDefault(g => g.Contract.Anchor == fact.Anchor);
+                        if (graph != null)
+                            message = graph.IsValid
+                                ? "The " + (graph.Contract.Family == BoundDispatchFamily.Stream ? "Stream" : "Send") + " execution graph satisfies its structural contract. Canonical runtime generation and equivalence are pending; emission remains blocked."
+                                : "The execution graph is incomplete: " + string.Join(", ", graph.Facts.Select(f => f.Reason)) + ". Canonical emission remains blocked.";
+                        var stream = streams.Routes.FirstOrDefault(r => r.CompositionIdentity == composition.Identity && r.Anchor == fact.Anchor);
+                        if (stream != null && stream.Kind != CanonicalStreamConnectionKind.InvalidContract) message = stream.Reason;
+                    }
+                    var properties = fact.FixHandler == null ? null : System.Collections.Immutable.ImmutableDictionary<string, string?>.Empty
+                        .Add(Zendiator.Tooling.MissingHandlerAttribute.ReasonKey, Zendiator.Tooling.MissingHandlerAttribute.Reason)
+                        .Add(Zendiator.Tooling.MissingHandlerAttribute.HandlerKey, fact.FixHandler)
+                        .Add(Zendiator.Tooling.MissingHandlerAttribute.SourceChecksumKey, fact.FixSourceChecksum)
+                        .Add(Zendiator.Tooling.MissingHandlerAttribute.TargetChecksumKey, fact.FixTargetChecksum);
+                    context.ReportDiagnostic(Diagnostic.Create(Descriptor(fact.Key), primary, additional, properties, message));
+                }
+                if (composition.Errors.Count == 0 && composition.Facts.Count == 0 && composition.Pipelines.Count == 0 &&
+                    (!composition.CompilerOwnsHandlerError || composition.Handlers.Count != 0))
+                    context.ReportDiagnostic(Diagnostic.Create(GeneratorDiagnostics.UnsupportedGenerationShape, location,
+                        $"Composition {composition.Key} requires the 0.5 canonical generation backend, which is not connected yet."));
+            }
+        }
+    }
+
+    private static DiagnosticDescriptor Descriptor(string key) => key switch
+    {
+        "StageContractMismatch" => GeneratorDiagnostics.StageContractMismatch,
+        "StageTypeMismatch" => GeneratorDiagnostics.StageTypeMismatch,
+        "AmbiguousStageContract" => GeneratorDiagnostics.AmbiguousStageContract,
+        "AmbiguousPipelineOrder" => GeneratorDiagnostics.AmbiguousPipelineOrder,
+        "UnsupportedDispatchFamily" => GeneratorDiagnostics.UnsupportedDispatchFamily,
+        "AsyncHookOnSyncRoute" => GeneratorDiagnostics.AsyncHookOnSyncRoute,
+        "CapabilityResultShapeMismatch" => GeneratorDiagnostics.CapabilityResultShapeMismatch,
+        "InaccessibleStage" => GeneratorDiagnostics.InaccessibleStage,
+        "RefLikeCapture" => GeneratorDiagnostics.RefLikeCapture,
+        "IncompleteExecutionContract" => GeneratorDiagnostics.IncompleteExecutionContract,
+        _ => GeneratorDiagnostics.UnsupportedGenerationShape
+    };
+}

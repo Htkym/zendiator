@@ -66,6 +66,11 @@ internal sealed partial class GenerationAnalysis
                         m.ContainingType.ContainingNamespace?.ToDisplayString() == "Zendiator.DependencyInjection" &&
                         Same(m.ContainingAssembly, diConfigAssembly)))
                     {
+                        // A type-argument error inside a named composition belongs to the compiler.
+                        var typeArgumentLambda = invocation.ArgumentList?.Arguments.LastOrDefault()?.Expression as LambdaExpressionSyntax;
+                        if (invocation.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax } && typeArgumentLambda != null &&
+                            model.GetDiagnostics(typeArgumentLambda.Span, ct).Any(d => d.Severity == DiagnosticSeverity.Error &&
+                                typeArgumentLambda.DescendantNodes().OfType<GenericNameSyntax>().Any(n => n.Span.Contains(d.Location.SourceSpan)))) continue;
                         hasLambdaDiCall = true;
                         if (firstLambdaLocation == Location.None) firstLambdaLocation = invocation.GetLocation();
                         ErrorAt(17, "AddZendiator call does not match a supported configuration shape. Fix the lambda and its statements, then use direct recorder calls with constant values.", invocation.GetLocation());
@@ -197,8 +202,6 @@ internal sealed partial class GenerationAnalysis
             }
         }
 
-        // DI backend inputs. Built from the single analyzed structure; the shared
-        // discovery, route, and emit machinery below runs unchanged afterwards.
         diMode = !hasAttributeConfig && (hasBareDiCall || hasLambdaDiCall);
 
         diNamespace = null;

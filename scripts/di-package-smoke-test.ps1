@@ -1,27 +1,16 @@
 <#
 .SYNOPSIS
-  Verifies packed Zendiator nupkgs through DI-only multi-project consumption.
-
+  Verifies DI-only package consumers.
 .DESCRIPTION
-  Builds a temporary solution against a local feed with an isolated global
-  packages folder. No ProjectReference to this repo is used.
-  - contracts: Abstractions only.
-  - app0: assembly-attribute mode (compatibility coexistence).
-  - app1/app2: DI configuration with AddOrders()/AddBilling() wrappers,
-    each generating its own unit (multi-application, no cycles).
-  - host: calls the wrappers only; its own compilation has no AddZendiator
-    calls and needs no Zendiator package reference.
-  Asserts generation, interception (via package props, no hand-written
-  MSBuild XML), execution results, and clean runtime assets.
-
+  Builds contracts, two independently generated applications and a host from a
+  local feed with an isolated packages folder. No ProjectReference is used.
+  Checks registration, interception, execution and runtime dependency isolation.
 .PARAMETER PackageVersion
-  Version of Zendiator packages to consume (e.g. 0.1.0-preview.1).
-
+  Package version in the local feed.
 .PARAMETER PackagesDir
-  Directory containing the packed .nupkg files (local feed).
-
+  Directory containing the .nupkg files.
 .PARAMETER WorkingDir
-  Scratch directory for the temporary solution. Removed on success.
+  Scratch directory, removed on success.
 #>
 param(
     [Parameter(Mandatory = $true)][string]$PackageVersion,

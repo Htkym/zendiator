@@ -3,7 +3,6 @@ using Zendiator.Sample.Contracts;
 
 namespace Zendiator.Sample.Application;
 
-/// <summary>Returns canned memorial targets. No allocation on the synchronous path.</summary>
 public sealed class GetTargetYearQueryHandler : IQueryHandler<GetTargetYearQuery, MemorialTargetDto>
 {
     public ValueTask<MemorialTargetDto> HandleAsync(GetTargetYearQuery query, CancellationToken cancellationToken)

@@ -1,10 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net10.0</TargetFramework><IsTestProject>true</IsTestProject></PropertyGroup>
   <ItemGroup>
+    <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamItemReference.cs" Link="Reference/CanonicalStreamItemReference.cs" />
+    <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamAsyncItemReference.cs" Link="Reference/CanonicalStreamAsyncItemReference.cs" />
+    <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamTypeChangingReference.cs" Link="Reference/CanonicalStreamTypeChangingReference.cs" />
+    <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamSessionReference.cs" Link="Reference/CanonicalStreamSessionReference.cs" />
+    <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamWrapperSessionReference.cs" Link="Reference/CanonicalStreamWrapperSessionReference.cs" />
+    <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamCleanupReference.cs" Link="Reference/CanonicalStreamCleanupReference.cs" />
+    <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamTypedOwnedReference.cs" Link="Reference/CanonicalStreamTypedOwnedReference.cs" />
+    <Compile Include="../Zendiator.Tests/Contracts/CanonicalStreamWrapperReference.cs" Link="Reference/CanonicalStreamWrapperReference.cs" />
+    <Compile Include="../Zendiator.Tests/Contracts/ContractEvents.cs" Link="Reference/ContractEvents.cs" />
     <ProjectReference Include="../../src/Zendiator.Abstractions/Zendiator.Abstractions.csproj" />
     <ProjectReference Include="../../src/Zendiator/Zendiator.csproj" />
     <ProjectReference Include="../../src/Zendiator.SourceGenerator/Zendiator.SourceGenerator.csproj" />
+    <ProjectReference Include="../../src/Zendiator.CodeFixes/Zendiator.CodeFixes.csproj" />
+    <EmbeddedResource Include="../../samples/Zendiator.Sample.GettingStarted/Program.cs" LogicalName="Zendiator.GettingStarted.Source" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.14.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />

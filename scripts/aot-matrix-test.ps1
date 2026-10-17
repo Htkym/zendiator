@@ -1,12 +1,10 @@
 <#
 .SYNOPSIS
-  Hardening-1 AOT verification matrix (AOT01-AOT12) + package consumer check.
+  Verifies Native AOT package consumers.
 .DESCRIPTION
-  Scaffolds two temp apps (DI-first, Assembly-compat) against the local
-  package feed only (no ProjectReference), publishes each as Native AOT
-  (win-x64, self-contained), runs the native binaries, and asserts every
-  AOTxx scenario line. Logs are copied to artifacts/aot/hardening-1/.
-  Product code is not modified; failures are classified per plan section 5.
+  Builds DI-first and assembly-attribute consumers from the local feed without
+  ProjectReference, publishes win-x64 self-contained apps, and checks their output.
+  Logs are saved under artifacts/aot/hardening-1/.
 #>
 param(
     [string]$PackageVersion = "0.1.0-preview.1",

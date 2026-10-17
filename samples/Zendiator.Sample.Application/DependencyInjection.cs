@@ -7,7 +7,6 @@ namespace Zendiator.Sample.Application;
 /// <summary>Application composition root. Generation happens in this compilation.</summary>
 public static class DependencyInjection
 {
-    /// <summary>Adds application services and generates the mediator.</summary>
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddZendiator(static configuration =>

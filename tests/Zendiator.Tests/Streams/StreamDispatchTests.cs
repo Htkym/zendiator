@@ -264,7 +264,6 @@ public sealed class StreamDispatchTests
         var error = GetFailHandler.Failure;
         Assert.Same(error, await Assert.ThrowsAsync<InvalidOperationException>(async () => await Collect(mediator.StreamAsync(new GetFail(4, 2)))));
         Assert.Contains("/fail", trace.Events);
-        // Early break still runs finally.
         trace.Events.Clear();
         await using (var e = mediator.StreamAsync(new GetPiped3(10)).GetAsyncEnumerator())
         {
@@ -279,16 +278,13 @@ public sealed class StreamDispatchTests
         await using var provider = Services().BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-        // Pre-cancel via API token.
         using var pre = new CancellationTokenSource();
         pre.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await Collect(mediator.StreamAsync(new GetCancel(3), pre.Token)));
-        // Pre-cancel via enumerator token.
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
             await foreach (var _ in mediator.StreamAsync(new GetCancel(3)).WithCancellation(pre.Token)) { }
         });
-        // Cancel between items via API token linked at start.
         using var mid = new CancellationTokenSource();
         var count = 0;
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
@@ -298,13 +294,11 @@ public sealed class StreamDispatchTests
                 if (++count == 2) mid.Cancel();
             }
         });
-        // Same token for both paths.
         using var same = new CancellationTokenSource();
         var stream = mediator.StreamAsync(new GetCancel(2), same.Token);
         var collected = new List<int>();
         await foreach (var i in stream.WithCancellation(same.Token)) collected.Add(i);
         Assert.Equal([0, 1], collected);
-        // Different tokens: either cancels.
         using var api = new CancellationTokenSource();
         using var en = new CancellationTokenSource();
         en.Cancel();
@@ -331,7 +325,6 @@ public sealed class StreamDispatchTests
     [Fact]
     public async Task Transient_stream_factory_is_used_and_disposed_scope_rejects_lazy_startup()
     {
-        // Transient factory override is respected (TryAdd does not replace).
         var factoryServices = Services();
         var factoryCalls = 0;
         factoryServices.AddTransient<GetOneHandler>(_ =>
@@ -344,7 +337,6 @@ public sealed class StreamDispatchTests
             Assert.Equal([5], await Collect(s.ServiceProvider.GetRequiredService<IZendiator>().StreamAsync(new GetOne(5))));
         Assert.Equal(1, factoryCalls);
 
-        // Disposed scope: enumeration fails without leaking.
         var disposedServices = Services();
         await using var disposedProvider = disposedServices.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         var disposedScope = disposedProvider.CreateAsyncScope();

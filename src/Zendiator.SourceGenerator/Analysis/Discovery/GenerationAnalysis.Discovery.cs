@@ -143,13 +143,32 @@ internal sealed partial class GenerationAnalysis
             }
             pipelines.Add((type, order, type.IsUnboundGenericType));
         }
-        var allTypes = assemblies.SelectMany(a => Types(a.GlobalNamespace, ct))
-            .Where(static type => type.TypeKind is TypeKind.Class or TypeKind.Struct && !type.IsAbstract && !type.AllInterfaces.IsEmpty)
+        var discoveryTypes = assemblies.SelectMany(a => Types(a.GlobalNamespace, ct))
+            .Where(static type => type.TypeKind is TypeKind.Class or TypeKind.Struct && !type.AllInterfaces.IsEmpty).ToArray();
+        var handlerMarker = handlerDefinition.ContainingAssembly.GetTypeByMetadataName(MarkedHandlerDiscovery.MarkerName);
+        var markedTypes = new HashSet<INamedTypeSymbol>(discoveryTypes.Where(type => type.GetAttributes().Any(a => Same(a.AttributeClass, handlerMarker))), SymbolEqualityComparer.Default);
+        var allTypes = discoveryTypes.Where(type => !type.IsAbstract && !markedTypes.Contains(type))
             .OrderBy(Name, StringComparer.Ordinal).ToArray();
+        // A marked handler never becomes a legacy service. Its request role also stays
+        // out of legacy auto-discovery unless an unmarked handler owns that family.
+        // Unrelated missing-handler diagnostics and shared legacy routes remain intact.
+        var asyncOnly = MarkedOnlyRequests(handlerDefinition, voidHandlerDefinition);
+        var syncOnly = MarkedOnlyRequests(syncHandlerDefinition, syncVoidHandlerDefinition);
+        var streamOnly = MarkedOnlyRequests(streamHandlerDefinition);
+        var notificationOnly = MarkedOnlyRequests(notificationHandlerDefinition);
+        HashSet<INamedTypeSymbol> MarkedOnlyRequests(params INamedTypeSymbol[] definitions)
+        {
+            var markedTargets = Targets(markedTypes);
+            markedTargets.ExceptWith(Targets(allTypes));
+            return markedTargets;
+            HashSet<INamedTypeSymbol> Targets(IEnumerable<INamedTypeSymbol> types) => new(types.SelectMany(type =>
+                type.AllInterfaces.Where(i => definitions.Any(d => Same(i.OriginalDefinition, d))))
+                .Select(i => i.TypeArguments[0]).OfType<INamedTypeSymbol>().Select(t => t.OriginalDefinition), SymbolEqualityComparer.Default);
+        }
         foreach (var type in allTypes)
         {
             ct.ThrowIfCancellationRequested();
-            var contracts = GetContracts(type, requestDefinition);
+            var contracts = asyncOnly.Contains(type.OriginalDefinition) ? System.Array.Empty<INamedTypeSymbol>() : GetContracts(type, requestDefinition);
             if (contracts.Length > 0)
             {
                 if (IsOpenDefinition(type))
@@ -251,7 +270,7 @@ internal sealed partial class GenerationAnalysis
                 }
                 else requests[request] = voidContracts[0].TypeArguments[0];
             }
-            var syncContracts = GetContracts(type, syncRequestDefinition);
+            var syncContracts = syncOnly.Contains(type.OriginalDefinition) ? System.Array.Empty<INamedTypeSymbol>() : GetContracts(type, syncRequestDefinition);
             if (syncContracts.Length > 0)
             {
                 if (IsOpenDefinition(type))
@@ -272,7 +291,7 @@ internal sealed partial class GenerationAnalysis
                 }
                 else syncRequests[type] = syncContracts[0].TypeArguments[0];
             }
-            if ((GetContracts(type, syncVoidRequestDefinition).Length != 0))
+            if (!syncOnly.Contains(type.OriginalDefinition) && GetContracts(type, syncVoidRequestDefinition).Length != 0)
             {
                 if (IsOpenDefinition(type))
                 {
@@ -362,7 +381,7 @@ internal sealed partial class GenerationAnalysis
                 if (!vlist.Any(h => Same(h, type))) vlist.Add(type);
                 syncVoidRequests.Add(request);
             }
-            var streamContracts = GetContracts(type, streamRequestDefinition);
+            var streamContracts = streamOnly.Contains(type.OriginalDefinition) ? System.Array.Empty<INamedTypeSymbol>() : GetContracts(type, streamRequestDefinition);
             if (streamContracts.Length > 0)
             {
                 if (IsOpenDefinition(type))
@@ -427,7 +446,7 @@ internal sealed partial class GenerationAnalysis
                 }
                 else streamRequests[streamReq] = contract.TypeArguments[1];
             }
-            var notificationContracts = GetContracts(type, notificationDefinition);
+            var notificationContracts = notificationOnly.Contains(type.OriginalDefinition) ? System.Array.Empty<INamedTypeSymbol>() : GetContracts(type, notificationDefinition);
             if (notificationContracts.Length > 0 && !type.IsRefLikeType)
             {
                 if (IsOpenDefinition(type))

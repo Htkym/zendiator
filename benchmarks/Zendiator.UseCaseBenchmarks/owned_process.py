@@ -243,7 +243,9 @@ class OwnedCommand:
             time.sleep(0.05)
         return True
 
-    def stop_and_wait(self):
+    def stop_and_wait(self, timeout=20):
+        # One shared deadline: callers can reserve a bounded cleanup window.
+        deadline = time.monotonic() + timeout
         if self.process is None:
             return True
         if self.job:
@@ -252,10 +254,10 @@ class OwnedCommand:
             else:
                 # Failed Job assignment: the unreleased launcher has never spawned a command.
                 self.process.kill()
-            self.process.wait(timeout=10)
-            return self.job.active() == 0 or self.wait_empty(10)
+            self.process.wait(timeout=max(0, deadline - time.monotonic()))
+            return self.job.active() == 0 or self.wait_empty(max(0, deadline - time.monotonic()))
         for sig in (signal.SIGTERM, signal.SIGKILL):
-            deadline = time.monotonic() + 10
+            phase_end = min(deadline, time.monotonic() + timeout / 2) if sig == signal.SIGTERM else deadline
             while True:
                 self.process.poll()  # Reap our direct child; zombies do not execute.
                 groups = self._linux_groups()
@@ -266,7 +268,7 @@ class OwnedCommand:
                         os.killpg(group, sig)
                     except ProcessLookupError:
                         pass
-                if time.monotonic() >= deadline:
+                if time.monotonic() >= phase_end:
                     break
                 time.sleep(0.05)
         return False

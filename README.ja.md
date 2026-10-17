@@ -26,6 +26,8 @@ dotnet add package Zendiator --version 0.4.0
 このREADMEは0.4.0の利用方法を説明しています。更新時のAPIと移行上の変更は、
 [リリースノート](docs/release/0.4.0-release-notes.ja.md)を参照してください。
 
+開発中の0.5.0候補は、[候補packageを使う実行例](docs/getting-started-0.5.0.ja.md)を参照してください。
+
 役割分担の目安です。
 
 | プロジェクト | 参照 |
