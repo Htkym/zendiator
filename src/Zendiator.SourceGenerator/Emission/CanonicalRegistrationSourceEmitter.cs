@@ -76,10 +76,11 @@ internal static class CanonicalRegistrationSourceEmitter
         var c = route.Registration;
         if (route.Open is { } open)
         {
+            var stages = open.Stages.Count == 0 ? "" : ", " + Stages(open.Stages);
             if (open.FinalDefinitionName != null)
-                b.AppendLine($$"""            expected.StreamPipeline(typeof({{open.RequestDefinitionName}}), typeof({{open.FinalDefinitionName}}), {{Stages(open.Stages)}});""");
+                b.AppendLine($$"""            expected.StreamPipeline(typeof({{open.RequestDefinitionName}}), typeof({{open.FinalDefinitionName}}){{stages}});""");
             else
-                b.AppendLine($$"""            expected.Pipeline(typeof({{open.RequestDefinitionName}}), {{(c.PipelineFamily == null ? "" : "global::Zendiator.DispatchFamily." + route.Family + ", ")}}{{Stages(open.Stages)}});""");
+                b.AppendLine($$"""            expected.Pipeline(typeof({{open.RequestDefinitionName}}){{(c.PipelineFamily == null ? "" : ", global::Zendiator.DispatchFamily." + route.Family)}}{{stages}});""");
         }
         else if (c.Handler.RequestIsRefLike)
             b.AppendLine($$"""            expected.Pipeline(typeof({{c.Handler.RequestName}}), global::Zendiator.DispatchFamily.{{route.Family}}, {{Stages(c.RegistrationStages)}});""");

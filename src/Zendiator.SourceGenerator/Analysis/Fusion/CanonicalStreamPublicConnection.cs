@@ -99,7 +99,7 @@ internal static class CanonicalStreamPublicConnection
 
     private static bool PlainZeroStageShape(CanonicalStreamFallbackModel model)
     {
-        if (model.Generic != null || model.ItemFlow != null || model.HandlerFactory != null || model.Handler.HandlerIsValueType ||
+        if (model.ItemFlow != null || model.HandlerFactory != null || model.Handler.HandlerIsValueType ||
             model.Segments.Count != 1 || model.ConsumerSegment != 0) return false;
         var segment = model.Segments[0];
         return segment.Id == 0 && segment.Wrapper == null && segment.Upstream == null &&
