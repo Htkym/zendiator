@@ -146,8 +146,8 @@ internal sealed partial class GenerationAnalysis
         var discoveryTypes = assemblies.SelectMany(a => Types(a.GlobalNamespace, ct))
             .Where(static type => type.TypeKind is TypeKind.Class or TypeKind.Struct && !type.AllInterfaces.IsEmpty).ToArray();
         var handlerMarker = handlerDefinition.ContainingAssembly.GetTypeByMetadataName(MarkedHandlerDiscovery.MarkerName);
-        var markedTypes = discoveryTypes.Where(type => type.GetAttributes().Any(a => Same(a.AttributeClass, handlerMarker))).ToArray();
-        var allTypes = discoveryTypes.Where(type => !type.IsAbstract && !markedTypes.Contains(type, SymbolEqualityComparer.Default))
+        var markedTypes = new HashSet<INamedTypeSymbol>(discoveryTypes.Where(type => type.GetAttributes().Any(a => Same(a.AttributeClass, handlerMarker))), SymbolEqualityComparer.Default);
+        var allTypes = discoveryTypes.Where(type => !type.IsAbstract && !markedTypes.Contains(type))
             .OrderBy(Name, StringComparer.Ordinal).ToArray();
         // A marked handler never becomes a legacy service. Its request role also stays
         // out of legacy auto-discovery unless an unmarked handler owns that family.

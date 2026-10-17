@@ -31,7 +31,7 @@ public sealed partial class GeneratorTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Unaccepted_async_single_Hook_public_API_keeps_ZEN0037_and_emits_no_backend(bool isVoid)
+    public void Accepted_async_single_Hook_public_API_emits_SendAsync_backend(bool isVoid)
     {
         var source = SingleHookBackendSource(isVoid, "async").Replace("ISyncRequest", "IRequest").Replace("DispatchFamily.SendSync", "DispatchFamily.SendAsync");
         source = isVoid ? source.Replace("void IRequestHandler<Ping>.Handle(Ping request,CancellationToken token) { _probe.Handle(request,token); }",
