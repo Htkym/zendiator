@@ -232,7 +232,7 @@ public sealed partial class GeneratorTests
         void Save(string name, string input, GeneratorDriver driver, Compilation output, IEnumerable<Diagnostic> diagnostics, byte[]? dll = null)
         {
             if (string.IsNullOrEmpty(evidence)) return;
-            var folder = Path.Combine(evidence, "stream-zero-value-public", name);Directory.CreateDirectory(folder);
+            var folder = Path.Combine(evidence, "stream-zero-value-public", name); Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, "input.cs"), input);
             foreach (var file in driver.GetRunResult().Results.Single().GeneratedSources) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
             if (dll != null) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), dll);
@@ -246,7 +246,7 @@ public sealed partial class GeneratorTests
         var source = ZeroStages(PublicValueRequestSource(false));
         var assemblyName = "PublicZeroValue_" + Guid.NewGuid().ToString("N");
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, assemblyName), out var output, out var diagnostics);
-        using var bytes = new MemoryStream();var emitted = output.Emit(bytes);
+        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes);
         Save("accepted", source, driver, output, diagnostics, bytes.ToArray());
         Assert.Empty(diagnostics);
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
@@ -263,10 +263,10 @@ public sealed partial class GeneratorTests
         Assert.NotNull(ro.GetTypeByMetadataName("ValuePublic.Generated.Single.IZendiator"));
         Assert.Null(ro.GetTypeByMetadataName("ValuePublic.Generated.Mixed.IZendiator"));
         Assert.Null(ro.GetTypeByMetadataName("ValuePublic.Generated.Mixed.ZendiatorGeneratedRegistrar"));
-        bytes.Position = 0;var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var inventory = PublicValueRequestIl(assembly);
         if (!string.IsNullOrEmpty(evidence)) File.WriteAllText(Path.Combine(evidence, "stream-zero-value-public", "accepted", "request-il.json"), JsonSerializer.Serialize(inventory));
-        Assert.Equal(4, inventory.Owners.Length);Assert.Empty(inventory.Boxes);Assert.NotEmpty(inventory.TypedFields);
+        Assert.Equal(4, inventory.Owners.Length); Assert.Empty(inventory.Boxes); Assert.NotEmpty(inventory.TypedFields);
         var run = assembly.GetType("ValuePublic.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>();
         var runtime = await run().WaitAsync(TimeSpan.FromSeconds(15));
         if (!string.IsNullOrEmpty(evidence)) File.WriteAllText(Path.Combine(evidence, "stream-zero-value-public", "accepted", "runtime.json"), runtime);

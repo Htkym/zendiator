@@ -29,14 +29,14 @@ public sealed class ZendiatorConfigurationSnapshot
         Namespace = @namespace;
         ServiceLifetime = serviceLifetime;
         DependencyLifetime = dependencyLifetime;
-        AssemblyMarkers = assemblyMarkers;
-        Assemblies = assemblies;
-        Behaviors = streamValidators == null ? behaviors : new StreamValidatorRegistrations(behaviors, streamValidators);
-        Notifications = notifications;
-        HandlerOrders = handlerOrders;
+        AssemblyMarkers = assemblyMarkers.AsReadOnly();
+        Assemblies = assemblies.AsReadOnly();
+        Behaviors = streamValidators == null ? behaviors.AsReadOnly() : new ReadOnlyStreamValidatorRegistrations(behaviors, streamValidators);
+        Notifications = notifications.AsReadOnly();
+        HandlerOrders = handlerOrders.AsReadOnly();
         UseLocalHandlers = useLocalHandlers;
         CatalogMarkers = (catalogMarkers ?? new()).AsReadOnly();
-        Handlers = handlers ?? new();
+        Handlers = (handlers ?? new()).AsReadOnly();
         Pipelines = (pipelines ?? new()).AsReadOnly();
         RouteHandlers = (routeHandlers ?? new()).AsReadOnly();
         StreamOutputs = (streamOutputs ?? new()).AsReadOnly();
@@ -61,7 +61,7 @@ public sealed class ZendiatorConfigurationSnapshot
 
     /// <summary>Gets synchronous stream validators ordered by order, then type.</summary>
     public IReadOnlyList<(string ValidatorType, int Order)> StreamRequestValidators =>
-        Behaviors is StreamValidatorRegistrations registrations
+        Behaviors is ReadOnlyStreamValidatorRegistrations registrations
             ? registrations.Validators : Array.Empty<(string ValidatorType, int Order)>();
 
     /// <summary>Gets the sorted notification type names.</summary>
@@ -101,7 +101,7 @@ public sealed class ZendiatorConfigurationSnapshot
             "notifications=" + string.Join(",", Notifications),
             "orders=" + string.Join(",", HandlerOrders.Select(static entry => entry.HandlerType + ":" + entry.Order)),
         };
-        if (Behaviors is StreamValidatorRegistrations validators)
+        if (Behaviors is ReadOnlyStreamValidatorRegistrations validators)
             parts.Add("streamValidators=" + string.Join(",", validators.Validators.Select(static entry =>
                 entry.Order.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + entry.ValidatorType)));
         if (CatalogMarkers.Count != 0) parts.Add("catalogs=" + string.Join(",", CatalogMarkers.Select(static type => type.Assembly.FullName).OrderBy(static identity => identity, StringComparer.Ordinal)));

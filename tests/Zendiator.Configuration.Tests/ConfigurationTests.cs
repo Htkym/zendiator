@@ -86,6 +86,51 @@ public sealed class ConfigurationTests
         Assert.Throws<InvalidOperationException>(() => configuration.AddStreamRequestValidator(typeof(BehaviorA), order: 0));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Snapshot_collections_reject_mutation_and_preserve_validator_fingerprint(bool withValidators)
+    {
+        var configuration = new ZendiatorConfiguration();
+        configuration.RegisterServicesFromAssemblyContaining<MarkerA>();
+        configuration.RegisterServicesFromAssembly(typeof(MarkerB).Assembly);
+        configuration.AddOpenBehavior(typeof(BehaviorA), order: 2);
+        configuration.AddNotification<Note>();
+        configuration.ConfigureHandlerOrder(typeof(HandlerA), order: 3);
+        configuration.AddHandler<HandlerA>();
+        if (withValidators) configuration.AddStreamRequestValidator(typeof(BehaviorB), order: -1);
+        var snapshot = configuration.Snapshot();
+        var fingerprint = snapshot.GetFingerprint();
+
+        static void RejectMutation<T>(IReadOnlyList<T> values)
+        {
+            var before = values.ToArray();
+            if (values is ICollection<T> mutable) Assert.Throws<NotSupportedException>(mutable.Clear);
+            if (values is IList<T> indexed && values.Count != 0)
+                Assert.Throws<NotSupportedException>(() => indexed[0] = default!);
+            Assert.Equal(before, values.ToArray());
+        }
+
+        RejectMutation(snapshot.AssemblyMarkers);
+        RejectMutation(snapshot.Assemblies);
+        RejectMutation(snapshot.Behaviors);
+        RejectMutation(snapshot.Notifications);
+        RejectMutation(snapshot.HandlerOrders);
+        RejectMutation(snapshot.Handlers);
+        RejectMutation(snapshot.StreamRequestValidators);
+        if (withValidators)
+        {
+            Assert.Equal([(typeof(BehaviorB).ToString(), -1)], snapshot.StreamRequestValidators);
+            Assert.Contains("streamValidators=-1:" + typeof(BehaviorB), fingerprint);
+        }
+        else
+        {
+            Assert.Empty(snapshot.StreamRequestValidators);
+            Assert.DoesNotContain("streamValidators=", fingerprint);
+        }
+        Assert.Equal(fingerprint, snapshot.GetFingerprint());
+    }
+
     [Fact]
     public void Dependency_lifetime_override_is_recorded_and_validated()
     {

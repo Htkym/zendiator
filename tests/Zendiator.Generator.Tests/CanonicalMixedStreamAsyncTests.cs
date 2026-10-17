@@ -74,7 +74,7 @@ public sealed partial class GeneratorTests
         var folder = evidence == null ? null : Path.Combine(evidence, "mixed-zero-stream-async");
         if (folder != null)
         {
-            Directory.CreateDirectory(folder);File.WriteAllText(Path.Combine(folder, "input.cs"), source);
+            Directory.CreateDirectory(folder); File.WriteAllText(Path.Combine(folder, "input.cs"), source);
             File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
             foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
             File.WriteAllText(Path.Combine(folder, "compile.json"), JsonSerializer.Serialize(new
@@ -92,7 +92,7 @@ public sealed partial class GeneratorTests
         Assert.DoesNotContain(generated, f => f.HintName.StartsWith("Zendiator.StreamPrototype.", StringComparison.Ordinal));
         Assert.Contains("__ZendiatorStreamCanonical_", CanonicalRouteSource(generated, "MixedAsync.Items"));
         Assert.Contains(" SendAsync(global::MixedAsync.Query request", CanonicalRouteSource(generated, "MixedAsync.Query"));
-        bytes.Position = 0;var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var runtime = await (Task<string>)assembly.GetType("MixedAsync.Bridge")!.GetMethod("Run")!.Invoke(null, null)!;
         if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime);
         using var observed = JsonDocument.Parse(runtime);
