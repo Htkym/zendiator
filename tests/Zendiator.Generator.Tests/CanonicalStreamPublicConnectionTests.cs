@@ -130,6 +130,88 @@ public sealed partial class GeneratorTests
         }
         """;
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Stream_zero_stage_public_registration_connects_canonical_and_preserves_terminal_paths(bool mixed)
+    {
+        var configuration = "c.Handlers<Request>(DispatchFamily.Stream,typeof(H)); c.Pipeline<Request>(DispatchFamily.Stream);";
+        if (mixed) configuration += "c.Handlers<Ping>(DispatchFamily.SendSync,typeof(PingHandler)); c.Pipeline<Ping>(DispatchFamily.SendSync);";
+        var source = PublicStreamSource("zero-stage").Replace(PublicStreamConfiguration, configuration)
+            .Replace("public bool HasToken,Overridden;", "public int InputCount; public bool HasToken,Overridden;")
+            .Replace("private int item;", "private int item=-1;")
+            .Replace("new(++item<=4)", "new(++item<p.InputCount)");
+        if (mixed) source = source.Replace("[ZendiatorComposition(\"reads\")]", """
+            public sealed record Ping(int Value):ISyncRequest<int>;
+            [ZendiatorHandler] public sealed class PingHandler:ISyncRequestHandler<Ping,int> {
+                public int Handle(Ping r,CancellationToken t)=>r.Value+1;
+            }
+            [ZendiatorComposition("reads")]
+            """);
+        var consumer = """
+            public static async Task<string> Run() {
+                var results=new List<object>();
+                for(int mode=0;mode<3;mode++) {
+                    var p=new Probe{InputCount=mode==0?0:16};var services=new ServiceCollection();services.AddSingleton(p);Register(services);
+                    foreach(var type in new[]{typeof(H),typeof(global::App.Generated.Reads.IZendiator),typeof(global::App.Generated.Reads.Zendiator)})
+                        Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"Scoped registrar");
+                    await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
+                    var scope=provider.CreateAsyncScope();
+                    var mediator=scope.ServiceProvider.GetRequiredService<global::App.Generated.Reads.IZendiator>();
+                    var request=new Request();p.Request=request;
+                    var stream=mediator.StreamAsync(request);
+                    Probe.Check(p.Starts==0&&p.Resolved.Count==0,"dispatch lazy");
+                    var cursor=stream.GetAsyncEnumerator();
+                    Probe.Check(p.Starts==0&&p.Resolved.Count==0,"cursor lazy");
+                    var values=new List<int>();
+                    try {while(await cursor.MoveNextAsync()){values.Add(cursor.Current);if(mode==2)break;}}
+                    finally {await cursor.DisposeAsync();}
+                    var count=mode==0?0:mode==2?1:16;
+                    Probe.Check(values.SequenceEqual(Enumerable.Range(0,count)),"zero-stage values");
+                    Probe.Check(p.Starts==1&&p.Disposals==1&&p.Moves==(mode==2?1:count+1)&&p.Reads==count,"source work and cleanup");
+                    Probe.Check(p.Resolved.SequenceEqual(new[]{"H"})&&p.Ended.Count==0,"borrowed handler only");
+                    __SEND__
+                    await scope.DisposeAsync();
+                    Probe.Check(p.Ended.SequenceEqual(new[]{"H"}),"scope owns handler");
+                    results.Add(new{mode,values,p.Starts,p.Moves,p.Reads,p.Disposals});
+                }
+                return System.Text.Json.JsonSerializer.Serialize(results);
+            }
+            """.Replace("__SEND__", mixed ? "Probe.Check(mediator.Send(new Ping(41))==42,\"mixed Send\");" : "");
+        source = source.Replace("public static class Bridge {", "public static class Bridge {" + consumer);
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "PublicZeroStage_" + Guid.NewGuid().ToString("N")),
+            out var output, out var diagnostics);
+        var generated = driver.GetRunResult().Results.Single().GeneratedSources;
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_STREAM_PUBLIC_EVIDENCE_DIR");
+        var folder = evidence == null ? null : Path.Combine(evidence, mixed ? "zero-stage-mixed" : "zero-stage");
+        if (folder != null)
+        {
+            Directory.CreateDirectory(folder);File.WriteAllText(Path.Combine(folder, "input.cs"), source);
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+            foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
+            File.WriteAllText(Path.Combine(folder, "compile.json"), System.Text.Json.JsonSerializer.Serialize(new
+            {
+                mixed, emitted.Success,
+                diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }),
+                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
+                sources = generated.Select(f => f.HintName)
+            }));
+        }
+        Assert.Empty(diagnostics);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        Assert.Empty(emitted.Diagnostics.Where(d => d.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error));
+        Assert.Single(generated, f => f.HintName.StartsWith("Zendiator.StreamCanonical.", StringComparison.Ordinal));
+        Assert.DoesNotContain(generated, f => f.HintName.StartsWith("Zendiator.StreamPrototype.", StringComparison.Ordinal));
+        Assert.Contains(generated, f => f.SourceText.ToString().Contains("return __ZendiatorStreamCanonical_", StringComparison.Ordinal));
+        bytes.Position = 0;var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var result = await (Task<string>)assembly.GetType("App.Bridge")!.GetMethod("Run")!.Invoke(null, null)!;
+        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
+        using var json = System.Text.Json.JsonDocument.Parse(result);
+        Assert.Equal(3, json.RootElement.GetArrayLength());
+    }
+
     [Fact]
     public async Task Stream_public_named_registration_connects_selected_candidate_and_rejects_unaccepted_compositions()
     {

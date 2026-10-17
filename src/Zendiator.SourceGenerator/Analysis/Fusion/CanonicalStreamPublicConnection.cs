@@ -38,7 +38,8 @@ internal static class CanonicalStreamPublicConnection
             var prototype = connection?.Kind == CanonicalStreamConnectionKind.Candidate ? connection.Candidate : null;
             var canonical = connection?.Kind == CanonicalStreamConnectionKind.CanonicalCandidate ? connection.Canonical : null;
             var itemChange = canonical != null && (ClosedItemChangeShape(canonical) || ClosedTypedWrapperSessionShape(canonical) || OpenOwnedMapShape(canonical));
-            if (prototype == null && (canonical == null || !AsyncItemShape(canonical) && !PlainOwnedSessionShape(canonical) && !WrapperOwnedSessionShape(canonical) && !itemChange)) continue;
+            var zeroStage = canonical != null && route.HasEmptyPipeline && route.PipelineFamily == BoundDispatchFamily.Stream && PlainZeroStageShape(canonical);
+            if (prototype == null && (canonical == null || !zeroStage && !AsyncItemShape(canonical) && !PlainOwnedSessionShape(canonical) && !WrapperOwnedSessionShape(canonical) && !itemChange)) continue;
             var h = prototype?.Handler ?? canonical!.Handler;
             var generic = prototype?.Generic ?? canonical?.Generic;
             var open = generic == null ? null : route.StreamOpenRegistration;
@@ -94,6 +95,15 @@ internal static class CanonicalStreamPublicConnection
         };
         var accepted = Create(new(new(new[] { projected })), connections).Compositions.SingleOrDefault();
         return accepted == null ? null : accepted with { Registration = accepted.Registration with { Index = index } };
+    }
+
+    private static bool PlainZeroStageShape(CanonicalStreamFallbackModel model)
+    {
+        if (model.Generic != null || model.ItemFlow != null || model.HandlerFactory != null || model.Handler.HandlerIsValueType ||
+            model.Segments.Count != 1 || model.ConsumerSegment != 0) return false;
+        var segment = model.Segments[0];
+        return segment.Id == 0 && segment.Wrapper == null && segment.Upstream == null &&
+            segment.WrapperFactory == null && segment.Hooks.Count == 0;
     }
 
     private static bool AsyncItemShape(CanonicalStreamFallbackModel model)
