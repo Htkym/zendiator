@@ -57,6 +57,51 @@ public sealed partial class GeneratorTests
         """ : "");
 
     [Fact]
+    public async Task Mixed_zero_stage_Stream_and_pending_SendAsync_connect_public_canonical_routes()
+    {
+        var source = MixedStreamAsyncSource(true)
+            .Replace("c.Pipeline<Items>(DispatchFamily.Stream,Stage.Hook<Positive>(),Stage.Hook<DoubleItem>(),Stage.Hook<Small>());", "c.Pipeline<Items>(DispatchFamily.Stream);")
+            .Replace("typeof(ItemsHandler),typeof(Positive),typeof(DoubleItem),typeof(Small),typeof(QueryHandler)", "typeof(ItemsHandler),typeof(QueryHandler)")
+            .Replace("values.SequenceEqual(new[]{2,4})", "values.SequenceEqual(new[]{1,2,3})")
+            .Replace("scopeEnds.Order().SequenceEqual(new[]{\"F1\",\"F2\",\"H\",\"M\"})", "scopeEnds.SequenceEqual(new[]{\"H\"})")
+            .Replace("p.Ended.Count==5", "p.Ended.Count==2");
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "MixedZeroStreamAsync_" + Guid.NewGuid().ToString("N")),
+            out var output, out var diagnostics);
+        var generated = driver.GetRunResult().Results.Single().GeneratedSources;
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
+        var folder = evidence == null ? null : Path.Combine(evidence, "mixed-zero-stream-async");
+        if (folder != null)
+        {
+            Directory.CreateDirectory(folder);File.WriteAllText(Path.Combine(folder, "input.cs"), source);
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+            foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
+            File.WriteAllText(Path.Combine(folder, "compile.json"), JsonSerializer.Serialize(new
+            {
+                emitted.Success,
+                diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }),
+                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
+                sources = generated.Select(f => f.HintName)
+            }));
+        }
+        Assert.Empty(diagnostics);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        Assert.Empty(emitted.Diagnostics.Where(d => d.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error));
+        Assert.Single(generated, f => f.HintName.StartsWith("Zendiator.StreamCanonical.", StringComparison.Ordinal));
+        Assert.DoesNotContain(generated, f => f.HintName.StartsWith("Zendiator.StreamPrototype.", StringComparison.Ordinal));
+        Assert.Contains("__ZendiatorStreamCanonical_", CanonicalRouteSource(generated, "MixedAsync.Items"));
+        Assert.Contains(" SendAsync(global::MixedAsync.Query request", CanonicalRouteSource(generated, "MixedAsync.Query"));
+        bytes.Position = 0;var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var runtime = await (Task<string>)assembly.GetType("MixedAsync.Bridge")!.GetMethod("Run")!.Invoke(null, null)!;
+        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime);
+        using var observed = JsonDocument.Parse(runtime);
+        Assert.Equal(11, observed.RootElement.GetProperty("result").GetInt32());
+        Assert.Equal(new[] { 1, 2, 3 }, observed.RootElement.GetProperty("values").EnumerateArray().Select(x => x.GetInt32()));
+        Assert.Equal(1, observed.RootElement.GetProperty("Consumptions").GetInt32());
+    }
+
+    [Fact]
     public async Task Mixed_closed_Stream_and_pending_SendAsync_connect_whole_composition_and_keep_handler_identity_local()
     {
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
