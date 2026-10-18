@@ -85,8 +85,7 @@ internal static class CanonicalStreamPublicConnection
             route.Family != BoundDispatchFamily.Stream || route.Handlers.Count != 1) return null;
         var connection = connections.Routes.SingleOrDefault(c => c.CompositionIdentity == composition.Identity && c.Anchor == route.Anchor);
         if (connection is not { Kind: CanonicalStreamConnectionKind.Candidate or CanonicalStreamConnectionKind.CanonicalCandidate } ||
-            route.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue) ||
-            route.StreamGeneric != null || route.StreamOpenRegistration != null) return null;
+            !HasMixedRequestShape(route)) return null;
         var projected = composition with
         {
             Pipelines = new(new[] { route }),
@@ -96,6 +95,11 @@ internal static class CanonicalStreamPublicConnection
         var accepted = Create(new(new(new[] { projected })), connections).Compositions.SingleOrDefault();
         return accepted == null ? null : accepted with { Registration = accepted.Registration with { Index = index } };
     }
+
+    internal static bool HasMixedRequestShape(BoundPipelineModel route) =>
+        route.RequestShape is BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue ||
+        route.Family == BoundDispatchFamily.Stream && route.HasEmptyPipeline && route.PipelineFamily == BoundDispatchFamily.Stream &&
+        route.StreamGeneric != null && route.StreamOpenRegistration is { Stages.Count: 0 };
 
     private static bool PlainZeroStageShape(CanonicalStreamFallbackModel model)
     {
