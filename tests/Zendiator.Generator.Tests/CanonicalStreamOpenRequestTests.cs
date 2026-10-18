@@ -79,12 +79,16 @@ public sealed partial class GeneratorTests
                 generatorDiagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }),
                 compilerDiagnostics = emitted.Diagnostics.Select(d => new { d.Id, message = d.GetMessage() })
             });
-            Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
+            var publicAccepted = shape == "wrapper" && closed == null;
+            if (publicAccepted) Assert.Empty(diagnostics);
+            else Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
             var route = Assert.Single(Selection(driver).Pipelines);
             var connection = Assert.Single(StreamConnections(driver).Routes);
             var expected = shape == "fixed" || closed == "int" ? CanonicalStreamConnectionKind.Candidate : CanonicalStreamConnectionKind.CanonicalCandidate;
             Assert.Equal(expected, connection.Kind);
-            Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s =>
+            if (publicAccepted) Assert.Single(driver.GetRunResult().Results.Single().GeneratedSources, s =>
+                s.HintName.StartsWith("Zendiator.Canonical.Stream.Public.", StringComparison.Ordinal));
+            else Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s =>
                 s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal) || s.HintName.StartsWith("Zendiator.Composition.", StringComparison.Ordinal) ||
                 s.HintName.Contains("Interceptors", StringComparison.Ordinal));
             Assert.Equal(closed == null, route.StreamGeneric != null);
@@ -100,8 +104,8 @@ public sealed partial class GeneratorTests
                 handlers = route.Handlers.Select(h => h.Name),
                 stages = route.Stages.Select(s => s.Name),
                 generic = route.StreamGeneric,
-                candidateOnly = true,
-                productionEnabled = false
+                candidateOnly = !publicAccepted,
+                productionEnabled = publicAccepted
             });
             bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
             var helper = Assert.Single(assembly.GetTypes(), t => t.Name.StartsWith(expected == CanonicalStreamConnectionKind.Candidate ? "__ZendiatorStreamPrototype_" : "__ZendiatorStreamCanonical_", StringComparison.Ordinal));
@@ -208,8 +212,8 @@ public sealed partial class GeneratorTests
                 baseReference,
                 baseGenerated,
                 actualHelper = f.Helper.FullName,
-                candidateOnly = true,
-                productionEnabled = false
+                candidateOnly = shape != "wrapper",
+                productionEnabled = shape == "wrapper"
             }));
     }
     [Theory]

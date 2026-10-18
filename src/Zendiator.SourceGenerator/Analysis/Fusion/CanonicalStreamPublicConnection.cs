@@ -136,7 +136,7 @@ internal static class CanonicalStreamPublicConnection
         var inner = model.Segments[0]; var outer = model.Segments[1];
         return inner.Id == 0 && inner.Upstream == null && inner.Wrapper == null && inner.WrapperFactory == null &&
             outer.Id == 1 && outer.Upstream == 0 && outer.Wrapper is { WrapperIsValueType: false, Completion: BoundCompletionKind.Enumerable } &&
-            outer.WrapperFactory == null && inner.Hooks.Count + outer.Hooks.Count <= 1 &&
+            outer.WrapperFactory == null && inner.Hooks.Count <= 1 && outer.Hooks.Count <= 1 &&
             new[] { inner, outer }.All(s => s.Hooks.All(h => h.Factory == null && !h.HookIsValueType &&
                 h.Completion == BoundCompletionKind.Synchronous && h.Phase is BoundCallbackPhase.Filter or BoundCallbackPhase.Map));
     }
