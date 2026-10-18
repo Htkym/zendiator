@@ -26,6 +26,8 @@ package versions used by your application and keep both packages aligned.
 This README describes 0.4.0. See the [release notes](docs/release/0.4.0-release-notes.md)
 for API and migration changes when upgrading.
 
+For the unreleased 0.5.0 API, see [getting started](docs/getting-started-0.5.0.md).
+
 Suggested project responsibilities:
 
 | Project | References |
