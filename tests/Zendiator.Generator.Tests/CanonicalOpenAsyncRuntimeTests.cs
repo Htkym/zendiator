@@ -11,7 +11,11 @@ namespace Zendiator.Generator.Tests;
 public sealed partial class GeneratorTests
 {
     private static readonly string[] OpenAsyncRuntimeCases = ["chain", "cancel-filter", "cancel-map"];
-    private sealed record OpenAsyncRuntimeFixture(Type Request, Type[] Definitions, Type[] Services, Type Bridge, MethodInfo Start, MethodInfo Create);
+    private sealed record OpenAsyncRuntimeFixture(Type Request, Type[] Definitions, Type[] Services, Type Bridge, MethodInfo Start, MethodInfo Create)
+    {
+        public Action<IServiceCollection>? Register { get; init; }
+        public Func<IServiceProvider, int, int>? Send { get; init; }
+    }
     private sealed record OpenAsyncRuntimeResult(int[] Values, StreamSeedEvent[] Events, OpenAsyncServiceEvent[] Services,
         int Starts, int Moves, int Reads, int Disposals, int LastCalls, int FilterConsumptions, int MapConsumptions,
         bool FirstPending, bool MapPending, bool Canceled, bool Faulted, bool ErrorTokenMatches, bool BorrowedAliveBeforeScopeEnd, int ScopeDisposals);
@@ -110,8 +114,16 @@ public sealed partial class GeneratorTests
             SourceCurrent = input
         };
         var collection = new ServiceCollection(); collection.AddSingleton(p);
-        foreach (var type in fixture.Definitions) collection.AddScoped(type, type); // Actual open-generic DI registrations, no factory bypass.
+        if (fixture.Register == null)
+            foreach (var type in fixture.Definitions) collection.AddScoped(type, type);
+        else
+        {
+            fixture.Register(collection); var count = collection.Count; fixture.Register(collection);
+            Assert.Equal(count, collection.Count);
+            Assert.All(fixture.Definitions, type => Assert.Equal(ServiceLifetime.Scoped, Assert.Single(collection, d => d.ServiceType == type).Lifetime));
+        }
         using var provider = collection.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true }); using var scope = provider.CreateScope();
+        if (fixture.Send != null) Assert.Equal(42, fixture.Send(scope.ServiceProvider, 41));
         IAsyncEnumerable<OpenAsyncRuntimeItem> stream;
         if (backend == "reference")
         {
@@ -156,6 +168,7 @@ public sealed partial class GeneratorTests
         }
         if (id == "chain") Assert.Null(error); else Assert.IsAssignableFrom<OperationCanceledException>(error);
         await cursor.DisposeAsync(); await cursor.DisposeAsync(); Assert.Equal(1, p.Disposals);
+        if (fixture.Send != null) Assert.Equal(10, fixture.Send(scope.ServiceProvider, 9));
         var alive = !p.ServiceEvents.Any(e => e.Kind == "Disposed"); Assert.True(alive);
         var created = p.ServiceEvents.Where(e => e.Kind == "Created").ToArray();
         Assert.All(p.ServiceEvents.Where(e => e.Kind == "Called"), e => Assert.Contains(created, c => c.Service == e.Service && c.Role == e.Role));
