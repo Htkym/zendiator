@@ -236,7 +236,9 @@ public sealed partial class GeneratorTests
             var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "Fallback_" + shape + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
             var backend = Assert.IsType<CanonicalRouteBackend>(Assert.Single(driver.GetRunResult().Results.Single()
                 .TrackedSteps["CanonicalRouteBackendEntry"].SelectMany(s => s.Outputs)).Value);
-            Assert.Equal(backend.StreamCandidate == null ? new[] { "ZEN0037" } : Array.Empty<string>(), diagnostics.Select(d => d.Id));
+            var publicConnected = wrapper || backend.StreamCandidate != null;
+            Assert.Equal(publicConnected ? Array.Empty<string>() : new[] { "ZEN0037" }, diagnostics.Select(d => d.Id));
+            Assert.Equal(publicConnected, driver.GetRunResult().Results.Single().GeneratedSources.Any(f => f.HintName.StartsWith("Zendiator.Canonical.Stream.Public.", StringComparison.Ordinal)));
             CanonicalSourceFile? forced = null;
             if (backend.StreamCandidate != null)
             {
@@ -258,8 +260,9 @@ public sealed partial class GeneratorTests
                 {
                     emitted.Success,
                     forcedCanonicalForComparison = forced != null,
-                    candidateOnly = true,
-                    productionEnabled = false,
+                    candidateOnly = !publicConnected,
+                    productionEnabled = publicConnected,
+                    generatorDiagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }),
                     diagnostics = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() })
                 }));
             }

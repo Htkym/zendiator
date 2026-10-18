@@ -75,7 +75,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Wrapper_selected_open_values_and_enumeration_arguments_do_not_overwrite_outer_state_or_eagerly_start_upstream()
     {
-        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"), "ZEN0037"));
+        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()")));
         var s = graph.StreamWrapperSchedule!; var w = Assert.Single(s.Wrappers);
         Assert.Equal(Segment(-1), w.InputSegment); Assert.Equal(Segment(1), w.OutputSegment);
         Assert.Equal(new EquatableArray<int>(new[] { 0 }), s.Segments[0].Descriptor.HookPositions);
@@ -113,7 +113,7 @@ public sealed partial class GeneratorTests
     [InlineData((int)StreamWrapperProgram.ReleaseByConsumer, (int)StreamWrapperPhase.UseChoice, (int)StreamWrapperOutcome.Continue, (int)StreamWrapperPhase.UseChoice, "CursorUsedOutsideItsOwnerLifetime")]
     public void Wrapper_actual_paths_reject_short_circuit_value_capture_acquisition_and_cleanup_errors_with_metadata_unchanged(int program, int from, int outcome, int to, string reason)
     {
-        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"), "ZEN0037")); var s = graph.StreamWrapperSchedule!;
+        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"))); var s = graph.StreamWrapperSchedule!;
         var candidate = ChangeWrapperPath(s, (StreamWrapperProgram)program, (StreamWrapperPhase)from, (StreamWrapperOutcome)outcome, (StreamWrapperPhase)to);
         Assert.Equal(s.Wrappers[0].Transfers, candidate.Wrappers[0].Transfers); Assert.Equal(s.Wrappers[0].Owners, candidate.Wrappers[0].Owners);
         Assert.Equal(s.Wrappers[0].Calls, candidate.Wrappers[0].Calls); Assert.Equal(s.Wrappers[0].Awaits, candidate.Wrappers[0].Awaits);
@@ -123,7 +123,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Wrapper_independent_requirements_reject_scope_aliases_multiplicity_ownership_and_await_or_body_claims()
     {
-        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"), "ZEN0037")); var s = graph.StreamWrapperSchedule!;
+        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"))); var s = graph.StreamWrapperSchedule!;
         Reject(s with { ConsumerSegment = s.Segments[0].Descriptor.Id }, "ConsumerSegmentMismatch");
         Reject(s with { Segments = new(s.Segments.Select(segment => segment.Descriptor.SourcePosition == -1 ? segment with { Descriptor = segment.Descriptor with { HookPositions = new(new[] { 0, 2 }) } } : segment)) }, "MissingSegment");
         Reject(ChangeWrapper(s, w => w with { InputSegment = w.OutputSegment }), "WrapperBoundaryMismatch");
@@ -156,7 +156,7 @@ public sealed partial class GeneratorTests
     public void Wrapper_body_zero_many_or_native_async_implementation_is_opaque_to_incremental_graph_and_locations_stay_fresh(int body)
     {
         var source = WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()");
-        var driver = BindLists(source, "ZEN0037"); var previous = Graph(driver);
+        var driver = BindLists(source); var previous = Graph(driver);
         var changed = body switch
         {
             0 => source.Replace("=> n.Open(r,c);", "=> Empty(); private static async System.Collections.Generic.IAsyncEnumerable<int> Empty() { await Task.Yield(); yield break; }"),
@@ -166,10 +166,13 @@ public sealed partial class GeneratorTests
         };
         var compilation = Compilation("\n\n" + changed); driver = driver.RunGenerators(compilation);
         GraphReason(driver, IncrementalStepRunReason.Cached); Assert.Equal(previous, Graph(driver));
-        Assert.Same(compilation.SyntaxTrees.Single(), Assert.Single(driver.GetRunResult().Diagnostics).Location.SourceTree);
+        Assert.Empty(driver.GetRunResult().Diagnostics);
         var reordered = source.Replace("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()", "Stage.Wrapper<StreamOpaque>(),Stage.Hook<Positive>(),Stage.Hook<Small>()");
-        driver = driver.RunGenerators(Compilation(reordered)); GraphReason(driver, IncrementalStepRunReason.Modified);
+        compilation = Compilation("\n\n" + reordered); driver = driver.RunGenerators(compilation); GraphReason(driver, IncrementalStepRunReason.Modified);
         Assert.True(Graph(driver).IsValid); Assert.NotEqual(previous.StreamWrapperSchedule, Graph(driver).StreamWrapperSchedule);
+        var diagnostic = Assert.Single(driver.GetRunResult().Diagnostics); Assert.Equal("ZEN0037", diagnostic.Id);
+        Assert.Same(compilation.SyntaxTrees.Single(), diagnostic.Location.SourceTree);
+        AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
     }
 
     [Fact]
@@ -192,7 +195,7 @@ public sealed partial class GeneratorTests
     [InlineData(true)]
     public void Direct_return_whole_path_preserves_selected_open_token_and_outer_hook_values_even_with_explicit_outer_enumeration(bool explicitOuter)
     {
-        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"), "ZEN0037"));
+        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()")));
         var result = StreamWrapperTokenFlowValidator.Trace(graph.Contract, graph.StreamWrapperSchedule!, explicitOuterEnumeration: explicitOuter);
         Assert.Empty(result.Facts);
         var trace = Assert.Single(result.Traces);
@@ -210,7 +213,7 @@ public sealed partial class GeneratorTests
     [InlineData((int)StreamCursorConsumer.Consumer)]
     public void Explicit_upstream_enumerator_token_still_combines_with_selected_open_token_under_D02(int consumer)
     {
-        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"), "ZEN0037"));
+        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()")));
         var result = StreamWrapperTokenFlowValidator.Trace(graph.Contract, graph.StreamWrapperSchedule!, explicitInnerEnumeration: true, explicitConsumer: (StreamCursorConsumer)consumer);
         Assert.Empty(result.Facts); var trace = Assert.Single(result.Traces);
         Assert.Equal("token:open:1", trace.InputApiToken);
@@ -222,7 +225,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Original_implicit_outer_token_bug_is_rejected_by_cross_path_oracle_without_using_matching_required_tables()
     {
-        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"), "ZEN0037")); var s = graph.StreamWrapperSchedule!;
+        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"))); var s = graph.StreamWrapperSchedule!;
         var oldBug = s with
         {
             Segments = new(s.Segments.Select(segment => segment.Descriptor.Contract.SourceKind == StreamSourceKind.Wrapper ? segment with
@@ -244,7 +247,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Delegated_acquisition_and_outer_hook_token_writes_are_checked_across_actual_storage_slots()
     {
-        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"), "ZEN0037")); var s = graph.StreamWrapperSchedule!;
+        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"))); var s = graph.StreamWrapperSchedule!;
         var injected = ChangeWrapper(s, w => w with
         {
             Transfers = new(w.Transfers.Select(t => t.At.Program == StreamWrapperProgram.AcquireDelegatedOutput &&

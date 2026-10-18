@@ -167,7 +167,7 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
-    public void Stream_candidate_uses_existing_graph_one_loop_and_never_accepts_wrapper_runtime()
+    public void Stream_candidate_uses_existing_graph_one_loop_and_never_fuses_across_wrapper()
     {
         var fixture = StreamPrototype.Value;
         Assert.Equal(new StreamSiteId(StreamProgram.Dispose, StreamPhase.DetachSource), fixture.Projection.TerminalCleanupEntry);
@@ -176,9 +176,10 @@ public sealed partial class GeneratorTests
         Assert.Equal(1, fixture.GeneratedSource.Split("while (true)", StringSplitOptions.None).Length - 1);
         Assert.Contains("await source.MoveNextAsync().ConfigureAwait(false)", fixture.GeneratedSource);
         Assert.Contains("await detached.DisposeAsync().ConfigureAwait(false)", fixture.GeneratedSource);
-        var driver = BindLists(StreamGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"), "ZEN0037");
+        var driver = BindLists(StreamGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"));
         Assert.NotNull(Graph(driver).StreamWrapperSchedule);
         Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.StreamPrototype.", StringComparison.Ordinal));
+        Assert.Single(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.Canonical.Stream.Public.", StringComparison.Ordinal));
     }
 
     [Theory]

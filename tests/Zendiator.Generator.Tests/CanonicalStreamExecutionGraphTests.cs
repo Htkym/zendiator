@@ -167,7 +167,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Stream_wrapper_uses_a_separate_segment_graph_and_owned_or_unknown_completion_never_alias_send()
     {
-        var graph = Graph(BindLists(StreamGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"), "ZEN0037"));
+        var graph = Graph(BindLists(StreamGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()")));
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         Assert.Null(graph.StreamSchedule); Assert.Null(graph.Schedule); Assert.NotNull(graph.StreamWrapperSchedule);
         var bare = Graph(BindLists(StreamGraphFixture(""), "ZEN0037"));

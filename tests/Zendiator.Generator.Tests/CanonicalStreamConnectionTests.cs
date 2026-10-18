@@ -93,10 +93,16 @@ public sealed partial class GeneratorTests
         var connection = Assert.Single(StreamConnections(run.Driver).Routes);
         Assert.Equal(CanonicalStreamConnectionKind.CanonicalCandidate, connection.Kind); Assert.Null(connection.Candidate); Assert.NotNull(connection.Canonical);
         Assert.DoesNotContain(run.Driver.GetRunResult().Results.Single().GeneratedSources, f => f.HintName.StartsWith("Zendiator.StreamPrototype.", StringComparison.Ordinal));
-        var diagnostic = Assert.Single(run.Diagnostics); Assert.Equal("ZEN0037", diagnostic.Id);
         var generated = Assert.Single(run.Driver.GetRunResult().Results.Single().GeneratedSources, f => f.HintName == connection.Canonical!.HintName);
         Assert.DoesNotContain("CanonicalStreamItemReference", generated.SourceText.ToString());
         Assert.DoesNotContain("CanonicalStreamWrapperReference", generated.SourceText.ToString());
+        if (shape == "wrapper")
+        {
+            Assert.Empty(run.Diagnostics);
+            Assert.Single(run.Driver.GetRunResult().Results.Single().GeneratedSources, f => f.HintName.StartsWith("Zendiator.Canonical.Stream.Public.", StringComparison.Ordinal));
+            return;
+        }
+        var diagnostic = Assert.Single(run.Diagnostics); Assert.Equal("ZEN0037", diagnostic.Id);
         Assert.Contains("same-contract canonical Stream candidate is generated", diagnostic.GetMessage());
         Assert.Contains("No legacy/reference adapter is selected", diagnostic.GetMessage());
         Assert.StartsWith("c.Pipeline<Items>", diagnostic.Location.SourceTree!.GetText().ToString(diagnostic.Location.SourceSpan));

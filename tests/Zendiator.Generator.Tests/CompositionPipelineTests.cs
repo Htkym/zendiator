@@ -229,7 +229,7 @@ public sealed partial class GeneratorTests
             """;
         // A method cannot share its enclosing type name.
         source = source.Replace("class Map :", "class Mapper :").Replace("Stage.Hook<Map>()", "Stage.Hook<Mapper>()");
-        var driver = BindLists(source, "ZEN0037");
+        var driver = BindLists(source);
         var route = Assert.Single(Selection(driver).Pipelines);
         Assert.Equal(FusionResultKind.Item, route.ResultKind);
         Assert.Equal(new[] { BoundCallbackPhase.Map, BoundCallbackPhase.Wrapper, BoundCallbackPhase.Filter }, route.Stages.Select(s => Assert.Single(s.Callbacks).Phase));
