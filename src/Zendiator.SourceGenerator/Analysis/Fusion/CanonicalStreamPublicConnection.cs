@@ -120,7 +120,7 @@ internal static class CanonicalStreamPublicConnection
             open.Stages.Count == 1 && route.Stages.Count == 1 && route.Stages[0].Kind == FusionStageKind.Hook &&
             route.Stages[0].Sessions.Count == 1 && route.Stages[0].Sessions[0].Acquire.Completion == BoundCompletionKind.Synchronous &&
             route.Stages[0].StreamEmission is
-            { HookIsValueType: false, Phase: BoundCallbackPhase.Map, Completion: BoundCompletionKind.Synchronous });
+            { HookIsValueType: false, Phase: BoundCallbackPhase.Map, Completion: BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask });
 
     private static bool PlainZeroStageShape(CanonicalStreamFallbackModel model)
     {
@@ -241,7 +241,7 @@ internal static class CanonicalStreamPublicConnection
             segment.SourceItemName == flow.Source.Name && segment.OutputItemName == flow.Final.Name &&
             segment.Hooks.Count == 1 && segment.Hooks[0] is
             {
-                Phase: BoundCallbackPhase.Map, Completion: BoundCompletionKind.Synchronous, HookIsValueType: false,
+                Phase: BoundCallbackPhase.Map, Completion: BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask, HookIsValueType: false,
                 Factory: { AwaitAcquire: false, CleanupContractName: not null, FactoryIsValueType: false }
             } &&
             flow.Stages[0].Input.Identity == flow.Source.Identity && flow.Stages[0].Output.Identity == flow.Final.Identity;

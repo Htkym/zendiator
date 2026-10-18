@@ -28,6 +28,32 @@ public sealed partial class GeneratorTests
             """ : "");
     }
 
+    private static string WithAsyncPublicOpenOwnedMap(string source, bool pending)
+    {
+        source = source.Replace("IStreamItemMap<R,T,OpenFinal<T>>", "IAsyncStreamItemMap<R,T,OpenFinal<T>>")
+            .Replace("public OpenFinal<T> Map(R r,T item,CancellationToken c)=>new(p.MapOpen(r!,item,c));", """
+                public static readonly TaskCompletionSource Entered=new(TaskCreationOptions.RunContinuationsAsynchronously);
+                public static global::Zendiator.Generator.Tests.AsyncOnceGate<OpenFinal<T>>? Gate;
+                public static bool InitiallyCompleted;
+                public ValueTask<OpenFinal<T>> MapAsync(R r,T item,CancellationToken c) {
+                    var gate=new global::Zendiator.Generator.Tests.AsyncOnceGate<OpenFinal<T>>(new OpenFinal<T>(p.MapOpen(r!,item,c)));
+                    Gate=gate;
+                    __COMPLETE__
+                    InitiallyCompleted=gate.Task.IsCompleted;
+                    Entered.TrySetResult();
+                    return gate.Task;
+                }
+                """.Replace("__COMPLETE__", pending ? "" : "gate.Complete();"));
+        return source + """
+            public static class PublicOpenOwnedAsyncControl {
+                public static Task Entered=>OpenMap<OpenRequest<OpenPayload>,OpenPayload>.Entered.Task;
+                public static int Consumptions=>OpenMap<OpenRequest<OpenPayload>,OpenPayload>.Gate!.Consumptions;
+                public static bool InitiallyCompleted=>OpenMap<OpenRequest<OpenPayload>,OpenPayload>.InitiallyCompleted;
+                public static void Release()=>OpenMap<OpenRequest<OpenPayload>,OpenPayload>.Gate!.Complete();
+            }
+            """;
+    }
+
     private static Assembly? CompilePublicOpenOwned(string shape, params string[] sources)
     {
         var mixed = shape.StartsWith("mixed-", StringComparison.Ordinal); var contract = mixed ? shape.Substring(6) : shape;
@@ -72,7 +98,7 @@ public sealed partial class GeneratorTests
             }
             return null;
         }
-        if (mixed && contract is ("async-map-blocked" or "borrowed-map-blocked"))
+        if (mixed && contract is ("async-handler-acquire-blocked" or "borrowed-map-blocked"))
         {
             Assert.Equal(2, diagnostics.Length);
             Assert.All(diagnostics, d => { Assert.Equal("ZEN0037", d.Id); Assert.True(d.Location.IsInSource); });
@@ -132,16 +158,23 @@ public sealed partial class GeneratorTests
             CompilePublicOpenOwned("mixed-" + (shape == "factory-undetermined" ? "undetermined-factory" : shape),
                 WithPublicOpenOwnedSend(TypedIntegrationSource(shape)));
         var source = TypedIntegrationSource("open-session");
-        CompilePublicOpenOwned("mixed-async-map-blocked", WithPublicOpenOwnedSend(source
-            .Replace("IStreamItemMap<R,T,OpenFinal<T>>", "IAsyncStreamItemMap<R,T,OpenFinal<T>>")
-            .Replace("public OpenFinal<T> Map(R r,T item,CancellationToken c)=>new(p.MapOpen(r!,item,c));",
-                "public ValueTask<OpenFinal<T>> MapAsync(R r,T item,CancellationToken c)=>new(new OpenFinal<T>(p.MapOpen(r!,item,c)));")));
+        CompilePublicOpenOwned("mixed-async-handler-acquire-blocked", WithPublicOpenOwnedSend(source
+            .Replace("IOwnedSessionFactory<OpenRequest<T>,OpenHandler<T>>", "IAsyncOwnedSessionFactory<OpenRequest<T>,OpenHandler<T>>")
+            .Replace("public OpenHandler<T> Create(OpenRequest<T> r,CancellationToken c)=>p.Create(\"H\",r,c,id=>new OpenHandler<T>(p,id));",
+                "public ValueTask<OpenHandler<T>> CreateAsync(OpenRequest<T> r,CancellationToken c)=>new(p.Create(\"H\",r,c,id=>new OpenHandler<T>(p,id)));")));
         CompilePublicOpenOwned("mixed-borrowed-map-blocked", WithPublicOpenOwnedSend(source
             .Replace("Stage.Hook(typeof(OpenMap<,>),typeof(OpenMapFactory<,>))", "Stage.Hook(typeof(OpenMap<,>))")));
         await RunPublicOpenOwned(true);
     }
 
-    private static async Task RunPublicOpenOwned(bool mixed)
+    [Fact]
+    public async Task Stream_public_open_owned_async_map_preserves_single_consumption_typed_item_and_ownership()
+    {
+        await RunPublicOpenOwned(false, true);
+        await RunPublicOpenOwned(true, true);
+    }
+
+    private static async Task RunPublicOpenOwned(bool mixed, bool asyncMap = false)
     {
         var source = TypedIntegrationSource("open-session") + """
             public static class PublicOpenOwnedEntry {
@@ -158,8 +191,9 @@ public sealed partial class GeneratorTests
                 }
             }
             """;
+        if (asyncMap) source = WithAsyncPublicOpenOwnedMap(source, mixed);
         if (mixed) source = WithPublicOpenOwnedSend(source, true);
-        var shape = mixed ? "mixed-public" : "public";
+        var shape = mixed ? asyncMap ? "mixed-async-public" : "mixed-public" : asyncMap ? "async-public" : "public";
         var assembly = CompilePublicOpenOwned(shape, source)!; var entry = assembly.GetType("App.PublicOpenOwnedEntry")!;
         var register = entry.GetMethod("Register")!.CreateDelegate<Action<IServiceCollection>>();
         var run = entry.GetMethod("Run")!.CreateDelegate<Func<IServiceProvider, object, Task<long[]>>>();
@@ -183,7 +217,27 @@ public sealed partial class GeneratorTests
         var scope = provider.CreateAsyncScope(); Assert.Empty(probe.Events);
         if (send != null) Assert.Equal(42, send(scope.ServiceProvider, 41));
         Assert.Empty(probe.Events);
-        var values = await run(scope.ServiceProvider, request); Assert.Equal(new long[] { 7 }, values);
+        var operation = run(scope.ServiceProvider, request);
+        var initiallyCompleted = operation.IsCompleted; var callbackInitiallyCompleted = false; var mapConsumptions = 0;
+        Type? control = null;
+        if (asyncMap)
+        {
+            control = assembly.GetType("App.PublicOpenOwnedAsyncControl")!;
+            await ((Task)control.GetProperty("Entered")!.GetValue(null)!).WaitAsync(TimeSpan.FromSeconds(5));
+            callbackInitiallyCompleted = (bool)control.GetProperty("InitiallyCompleted")!.GetValue(null)!;
+            Assert.Equal(!mixed, callbackInitiallyCompleted);
+            if (mixed)
+            {
+                Assert.False(operation.IsCompleted);
+                Assert.Equal(0, (int)control.GetProperty("Consumptions")!.GetValue(null)!);
+                Assert.Equal(1, probe.Starts); Assert.Equal(1, probe.Moves); Assert.Equal(1, probe.Reads);
+                Assert.Equal(2, probe.Created.Count); Assert.Equal(0, probe.SourceDisposals);
+                Assert.Equal(0, probe.SessionDisposals); Assert.Equal(0, probe.FactoryDisposals);
+                control.GetMethod("Release")!.Invoke(null, null);
+            }
+        }
+        var values = await operation.WaitAsync(TimeSpan.FromSeconds(5)); Assert.Equal(new long[] { 7 }, values);
+        if (asyncMap) { mapConsumptions = (int)control!.GetProperty("Consumptions")!.GetValue(null)!; Assert.Equal(1, mapConsumptions); }
         if (send != null) Assert.Equal(10, send(scope.ServiceProvider, 9));
         Assert.Equal(new[] { "M:1", "H:2" }, probe.Created.Select(c => c.Role + ":" + c.Id));
         Assert.Equal(2, probe.Instances.Distinct(ReferenceEqualityComparer.Instance).Count());
@@ -199,6 +253,10 @@ public sealed partial class GeneratorTests
         {
             values,
             mixed,
+            asyncMap,
+            initiallyCompleted,
+            callbackInitiallyCompleted,
+            mapConsumptions,
             publicSendsChecked = mixed ? 2 : 0,
             runtimeEnumerations = 1,
             publicReturnType = api.ReturnType.ToString(),
