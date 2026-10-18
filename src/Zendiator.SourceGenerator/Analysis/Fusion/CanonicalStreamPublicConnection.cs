@@ -116,7 +116,7 @@ internal static class CanonicalStreamPublicConnection
                 route.Stages.Select(s => s.StreamEmission!.Completion).SequenceEqual(new[] { BoundCompletionKind.ValueTask, BoundCompletionKind.ValueTask, BoundCompletionKind.Synchronous })) ||
             route.StreamItemFlow is { } flow && flow.Stages.Count == 1 && flow.Source.Identity != flow.Final.Identity &&
             route.Handlers.Count == 1 && route.Handlers[0].Sessions.Count == 1 &&
-            route.Handlers[0].Sessions[0].Acquire.Completion == BoundCompletionKind.Synchronous &&
+            (route.Handlers[0].Sessions[0].Acquire.Completion is BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask) &&
             open.Stages.Count == 1 && route.Stages.Count == 1 && route.Stages[0].Kind == FusionStageKind.Hook &&
             route.Stages[0].Sessions.Count == 1 && route.Stages[0].Sessions[0].Acquire.Completion == BoundCompletionKind.Synchronous &&
             route.Stages[0].StreamEmission is
@@ -235,7 +235,7 @@ internal static class CanonicalStreamPublicConnection
     {
         if (model.Generic == null || model.Handler.HandlerIsValueType || model.ItemFlow is not { } flow ||
             flow.Stages.Count != 1 || flow.Source.Identity == flow.Final.Identity || model.Segments.Count != 1 || model.ConsumerSegment != 0 ||
-            model.HandlerFactory is not { AwaitAcquire: false, CleanupContractName: not null, FactoryIsValueType: false }) return false;
+            model.HandlerFactory is not { CleanupContractName: not null, FactoryIsValueType: false }) return false;
         var segment = model.Segments[0];
         return segment.Id == 0 && segment.Upstream == null && segment.Wrapper == null && segment.WrapperFactory == null &&
             segment.SourceItemName == flow.Source.Name && segment.OutputItemName == flow.Final.Name &&
