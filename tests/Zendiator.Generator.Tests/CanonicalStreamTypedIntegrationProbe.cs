@@ -3,6 +3,7 @@ namespace Zendiator.Generator.Tests;
 public sealed class CanonicalStreamTypedIntegrationProbe
 {
     internal object Request = null!;
+    internal CancellationToken ExpectedToken;
     internal readonly List<string> Events = [];
     internal readonly List<(string Role, int Id)> Created = [];
     internal readonly List<object> Instances = [];
@@ -10,7 +11,7 @@ public sealed class CanonicalStreamTypedIntegrationProbe
     public void Resolve(string role) => Events.Add("DI.Resolve:" + role);
     public void DisposeFactory(string role) { FactoryDisposals++; Events.Add("Factory.Dispose:" + role); }
     private void Check(object request, CancellationToken token)
-    { if (!ReferenceEquals(request, Request) || token != default) throw new InvalidOperationException("Typed integration request/token changed."); }
+    { if (!ReferenceEquals(request, Request) || token != ExpectedToken) throw new InvalidOperationException("Typed integration request/token changed."); }
     public T Create<T>(string role, object request, CancellationToken token, Func<int, T> make) where T : class
     { Check(request, token); var id = Created.Count + 1; var result = make(id); Created.Add((role, id)); Instances.Add(result); Events.Add("Session.Create:" + role + ":" + id); return result; }
     public ValueTask DisposeSession(string role, int id)
@@ -28,7 +29,7 @@ public sealed class CanonicalStreamTypedIntegrationProbe
     {
         private int _index;
         public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken token = default)
-        { if (token != default) throw new InvalidOperationException(); p.SourceEnumerations++; p.Events.Add("H.Get"); return this; }
+        { if (token != p.ExpectedToken) throw new InvalidOperationException(); p.SourceEnumerations++; p.Events.Add("H.Get"); return this; }
         public T Current { get { p.Reads++; p.Events.Add("H.Current"); return item; } }
         public ValueTask<bool> MoveNextAsync() { p.Moves++; var next = _index++ == 0; p.Events.Add("H.Move:" + next); return new(next); }
         public ValueTask DisposeAsync() { p.SourceDisposals++; p.Events.Add("H.Dispose"); return default; }
