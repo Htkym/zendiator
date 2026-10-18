@@ -79,6 +79,8 @@ internal static class CanonicalMultiSourceEmitter
         public override SyntaxNode? VisitGenericName(GenericNameSyntax node)
         {
             var result = (GenericNameSyntax)base.VisitGenericName(node)!;
+            if (node.Parent is not (QualifiedNameSyntax or AliasQualifiedNameSyntax or MemberAccessExpressionSyntax) && _types.TryGetValue(node.Identifier.ValueText, out var type))
+                return result.WithIdentifier(Rename(result.Identifier, type));
             return node.Parent is InvocationExpressionSyntax call && ReferenceEquals(call.Expression, node) && _methods.TryGetValue(node.Identifier.ValueText, out var method)
                 ? result.WithIdentifier(Rename(result.Identifier, method)) : result;
         }

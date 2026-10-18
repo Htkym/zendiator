@@ -31,30 +31,31 @@ internal static class CanonicalWrapperSourceEmitter
         foreach (var c in model.Compositions)
         {
             var r = c.Registration; var h = r.Handler; var async = c.Family == BoundDispatchFamily.SendAsync; var result = Result(h, async); var send = async ? "SendAsync" : "Send";
+            var typeParameters = r.Generic?.TypeParameters ?? ""; var constraints = r.Generic?.TypeConstraints ?? "";
             b.AppendLine($$"""
                 namespace {{r.Namespace}} {
-                    public interface IZendiator { {{result}} {{send}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken=default); }
+                    public interface IZendiator { {{result}} {{send}}{{typeParameters}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken=default){{constraints}}; }
                     public sealed class Zendiator:IZendiator {
                         private readonly global::System.IServiceProvider _provider;
                         public Zendiator(global::System.IServiceProvider provider) {
                             global::System.ArgumentNullException.ThrowIfNull(provider);
                             _provider=provider;
                         }
-                        public {{result}} {{send}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken=default) {
+                        public {{result}} {{send}}{{typeParameters}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken=default){{constraints}} {
                             {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
-                            {{(async || h.ResultName != null ? "return " : "")}}{{(c.Regions.Count == 0 ? "ExecuteOuter" : "ExecuteRegion0")}}(request,cancellationToken);
+                            {{(async || h.ResultName != null ? "return " : "")}}{{(c.Regions.Count == 0 ? "ExecuteOuter" : "ExecuteRegion0")}}{{typeParameters}}(request,cancellationToken);
                         }
                 """);
             if (c.Regions.Count != 0) { for (var index = 0; index < c.Regions.Count; index++) GeneralRegion(b, c, index); b.AppendLine("}"); CanonicalSyncSourceEmitter.EmitRegistrar(b, r, c.Family); b.AppendLine("}"); continue; }
             Region(b, c, true); Region(b, c, false);
             var continuation = "global::Zendiator." + (async ? "IAsyncSendContinuation" : "ISendContinuation") + "<" + h.RequestName + (h.ResultName == null ? "" : ", " + h.ResultName) + ">";
             b.AppendLine($$"""
-                private readonly struct WrapperNext:{{continuation}} {
+                private readonly struct WrapperNext{{typeParameters}}:{{continuation}}{{constraints}} {
                     private readonly Zendiator _owner;
                     public WrapperNext(Zendiator owner){_owner=owner;}
                     public {{result}} {{(async ? "InvokeAsync" : "Invoke")}}({{h.RequestName}} request,global::System.Threading.CancellationToken token) {
                         {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
-                        {{(async || h.ResultName != null ? "return " : "")}}_owner.ExecuteInner(request,token);
+                        {{(async || h.ResultName != null ? "return " : "")}}_owner.ExecuteInner{{typeParameters}}(request,token);
                     }
                 }
                 }
@@ -122,11 +123,12 @@ internal static class CanonicalWrapperSourceEmitter
     private static void Region(StringBuilder b, CanonicalWrapperCompositionEmission c, bool outer)
     {
         var h = c.Registration.Handler; var async = c.Family == BoundDispatchFamily.SendAsync; var sh = outer ? c.SyncOuter : c.SyncInner; var ah = outer ? c.AsyncOuter : c.AsyncInner;
+        var typeParameters = c.Registration.Generic?.TypeParameters ?? ""; var constraints = c.Registration.Generic?.TypeConstraints ?? "";
         var capabilities = outer ? c.OuterCapabilities : c.InnerCapabilities;
         if (capabilities != null) { CapabilityRegion(b, c, outer, capabilities); return; }
         var hookName = async ? ah?.HookName : sh?.HookName;
         b.AppendLine($$"""
-            private {{(async ? "async " : "")}}{{Result(h, async)}} Execute{{(outer ? "Outer" : "Inner")}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken) {
+            private {{(async ? "async " : "")}}{{Result(h, async)}} Execute{{(outer ? "Outer" : "Inner")}}{{typeParameters}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken){{constraints}} {
                 cancellationToken.ThrowIfCancellationRequested();
             """);
         if (hookName != null)
@@ -144,7 +146,7 @@ internal static class CanonicalWrapperSourceEmitter
         if (outer)
         {
             b.AppendLine($$"""var wrapper={{CanonicalServiceResolution.Emit(c.Wrapper.WrapperName, c.Wrapper.WrapperIsValueType)}};""");
-            b.AppendLine((h.ResultName == null ? "" : "response=") + Call("((" + c.Wrapper.ContractName + ")wrapper)." + c.Wrapper.MethodName + "(" + request + ",new WrapperNext(this),cancellationToken)", async) + ";");
+            b.AppendLine((h.ResultName == null ? "" : "response=") + Call("((" + c.Wrapper.ContractName + ")wrapper)." + c.Wrapper.MethodName + "(" + request + ",new WrapperNext" + typeParameters + "(this),cancellationToken)", async) + ";");
         }
         else
         {

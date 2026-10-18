@@ -22,6 +22,13 @@ internal static class CanonicalWrapperEmissionNormalizer
             var wrappers = route.Stages.Select((s, index) => (Stage: s, Index: index)).Where(s => s.Stage.Kind == FusionStageKind.Wrapper).ToArray();
             if (wrappers.Length == 0) continue; var w = wrappers[0];
             var sync = route.Family == BoundDispatchFamily.SendSync; var h = route.Handlers[0];
+            if (route.RequestShape == BoundRequestShape.OpenAsyncReference &&
+                (c.MarkerName == null || route.SendGeneric == null || route.SendOpenRegistration is not { } open ||
+                route.ResultKind != FusionResultKind.Response || route.Stages.Count != 1 || wrappers.Length != 1 ||
+                open.Stages.Count != 1 || h.Sessions.Count != 0 ||
+                h.AsyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false } ||
+                w.Stage.Sessions.Count != 0 || w.Stage.WrapperEmission is not { WrapperIsValueType: false } ||
+                c.Handlers.Any(member => !open.HandlerMembership.Contains(member.Identity)))) continue;
             if (h.CompilerOwnsError || !c.Handlers.Any(x => x.Identity == h.Type) || sync && h.SyncEmission == null || !sync && h.AsyncEmission == null) continue;
             var regions = new List<CanonicalWrapperRegionEmission>(); var pending = new List<HookCapabilityEmission>(); var invalid = false;
             foreach (var s in route.Stages)
@@ -61,7 +68,7 @@ internal static class CanonicalWrapperEmissionNormalizer
             else if (h.ServiceOwnership != FusionOwnership.BorrowedService) continue;
             var handler = sync ? h.SyncEmission! : new BoundSyncHandlerEmission(h.AsyncEmission!.RequestName, h.AsyncEmission.HandlerName, h.AsyncEmission.ContractName, h.AsyncEmission.MethodName, h.AsyncEmission.ResultName) { RequestIsValueType = h.AsyncEmission.RequestIsValueType, HandlerIsValueType = h.AsyncEmission.HandlerIsValueType };
             var registration = new CanonicalSyncCompositionEmission(i, c.GeneratedNamespace, c.MarkerName, c.UseLocalHandlers, handler, sf, false, route.PipelineFamily, c.MicrosoftDiProviderName ?? "")
-            { ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes, ExternAliases = c.ExternAliases, RegistrationStages = new(route.Stages.Select(s => new RegistrationStageEmission(s.Name, s.Kind == FusionStageKind.Wrapper ? "Wrapper" : "Hook", s.Sessions.Count == 0 ? null : CanonicalCapabilityEmissionNormalizer.Factory(s.Sessions[0], sync)!.FactoryName))) };
+            { Generic = route.SendGeneric, OpenRegistration = route.SendOpenRegistration, ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes, ExternAliases = c.ExternAliases, RegistrationStages = new(route.Stages.Select(s => new RegistrationStageEmission(s.Name, s.Kind == FusionStageKind.Wrapper ? "Wrapper" : "Hook", s.Sessions.Count == 0 ? null : CanonicalCapabilityEmissionNormalizer.Factory(s.Sessions[0], sync)!.FactoryName))) };
             output.Add(new(registration, route.Family.Value, w.Stage.WrapperEmission!, outer?.SyncEmission, inner?.SyncEmission, outer?.AsyncEmission, inner?.AsyncEmission, af)
             {
                 OuterCapabilities = outer != null && (sync ? outer.SyncEmission == null : outer.AsyncEmission == null) ? outer.Capabilities : null,
