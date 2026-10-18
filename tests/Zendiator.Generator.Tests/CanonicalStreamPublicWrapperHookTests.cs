@@ -11,20 +11,30 @@ public sealed partial class GeneratorTests
     [Fact]
     public async Task Stream_single_sync_hook_and_wrapper_keep_request_boundaries_opaque_control_and_borrowed_ownership()
     {
-        foreach (var shape in new[] { "map-before", "map-after", "filter-before", "filter-after", "constrained", "consumer-constraint", "closed", "mixed-blocked" })
+        foreach (var shape in new[] { "map-before", "map-after", "filter-before", "filter-after", "constrained", "consumer-constraint", "closed" })
             await CompileWrapperHookInput(shape);
     }
 
     [Fact]
     public Task Closed_mixed_single_hook_wrapper_preserves_public_Send_Stream_registration_and_request_boundaries() => CompileWrapperHookInput("closed-mixed");
 
-    private static async Task CompileWrapperHookInput(string shape)
+    [Fact]
+    public async Task Open_generic_mixed_single_hook_wrapper_connects_public_Send_Stream_and_constraints()
+    {
+        foreach (var shape in new[] { "map-before", "filter-after", "constrained", "consumer-constraint" })
+            await CompileWrapperHookInput(shape, true);
+    }
+
+    [Fact]
+    public Task Open_generic_mixed_single_hook_wrapper_with_two_hooks_rejects_composition() => CompileWrapperHookInput("mixed-blocked");
+
+    private static async Task CompileWrapperHookInput(string shape, bool includeSend = false)
     {
         var before = shape.EndsWith("before", StringComparison.Ordinal) || shape is "closed" or "closed-mixed";
         var filter = shape.StartsWith("filter", StringComparison.Ordinal);
         var constrained = shape is "constrained" or "consumer-constraint";
         var closed = shape is "closed" or "closed-mixed";
-        var mixed = shape is "mixed-blocked" or "closed-mixed";
+        var mixed = includeSend || shape is "mixed-blocked" or "closed-mixed";
         var hook = filter ? "GenericFirst" : "GenericMap";
         var types = StreamGenericTypes.Replace("(T Value) : IStreamRequest<T>;",
             "(T Value,int Mode,Func<T,T> Map,Func<T,T> SelectedMap,bool Allow,bool SelectedAllow) : IStreamRequest<T>;")
@@ -57,7 +67,8 @@ public sealed partial class GeneratorTests
         var hookStage = "Stage.Hook(typeof(" + hook + (closed ? "" : "<>") + "))";
         var wrapperStage = "Stage.Wrapper(typeof(GenericWrapper" + (closed ? "" : "<>") + "))";
         var body = "c.Handlers(typeof(" + request + "),DispatchFamily.Stream,typeof(" + handler + "));" +
-            "c.Pipeline(typeof(" + request + "),DispatchFamily.Stream," + (before ? hookStage + "," + wrapperStage : wrapperStage + "," + hookStage) + ");";
+            "c.Pipeline(typeof(" + request + "),DispatchFamily.Stream," + (before ? hookStage + "," + wrapperStage : wrapperStage + "," + hookStage) +
+            (shape == "mixed-blocked" ? ",Stage.Hook(typeof(GenericFirst<>))" : "") + ");";
         if (mixed) body += "c.Handlers<HookPing>(DispatchFamily.SendSync,typeof(HookPingHandler));c.Pipeline<HookPing>(DispatchFamily.SendSync);";
         var source = "using System.Linq;using System.Collections.Generic;using Microsoft.Extensions.DependencyInjection;" + ListFixture(body) + types;
         if (mixed) source += """
@@ -81,7 +92,7 @@ public sealed partial class GeneratorTests
                 foreach (var name in new[] { "GenericItems", "GenericHandler", "GenericMap", "GenericWrapper" }) consumer = consumer.Replace(name + "<T>", name).Replace(name + "<>", name);
                 consumer = Regex.Replace(consumer.Replace("Read<T>(", "Read("), @"\bT\b", "int");
             }
-            if (shape == "closed-mixed") consumer = consumer
+            if (mixed) consumer = consumer
                 .Replace("var request=new GenericItems", "Check(services.Single(d=>d.ServiceType==typeof(HookPingHandler)).Lifetime==ServiceLifetime.Scoped,\"closed Send registration\");Check(mediator.Send(new HookPing(41))==41,\"Send before Stream\");var request=new GenericItems")
                 .Replace("await scope.DisposeAsync();", "Check(mediator.Send(new HookPing(9))==9,\"Send after Stream\");await scope.DisposeAsync();");
             source += consumer;
@@ -90,7 +101,7 @@ public sealed partial class GeneratorTests
         var generated = driver.GetRunResult().Results.Single().GeneratedSources;
         using var bytes = new MemoryStream(); var emitted = output.Emit(bytes);
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_STREAM_PUBLIC_EVIDENCE_DIR");
-        var folder = evidence == null ? null : Path.Combine(evidence, "wrapper-hook", shape);
+        var folder = evidence == null ? null : Path.Combine(evidence, includeSend || shape == "mixed-blocked" ? "open-mixed-wrapper-hook" : "wrapper-hook", shape);
         if (folder != null)
         {
             Directory.CreateDirectory(folder); File.WriteAllText(Path.Combine(folder, "input.cs"), source); File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
@@ -111,16 +122,22 @@ public sealed partial class GeneratorTests
             Assert.DoesNotContain(generated, f => f.HintName.EndsWith(".Interceptors.g.cs", StringComparison.Ordinal)); return;
         }
         Assert.Empty(diagnostics);
-        var facade = shape == "closed-mixed" ? CanonicalRouteSource(generated, "App.GenericItems") :
+        var facade = mixed ? closed ? CanonicalRouteSource(generated, "App.GenericItems") :
+            Assert.Single(generated, f => IsCanonicalRoute(f) && f.SourceText.ToString().Contains("global::App.GenericItems<", StringComparison.Ordinal)).SourceText.ToString() :
             Assert.Single(generated, f => f.HintName.StartsWith("Zendiator.Canonical.Stream.Public.", StringComparison.Ordinal)).SourceText.ToString();
-        if (shape == "closed-mixed")
+        if (mixed)
         {
             Assert.Equal(2, generated.Count(IsCanonicalRoute)); Assert.Contains("Send(", CanonicalRouteSource(generated, "App.HookPing"));
             var registration = CanonicalCompositionSource(generated);
-            foreach (var requestType in new[] { "GenericItems", "HookPing" })
+            foreach (var requestType in closed ? new[] { "GenericItems", "HookPing" } : new[] { "HookPing" })
             {
                 Assert.Contains("expected.Handlers<global::App." + requestType + ">", registration);
                 Assert.Contains("expected.Pipeline<global::App." + requestType + ">", registration);
+            }
+            if (!closed)
+            {
+                Assert.Contains("expected.Handlers(typeof(global::App.GenericItems<>)", registration);
+                Assert.Contains("expected.Pipeline(typeof(global::App.GenericItems<>)", registration);
             }
         }
         Assert.Contains("__ZendiatorStreamCanonical_", facade);

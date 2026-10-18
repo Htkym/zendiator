@@ -102,11 +102,13 @@ internal static class CanonicalStreamPublicConnection
         route.StreamGeneric != null && route.StreamOpenRegistration is { } open &&
         (route.HasEmptyPipeline && open.Stages.Count == 0 ||
             route.StreamItemFlow == null && route.Handlers.Count == 1 && route.Handlers[0].Sessions.Count == 0 &&
-            open.Stages.Count == route.Stages.Count &&
-            (route.Stages.Count is 1 or 2 && route.Stages.All(s => s.Kind == FusionStageKind.Hook && s.Sessions.Count == 0 && s.StreamEmission is
-            { HookIsValueType: false, Completion: BoundCompletionKind.Synchronous, Phase: BoundCallbackPhase.Filter or BoundCallbackPhase.Map }) ||
-                route.Stages.Count == 1 && route.Stages[0] is
-                { Kind: FusionStageKind.Wrapper, Sessions.Count: 0, StreamWrapperEmission: { WrapperIsValueType: false, Completion: BoundCompletionKind.Enumerable } }));
+            open.Stages.Count == route.Stages.Count && route.Stages.Count is 1 or 2 &&
+            route.Stages.Count(s => s.Kind == FusionStageKind.Wrapper) <= 1 &&
+            route.Stages.All(s => s.Sessions.Count == 0 &&
+                (s.Kind == FusionStageKind.Hook && s.StreamEmission is
+                { HookIsValueType: false, Completion: BoundCompletionKind.Synchronous, Phase: BoundCallbackPhase.Filter or BoundCallbackPhase.Map } ||
+                    s.Kind == FusionStageKind.Wrapper && s.StreamWrapperEmission is
+                    { WrapperIsValueType: false, Completion: BoundCompletionKind.Enumerable })));
 
     private static bool PlainZeroStageShape(CanonicalStreamFallbackModel model)
     {
