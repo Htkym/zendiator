@@ -4,6 +4,7 @@ public sealed class CanonicalStreamTypedIntegrationProbe
 {
     internal object Request = null!;
     internal CancellationToken ExpectedToken;
+    internal Func<string, int, ValueTask>? SessionCleanup;
     internal readonly List<string> Events = [];
     internal readonly List<(string Role, int Id)> Created = [];
     internal readonly List<object> Instances = [];
@@ -15,7 +16,7 @@ public sealed class CanonicalStreamTypedIntegrationProbe
     public T Create<T>(string role, object request, CancellationToken token, Func<int, T> make) where T : class
     { Check(request, token); var id = Created.Count + 1; var result = make(id); Created.Add((role, id)); Instances.Add(result); Events.Add("Session.Create:" + role + ":" + id); return result; }
     public ValueTask DisposeSession(string role, int id)
-    { SessionDisposals++; Events.Add("Session.Dispose:" + role + ":" + id); return default; }
+    { SessionDisposals++; Events.Add("Session.Dispose:" + role + ":" + id); return SessionCleanup?.Invoke(role, id) ?? default; }
     public IAsyncEnumerable<T> Start<T>(object request, T item, CancellationToken token)
     { Check(request, token); Starts++; Events.Add("H.Start"); return new Source<T>(this, item); }
     public T MapOpen<T>(object request, T item, CancellationToken token)
