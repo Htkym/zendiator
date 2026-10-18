@@ -37,7 +37,7 @@ internal static class CanonicalStreamPublicConnection
             var connection = connections.Routes.SingleOrDefault(r => r.CompositionIdentity == c.Identity && r.Anchor == route.Anchor);
             var prototype = connection?.Kind == CanonicalStreamConnectionKind.Candidate ? connection.Candidate : null;
             var canonical = connection?.Kind == CanonicalStreamConnectionKind.CanonicalCandidate ? connection.Canonical : null;
-            var itemChange = canonical != null && (ClosedItemChangeShape(canonical) || ClosedTypedWrapperSessionShape(canonical) || OpenOwnedMapShape(canonical));
+            var itemChange = canonical != null && (ClosedItemChangeShape(canonical) || ClosedTypedWrapperSessionShape(canonical) || OpenOwnedMapShape(canonical) || OpenBorrowedMapShape(canonical));
             var zeroStage = canonical != null && route.HasEmptyPipeline && route.PipelineFamily == BoundDispatchFamily.Stream && PlainZeroStageShape(canonical);
             if (prototype == null && (canonical == null || !zeroStage && !PlainSynchronousItemShape(canonical) && !PlainWrapperShape(canonical) && !AsyncItemShape(canonical) && !PlainOwnedSessionShape(canonical) && !WrapperOwnedSessionShape(canonical) && !itemChange)) continue;
             var h = prototype?.Handler ?? canonical!.Handler;
@@ -120,7 +120,11 @@ internal static class CanonicalStreamPublicConnection
             open.Stages.Count == 1 && route.Stages.Count == 1 && route.Stages[0].Kind == FusionStageKind.Hook &&
             route.Stages[0].Sessions.Count == 1 && (route.Stages[0].Sessions[0].Acquire.Completion is BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask) &&
             route.Stages[0].StreamEmission is
-            { HookIsValueType: false, Phase: BoundCallbackPhase.Map, Completion: BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask });
+            { HookIsValueType: false, Phase: BoundCallbackPhase.Map, Completion: BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask } ||
+            route.StreamItemFlow is { } borrowedFlow && borrowedFlow.Stages.Count == 1 && borrowedFlow.Source.Identity != borrowedFlow.Final.Identity &&
+            route.Handlers.Count == 1 && route.Handlers[0].Sessions.Count == 0 && open.Stages.Count == 1 && route.Stages.Count == 1 &&
+            route.Stages[0].Kind == FusionStageKind.Hook && route.Stages[0].Sessions.Count == 0 && route.Stages[0].StreamEmission is
+            { HookIsValueType: false, Phase: BoundCallbackPhase.Map, Completion: BoundCompletionKind.Synchronous });
 
     private static bool PlainZeroStageShape(CanonicalStreamFallbackModel model)
     {
@@ -229,6 +233,18 @@ internal static class CanonicalStreamPublicConnection
             flow.Stages[0].Input.Identity == flow.Source.Identity &&
             flow.Stages.All(stage => stage.Output.Identity == flow.Final.Identity) &&
             flow.Stages.Skip(1).All(stage => stage.Input.Identity == flow.Final.Identity);
+    }
+
+    private static bool OpenBorrowedMapShape(CanonicalStreamFallbackModel model)
+    {
+        if (model.Generic == null || model.Handler.HandlerIsValueType || model.HandlerFactory != null || model.ItemFlow is not { } flow ||
+            flow.Stages.Count != 1 || flow.Source.Identity == flow.Final.Identity || model.Segments.Count != 1 || model.ConsumerSegment != 0) return false;
+        var segment = model.Segments[0];
+        return segment.Id == 0 && segment.Upstream == null && segment.Wrapper == null && segment.WrapperFactory == null &&
+            segment.SourceItemName == flow.Source.Name && segment.OutputItemName == flow.Final.Name &&
+            segment.Hooks.Count == 1 && segment.Hooks[0] is
+            { Phase: BoundCallbackPhase.Map, Completion: BoundCompletionKind.Synchronous, HookIsValueType: false, Factory: null } &&
+            flow.Stages[0].Input.Identity == flow.Source.Identity && flow.Stages[0].Output.Identity == flow.Final.Identity;
     }
 
     private static bool OpenOwnedMapShape(CanonicalStreamFallbackModel model)
