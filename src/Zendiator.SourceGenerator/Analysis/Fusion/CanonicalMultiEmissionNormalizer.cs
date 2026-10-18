@@ -14,9 +14,12 @@ internal static class CanonicalMultiEmissionNormalizer
         for (var i = 0; i < catalog.Compositions.Count; i++)
         {
             var c = catalog.Compositions[i];
-            if (c.Pipelines.Any(r => r.RequestShape is BoundRequestShape.ClosedRefLike or BoundRequestShape.OpenSyncReference or BoundRequestShape.OpenAsyncReference or BoundRequestShape.OpenAllSyncReference or BoundRequestShape.OpenAllAsyncReference) || c.Pipelines.Count < 2 || c.GeneratedNamespace == null || c.Errors.Count != 0 || c.CompilerOwnsHandlerError ||
+            if (c.Pipelines.Count < 2 || c.GeneratedNamespace == null || c.Errors.Count != 0 || c.CompilerOwnsHandlerError ||
                 c.Facts.Count != c.Pipelines.Count || c.Facts.Any(f => f.Key != "IncompleteExecutionContract") ||
                 catalog.Compositions.Count(x => x.Identity == c.Identity || x.Key == c.Key || x.GeneratedNamespace == c.GeneratedNamespace) != 1) continue;
+            var openSendPair = c.Pipelines.Any(r => r.RequestShape == BoundRequestShape.OpenAsyncReference);
+            if (c.Pipelines.Any(r => r.RequestShape is BoundRequestShape.ClosedRefLike or BoundRequestShape.OpenSyncReference or BoundRequestShape.OpenAllSyncReference or BoundRequestShape.OpenAllAsyncReference) ||
+                openSendPair && (!HasOpenWrapperPair(c) || c.Handlers.Any(h => !c.Pipelines.Any(r => HasHandler(r, h))))) continue;
             var mixedStream = c.Pipelines.Any(r => r.Family == BoundDispatchFamily.Stream);
             if (mixedStream && (streams == null || c.ExternAliases.Count != 0 ||
                 c.Pipelines.Any(r => r.Family is not (BoundDispatchFamily.Stream or BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAllAsync) ||
@@ -37,7 +40,9 @@ internal static class CanonicalMultiEmissionNormalizer
                     { Stream = acceptedStream, StreamStableKey = c.Identity + "|" + route.Family + "|" + route.Request });
                     continue;
                 }
-                var projected = new CompositionSelectionCatalog(new(new[] { c with { Pipelines = new(new[] { route }), Facts = new(c.Facts.Where(f => f.Anchor == route.Anchor)) } }));
+                var projected = new CompositionSelectionCatalog(new(new[] { c with {
+                    Handlers = openSendPair ? new(c.Handlers.Where(h => HasHandler(route, h))) : c.Handlers,
+                    Pipelines = new(new[] { route }), Facts = new(c.Facts.Where(f => f.Anchor == route.Anchor)) } }));
                 var graphs = new CanonicalExecutionGraphCatalog(new(new[] { new EquatableArray<CanonicalExecutionGraphModel>(new[] { graph }) }));
                 var sync = CanonicalSyncEmissionNormalizer.Create(projected, graphs);
                 var async = CanonicalAsyncEmissionNormalizer.Create(projected, graphs);
@@ -56,6 +61,19 @@ internal static class CanonicalMultiEmissionNormalizer
         }
         return new(new(result));
     }
+    private static bool HasOpenWrapperPair(CompositionSelectionModel c) => c.ExternAliases.Count == 0 && c.Pipelines.Count == 2 &&
+        c.Pipelines.Count(r => r.RequestShape == BoundRequestShape.OpenAsyncReference) == 1 &&
+        c.Pipelines.All(r => r.Family == BoundDispatchFamily.SendAsync && r.ResultKind == FusionResultKind.Response &&
+            (r.RequestShape == BoundRequestShape.OpenAsyncReference
+                ? r.Stages.Count == 1 && r.Stages[0].Kind == FusionStageKind.Wrapper
+                : r.RequestShape == BoundRequestShape.ClosedReference && !r.RequestIsGeneric && r.HasEmptyPipeline &&
+                    r.Stages.Count == 0 && r.Handlers.Count == 1 && r.Handlers[0].Sessions.Count == 0 &&
+                    r.Handlers[0].ServiceOwnership == FusionOwnership.BorrowedService &&
+                    r.Handlers[0].AsyncEmission is { HandlerIsValueType: false, RequestIsValueType: false }));
+
+    private static bool HasHandler(BoundPipelineModel route, SelectedHandlerModel handler) => route.SendOpenRegistration is { } open
+        ? open.HandlerMembership.Contains(handler.Identity) : route.Handlers.Any(h => h.Type == handler.Identity);
+
     internal static CanonicalMultiEmissionModel Connected(CanonicalMultiEmissionModel model, CanonicalSyncInterceptorModel sites) =>
         new(new(model.Compositions.Where(c =>
             sites.CallSites.Count(s => s.Namespace == c.Namespace && s.MarkerName == c.Routes[0].Registration.MarkerName) == 1)));
