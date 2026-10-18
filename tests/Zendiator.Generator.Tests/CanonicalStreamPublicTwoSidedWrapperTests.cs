@@ -14,23 +14,33 @@ public sealed partial class GeneratorTests
     public Task Stream_two_sided_open_generic_mixed_public_registration() => CompileTwoSidedWrapperInput("open-mixed");
 
     [Fact]
+    public async Task Stream_same_side_pair_public_registration_and_three_hook_boundary()
+    {
+        foreach (var (shape, placement) in new[] { ("open", "before"), ("open", "after"), ("closed-mixed", "before"), ("same-side-three-hooks-blocked", "after") })
+            await CompileTwoSidedWrapperInput(shape, placement);
+    }
+
+    [Fact]
     public async Task Stream_two_sided_closed_mixed_and_rejection_boundaries()
     {
-        foreach (var shape in new[] { "closed-mixed", "same-side-blocked" })
+        foreach (var shape in new[] { "closed-mixed", "same-side-three-hooks-blocked" })
             await CompileTwoSidedWrapperInput(shape);
     }
 
-    private static async Task CompileTwoSidedWrapperInput(string shape)
+    private static async Task CompileTwoSidedWrapperInput(string shape, string placement = "split")
     {
         var closed = shape == "closed-mixed";
         var mixed = closed || shape == "open-mixed";
         var types = StreamGenericTypes.Replace("public System.Collections.Generic.IAsyncEnumerable<T> HandleAsync",
             "public static CancellationToken Token; public static object? LastRequest; public System.Collections.Generic.IAsyncEnumerable<T> HandleAsync")
             .Replace("{ p.Call(this);return p.Source(r.Value); }", "{ Token=c;LastRequest=r;p.Call(this);return p.Source(r.Value); }");
+        var pipeline = shape == "same-side-three-hooks-blocked" ?
+            "Stage.Wrapper(typeof(GenericWrapper<>)),Stage.Hook(typeof(GenericFirst<>)),Stage.Hook(typeof(GenericMap<>)),Stage.Hook(typeof(GenericLast<>))" :
+            placement == "before" ? "Stage.Hook(typeof(GenericFirst<>)),Stage.Hook(typeof(GenericLast<>)),Stage.Wrapper(typeof(GenericWrapper<>))" :
+            placement == "after" ? "Stage.Wrapper(typeof(GenericWrapper<>)),Stage.Hook(typeof(GenericFirst<>)),Stage.Hook(typeof(GenericLast<>))" :
+            "Stage.Hook(typeof(GenericFirst<>)),Stage.Wrapper(typeof(GenericWrapper<>)),Stage.Hook(typeof(GenericLast<>))";
         var body = "c.Handlers(typeof(GenericItems<>),DispatchFamily.Stream,typeof(GenericHandler<>));" +
-            "c.Pipeline(typeof(GenericItems<>),DispatchFamily.Stream," + (shape == "same-side-blocked" ?
-                "Stage.Wrapper(typeof(GenericWrapper<>)),Stage.Hook(typeof(GenericFirst<>)),Stage.Hook(typeof(GenericLast<>))" :
-                "Stage.Hook(typeof(GenericFirst<>)),Stage.Wrapper(typeof(GenericWrapper<>)),Stage.Hook(typeof(GenericLast<>))") + ");";
+            "c.Pipeline(typeof(GenericItems<>),DispatchFamily.Stream," + pipeline + ");";
         if (closed)
         {
             foreach (var name in new[] { "GenericItems", "GenericHandler", "GenericFirst", "GenericMap", "GenericLast", "GenericWrapper" }) types = types.Replace(name + "<T>", name);
@@ -51,6 +61,9 @@ public sealed partial class GeneratorTests
                 .Replace("p.Released.Count==__CLOSED_TYPES__", "p.Released.Count==4*__CLOSED_TYPES__")
                 .Replace("__CALLS__", "results.Add(await Read(mediator,new GenericItems<int>(7),p));" + (closed ? "" : "results.Add(await Read(mediator,new GenericItems<string>(\"item\"),p));"))
                 .Replace("__REQUEST__", "new GenericItems<int>(7)").Replace("__CLOSED_TYPES__", closed ? "1" : "2");
+            if (placement != "split") consumer = consumer
+                .Replace("var dangling=mediator.StreamAsync", "Check(p.Called.Select(call=>p.Created.Single(created=>ReferenceEquals(created.Instance,call)).Role).SequenceEqual(Enumerable.Repeat(new[]{\"W\",\"H\",\"F1\",\"F2\"}," + (closed ? "2" : "4") + ").SelectMany(roles=>roles)),\"declared hook order\");var dangling=mediator.StreamAsync")
+                .Replace("released=p.Released.Count,p.SourceDisposals", "released=p.Released.Count,p.SourceDisposals,roles=p.Called.Select(call=>p.Created.Single(created=>ReferenceEquals(created.Instance,call)).Role).ToArray()");
             if (closed)
             {
                 foreach (var name in new[] { "GenericItems", "GenericHandler", "GenericFirst", "GenericLast", "GenericWrapper" }) consumer = consumer.Replace(name + "<T>", name).Replace(name + "<>", name).Replace(name + "<int>", name);
@@ -66,7 +79,7 @@ public sealed partial class GeneratorTests
         var generated = driver.GetRunResult().Results.Single().GeneratedSources;
         using var bytes = new MemoryStream(); var emitted = output.Emit(bytes);
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_STREAM_PUBLIC_EVIDENCE_DIR");
-        var folder = evidence == null ? null : Path.Combine(evidence, "two-sided-wrapper", shape);
+        var folder = evidence == null ? null : Path.Combine(evidence, "two-sided-wrapper", placement == "split" ? shape : shape + "-" + placement);
         if (folder != null)
         {
             Directory.CreateDirectory(folder); File.WriteAllText(Path.Combine(folder, "input.cs"), source); File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
@@ -74,6 +87,7 @@ public sealed partial class GeneratorTests
             File.WriteAllText(Path.Combine(folder, "compile.json"), JsonSerializer.Serialize(new
             {
                 shape,
+                placement,
                 emitted.Success,
                 diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), inSource = d.Location.IsInSource }),
                 compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage(), inSource = d.Location.IsInSource }),

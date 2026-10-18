@@ -167,7 +167,7 @@ public sealed partial class GeneratorTests
         var compilation = Compilation("\n\n" + changed); driver = driver.RunGenerators(compilation);
         GraphReason(driver, IncrementalStepRunReason.Cached); Assert.Equal(previous, Graph(driver));
         Assert.Empty(driver.GetRunResult().Diagnostics);
-        var reordered = source.Replace("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()", "Stage.Wrapper<StreamOpaque>(),Stage.Hook<Positive>(),Stage.Hook<Small>()");
+        var reordered = source.Replace("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()", "Stage.Wrapper<StreamOpaque>(),Stage.Hook<Positive>(),Stage.Hook<DoubleItem>(),Stage.Hook<Small>()");
         compilation = Compilation("\n\n" + reordered); driver = driver.RunGenerators(compilation); GraphReason(driver, IncrementalStepRunReason.Modified);
         Assert.True(Graph(driver).IsValid); Assert.NotEqual(previous.StreamWrapperSchedule, Graph(driver).StreamWrapperSchedule);
         var diagnostic = Assert.Single(driver.GetRunResult().Diagnostics); Assert.Equal("ZEN0037", diagnostic.Id);
