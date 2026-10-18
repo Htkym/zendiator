@@ -37,7 +37,7 @@ internal static class CanonicalStreamPublicConnection
             var connection = connections.Routes.SingleOrDefault(r => r.CompositionIdentity == c.Identity && r.Anchor == route.Anchor);
             var prototype = connection?.Kind == CanonicalStreamConnectionKind.Candidate ? connection.Candidate : null;
             var canonical = connection?.Kind == CanonicalStreamConnectionKind.CanonicalCandidate ? connection.Canonical : null;
-            var itemChange = canonical != null && (ClosedItemChangeShape(canonical) || ClosedTypedWrapperSessionShape(canonical) || OpenOwnedMapShape(canonical) || OpenBorrowedMapShape(canonical));
+            var itemChange = canonical != null && (ClosedItemChangeShape(canonical) || ClosedTypedWrapperSessionShape(canonical) || OpenOwnedMapShape(canonical) || BorrowedMapShape(canonical));
             var zeroStage = canonical != null && route.HasEmptyPipeline && route.PipelineFamily == BoundDispatchFamily.Stream && PlainZeroStageShape(canonical);
             if (prototype == null && (canonical == null || !zeroStage && !PlainSynchronousItemShape(canonical) && !PlainWrapperShape(canonical) && !AsyncItemShape(canonical) && !PlainOwnedSessionShape(canonical) && !WrapperOwnedSessionShape(canonical) && !itemChange)) continue;
             var h = prototype?.Handler ?? canonical!.Handler;
@@ -235,9 +235,9 @@ internal static class CanonicalStreamPublicConnection
             flow.Stages.Skip(1).All(stage => stage.Input.Identity == flow.Final.Identity);
     }
 
-    private static bool OpenBorrowedMapShape(CanonicalStreamFallbackModel model)
+    private static bool BorrowedMapShape(CanonicalStreamFallbackModel model)
     {
-        if (model.Generic == null || model.Handler.HandlerIsValueType || model.HandlerFactory != null || model.ItemFlow is not { } flow ||
+        if (model.Handler.HandlerIsValueType || model.HandlerFactory != null || model.ItemFlow is not { } flow ||
             flow.Stages.Count != 1 || flow.Source.Identity == flow.Final.Identity || model.Segments.Count != 1 || model.ConsumerSegment != 0) return false;
         var segment = model.Segments[0];
         return segment.Id == 0 && segment.Upstream == null && segment.Wrapper == null && segment.WrapperFactory == null &&

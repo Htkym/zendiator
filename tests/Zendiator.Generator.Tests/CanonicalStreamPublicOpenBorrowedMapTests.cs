@@ -17,7 +17,7 @@ public sealed partial class GeneratorTests
         .Replace("public ValueTask DisposeAsync()=>p.DisposeSession(\"H\",id);", "public ValueTask DisposeAsync(){p.DisposeFactory(\"borrowed-H\");return default;}")
         .Replace("public ValueTask DisposeAsync()=>p.DisposeSession(\"M\",id);", "public ValueTask DisposeAsync(){p.DisposeFactory(\"borrowed-M\");return default;}");
 
-    private static Assembly? CompilePublicOpenBorrowedMap(string shape, string source, bool mixed, bool blocked = false)
+    private static Assembly? CompilePublicBorrowedMap(string shape, string source, bool mixed, bool blocked = false, bool closed = false)
     {
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "PublicBorrowedMap_" + Guid.NewGuid().ToString("N")),
             out var output, out var diagnostics);
@@ -46,14 +46,20 @@ public sealed partial class GeneratorTests
         }
         Assert.Empty(diagnostics);
         var route = Assert.Single(Selection(driver).Pipelines, p => p.Family == BoundDispatchFamily.Stream);
-        var flow = Assert.IsType<BoundStreamItemFlow>(route.StreamItemFlow); var generic = Assert.IsType<BoundStreamGenericEmission>(route.StreamGeneric);
-        var registration = Assert.IsType<BoundStreamOpenRegistration>(route.StreamOpenRegistration);
-        Assert.Equal("global::App.OpenRequest<>", registration.RequestDefinitionName); Assert.Equal("global::App.OpenFinal<>", registration.FinalDefinitionName);
-        Assert.Equal("global::App.OpenHandler<>", registration.HandlerDefinitionName); Assert.Null(registration.HandlerFactoryDefinitionName);
-        var stage = Assert.Single(registration.Stages); Assert.Equal("global::App.OpenMap<,>", stage.TypeName); Assert.Null(stage.FactoryName);
+        var flow = Assert.IsType<BoundStreamItemFlow>(route.StreamItemFlow); var generic = route.StreamGeneric;
+        if (closed) { Assert.Null(generic); Assert.Null(route.StreamOpenRegistration); }
+        else
+        {
+            generic = Assert.IsType<BoundStreamGenericEmission>(generic);
+            var registration = Assert.IsType<BoundStreamOpenRegistration>(route.StreamOpenRegistration);
+            Assert.Equal("global::App.OpenRequest<>", registration.RequestDefinitionName); Assert.Equal("global::App.OpenFinal<>", registration.FinalDefinitionName);
+            Assert.Equal("global::App.OpenHandler<>", registration.HandlerDefinitionName); Assert.Null(registration.HandlerFactoryDefinitionName);
+            var stage = Assert.Single(registration.Stages); Assert.Equal("global::App.OpenMap<,>", stage.TypeName); Assert.Null(stage.FactoryName);
+        }
         var facade = mixed ? Assert.Single(generated, f => IsCanonicalRoute(f) && f.SourceText.ToString().Contains(" StreamAsync", StringComparison.Ordinal)).SourceText.ToString() :
             Assert.Single(generated, f => f.HintName.StartsWith("Zendiator.Canonical.Stream.Public.", StringComparison.Ordinal)).SourceText.ToString();
-        Assert.Contains("IAsyncEnumerable<" + flow.Final.Name + "> StreamAsync" + generic.TypeParameters, facade); Assert.Contains(generic.TypeConstraints, facade);
+        Assert.Contains("IAsyncEnumerable<" + flow.Final.Name + "> StreamAsync" + (closed ? "(" : generic!.TypeParameters), facade);
+        if (!closed) Assert.Contains(generic!.TypeConstraints, facade);
         Assert.DoesNotContain("IAsyncEnumerable<object>", facade);
         if (mixed) { Assert.Equal(2, generated.Count(IsCanonicalRoute)); Assert.Single(generated, f => f.HintName.StartsWith("Zendiator.Composition.", StringComparison.Ordinal)); }
         bytes.Position = 0; return AssemblyLoadContext.Default.LoadFromStream(bytes);
@@ -63,7 +69,7 @@ public sealed partial class GeneratorTests
     public async Task Stream_public_open_borrowed_map_uses_normal_DI_without_session_factories()
     {
         var source = PublicOpenBorrowedMapSource();
-        CompilePublicOpenBorrowedMap("mixed-borrowed-factory-blocked", WithPublicOpenOwnedSend(source
+        CompilePublicBorrowedMap("mixed-borrowed-factory-blocked", WithPublicOpenOwnedSend(source
             .Replace("Stage.Hook(typeof(OpenMap<,>))", "Stage.Hook(typeof(OpenMap<,>),typeof(OpenMapFactory<,>))")
             .Replace("IOwnedSessionFactory<R,OpenMap<R,T>>", "IAsyncBorrowedSessionFactory<R,OpenMap<R,T>>")
             .Replace("public OpenMap<R,T> Create(R r,CancellationToken c)=>p.Create(\"M\",r!,c,id=>new OpenMap<R,T>(p));",
@@ -79,7 +85,7 @@ public sealed partial class GeneratorTests
         foreach (var mixed in new[] { false, true })
         {
             var shape = mixed ? "mixed-borrowed-public" : "borrowed-public";
-            var assembly = CompilePublicOpenBorrowedMap(shape, mixed ? WithPublicOpenOwnedSend(source, true) : source, mixed)!;
+            var assembly = CompilePublicBorrowedMap(shape, mixed ? WithPublicOpenOwnedSend(source, true) : source, mixed)!;
             var entry = assembly.GetType("App.PublicBorrowedMapEntry")!; var register = entry.GetMethod("Register")!.CreateDelegate<Action<IServiceCollection>>();
             var send = mixed ? assembly.GetType("App.PublicOpenOwnedSend")!.GetMethod("Send")!.CreateDelegate<Func<IServiceProvider, int, int>>() : null;
             var payload = Activator.CreateInstance(assembly.GetType("App.OpenPayload")!)!;
