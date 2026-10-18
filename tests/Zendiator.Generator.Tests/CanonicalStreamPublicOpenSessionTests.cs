@@ -80,6 +80,32 @@ public sealed partial class GeneratorTests
             """;
     }
 
+    private static string WithAsyncPublicOpenOwnedMapFactory(string source, bool pending)
+    {
+        source = source.Replace("IOwnedSessionFactory<R,OpenMap<R,T>>", "IAsyncOwnedSessionFactory<R,OpenMap<R,T>>")
+            .Replace("public OpenMap<R,T> Create(R r,CancellationToken c)=>p.Create(\"M\",r!,c,id=>new OpenMap<R,T>(p,id));", """
+                public static readonly TaskCompletionSource Entered=new(TaskCreationOptions.RunContinuationsAsynchronously);
+                public static global::Zendiator.Generator.Tests.AsyncOnceGate<OpenMap<R,T>>? Gate;
+                public static bool InitiallyCompleted;
+                public ValueTask<OpenMap<R,T>> CreateAsync(R r,CancellationToken c) {
+                    var gate=new global::Zendiator.Generator.Tests.AsyncOnceGate<OpenMap<R,T>>(p.Create("M",r!,c,id=>new OpenMap<R,T>(p,id)));
+                    Gate=gate;
+                    __COMPLETE__
+                    InitiallyCompleted=gate.Task.IsCompleted;
+                    Entered.TrySetResult();
+                    return gate.Task;
+                }
+                """.Replace("__COMPLETE__", pending ? "" : "gate.Complete();"));
+        return source + """
+            public static class PublicOpenOwnedMapFactoryControl {
+                public static Task Entered=>OpenMapFactory<OpenRequest<OpenPayload>,OpenPayload>.Entered.Task;
+                public static int Consumptions=>OpenMapFactory<OpenRequest<OpenPayload>,OpenPayload>.Gate!.Consumptions;
+                public static bool InitiallyCompleted=>OpenMapFactory<OpenRequest<OpenPayload>,OpenPayload>.InitiallyCompleted;
+                public static void Release()=>OpenMapFactory<OpenRequest<OpenPayload>,OpenPayload>.Gate!.Complete();
+            }
+            """;
+    }
+
     private static Assembly? CompilePublicOpenOwned(string shape, params string[] sources)
     {
         var mixed = shape.StartsWith("mixed-", StringComparison.Ordinal); var contract = mixed ? shape.Substring(6) : shape;
@@ -124,7 +150,7 @@ public sealed partial class GeneratorTests
             }
             return null;
         }
-        if (mixed && contract is ("async-map-acquire-blocked" or "borrowed-map-blocked"))
+        if (mixed && contract is ("async-borrowed-map-factory-blocked" or "borrowed-map-blocked"))
         {
             Assert.Equal(2, diagnostics.Length);
             Assert.All(diagnostics, d => { Assert.Equal("ZEN0037", d.Id); Assert.True(d.Location.IsInSource); });
@@ -184,8 +210,8 @@ public sealed partial class GeneratorTests
             CompilePublicOpenOwned("mixed-" + (shape == "factory-undetermined" ? "undetermined-factory" : shape),
                 WithPublicOpenOwnedSend(TypedIntegrationSource(shape)));
         var source = TypedIntegrationSource("open-session");
-        CompilePublicOpenOwned("mixed-async-map-acquire-blocked", WithPublicOpenOwnedSend(source
-            .Replace("IOwnedSessionFactory<R,OpenMap<R,T>>", "IAsyncOwnedSessionFactory<R,OpenMap<R,T>>")
+        CompilePublicOpenOwned("mixed-async-borrowed-map-factory-blocked", WithPublicOpenOwnedSend(source
+            .Replace("IOwnedSessionFactory<R,OpenMap<R,T>>", "IAsyncBorrowedSessionFactory<R,OpenMap<R,T>>")
             .Replace("public OpenMap<R,T> Create(R r,CancellationToken c)=>p.Create(\"M\",r!,c,id=>new OpenMap<R,T>(p,id));",
                 "public ValueTask<OpenMap<R,T>> CreateAsync(R r,CancellationToken c)=>new(p.Create(\"M\",r!,c,id=>new OpenMap<R,T>(p,id)));")));
         CompilePublicOpenOwned("mixed-borrowed-map-blocked", WithPublicOpenOwnedSend(source
@@ -207,7 +233,14 @@ public sealed partial class GeneratorTests
         await RunPublicOpenOwned(true, asyncMap: true, asyncHandler: true);
     }
 
-    private static async Task RunPublicOpenOwned(bool mixed, bool asyncMap = false, bool asyncHandler = false)
+    [Fact]
+    public async Task Stream_public_open_owned_async_map_factory_preserves_transfer_order_and_single_consumption()
+    {
+        await RunPublicOpenOwned(false, asyncMapFactory: true);
+        await RunPublicOpenOwned(true, asyncMap: true, asyncHandler: true, asyncMapFactory: true);
+    }
+
+    private static async Task RunPublicOpenOwned(bool mixed, bool asyncMap = false, bool asyncHandler = false, bool asyncMapFactory = false)
     {
         var source = TypedIntegrationSource("open-session") + """
             public static class PublicOpenOwnedEntry {
@@ -226,8 +259,9 @@ public sealed partial class GeneratorTests
             """;
         if (asyncMap) source = WithAsyncPublicOpenOwnedMap(source, mixed);
         if (asyncHandler) source = WithAsyncPublicOpenOwnedHandler(source, mixed);
+        if (asyncMapFactory) source = WithAsyncPublicOpenOwnedMapFactory(source, mixed);
         if (mixed) source = WithPublicOpenOwnedSend(source, true);
-        var shape = (mixed ? "mixed-" : "") + (asyncHandler ? "async-handler-public" : asyncMap ? "async-public" : "public");
+        var shape = (mixed ? "mixed-" : "") + (asyncMapFactory ? "async-map-factory-public" : asyncHandler ? "async-handler-public" : asyncMap ? "async-public" : "public");
         var assembly = CompilePublicOpenOwned(shape, source)!; var entry = assembly.GetType("App.PublicOpenOwnedEntry")!;
         var register = entry.GetMethod("Register")!.CreateDelegate<Action<IServiceCollection>>();
         var run = entry.GetMethod("Run")!.CreateDelegate<Func<IServiceProvider, object, Task<long[]>>>();
@@ -253,6 +287,24 @@ public sealed partial class GeneratorTests
         Assert.Empty(probe.Events);
         var operation = run(scope.ServiceProvider, request);
         var initiallyCompleted = operation.IsCompleted; var callbackInitiallyCompleted = false; var mapConsumptions = 0;
+        var mapFactoryInitiallyCompleted = false; var mapFactoryConsumptions = 0;
+        Type? mapFactoryControl = null;
+        if (asyncMapFactory)
+        {
+            mapFactoryControl = assembly.GetType("App.PublicOpenOwnedMapFactoryControl")!;
+            await ((Task)mapFactoryControl.GetProperty("Entered")!.GetValue(null)!).WaitAsync(TimeSpan.FromSeconds(5));
+            mapFactoryInitiallyCompleted = (bool)mapFactoryControl.GetProperty("InitiallyCompleted")!.GetValue(null)!;
+            Assert.Equal(!mixed, mapFactoryInitiallyCompleted);
+            if (mixed)
+            {
+                Assert.False(operation.IsCompleted);
+                Assert.Equal(0, (int)mapFactoryControl.GetProperty("Consumptions")!.GetValue(null)!);
+                Assert.Equal(0, probe.Starts); Assert.Equal(0, probe.Moves); Assert.Equal(0, probe.Reads);
+                Assert.Single(probe.Created); Assert.Equal("M", probe.Created[0].Role);
+                Assert.Equal(0, probe.SourceDisposals); Assert.Equal(0, probe.SessionDisposals); Assert.Equal(0, probe.FactoryDisposals);
+                mapFactoryControl.GetMethod("Release")!.Invoke(null, null);
+            }
+        }
         var handlerInitiallyCompleted = false; var handlerConsumptions = 0;
         Type? handlerControl = null;
         if (asyncHandler)
@@ -265,6 +317,7 @@ public sealed partial class GeneratorTests
             {
                 Assert.False(operation.IsCompleted);
                 Assert.Equal(0, (int)handlerControl.GetProperty("Consumptions")!.GetValue(null)!);
+                if (asyncMapFactory) Assert.Equal(1, (int)mapFactoryControl!.GetProperty("Consumptions")!.GetValue(null)!);
                 Assert.Equal(0, probe.Starts); Assert.Equal(0, probe.Moves); Assert.Equal(0, probe.Reads);
                 Assert.Equal(2, probe.Created.Count); Assert.Equal(0, probe.SourceDisposals);
                 Assert.Equal(0, probe.SessionDisposals); Assert.Equal(0, probe.FactoryDisposals);
@@ -292,6 +345,7 @@ public sealed partial class GeneratorTests
         var values = await operation.WaitAsync(TimeSpan.FromSeconds(5)); Assert.Equal(new long[] { 7 }, values);
         if (asyncMap) { mapConsumptions = (int)control!.GetProperty("Consumptions")!.GetValue(null)!; Assert.Equal(1, mapConsumptions); }
         if (asyncHandler) { handlerConsumptions = (int)handlerControl!.GetProperty("Consumptions")!.GetValue(null)!; Assert.Equal(1, handlerConsumptions); }
+        if (asyncMapFactory) { mapFactoryConsumptions = (int)mapFactoryControl!.GetProperty("Consumptions")!.GetValue(null)!; Assert.Equal(1, mapFactoryConsumptions); }
         if (send != null) Assert.Equal(10, send(scope.ServiceProvider, 9));
         Assert.Equal(new[] { "M:1", "H:2" }, probe.Created.Select(c => c.Role + ":" + c.Id));
         Assert.Equal(2, probe.Instances.Distinct(ReferenceEqualityComparer.Instance).Count());
@@ -309,6 +363,9 @@ public sealed partial class GeneratorTests
             mixed,
             asyncMap,
             asyncHandler,
+            asyncMapFactory,
+            mapFactoryInitiallyCompleted,
+            mapFactoryConsumptions,
             handlerInitiallyCompleted,
             handlerConsumptions,
             initiallyCompleted,
