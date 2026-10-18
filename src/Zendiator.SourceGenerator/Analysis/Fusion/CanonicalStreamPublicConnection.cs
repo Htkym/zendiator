@@ -127,7 +127,7 @@ internal static class CanonicalStreamPublicConnection
 
     private static bool PlainWrapperShape(CanonicalStreamFallbackModel model)
     {
-        if (model.Generic != null || model.ItemFlow != null || model.HandlerFactory != null || model.Handler.HandlerIsValueType ||
+        if (model.ItemFlow != null || model.HandlerFactory != null || model.Handler.HandlerIsValueType ||
             model.Segments.Count != 2 || model.ConsumerSegment != 1) return false;
         var inner = model.Segments[0]; var outer = model.Segments[1];
         return inner.Id == 0 && inner.Upstream == null && inner.Wrapper == null && inner.WrapperFactory == null && inner.Hooks.Count == 0 &&
