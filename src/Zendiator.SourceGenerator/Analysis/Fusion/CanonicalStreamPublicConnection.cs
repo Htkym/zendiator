@@ -98,8 +98,13 @@ internal static class CanonicalStreamPublicConnection
 
     internal static bool HasMixedRequestShape(BoundPipelineModel route) =>
         route.RequestShape is BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue ||
-        route.Family == BoundDispatchFamily.Stream && route.HasEmptyPipeline && route.PipelineFamily == BoundDispatchFamily.Stream &&
-        route.StreamGeneric != null && route.StreamOpenRegistration is { Stages.Count: 0 };
+        route.Family == BoundDispatchFamily.Stream && route.PipelineFamily == BoundDispatchFamily.Stream &&
+        route.StreamGeneric != null && route.StreamOpenRegistration is { } open &&
+        (route.HasEmptyPipeline && open.Stages.Count == 0 ||
+            route.StreamItemFlow == null && route.Handlers.Count == 1 && route.Handlers[0].Sessions.Count == 0 &&
+            route.Stages.Count is 1 or 2 && open.Stages.Count == route.Stages.Count &&
+            route.Stages.All(s => s.Kind == FusionStageKind.Hook && s.Sessions.Count == 0 && s.StreamEmission is
+            { HookIsValueType: false, Completion: BoundCompletionKind.Synchronous, Phase: BoundCallbackPhase.Filter or BoundCallbackPhase.Map }));
 
     private static bool PlainZeroStageShape(CanonicalStreamFallbackModel model)
     {

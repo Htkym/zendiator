@@ -10,13 +10,13 @@ public sealed partial class GeneratorTests
     [Fact]
     public async Task Mixed_open_zero_Stream_and_closed_SendSync_share_public_registration_without_losing_constraints_or_routes()
     {
-        foreach (var shape in new[] { "general", "constrained", "consumer-constraint", "nonempty-blocked" })
+        foreach (var shape in new[] { "general", "constrained", "consumer-constraint", "three-stage-blocked" })
         {
             var constrained = shape is "constrained" or "consumer-constraint";
             var handlers = "c.Handlers(typeof(GenericItems<>),DispatchFamily.Stream,typeof(GenericHandler<>));" +
                 "c.Handlers<MixedPing>(DispatchFamily.SendSync,typeof(MixedPingHandler));";
             var stream = "c.Pipeline(typeof(GenericItems<>),DispatchFamily.Stream" +
-                (shape == "nonempty-blocked" ? ",Stage.Hook(typeof(GenericFirst<>))" : "") + ");";
+                (shape == "three-stage-blocked" ? ",Stage.Hook(typeof(GenericFirst<>)),Stage.Hook(typeof(GenericMap<>)),Stage.Hook(typeof(GenericLast<>))" : "") + ");";
             var send = "c.Pipeline<MixedPing>(DispatchFamily.SendSync);";
             var types = StreamGenericTypes.Replace("public System.Collections.Generic.IAsyncEnumerable<T> HandleAsync",
                 "public static CancellationToken Token; public static object? LastRequest; public System.Collections.Generic.IAsyncEnumerable<T> HandleAsync")
@@ -37,7 +37,7 @@ public sealed partial class GeneratorTests
                         .StreamAsync(new GenericItems<NoDefault>(new NoDefault(1)));
                 }
                 """;
-            else if (shape != "nonempty-blocked") source += OpenZeroConsumer.Replace("__WHERE__", constrained ? "where T:class,new()" : "")
+            else if (shape != "three-stage-blocked") source += OpenZeroConsumer.Replace("__WHERE__", constrained ? "where T:class,new()" : "")
                 .Replace("__CALLS__", "Check(mediator.Send(new MixedPing(41))==42,\"mixed Send before Stream\");" +
                     (constrained ? "results.Add(await Read(mediator,new GenericItems<OpenValue>(new OpenValue()),p));" :
                         "results.Add(await Read(mediator,new GenericItems<int>(7),p));results.Add(await Read(mediator,new GenericItems<string>(\"item\"),p));") +
@@ -66,7 +66,7 @@ public sealed partial class GeneratorTests
                     sources = generated.Select(f => f.HintName)
                 }));
             }
-            if (shape == "nonempty-blocked")
+            if (shape == "three-stage-blocked")
             {
                 Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
                 Assert.Equal(2, diagnostics.Length);

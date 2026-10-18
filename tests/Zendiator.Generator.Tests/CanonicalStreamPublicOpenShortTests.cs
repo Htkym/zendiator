@@ -11,73 +11,109 @@ public sealed partial class GeneratorTests
     public async Task Stream_open_short_sync_public_calls_preserve_hook_order_lazy_resolution_and_hook_constraints()
     {
         foreach (var shape in new[] { "filter", "map", "filter-map", "map-filter", "constrained", "consumer-constraint" })
+            await CompileOpenShortInput(shape, false);
+    }
+
+    [Fact]
+    public async Task Mixed_open_short_Stream_and_closed_SendSync_preserve_registration_order_constraints_and_both_routes()
+    {
+        foreach (var shape in new[] { "filter-map", "map-filter", "constrained", "consumer-constraint" })
+            await CompileOpenShortInput(shape, true);
+    }
+
+    private static async Task CompileOpenShortInput(string shape, bool mixed)
+    {
+        var constrained = shape is "constrained" or "consumer-constraint";
+        var stages = shape == "filter" ? new[] { "GenericFirst" } : shape is "map" or "constrained" or "consumer-constraint" ?
+            new[] { "GenericMap" } : shape == "filter-map" ? new[] { "GenericFirst", "GenericMap" } : new[] { "GenericMap", "GenericFirst" };
+        var types = StreamGenericTypes.Replace("(T Value) : IStreamRequest<T>;",
+            "(T Value,Func<T,T> Project,bool Allow) : IStreamRequest<T>;")
+            .Replace("return true;", "return r.Allow;").Replace("return item;", "return r.Project(item);");
+        if (constrained) types = types.Replace("IStreamItemMap<GenericItems<T>,T>, IDisposable {",
+            "IStreamItemMap<GenericItems<T>,T>, IDisposable where T:class,new() {");
+        var body = "c.Handlers(typeof(GenericItems<>),DispatchFamily.Stream,typeof(GenericHandler<>));" +
+            "c.Pipeline(typeof(GenericItems<>),DispatchFamily.Stream," +
+            string.Join(",", stages.Select(s => "Stage.Hook(typeof(" + s + "<>))")) + ");";
+        if (mixed)
         {
-            var constrained = shape is "constrained" or "consumer-constraint";
-            var stages = shape == "filter" ? new[] { "GenericFirst" } : shape is "map" or "constrained" or "consumer-constraint" ?
-                new[] { "GenericMap" } : shape == "filter-map" ? new[] { "GenericFirst", "GenericMap" } : new[] { "GenericMap", "GenericFirst" };
-            var types = StreamGenericTypes.Replace("(T Value) : IStreamRequest<T>;",
-                "(T Value,Func<T,T> Project,bool Allow) : IStreamRequest<T>;")
-                .Replace("return true;", "return r.Allow;").Replace("return item;", "return r.Project(item);");
-            if (constrained) types = types.Replace("IStreamItemMap<GenericItems<T>,T>, IDisposable {",
-                "IStreamItemMap<GenericItems<T>,T>, IDisposable where T:class,new() {");
-            var body = "c.Handlers(typeof(GenericItems<>),DispatchFamily.Stream,typeof(GenericHandler<>));" +
-                "c.Pipeline(typeof(GenericItems<>),DispatchFamily.Stream," +
-                string.Join(",", stages.Select(s => "Stage.Hook(typeof(" + s + "<>))")) + ");";
-            var source = "using System.Linq;using System.Collections.Generic;using Microsoft.Extensions.DependencyInjection;" + ListFixture(body) + types;
-            if (shape == "consumer-constraint") source += """
-                public sealed class NoDefault { public NoDefault(int value){} }
-                public static class InvalidShortConsumer {
-                    public static object Call(IServiceProvider p)=>p.GetRequiredService<global::App.Generated.Reads.IZendiator>()
-                        .StreamAsync(new GenericItems<NoDefault>(new NoDefault(1),x=>x,true));
-                }
-                """;
-            else source += OpenShortConsumer.Replace("__WHERE__", constrained ? "where T:class,new()" : "")
-                .Replace("__CALLS__", constrained ? "results.Add(await Read(new OpenValue(),x=>x,true));" :
-                    "results.Add(await Read(7,x=>x+10,true));results.Add(await Read(\"item\",x=>x+\"!\",true));" +
-                    (stages.Contains("GenericFirst") ? "results.Add(await Read(7,x=>x+10,false));" : ""))
-                .Replace("__HAS_FILTER__", stages.Contains("GenericFirst") ? "true" : "false")
-                .Replace("__HAS_MAP__", stages.Contains("GenericMap") ? "true" : "false")
-                .Replace("__FILTER_FIRST__", stages[0] == "GenericFirst" ? "true" : "false")
-                .Replace("__ROLES__", string.Join(",", stages.Select(s => s == "GenericFirst" ? "\"F1\"" : "\"M\"")))
-                .Replace("__TYPES__", string.Join(",", stages.Select(s => "typeof(" + s + "<>)")));
-            var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "OpenShort_" + Guid.NewGuid().ToString("N")),
-                out var output, out var diagnostics);
-            var generated = driver.GetRunResult().Results.Single().GeneratedSources;
-            using var bytes = new MemoryStream(); var emitted = output.Emit(bytes);
-            var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_STREAM_PUBLIC_EVIDENCE_DIR");
-            var folder = evidence == null ? null : Path.Combine(evidence, "open-short", shape);
-            if (folder != null)
-            {
-                Directory.CreateDirectory(folder);
-                File.WriteAllText(Path.Combine(folder, "input.cs"), source); File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
-                foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
-                File.WriteAllText(Path.Combine(folder, "compile.json"), JsonSerializer.Serialize(new
-                {
-                    shape,
-                    emitted.Success,
-                    diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), inSource = d.Location.IsInSource }),
-                    compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage(), inSource = d.Location.IsInSource }),
-                    sources = generated.Select(f => f.HintName)
-                }));
-            }
-            Assert.Empty(diagnostics);
-            var facade = Assert.Single(generated, f => f.HintName.StartsWith("Zendiator.Canonical.Stream.Public.", StringComparison.Ordinal)).SourceText.ToString();
-            Assert.Contains("__ZendiatorStreamCanonical_", facade);
-            Assert.Contains("typeof(global::App.GenericHandler<>)", facade);
-            foreach (var stage in stages) Assert.Contains("typeof(global::App." + stage + "<>)", facade);
-            if (constrained) Assert.Contains(" : class, new()", facade);
-            if (shape == "consumer-constraint")
-            {
-                Assert.False(emitted.Success);
-                Assert.Contains(emitted.Diagnostics, d => d.Id == "CS0310" && d.Severity == DiagnosticSeverity.Error && d.Location.IsInSource);
-                continue;
-            }
-            Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-            Assert.Empty(emitted.Diagnostics.Where(d => d.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error));
-            bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
-            var runtime = await (Task<string>)assembly.GetType("App.OpenShortConsumer")!.GetMethod("Run")!.Invoke(null, null)!;
-            if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime);
+            var send = "c.Handlers<OpenShortPing>(DispatchFamily.SendSync,typeof(OpenShortHandler));c.Pipeline<OpenShortPing>(DispatchFamily.SendSync);";
+            body = shape == "map-filter" ? send + body : body + send;
         }
+        var source = "using System.Linq;using System.Collections.Generic;using Microsoft.Extensions.DependencyInjection;" + ListFixture(body) + types;
+        if (mixed) source += """
+            public sealed record OpenShortPing(int Value):ISyncRequest<int>;
+            [ZendiatorHandler] public sealed class OpenShortHandler:ISyncRequestHandler<OpenShortPing,int> {
+                public int Handle(OpenShortPing r,CancellationToken c)=>r.Value+1;
+            }
+            """;
+        if (shape == "consumer-constraint") source += """
+            public sealed class NoDefault { public NoDefault(int value){} }
+            public static class InvalidShortConsumer {
+                public static object Call(IServiceProvider p)=>p.GetRequiredService<global::App.Generated.Reads.IZendiator>()
+                    .StreamAsync(new GenericItems<NoDefault>(new NoDefault(1),x=>x,true));
+            }
+            """;
+        else source += OpenShortConsumer.Replace("__WHERE__", constrained ? "where T:class,new()" : "")
+            .Replace("__CALLS__", constrained ? "results.Add(await Read(new OpenValue(),x=>x,true));" :
+                "results.Add(await Read(7,x=>x+10,true));results.Add(await Read(\"item\",x=>x+\"!\",true));" +
+                (stages.Contains("GenericFirst") ? "results.Add(await Read(7,x=>x+10,false));" : ""))
+            .Replace("__HAS_FILTER__", stages.Contains("GenericFirst") ? "true" : "false")
+            .Replace("__HAS_MAP__", stages.Contains("GenericMap") ? "true" : "false")
+            .Replace("__FILTER_FIRST__", stages[0] == "GenericFirst" ? "true" : "false")
+            .Replace("__ROLES__", string.Join(",", stages.Select(s => s == "GenericFirst" ? "\"F1\"" : "\"M\"")))
+            .Replace("__TYPES__", string.Join(",", stages.Select(s => "typeof(" + s + "<>)")));
+        if (mixed && shape != "consumer-constraint") source = source
+            .Replace("var request=new GenericItems<T>", "Check(mediator.Send(new OpenShortPing(41))==42,\"mixed Send before Stream\");var request=new GenericItems<T>")
+            .Replace("await scope.DisposeAsync();", "Check(mediator.Send(new OpenShortPing(9))==10,\"mixed Send after Stream\");await scope.DisposeAsync();");
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, (mixed ? "MixedOpenShort_" : "OpenShort_") + Guid.NewGuid().ToString("N")),
+            out var output, out var diagnostics);
+        var generated = driver.GetRunResult().Results.Single().GeneratedSources;
+        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes);
+        var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_STREAM_PUBLIC_EVIDENCE_DIR");
+        var folder = evidence == null ? null : Path.Combine(evidence, mixed ? "mixed-open-short" : "open-short", shape);
+        if (folder != null)
+        {
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(Path.Combine(folder, "input.cs"), source); File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+            foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
+            File.WriteAllText(Path.Combine(folder, "compile.json"), JsonSerializer.Serialize(new
+            {
+                shape,
+                emitted.Success,
+                diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), inSource = d.Location.IsInSource }),
+                compiler = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage(), inSource = d.Location.IsInSource }),
+                sources = generated.Select(f => f.HintName)
+            }));
+        }
+        Assert.Empty(diagnostics);
+        var facade = Assert.Single(generated, f => mixed ? IsCanonicalRoute(f) && f.SourceText.ToString().Contains("global::App.GenericItems<", StringComparison.Ordinal) :
+            f.HintName.StartsWith("Zendiator.Canonical.Stream.Public.", StringComparison.Ordinal)).SourceText.ToString();
+        var registration = mixed ? CanonicalCompositionSource(generated) : facade;
+        if (mixed)
+        {
+            Assert.Equal(2, generated.Count(IsCanonicalRoute));
+            Assert.Contains("Send(", CanonicalRouteSource(generated, "App.OpenShortPing"));
+            Assert.Contains("expected.Handlers<global::App.OpenShortPing>", registration);
+            var sendOrder = registration.IndexOf("expected.Pipeline<global::App.OpenShortPing>", StringComparison.Ordinal);
+            var streamOrder = registration.IndexOf("expected.Pipeline(typeof(global::App.GenericItems<>)", StringComparison.Ordinal);
+            Assert.True(sendOrder >= 0 && streamOrder >= 0);
+            Assert.Equal(shape == "map-filter", sendOrder < streamOrder);
+        }
+        Assert.Contains("__ZendiatorStreamCanonical_", facade);
+        Assert.Contains("typeof(global::App.GenericHandler<>)", registration);
+        foreach (var stage in stages) Assert.Contains("typeof(global::App." + stage + "<>)", registration);
+        if (constrained) Assert.Contains(" : class, new()", facade);
+        if (shape == "consumer-constraint")
+        {
+            Assert.False(emitted.Success);
+            Assert.Contains(emitted.Diagnostics, d => d.Id == "CS0310" && d.Severity == DiagnosticSeverity.Error && d.Location.IsInSource);
+            return;
+        }
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        Assert.Empty(emitted.Diagnostics.Where(d => d.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error));
+        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var runtime = await (Task<string>)assembly.GetType("App.OpenShortConsumer")!.GetMethod("Run")!.Invoke(null, null)!;
+        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime);
     }
 
     private const string OpenShortConsumer = """
