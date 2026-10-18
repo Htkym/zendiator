@@ -39,7 +39,7 @@ internal static class CanonicalStreamPublicConnection
             var canonical = connection?.Kind == CanonicalStreamConnectionKind.CanonicalCandidate ? connection.Canonical : null;
             var itemChange = canonical != null && (ClosedItemChangeShape(canonical) || ClosedTypedWrapperSessionShape(canonical) || OpenOwnedMapShape(canonical));
             var zeroStage = canonical != null && route.HasEmptyPipeline && route.PipelineFamily == BoundDispatchFamily.Stream && PlainZeroStageShape(canonical);
-            if (prototype == null && (canonical == null || !zeroStage && !PlainSynchronousItemShape(canonical) && !AsyncItemShape(canonical) && !PlainOwnedSessionShape(canonical) && !WrapperOwnedSessionShape(canonical) && !itemChange)) continue;
+            if (prototype == null && (canonical == null || !zeroStage && !PlainSynchronousItemShape(canonical) && !PlainWrapperShape(canonical) && !AsyncItemShape(canonical) && !PlainOwnedSessionShape(canonical) && !WrapperOwnedSessionShape(canonical) && !itemChange)) continue;
             var h = prototype?.Handler ?? canonical!.Handler;
             var generic = prototype?.Generic ?? canonical?.Generic;
             var open = generic == null ? null : route.StreamOpenRegistration;
@@ -114,6 +114,16 @@ internal static class CanonicalStreamPublicConnection
         return segment.Id == 0 && segment.Wrapper == null && segment.Upstream == null && segment.WrapperFactory == null &&
             segment.Hooks.Count is 1 or 2 && segment.Hooks.All(h => h.Factory == null && !h.HookIsValueType &&
                 h.Completion == BoundCompletionKind.Synchronous && h.Phase is BoundCallbackPhase.Filter or BoundCallbackPhase.Map);
+    }
+
+    private static bool PlainWrapperShape(CanonicalStreamFallbackModel model)
+    {
+        if (model.Generic != null || model.ItemFlow != null || model.HandlerFactory != null || model.Handler.HandlerIsValueType ||
+            model.Segments.Count != 2 || model.ConsumerSegment != 1) return false;
+        var inner = model.Segments[0]; var outer = model.Segments[1];
+        return inner.Id == 0 && inner.Upstream == null && inner.Wrapper == null && inner.WrapperFactory == null && inner.Hooks.Count == 0 &&
+            outer.Id == 1 && outer.Upstream == 0 && outer.Wrapper is { WrapperIsValueType: false, Completion: BoundCompletionKind.Enumerable } &&
+            outer.WrapperFactory == null && outer.Hooks.Count == 0;
     }
 
     private static bool AsyncItemShape(CanonicalStreamFallbackModel model)

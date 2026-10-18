@@ -36,9 +36,10 @@ public sealed partial class GeneratorTests
     [InlineData("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<DoubleItem>(),Stage.Hook<Small>()")]
     [InlineData("Stage.Wrapper<StreamOpaque>(),Stage.Hook<DoubleItem>(),Stage.Wrapper<SecondStreamOpaque>(),Stage.Hook<Small>()")]
     [InlineData("Stage.Wrapper<StreamOpaque>(),Stage.Wrapper<SecondStreamOpaque>()")]
-    public void Stream_wrapper_real_frontend_preserves_source_to_consumer_segments_and_blocks_runtime_emission(string pipeline)
+    public void Stream_wrapper_real_frontend_preserves_source_to_consumer_segments_and_public_acceptance(string pipeline)
     {
-        var driver = BindLists(WrapperGraphFixture(pipeline), "ZEN0037"); var graph = Graph(driver);
+        var accepted = pipeline == "Stage.Wrapper<StreamOpaque>()";
+        var driver = BindLists(WrapperGraphFixture(pipeline), accepted ? [] : ["ZEN0037"]); var graph = Graph(driver);
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         Assert.Null(graph.StreamSchedule); Assert.Null(graph.Schedule);
         var s = Assert.IsType<CanonicalStreamWrapperSchedule>(graph.StreamWrapperSchedule);
@@ -68,7 +69,7 @@ public sealed partial class GeneratorTests
             Assert.Equal("wrapper-call-or-enumeration", w.OpenAvailability);
             Assert.All(w.Awaits, a => { Assert.True(a.ConsumeOnce); Assert.True(a.ConfigureAwaitFalse); Assert.True(a.CompleteBeforeOwnerExit); });
         });
-        Assert.Contains("runtime generation and equivalence are pending", Assert.Single(driver.GetRunResult().Diagnostics).GetMessage());
+        if (!accepted) Assert.Contains("runtime generation and equivalence are pending", Assert.Single(driver.GetRunResult().Diagnostics).GetMessage());
     }
 
     [Fact]
@@ -174,7 +175,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Wrapper_owned_service_and_unknown_completion_still_block_canonical_graph_creation()
     {
-        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Wrapper<StreamOpaque>()"), "ZEN0037"));
+        var graph = Graph(BindLists(WrapperGraphFixture("Stage.Wrapper<StreamOpaque>()")));
         var wrapper = graph.Contract.Stages[0];
         var owned = CanonicalExecutionGraphNormalizer.Create(graph.Contract with { Stages = new(new[] { wrapper with { ServiceOwnership = FusionOwnership.OwnedSession } }) });
         Assert.False(owned.IsValid); Assert.Null(owned.StreamWrapperSchedule);
