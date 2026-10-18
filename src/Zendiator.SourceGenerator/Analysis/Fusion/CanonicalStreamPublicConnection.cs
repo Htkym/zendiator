@@ -113,7 +113,14 @@ internal static class CanonicalStreamPublicConnection
                 route.Stages.Count == 3 && route.Stages.All(s => s.Kind == FusionStageKind.Hook && s.Sessions.Count == 0 &&
                     s.StreamEmission is { HookIsValueType: false }) &&
                 route.Stages.Select(s => s.StreamEmission!.Phase).SequenceEqual(new[] { BoundCallbackPhase.Filter, BoundCallbackPhase.Map, BoundCallbackPhase.Filter }) &&
-                route.Stages.Select(s => s.StreamEmission!.Completion).SequenceEqual(new[] { BoundCompletionKind.ValueTask, BoundCompletionKind.ValueTask, BoundCompletionKind.Synchronous })));
+                route.Stages.Select(s => s.StreamEmission!.Completion).SequenceEqual(new[] { BoundCompletionKind.ValueTask, BoundCompletionKind.ValueTask, BoundCompletionKind.Synchronous })) ||
+            route.StreamItemFlow is { } flow && flow.Stages.Count == 1 && flow.Source.Identity != flow.Final.Identity &&
+            route.Handlers.Count == 1 && route.Handlers[0].Sessions.Count == 1 &&
+            route.Handlers[0].Sessions[0].Acquire.Completion == BoundCompletionKind.Synchronous &&
+            open.Stages.Count == 1 && route.Stages.Count == 1 && route.Stages[0].Kind == FusionStageKind.Hook &&
+            route.Stages[0].Sessions.Count == 1 && route.Stages[0].Sessions[0].Acquire.Completion == BoundCompletionKind.Synchronous &&
+            route.Stages[0].StreamEmission is
+            { HookIsValueType: false, Phase: BoundCallbackPhase.Map, Completion: BoundCompletionKind.Synchronous });
 
     private static bool PlainZeroStageShape(CanonicalStreamFallbackModel model)
     {
