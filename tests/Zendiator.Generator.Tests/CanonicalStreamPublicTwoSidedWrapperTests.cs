@@ -11,16 +11,19 @@ public sealed partial class GeneratorTests
     public Task Stream_two_sided_public_open_normal_registration() => CompileTwoSidedWrapperInput("open");
 
     [Fact]
+    public Task Stream_two_sided_open_generic_mixed_public_registration() => CompileTwoSidedWrapperInput("open-mixed");
+
+    [Fact]
     public async Task Stream_two_sided_closed_mixed_and_rejection_boundaries()
     {
-        foreach (var shape in new[] { "closed-mixed", "same-side-blocked", "open-mixed-blocked" })
+        foreach (var shape in new[] { "closed-mixed", "same-side-blocked" })
             await CompileTwoSidedWrapperInput(shape);
     }
 
     private static async Task CompileTwoSidedWrapperInput(string shape)
     {
         var closed = shape == "closed-mixed";
-        var mixed = closed || shape == "open-mixed-blocked";
+        var mixed = closed || shape == "open-mixed";
         var types = StreamGenericTypes.Replace("public System.Collections.Generic.IAsyncEnumerable<T> HandleAsync",
             "public static CancellationToken Token; public static object? LastRequest; public System.Collections.Generic.IAsyncEnumerable<T> HandleAsync")
             .Replace("{ p.Call(this);return p.Source(r.Value); }", "{ Token=c;LastRequest=r;p.Call(this);return p.Source(r.Value); }");
@@ -40,7 +43,7 @@ public sealed partial class GeneratorTests
             public sealed record TwoSidedPing(int Value):ISyncRequest<int>;
             [ZendiatorHandler]public sealed class TwoSidedPingHandler:ISyncRequestHandler<TwoSidedPing,int>{public int Handle(TwoSidedPing r,CancellationToken c)=>r.Value+1;}
             """;
-        if (shape is "open" or "closed-mixed")
+        if (shape is "open" or "closed-mixed" or "open-mixed")
         {
             var consumer = OpenZeroConsumer.Replace("__WHERE__", "")
                 .Replace("p.Called.Count==calls+i", "p.Called.Count==calls+4*i")
@@ -52,10 +55,11 @@ public sealed partial class GeneratorTests
             {
                 foreach (var name in new[] { "GenericItems", "GenericHandler", "GenericFirst", "GenericLast", "GenericWrapper" }) consumer = consumer.Replace(name + "<T>", name).Replace(name + "<>", name).Replace(name + "<int>", name);
                 consumer = System.Text.RegularExpressions.Regex.Replace(consumer.Replace("Read<T>(", "Read("), @"\bT\b", "int")
-                    .Replace("StreamAsync<int>(", "StreamAsync(")
-                    .Replace("var results=new List<object>();", "Check(mediator.Send(new TwoSidedPing(41))==42,\"closed mixed Send before Stream\");var results=new List<object>();")
-                    .Replace("var dangling=mediator.StreamAsync", "Check(mediator.Send(new TwoSidedPing(9))==10,\"closed mixed Send after Stream\");var dangling=mediator.StreamAsync");
+                    .Replace("StreamAsync<int>(", "StreamAsync(");
             }
+            if (mixed) consumer = consumer
+                .Replace("var results=new List<object>();", "Check(mediator.Send(new TwoSidedPing(41))==42,\"mixed Send before Stream\");var results=new List<object>();")
+                .Replace("var dangling=mediator.StreamAsync", "Check(mediator.Send(new TwoSidedPing(9))==10,\"mixed Send after Stream\");var dangling=mediator.StreamAsync");
             source += consumer;
         }
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "TwoSidedWrapper_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
@@ -83,10 +87,13 @@ public sealed partial class GeneratorTests
             AssertNoCanonicalOutput(generated); Assert.DoesNotContain(generated, f => f.HintName.EndsWith(".Interceptors.g.cs", StringComparison.Ordinal)); return;
         }
         Assert.Empty(diagnostics); Assert.Empty(emitted.Diagnostics.Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        if (closed)
+        if (mixed)
         {
             Assert.Equal(2, generated.Count(IsCanonicalRoute)); Assert.Contains("Send(", CanonicalRouteSource(generated, "App.TwoSidedPing"));
-            var shared = CanonicalCompositionSource(generated); Assert.Contains("expected.Handlers<global::App.GenericItems>", shared); Assert.Contains("expected.Handlers<global::App.TwoSidedPing>", shared);
+            var shared = CanonicalCompositionSource(generated);
+            Assert.Contains(closed ? "expected.Handlers<global::App.GenericItems>" : "expected.Handlers(typeof(global::App.GenericItems<>)", shared);
+            Assert.Contains(closed ? "expected.Pipeline<global::App.GenericItems>" : "expected.Pipeline(typeof(global::App.GenericItems<>)", shared);
+            Assert.Contains("expected.Handlers<global::App.TwoSidedPing>", shared);
         }
         else Assert.Single(generated, f => f.HintName.StartsWith("Zendiator.Canonical.Stream.Public.", StringComparison.Ordinal));
         bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
