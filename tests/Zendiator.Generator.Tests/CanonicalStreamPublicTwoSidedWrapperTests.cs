@@ -14,6 +14,13 @@ public sealed partial class GeneratorTests
     public Task Stream_two_sided_open_generic_mixed_public_registration() => CompileTwoSidedWrapperInput("open-mixed");
 
     [Fact]
+    public async Task Stream_open_generic_mixed_same_side_pair_public_registration()
+    {
+        foreach (var placement in new[] { "before", "after" })
+            await CompileTwoSidedWrapperInput("open-mixed", placement);
+    }
+
+    [Fact]
     public async Task Stream_same_side_pair_public_registration_and_three_hook_boundary()
     {
         foreach (var (shape, placement) in new[] { ("open", "before"), ("open", "after"), ("closed-mixed", "before"), ("same-side-three-hooks-blocked", "after") })

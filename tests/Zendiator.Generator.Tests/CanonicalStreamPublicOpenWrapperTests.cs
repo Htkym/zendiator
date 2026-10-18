@@ -22,14 +22,14 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
-    public Task Mixed_open_wrapper_with_two_hooks_keeps_composition_wide_rejection() => CompileOpenWrapperInput("two-hook-wrapper-blocked", true);
+    public Task Mixed_open_wrapper_with_three_hooks_keeps_composition_wide_rejection() => CompileOpenWrapperInput("three-hook-wrapper-blocked", true);
 
     private static async Task CompileOpenWrapperInput(string shape, bool mixed)
     {
         var constrained = shape is "constrained" or "consumer-constraint";
         var body = "c.Handlers(typeof(GenericItems<>),DispatchFamily.Stream,typeof(GenericHandler<>));" +
             "c.Pipeline(typeof(GenericItems<>),DispatchFamily.Stream,Stage.Wrapper(typeof(GenericWrapper<>))" +
-            (shape == "two-hook-wrapper-blocked" ? ",Stage.Hook(typeof(GenericFirst<>)),Stage.Hook(typeof(GenericLast<>))" : "") + ");";
+            (shape == "three-hook-wrapper-blocked" ? ",Stage.Hook(typeof(GenericFirst<>)),Stage.Hook(typeof(GenericMap<>)),Stage.Hook(typeof(GenericLast<>))" : "") + ");";
         if (mixed)
         {
             var send = "c.Handlers<WrapperPing>(DispatchFamily.SendSync,typeof(WrapperPingHandler));c.Pipeline<WrapperPing>(DispatchFamily.SendSync);";
@@ -64,10 +64,10 @@ public sealed partial class GeneratorTests
                     .StreamAsync(new GenericItems<NoDefault>(new NoDefault(1)));
             }
             """;
-        else if (shape != "two-hook-wrapper-blocked") source += OpenWrapperConsumer.Replace("__WHERE__", constrained ? "where T:class,new()" : "")
+        else if (shape != "three-hook-wrapper-blocked") source += OpenWrapperConsumer.Replace("__WHERE__", constrained ? "where T:class,new()" : "")
             .Replace("__CALLS__", constrained ? "results.Add(await Read(new OpenValue(),mode));" :
                 "results.Add(await Read(7,mode));results.Add(await Read(\"item\",mode));");
-        if (mixed && shape is not ("consumer-constraint" or "two-hook-wrapper-blocked")) source = source
+        if (mixed && shape is not ("consumer-constraint" or "three-hook-wrapper-blocked")) source = source
             .Replace("var request=new GenericItems<T>", "Check(mediator.Send(new WrapperPing(41))==42,\"mixed Send before Stream\");var request=new GenericItems<T>")
             .Replace("await scope.DisposeAsync();", "Check(mediator.Send(new WrapperPing(9))==10,\"mixed Send after Stream\");await scope.DisposeAsync();");
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, (mixed ? "MixedOpenWrapper_" : "OpenWrapper_") + Guid.NewGuid().ToString("N")),
@@ -89,7 +89,7 @@ public sealed partial class GeneratorTests
                 sources = generated.Select(f => f.HintName)
             }));
         }
-        if (shape == "two-hook-wrapper-blocked")
+        if (shape == "three-hook-wrapper-blocked")
         {
             Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
             Assert.Equal(2, diagnostics.Length); Assert.All(diagnostics, d => { Assert.Equal("ZEN0037", d.Id); Assert.True(d.Location.IsInSource); });

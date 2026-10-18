@@ -103,7 +103,7 @@ internal static class CanonicalStreamPublicConnection
         (route.HasEmptyPipeline && open.Stages.Count == 0 ||
             route.StreamItemFlow == null && route.Handlers.Count == 1 && route.Handlers[0].Sessions.Count == 0 &&
             open.Stages.Count == route.Stages.Count && (route.Stages.Count is 1 or 2 ||
-                route.Stages.Count == 3 && route.Stages[1].Kind == FusionStageKind.Wrapper) &&
+                route.Stages.Count == 3 && route.Stages.Any(s => s.Kind == FusionStageKind.Wrapper)) &&
             route.Stages.Count(s => s.Kind == FusionStageKind.Wrapper) <= 1 &&
             route.Stages.All(s => s.Sessions.Count == 0 &&
                 (s.Kind == FusionStageKind.Hook && s.StreamEmission is

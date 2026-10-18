@@ -26,7 +26,7 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
-    public Task Open_generic_mixed_single_hook_wrapper_with_two_hooks_rejects_composition() => CompileWrapperHookInput("mixed-blocked");
+    public Task Open_generic_mixed_wrapper_with_three_hooks_rejects_composition() => CompileWrapperHookInput("mixed-three-hooks-blocked");
 
     private static async Task CompileWrapperHookInput(string shape, bool includeSend = false)
     {
@@ -34,7 +34,7 @@ public sealed partial class GeneratorTests
         var filter = shape.StartsWith("filter", StringComparison.Ordinal);
         var constrained = shape is "constrained" or "consumer-constraint";
         var closed = shape is "closed" or "closed-mixed";
-        var mixed = includeSend || shape is "mixed-blocked" or "closed-mixed";
+        var mixed = includeSend || shape is "mixed-three-hooks-blocked" or "closed-mixed";
         var hook = filter ? "GenericFirst" : "GenericMap";
         var types = StreamGenericTypes.Replace("(T Value) : IStreamRequest<T>;",
             "(T Value,int Mode,Func<T,T> Map,Func<T,T> SelectedMap,bool Allow,bool SelectedAllow) : IStreamRequest<T>;")
@@ -68,7 +68,7 @@ public sealed partial class GeneratorTests
         var wrapperStage = "Stage.Wrapper(typeof(GenericWrapper" + (closed ? "" : "<>") + "))";
         var body = "c.Handlers(typeof(" + request + "),DispatchFamily.Stream,typeof(" + handler + "));" +
             "c.Pipeline(typeof(" + request + "),DispatchFamily.Stream," + (before ? hookStage + "," + wrapperStage : wrapperStage + "," + hookStage) +
-            (shape == "mixed-blocked" ? ",Stage.Hook(typeof(GenericFirst<>))" : "") + ");";
+            (shape == "mixed-three-hooks-blocked" ? ",Stage.Hook(typeof(GenericFirst<>)),Stage.Hook(typeof(GenericLast<>))" : "") + ");";
         if (mixed) body += "c.Handlers<HookPing>(DispatchFamily.SendSync,typeof(HookPingHandler));c.Pipeline<HookPing>(DispatchFamily.SendSync);";
         var source = "using System.Linq;using System.Collections.Generic;using Microsoft.Extensions.DependencyInjection;" + ListFixture(body) + types;
         if (mixed) source += """
@@ -80,7 +80,7 @@ public sealed partial class GeneratorTests
             public static class InvalidWrapperHookConsumer{public static object Call(IServiceProvider p)=>
                 p.GetRequiredService<global::App.Generated.Reads.IZendiator>().StreamAsync(new GenericItems<NoDefault>(new NoDefault(1),1,x=>x,x=>x,true,false));}
             """;
-        else if (shape != "mixed-blocked")
+        else if (shape != "mixed-three-hooks-blocked")
         {
             var consumer = WrapperHookConsumer.Replace("__WHERE__", constrained ? "where T:class,new()" : "")
                 .Replace("__BEFORE__", before ? "true" : "false").Replace("__FILTER__", filter ? "true" : "false")
@@ -101,7 +101,7 @@ public sealed partial class GeneratorTests
         var generated = driver.GetRunResult().Results.Single().GeneratedSources;
         using var bytes = new MemoryStream(); var emitted = output.Emit(bytes);
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_STREAM_PUBLIC_EVIDENCE_DIR");
-        var folder = evidence == null ? null : Path.Combine(evidence, includeSend || shape == "mixed-blocked" ? "open-mixed-wrapper-hook" : "wrapper-hook", shape);
+        var folder = evidence == null ? null : Path.Combine(evidence, includeSend || shape == "mixed-three-hooks-blocked" ? "open-mixed-wrapper-hook" : "wrapper-hook", shape);
         if (folder != null)
         {
             Directory.CreateDirectory(folder); File.WriteAllText(Path.Combine(folder, "input.cs"), source); File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
@@ -115,7 +115,7 @@ public sealed partial class GeneratorTests
                 sources = generated.Select(f => f.HintName)
             }));
         }
-        if (shape == "mixed-blocked")
+        if (shape == "mixed-three-hooks-blocked")
         {
             Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); Assert.Equal(2, diagnostics.Length);
             Assert.All(diagnostics, d => { Assert.Equal("ZEN0037", d.Id); Assert.True(d.Location.IsInSource); }); AssertNoCanonicalOutput(generated);
