@@ -30,7 +30,7 @@ internal static class CanonicalWrapperEmissionNormalizer
                 };
             if (route.RequestShape == BoundRequestShape.OpenAsyncReference &&
                 (c.MarkerName == null || route.SendGeneric == null || route.SendOpenRegistration is not { } open ||
-                route.ResultKind != FusionResultKind.Response || route.Stages.Count != 1 && !openWrapperHook || wrappers.Length != 1 ||
+                route.ResultKind == FusionResultKind.Void && !openWrapperHook || route.Stages.Count != 1 && !openWrapperHook || wrappers.Length != 1 ||
                 open.Stages.Count != route.Stages.Count || h.Sessions.Count != 0 ||
                 h.AsyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false } ||
                 w.Stage.Sessions.Count != 0 || w.Stage.WrapperEmission is not { WrapperIsValueType: false } ||
