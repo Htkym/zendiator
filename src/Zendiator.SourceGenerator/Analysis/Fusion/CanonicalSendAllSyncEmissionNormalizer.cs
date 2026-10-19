@@ -22,12 +22,15 @@ internal static class CanonicalSendAllSyncEmissionNormalizer
             if (graph?.IsValid != true || graph.Schedule == null || r.Family != BoundDispatchFamily.SendAllSync ||
                 r.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue or BoundRequestShape.OpenAllSyncReference) || !r.ExplicitHandlerOrder || r.Handlers.Count == 0 ||
                 r.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void)) continue;
+            var openWrapperHook = r.ResultKind == FusionResultKind.Response && r.Stages.Count == 2 &&
+                r.Stages[0] is { Kind: FusionStageKind.Wrapper, Sessions.Count: 0, ServiceOwnership: FusionOwnership.BorrowedService, WrapperEmission: { WrapperIsValueType: false } } &&
+                r.Stages[1] is { Kind: FusionStageKind.Hook, Sessions.Count: 0, ServiceOwnership: FusionOwnership.BorrowedService, SyncEmission: { HookIsValueType: false } };
             if (r.RequestShape == BoundRequestShape.OpenAllSyncReference &&
                 (r.SendGeneric == null || r.SendOpenRegistration is not { } open || open.HandlerDefinitionNames.Count != 2 ||
-                r.Handlers.Count != 2 || r.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void) || r.Stages.Count != 1 || open.Stages.Count != 1 ||
+                r.Handlers.Count != 2 || r.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void) || open.Stages.Count != r.Stages.Count ||
                 r.Handlers.Any(h => h.Sessions.Count != 0 || h.SyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false }) ||
-                r.Stages[0].Kind != FusionStageKind.Hook || r.Stages[0].Sessions.Count != 0 ||
-                r.Stages[0].SyncEmission is not { HookIsValueType: false } || c.Handlers.Any(h => !open.HandlerMembership.Contains(h.Identity)))) continue;
+                !openWrapperHook && (r.Stages.Count != 1 || r.Stages[0].Kind != FusionStageKind.Hook || r.Stages[0].Sessions.Count != 0 ||
+                    r.Stages[0].SyncEmission is not { HookIsValueType: false }) || c.Handlers.Any(h => !open.HandlerMembership.Contains(h.Identity)))) continue;
             if (r.RequestIsGeneric && (r.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.OpenAllSyncReference) ||
                 r.Stages.Any(s => s.Sessions.Any(f => f.FactoryIsGeneric && !f.FactoryIsPublic)) ||
                 r.Handlers.Any(h => h.Sessions.Any(f => f.FactoryIsGeneric && !f.FactoryIsPublic)))) continue;

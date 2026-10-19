@@ -101,8 +101,17 @@ internal static class CanonicalWrapperEmissionNormalizer
         BoundPipelineModel route, CanonicalExecutionGraphModel graph, int index)
     {
         var sync = route.Family == BoundDispatchFamily.SendAllSync;
-        if (route.Family is not (BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAllAsync) ||
-            route.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue) ||
+        var openSync = route.RequestShape == BoundRequestShape.OpenAllSyncReference;
+        if (openSync && (!sync || composition.MarkerName == null || route.SendGeneric == null ||
+            route.SendOpenRegistration is not { } open || open.HandlerDefinitionNames.Count != 2 || open.Stages.Count != 2 ||
+            route.ResultKind != FusionResultKind.Response || !route.ExplicitHandlerOrder || route.Handlers.Count != 2 || route.Stages.Count != 2 ||
+            route.Handlers.Any(h => h.Sessions.Count != 0 || h.ServiceOwnership != FusionOwnership.BorrowedService ||
+                h.SyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false, ResultName: "int" or "global::System.Int32" }) ||
+            route.Stages[0] is not { Kind: FusionStageKind.Wrapper, Sessions.Count: 0, ServiceOwnership: FusionOwnership.BorrowedService, WrapperEmission: { WrapperIsValueType: false } } ||
+            route.Stages[1] is not { Kind: FusionStageKind.Hook, Sessions.Count: 0, ServiceOwnership: FusionOwnership.BorrowedService, SyncEmission: { HookIsValueType: false } } ||
+            composition.Handlers.Any(h => !open.HandlerMembership.Contains(h.Identity)))) return default;
+        if (!graph.IsValid || graph.Schedule == null || route.Family is not (BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAllAsync) ||
+            route.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue or BoundRequestShape.OpenAllSyncReference) ||
             route.Stages.Count(s => s.Kind == FusionStageKind.Wrapper) != 1 ||
             route.Stages.Any(s => s.CompilerOwnsError || !Session(s.Sessions, s.ServiceOwnership) ||
                 (s.Kind == FusionStageKind.Wrapper ? s.WrapperEmission is not { WrapperIsValueType: false } :
@@ -112,7 +121,7 @@ internal static class CanonicalWrapperEmissionNormalizer
                         h.SyncEmission.ResultName is not (null or "int" or "global::System.Int32") :
                     h.AsyncEmission is not { HandlerIsValueType: false } || h.AsyncEmission.RequestIsValueType != (route.RequestShape == BoundRequestShape.ClosedNonGenericValue) ||
                         h.AsyncEmission.ResultName is not (null or "int" or "global::System.Int32")))) return default;
-        if (route.RequestIsGeneric && (route.RequestShape != BoundRequestShape.ClosedReference ||
+        if (route.RequestIsGeneric && (route.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.OpenAllSyncReference) ||
             !route.Stages.Any(s => s.Kind == FusionStageKind.Hook) ||
             route.Stages.Any(s => s.ReceiverIsGeneric && !s.ReceiverIsPublic || s.Sessions.Any(f => f.FactoryIsGeneric && !f.FactoryIsPublic) ||
                 s.Kind == FusionStageKind.Hook && (sync ? s.SyncEmission is not { HookIsValueType: false } : s.AsyncEmission is not { HookIsValueType: false })) ||
@@ -128,6 +137,7 @@ internal static class CanonicalWrapperEmissionNormalizer
             {
                 Pipelines = new(new[] { route with {
                 Family = sync ? BoundDispatchFamily.SendSync : BoundDispatchFamily.SendAsync,
+                RequestShape = openSync ? BoundRequestShape.OpenSyncReference : route.RequestShape,
                 Handlers = new(new[] { handler }) } })
             };
             var branch = Create(new(new(new[] { projected })),
