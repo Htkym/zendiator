@@ -22,7 +22,7 @@ internal static class CanonicalSendAllSyncEmissionNormalizer
             if (graph?.IsValid != true || graph.Schedule == null || r.Family != BoundDispatchFamily.SendAllSync ||
                 r.RequestShape is not (BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue or BoundRequestShape.OpenAllSyncReference) || !r.ExplicitHandlerOrder || r.Handlers.Count == 0 ||
                 r.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void)) continue;
-            var openWrapperHook = r.ResultKind == FusionResultKind.Response && r.Stages.Count == 2 &&
+            var openWrapperHook = r.ResultKind is (FusionResultKind.Response or FusionResultKind.Void) && r.Stages.Count == 2 &&
                 r.Stages[0] is { Kind: FusionStageKind.Wrapper, Sessions.Count: 0, ServiceOwnership: FusionOwnership.BorrowedService, WrapperEmission: { WrapperIsValueType: false } } &&
                 r.Stages[1] is { Kind: FusionStageKind.Hook, Sessions.Count: 0, ServiceOwnership: FusionOwnership.BorrowedService, SyncEmission: { HookIsValueType: false } };
             if (r.RequestShape == BoundRequestShape.OpenAllSyncReference &&

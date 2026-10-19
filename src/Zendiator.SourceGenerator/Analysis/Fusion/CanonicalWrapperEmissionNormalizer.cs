@@ -104,9 +104,10 @@ internal static class CanonicalWrapperEmissionNormalizer
         var openSync = route.RequestShape == BoundRequestShape.OpenAllSyncReference;
         if (openSync && (!sync || composition.MarkerName == null || route.SendGeneric == null ||
             route.SendOpenRegistration is not { } open || open.HandlerDefinitionNames.Count != 2 || open.Stages.Count != 2 ||
-            route.ResultKind != FusionResultKind.Response || !route.ExplicitHandlerOrder || route.Handlers.Count != 2 || route.Stages.Count != 2 ||
+            route.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void) || !route.ExplicitHandlerOrder || route.Handlers.Count != 2 || route.Stages.Count != 2 ||
             route.Handlers.Any(h => h.Sessions.Count != 0 || h.ServiceOwnership != FusionOwnership.BorrowedService ||
-                h.SyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false, ResultName: "int" or "global::System.Int32" }) ||
+                h.SyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false } ||
+                (route.ResultKind == FusionResultKind.Void ? h.SyncEmission.ResultName != null : h.SyncEmission.ResultName is not ("int" or "global::System.Int32"))) ||
             route.Stages[0] is not { Kind: FusionStageKind.Wrapper, Sessions.Count: 0, ServiceOwnership: FusionOwnership.BorrowedService, WrapperEmission: { WrapperIsValueType: false } } ||
             route.Stages[1] is not { Kind: FusionStageKind.Hook, Sessions.Count: 0, ServiceOwnership: FusionOwnership.BorrowedService, SyncEmission: { HookIsValueType: false } } ||
             composition.Handlers.Any(h => !open.HandlerMembership.Contains(h.Identity)))) return default;

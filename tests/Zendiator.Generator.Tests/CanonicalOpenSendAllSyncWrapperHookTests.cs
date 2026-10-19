@@ -231,8 +231,7 @@ public sealed partial class GeneratorTests
             ("two-wrappers", source.Replace(wrapper, wrapper + "," + wrapper)),
             ("async", source.Replace(wrapper, "Stage.Wrapper(typeof(AsyncLogging<,>))")),
             ("wrong-contract", source.Replace(wrapper, "Stage.Wrapper(typeof(Hook<,>))")),
-            ("three", source.Replace("typeof(ZHandler<,>),typeof(AHandler<,>)", "typeof(ZHandler<,>),typeof(AHandler<,>),typeof(Third<,>)")),
-            ("native-void", voidSource)
+            ("three", source.Replace("typeof(ZHandler<,>),typeof(AHandler<,>)", "typeof(ZHandler<,>),typeof(AHandler<,>),typeof(Third<,>)"))
         })
         {
             var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(invalid, "OpenAllWrapperRejected_" + name + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
@@ -243,10 +242,15 @@ public sealed partial class GeneratorTests
                 var anchor = name == "unbound-wrapper" ? "Stage.Wrapper(typeof(Unbound<,,>))" : "typeof(Missing<,,>)";
                 var error = Assert.Single(diagnostics, d => invalid.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length) == anchor); Assert.Empty(error.AdditionalLocations);
             }
-            var ns = name == "native-void" ? "OpenAllVoid" : "OpenAllWrapper";
-            Assert.Null(output.GetTypeByMetadataName(ns + ".Generated.Composition.IZendiator")); Assert.Null(output.GetTypeByMetadataName(ns + ".Generated.Composition.ZendiatorGeneratedRegistrar"));
+            Assert.Null(output.GetTypeByMetadataName("OpenAllWrapper.Generated.Composition.IZendiator")); Assert.Null(output.GetTypeByMetadataName("OpenAllWrapper.Generated.Composition.ZendiatorGeneratedRegistrar"));
             Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal));
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         }
+        var accepted = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(voidSource, "OpenAllWrapperVoidAccepted_" + Guid.NewGuid().ToString("N")), out var voidOutput, out var voidDiagnostics);
+        SaveSendAllSync(OpenSendAllSyncFolder("wrapper-hook-native-void"), voidSource, accepted, voidOutput, voidDiagnostics);
+        Assert.Empty(voidDiagnostics); Assert.Empty(voidOutput.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var api = voidOutput.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.IZendiator"); Assert.NotNull(api);
+        Assert.True(Assert.Single(api.GetMembers("SendAll").OfType<IMethodSymbol>()).ReturnsVoid);
+        Assert.NotNull(voidOutput.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.ZendiatorGeneratedRegistrar"));
     }
 }
