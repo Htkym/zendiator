@@ -44,6 +44,92 @@ once.
 - For a type-changing Stream, declare its final type with `StreamPipeline`.
   The handler's request interface continues to describe the source item type.
 
+### Register an open wrapper alongside a closed route
+
+When moving an `AddOpenBehavior` registration from 0.4.0, implement the wrapper
+contract explicitly and preserve the behavior's continuation logic. These snippets
+are for an existing application, using two request records in `OpenSendWrapper`:
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Zendiator;
+using Zendiator.DependencyInjection;
+
+namespace OpenSendWrapper;
+
+public sealed record Query<TMarker>(int Value) : IRequest<int>;
+public sealed record ClosedQuery(int Value) : IRequest<int>;
+```
+
+Supply `[ZendiatorHandler]` classes `Handler<TMarker>` implementing
+`IRequestHandler<Query<TMarker>, int>` and `ClosedHandler` implementing
+`IRequestHandler<ClosedQuery, int>`, with your handler bodies and their DI dependencies.
+The open wrapper below calls the continuation once and logs completion in `finally`:
+
+```csharp
+public sealed class Logging<TRequest, TResponse> : IAsyncSendWrapper<TRequest, TResponse>
+    where TRequest : class, IRequest<TResponse>
+{
+    public async ValueTask<TResponse> InvokeAsync<TNext>(
+        TRequest request, TNext next, CancellationToken token)
+        where TNext : IAsyncSendContinuation<TRequest, TResponse>
+    {
+        Console.WriteLine("Before send");
+        try
+        {
+            return await next.InvokeAsync(request, token).ConfigureAwait(false);
+        }
+        finally
+        {
+            Console.WriteLine("Send finished");
+        }
+    }
+}
+```
+
+Select both handlers and declare a pipeline for each route. The closed route has
+an empty pipeline; the wrapper is selected only for `Query<>`:
+
+```csharp
+[ZendiatorComposition("openSendWrapperPair")]
+public sealed class Pair;
+
+public static class RegisterPair
+{
+    public static IServiceCollection Add(IServiceCollection services) =>
+        services.AddZendiator<Pair>(c =>
+        {
+            c.Handlers<ClosedQuery>(DispatchFamily.SendAsync, typeof(ClosedHandler));
+            c.Pipeline(typeof(Query<>), DispatchFamily.SendAsync,
+                Stage.Wrapper(typeof(Logging<,>)));
+            c.Handlers(typeof(Query<>), DispatchFamily.SendAsync, typeof(Handler<>));
+            c.Pipeline<ClosedQuery>(DispatchFamily.SendAsync);
+        });
+}
+```
+
+From an async method in the same namespace, resolve the generated facade from a
+scope and call both overloads. `IZendiator` is not generic; the open `SendAsync`
+method infers its type argument from `Query<int>`:
+
+```csharp
+IServiceCollection services = new ServiceCollection();
+RegisterPair.Add(services);
+using var provider = services.BuildServiceProvider();
+using var scope = provider.CreateScope();
+var mediator = scope.ServiceProvider.GetRequiredService<Generated.Pair.IZendiator>();
+
+var openResult = await mediator.SendAsync(new Query<int>(42), CancellationToken.None);
+var closedResult = await mediator.SendAsync(new ClosedQuery(7), CancellationToken.None);
+```
+
+Keep the scope alive until both awaited operations finish. The pipeline borrows
+the DI-owned handlers and wrapper; do not dispose them in the wrapper. Await each
+returned `ValueTask` once. This example covers one open response wrapper on a
+class request and a separate closed response route. Other dispatch families,
+session factories and additional hook/wrapper combinations have their own
+contracts; this example does not establish their registration patterns.
+
 See [configuration diagnostics](diagnostics/configuration.md) for invalid
 configuration, including ZEN0026 and ZEN0037. Suppressing a diagnostic does not
 enable a rejected route. The optional

@@ -208,6 +208,78 @@ Behaviorの並びは`Pipeline`の順序付きリストで指定します。こ�
 
 この例は、型引数を持たないclassのrequest、`int`または`string`の応答、`int`のStream、DIが所有するHandlerとHookを使います。ほかの型や経路を網羅する例ではありません。0.5.0候補のAPIと公開範囲は開発中です。
 
+### ジェネリック要求のWrapperと非ジェネリック要求を併用する
+
+0.4.0の`AddOpenBehavior`から移る場合は、Wrapperの契約を明示的に実装し、継続の呼出しを制御する既存の処理を保ちます。以下は既存アプリケーションへ組み込むための断片です。`OpenSendWrapper`名前空間に2つの要求を定義します。
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Zendiator;
+using Zendiator.DependencyInjection;
+
+namespace OpenSendWrapper;
+
+public sealed record Query<TMarker>(int Value) : IRequest<int>;
+public sealed record ClosedQuery(int Value) : IRequest<int>;
+```
+
+`[ZendiatorHandler]`を付けた`Handler<TMarker>`と`ClosedHandler`を用意します。それぞれ`IRequestHandler<Query<TMarker>, int>`と`IRequestHandler<ClosedQuery, int>`を実装し、処理本体と必要なDI依存関係は既存のものを使います。次のWrapperは継続を1回呼び、`finally`で終了を記録します。
+
+```csharp
+public sealed class Logging<TRequest, TResponse> : IAsyncSendWrapper<TRequest, TResponse>
+    where TRequest : class, IRequest<TResponse>
+{
+    public async ValueTask<TResponse> InvokeAsync<TNext>(
+        TRequest request, TNext next, CancellationToken token)
+        where TNext : IAsyncSendContinuation<TRequest, TResponse>
+    {
+        Console.WriteLine("Before send");
+        try
+        {
+            return await next.InvokeAsync(request, token).ConfigureAwait(false);
+        }
+        finally
+        {
+            Console.WriteLine("Send finished");
+        }
+    }
+}
+```
+
+両方のHandlerを選び、要求ごとに`Pipeline`を宣言します。非ジェネリック要求のPipelineは空で、Wrapperは`Query<>`だけに適用します。
+
+```csharp
+[ZendiatorComposition("openSendWrapperPair")]
+public sealed class Pair;
+
+public static class RegisterPair
+{
+    public static IServiceCollection Add(IServiceCollection services) =>
+        services.AddZendiator<Pair>(c =>
+        {
+            c.Handlers<ClosedQuery>(DispatchFamily.SendAsync, typeof(ClosedHandler));
+            c.Pipeline(typeof(Query<>), DispatchFamily.SendAsync,
+                Stage.Wrapper(typeof(Logging<,>)));
+            c.Handlers(typeof(Query<>), DispatchFamily.SendAsync, typeof(Handler<>));
+            c.Pipeline<ClosedQuery>(DispatchFamily.SendAsync);
+        });
+}
+```
+
+同じ名前空間の非同期メソッドから、scope内の生成されたfacadeを取得して両方のoverloadを呼びます。`IZendiator`自体はジェネリックではなく、open側の`SendAsync`は`Query<int>`から型引数を推論します。
+
+```csharp
+IServiceCollection services = new ServiceCollection();
+RegisterPair.Add(services);
+using var provider = services.BuildServiceProvider();
+using var scope = provider.CreateScope();
+var mediator = scope.ServiceProvider.GetRequiredService<Generated.Pair.IZendiator>();
+
+var openResult = await mediator.SendAsync(new Query<int>(42), CancellationToken.None);
+var closedResult = await mediator.SendAsync(new ClosedQuery(7), CancellationToken.None);
+```
+
+両方の非同期処理が完了するまでscopeを保持します。PipelineはDIが所有するHandlerとWrapperを借りるため、Wrapper内で個別に破棄しないでください。返された`ValueTask`はそれぞれ1回だけ`await`します。この例の範囲はclassの要求に対する1個のopen response Wrapperと、別のclosed response routeです。他のdispatch family、session factory、HookとWrapperの追加の組合せにはそれぞれの契約があり、この例では登録方法を示していません。
 ### Handler属性の付け忘れ
 
 プロジェクト内で定義したHandlerを属性なしで明示登録すると、ZEN0035で登録箇所が示されます。ZEN0035はほかの生成条件の不備にも使います。診断文が属性不足を示している場合は、上の`AddNumbersHandler`のようにクラス宣言へ`[ZendiatorHandler]`を付けてください。
