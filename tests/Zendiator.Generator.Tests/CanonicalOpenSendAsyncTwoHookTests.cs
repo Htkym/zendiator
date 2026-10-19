@@ -128,13 +128,12 @@ public sealed partial class GeneratorTests
         Assert.Equal(new[] { "global::OpenAsyncTwoHooks.First<,>", "global::OpenAsyncTwoHooks.Second<,>" }, emission.OpenRegistration.Stages.Select(s => s.TypeName));
         var api = output.GetTypeByMetadataName("OpenAsyncTwoHooks.Generated.Composition.IZendiator")!; Assert.NotNull(api); Assert.False(api.IsGenericType);
         var mediator = output.GetTypeByMetadataName("OpenAsyncTwoHooks.Generated.Composition.Zendiator")!; Assert.False(mediator.IsGenericType);
-        var methods = new[] { Assert.Single(api.GetMembers("SendAsync").OfType<IMethodSymbol>()), Assert.Single(mediator.GetMembers("SendAsync").OfType<IMethodSymbol>()), Assert.Single(mediator.GetMembers().OfType<IMethodSymbol>(), m => m.Name.StartsWith("ExecuteAsync", StringComparison.Ordinal)) };
+        var methods = new[] { Assert.Single(api.GetMembers("SendAsync").OfType<IMethodSymbol>()), Assert.Single(mediator.GetMembers("SendAsync").OfType<IMethodSymbol>()) };
         Assert.All(methods, m => { Assert.Equal(2, m.Arity); Assert.All(m.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); }); Assert.Equal(SpecialType.System_Int32, ((INamedTypeSymbol)m.ReturnType).TypeArguments.Single().SpecialType); });
         var declarations = methods.Select(m => (MethodDeclarationSyntax)m.DeclaringSyntaxReferences.Single().GetSyntax()).ToArray();
         Assert.All(declarations, d => Assert.Equal(declarations[0].ConstraintClauses.ToFullString().Trim(), d.ConstraintClauses.ToFullString().Trim()));
-        var call = Assert.Single(declarations[1].DescendantNodes().OfType<InvocationExpressionSyntax>(), i => i.Expression is GenericNameSyntax g && g.Identifier.ValueText == methods[2].Name);
-        var bound = Assert.IsAssignableFrom<IMethodSymbol>(output.GetSemanticModel(call.SyntaxTree).GetSymbolInfo(call).Symbol); Assert.True(SymbolEqualityComparer.Default.Equals(bound.OriginalDefinition, methods[2]));
-        Assert.Equal(methods[1].TypeParameters.Cast<ITypeSymbol>(), bound.TypeArguments, SymbolEqualityComparer.Default);
+        var invoke = AssertOpenAsyncInvoker(output, mediator, methods[1]);
+        Assert.Equal(SpecialType.System_Int32, ((INamedTypeSymbol)invoke.ReturnType).TypeArguments.Single().SpecialType);
         if (negative)
         {
             var error = Assert.Single(diagnostics, d => d.Id == "ZEN0035" && source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length) == "Stage.Hook(typeof(Unused<,,>))"); Assert.Empty(error.AdditionalLocations);

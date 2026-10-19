@@ -350,7 +350,9 @@ internal sealed class CompositionListBinding
                             BoundName(contract), member.Name, nextResult == null ? null : BoundName(nextResult))
                             {
                                 RequestIsValueType = request.IsValueType,
-                                HandlerIsValueType = entry.Type.IsValueType
+                                HandlerIsValueType = entry.Type.IsValueType,
+                                CallTarget = family == BoundDispatchFamily.SendAsync
+                                    ? CanonicalAsyncCallBinding.Bind(entry.Type, member, implementation, _compilation, BoundName) : null
                             }
                         };
                 }

@@ -143,6 +143,10 @@ public sealed partial class GeneratorTests
             File.WriteAllText(Path.Combine(p, "compile.json"), JsonSerializer.Serialize(new { emitted.Success, productionEnabled = true, candidateOnly = false, warnings = 0, errors = 0, generatorErrors = diagnostics.Length }));
         }
         bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var bridge = assembly.GetType("App.Bridge")!; var outer = assembly.GetType("App.Hook`1")!.MakeGenericType(assembly.GetType("App.OuterTag")!);
+        var execute = assembly.GetType("App.Generated.Reads.Zendiator")!.GetNestedTypes(BindingFlags.NonPublic).Single(t => t.Name.StartsWith("SendInvoker", StringComparison.Ordinal))
+            .GetMethod("InvokeAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var builder = execute.GetCustomAttribute<System.Runtime.CompilerServices.AsyncMethodBuilderAttribute>()?.BuilderType;
+        Assert.Equal(key.Mode is "direct" or "two" && !key.Void ? typeof(System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder<>) : null, builder);
         return new(assembly, assembly.GetType("App.Generated.Reads.Zendiator")!, assembly.GetType("App.Ping")!, outer, assembly.GetType("App.Hook`1")!.MakeGenericType(assembly.GetType("App.InnerTag")!), assembly.GetType("App.Handler")!, assembly.GetType("App.Factory`1")?.MakeGenericType(assembly.GetType("App.OuterTag")!) ?? outer, bridge.GetMethod("Register")!, bridge.GetMethod("Dispatch")!);
     })).Value;
     private static object InvokeAsyncHook(AsyncHookFixture f, string mode, bool isVoid, bool generated, IServiceProvider provider, object? request, CancellationToken token)
@@ -204,6 +208,42 @@ public sealed partial class GeneratorTests
         var f = HookAsyncFixture("direct", false);
         foreach (var generated in new[] { false, true })
         { await RunAsyncHookCase(f, "direct", false, generated, "observer-pending-oce", "h0.exception"); await RunAsyncHookCase(f, "direct", false, generated, "native-before"); }
+    }
+
+    [Fact]
+    public async Task Async_hook_overlapping_pending_operations_and_followup_keep_state_separate()
+    {
+        var f = HookAsyncFixture("direct", false);
+        var p = new AsyncHookProbe { Pending = "handler" }; var prior = AsyncHookProbe.Ambient.Value;
+        using var foreign = new CancellationTokenSource(); var canceled = new OperationCanceledException("second", foreign.Token);
+        try
+        {
+            IServiceCollection services = new ServiceCollection(); services.AddSingleton(p); f.Register.Invoke(null, [services]);
+            await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+            await using (var scope = provider.CreateAsyncScope())
+            {
+                Task<int> Start(int value) => ((ValueTask<int>)InvokeAsyncHook(f, "direct", false, true, scope.ServiceProvider,
+                    Activator.CreateInstance(f.Request, [value])!, p.Cancellation.Token)).AsTask();
+                AsyncHookProbe.Ambient.Value = "caller";
+                var first = Start(10); var second = Start(20);
+                Assert.False(first.IsCompleted); Assert.False(second.IsCompleted); Assert.Equal(2, p.Gates.Count);
+                Assert.Equal("caller", AsyncHookProbe.Ambient.Value);
+                p.Gates[1].Fail(canceled);
+                Assert.Same(canceled, await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second.WaitAsync(TimeSpan.FromSeconds(10))));
+                Assert.True(second.IsCanceled); Assert.False(first.IsCompleted); Assert.Equal(0, p.Gates[0].Consumptions);
+                p.Gates[0].Complete(); Assert.Equal(12, await first.WaitAsync(TimeSpan.FromSeconds(10)));
+                var followup = Start(30); Assert.False(followup.IsCompleted); Assert.Equal(3, p.Gates.Count);
+                p.Gates[2].Complete(); Assert.Equal(32, await followup.WaitAsync(TimeSpan.FromSeconds(10)));
+                Assert.All(p.Gates, gate => Assert.Equal(1, gate.Consumptions));
+                var exits = p.Calls.Where(c => c.Phase == "h0.finally").ToArray();
+                Assert.Equal(new[] { 21, 11, 31 }, exits.Select(c => (int)c.Request!.GetType().GetProperty("Value")!.GetValue(c.Request)!));
+                Assert.Same(canceled, exits[0].Exit!.Value.Error); Assert.False(exits[0].Exit!.Value.Success);
+                Assert.All(exits.Skip(1), exit => { Assert.True(exit.Exit!.Value.Success); Assert.Null(exit.Exit.Value.Error); });
+                Assert.Equal("caller", AsyncHookProbe.Ambient.Value);
+            }
+            Assert.Equal(1, p.HandlerDisposals); Assert.Single(p.ReleasedHooks); Assert.Equal(0, p.FactoryDisposals);
+        }
+        finally { p.Cancellation.Dispose(); AsyncHookProbe.Ambient.Value = prior; }
     }
 
     private static async Task RunAsyncHookCase(AsyncHookFixture f, string mode, bool isVoid, bool generated, string scenario, string? pending = null)

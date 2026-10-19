@@ -16,6 +16,7 @@ internal static class CanonicalAsyncSourceEmitter
             var result = h.ResultName == null ? "global::System.Threading.Tasks.ValueTask" : "global::System.Threading.Tasks.ValueTask<" + h.ResultName + ">";
             var typeParameters = c.Generic?.TypeParameters ?? "";
             var constraints = c.Generic?.TypeConstraints ?? "";
+            var typedInvoker = c.Hooks.Count != 0;
             b.AppendLine($$"""
                 namespace {{c.Namespace}}
                 {
@@ -34,16 +35,27 @@ internal static class CanonicalAsyncSourceEmitter
                         public {{result}} SendAsync{{typeParameters}}({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default){{constraints}}
                         {
                             {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
-                            return ExecuteAsync{{typeParameters}}(request, cancellationToken);
+                            return {{(typedInvoker ? "new SendInvoker" + typeParameters + "(_provider).InvokeAsync(request, cancellationToken)" : "ExecuteAsync" + typeParameters + "(request, cancellationToken)")}};
                         }
-                        private async {{result}} ExecuteAsync{{typeParameters}}({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken){{constraints}}
+                """);
+            if (typedInvoker) b.AppendLine($$"""
+                    private readonly struct SendInvoker{{typeParameters}}{{constraints}}
+                    {
+                        private readonly global::System.IServiceProvider _provider;
+                        internal SendInvoker(global::System.IServiceProvider provider) { _provider = provider; }
+                """);
+            if (!h.RequestIsValueType && h.ResultName != null && c.Generic == null && c.OpenRegistration == null &&
+                c.Hooks.Count != 0 && c.Factory == null && c.Hooks.All(hook => hook.Factory == null))
+                b.AppendLine("        [global::System.Runtime.CompilerServices.AsyncMethodBuilder(typeof(global::System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder<>))]");
+            b.AppendLine($$"""
+                        {{(typedInvoker ? "internal" : "private")}} async {{result}} {{(typedInvoker ? "InvokeAsync" : "ExecuteAsync" + typeParameters)}}({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken){{(typedInvoker ? "" : constraints)}}
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                 """);
             if (c.Hooks.Count != 0)
             {
                 if (h.ResultName != null) b.AppendLine($"            {h.ResultName} response;");
-                EmitHookScope(b, c, 0, "request");
+                EmitHookScope(b, c, 0, "request", typedInvoker: true);
                 if (h.ResultName != null) b.AppendLine("            return response;");
             }
             else
@@ -70,17 +82,28 @@ internal static class CanonicalAsyncSourceEmitter
                             }
                     """);
             }
-            b.AppendLine("        }\n    }");
+            b.AppendLine("        }");
+            if (typedInvoker)
+            {
+                EmitTypedCalls(b, c);
+                b.AppendLine("    }");
+            }
+            b.AppendLine("    }");
             CanonicalSyncSourceEmitter.EmitRegistrar(b, CanonicalAsyncEmissionNormalizer.Registration(c), BoundDispatchFamily.SendAsync);
             b.AppendLine("}");
         }
         return b.ToString();
     }
 
-    internal static void EmitHookScope(StringBuilder b, CanonicalAsyncCompositionEmission c, int index, string input)
+    internal static void EmitHookScope(StringBuilder b, CanonicalAsyncCompositionEmission c, int index, string input, bool typedInvoker = false)
     {
         var h = c.Handler; var hook = c.Hooks[index];
         var receiver = "hook" + index; var saved = "saved" + index; var error = "error" + index; var success = "success" + index;
+        string Call(string phase, BoundAsyncHookCallbackEmission callback, string arguments) => typedInvoker
+            ? phase + index + "(" + receiver + ", " + arguments + ")"
+            : "((" + callback.ContractName + ")" + receiver + ")." + callback.MethodName + "(" + arguments + ")";
+        string HandlerCall() => typedInvoker ? "Handle(handler, " + saved + ", cancellationToken)"
+            : "((" + h.ContractName + ")handler)." + h.MethodName + "(" + saved + ", cancellationToken)";
         if (hook.Factory is { } factory)
             b.AppendLine($$"""
                 var hookFactory{{index}} = {{CanonicalServiceResolution.Emit(factory.FactoryName, factory.FactoryIsValueType)}};
@@ -96,14 +119,14 @@ internal static class CanonicalAsyncSourceEmitter
             global::System.Exception? {{error}} = null;
             try
             {
-                {{saved}} = await (({{hook.Before.ContractName}}){{receiver}}).{{hook.Before.MethodName}}({{saved}}, cancellationToken).ConfigureAwait(false);
+                {{saved}} = await {{Call("Before", hook.Before, saved + ", cancellationToken")}}.ConfigureAwait(false);
                 {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(" + saved + ", \"request\");")}}
                 cancellationToken.ThrowIfCancellationRequested();
             """);
-        if (index + 1 < c.Hooks.Count) EmitHookScope(b, c, index + 1, saved);
+        if (index + 1 < c.Hooks.Count) EmitHookScope(b, c, index + 1, saved, typedInvoker);
         else if (c.Factory == null) b.AppendLine($$"""
             var handler = {{CanonicalServiceResolution.Emit(h.HandlerName, h.HandlerIsValueType)}};
-            {{(h.ResultName == null ? "" : "response = ")}}await (({{h.ContractName}})handler).{{h.MethodName}}({{saved}}, cancellationToken).ConfigureAwait(false);
+            {{(h.ResultName == null ? "" : "response = ")}}await {{HandlerCall()}}.ConfigureAwait(false);
             """);
         else
         {
@@ -115,7 +138,7 @@ internal static class CanonicalAsyncSourceEmitter
                 """);
             var handlerOwned = handlerFactory.CleanupContractName != null;
             if (handlerOwned) b.AppendLine("try\n{");
-            b.AppendLine($$"""{{(h.ResultName == null ? "" : "response = ")}}await (({{h.ContractName}})handler).{{h.MethodName}}({{saved}}, cancellationToken).ConfigureAwait(false);""");
+            b.AppendLine($$"""{{(h.ResultName == null ? "" : "response = ")}}await {{HandlerCall()}}.ConfigureAwait(false);""");
             if (handlerOwned) b.AppendLine($$"""
                 }
                 finally
@@ -127,19 +150,19 @@ internal static class CanonicalAsyncSourceEmitter
                 """);
         }
         b.AppendLine($$"""
-                {{(h.ResultName == null ? "" : "response = ")}}await (({{hook.Success.ContractName}}){{receiver}}).{{hook.Success.MethodName}}({{saved}}, {{(h.ResultName == null ? "" : "response, ")}}cancellationToken).ConfigureAwait(false);
+                {{(h.ResultName == null ? "" : "response = ")}}await {{Call("After", hook.Success, saved + ", " + (h.ResultName == null ? "" : "response, ") + "cancellationToken")}}.ConfigureAwait(false);
                 {{success}} = true;
             }
             catch (global::System.Exception failure{{index}})
             {
                 {{error}} = failure{{index}};
-                try { await (({{hook.Exception.ContractName}}){{receiver}}).{{hook.Exception.MethodName}}({{saved}}, failure{{index}}, cancellationToken).ConfigureAwait(false); }
+                try { await {{Call("Observe", hook.Exception, saved + ", failure" + index + ", cancellationToken")}}.ConfigureAwait(false); }
                 catch (global::System.Exception replacement{{index}}) { {{error}} = replacement{{index}}; throw; }
                 throw;
             }
             finally
             {
-                await (({{hook.Finally.ContractName}}){{receiver}}).{{hook.Finally.MethodName}}({{saved}}, new global::Zendiator.SendExitInfo({{success}}, {{error}}), cancellationToken).ConfigureAwait(false);
+                await {{Call("Finally", hook.Finally, saved + ", new global::Zendiator.SendExitInfo(" + success + ", " + error + "), cancellationToken")}}.ConfigureAwait(false);
             }
             """);
         if (owned) b.AppendLine($$"""
@@ -151,5 +174,42 @@ internal static class CanonicalAsyncSourceEmitter
                 await (({{hook.Factory!.CleanupContractName}})detachedHook{{index}}).DisposeAsync().ConfigureAwait(false);
             }
             """);
+    }
+
+    private static void EmitTypedCalls(StringBuilder b, CanonicalAsyncCompositionEmission c)
+    {
+        var h = c.Handler;
+        const string token = "global::System.Threading.CancellationToken";
+        var task = "global::System.Threading.Tasks.ValueTask";
+        for (var i = 0; i < c.Hooks.Count; i++)
+        {
+            var hook = c.Hooks[i]; var receiver = hook.HookIsValueType ? "object" : hook.HookName;
+            EmitCall(b, "Before" + i, task + "<" + h.RequestName + ">", receiver, hook.Before.ContractName, hook.Before.MethodName,
+                hook.Before.CallTarget, new[] { h.RequestName, token }, new[] { "request", "cancellationToken" });
+            EmitCall(b, "After" + i, h.ResultName == null ? task : task + "<" + h.ResultName + ">", receiver, hook.Success.ContractName, hook.Success.MethodName,
+                hook.Success.CallTarget, h.ResultName == null ? new[] { h.RequestName, token } : new[] { h.RequestName, h.ResultName, token },
+                h.ResultName == null ? new[] { "request", "cancellationToken" } : new[] { "request", "response", "cancellationToken" });
+            EmitCall(b, "Observe" + i, task, receiver, hook.Exception.ContractName, hook.Exception.MethodName,
+                hook.Exception.CallTarget, new[] { h.RequestName, "global::System.Exception", token }, new[] { "request", "error", "cancellationToken" });
+            EmitCall(b, "Finally" + i, task, receiver, hook.Finally.ContractName, hook.Finally.MethodName,
+                hook.Finally.CallTarget, new[] { h.RequestName, "global::Zendiator.SendExitInfo", token }, new[] { "request", "exit", "cancellationToken" });
+        }
+        EmitCall(b, "Handle", h.ResultName == null ? task : task + "<" + h.ResultName + ">", h.HandlerIsValueType ? "object" : h.HandlerName,
+            h.ContractName, h.MethodName, h.CallTarget, new[] { h.RequestName, token }, new[] { "request", "cancellationToken" });
+    }
+
+    private static void EmitCall(StringBuilder b, string name, string result, string receiver,
+        string contract, string method, BoundAsyncCallTargetEmission? target, string[] parameters, string[] names)
+    {
+        var fallback = "((" + contract + ")receiver)." + method + "(" + string.Join(", ", names) + ")";
+        var call = fallback;
+        if (target != null)
+        {
+            var arguments = string.Join(", ", names.Select((n, i) => "(" + target.ParameterTypes[i] + ")" + n));
+            var direct = "((" + target.ImplementationTypeName + ")receiver)." + target.MethodName + "(" + arguments + ")";
+            call = target.RequiresExactReceiver ? "((global::System.Object)receiver).GetType() == typeof(" + target.ReceiverName + ") ? " + direct + " : " + fallback : direct;
+        }
+        b.AppendLine("        private static " + result + " " + name + "(" + receiver + " receiver, " +
+            string.Join(", ", parameters.Select((p, i) => p + " " + names[i])) + ") => " + call + ";");
     }
 }

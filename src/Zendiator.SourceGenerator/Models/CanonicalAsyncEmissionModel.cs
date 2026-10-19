@@ -4,6 +4,7 @@ internal sealed record BoundAsyncHandlerEmission(string RequestName, string Hand
 {
     public bool RequestIsValueType { get; init; }
     public bool HandlerIsValueType { get; init; }
+    public BoundAsyncCallTargetEmission? CallTarget { get; init; }
 }
 internal sealed record BoundAsyncFactoryEmission(string FactoryName, string ContractName, string MethodName, string? CleanupContractName, bool AwaitAcquire)
 {
@@ -20,7 +21,12 @@ internal sealed record CanonicalAsyncCompositionEmission(int Index, string Names
     public EquatableArray<string> CatalogMarkerTypes { get; init; }
     public EquatableArray<BoundAsyncHookEmission> Hooks { get; init; } = new(System.Array.Empty<BoundAsyncHookEmission>());
 }
-internal sealed record BoundAsyncHookCallbackEmission(string ContractName, string MethodName);
+internal sealed record BoundAsyncCallTargetEmission(string ReceiverName, string ImplementationTypeName, string MethodName,
+    EquatableArray<string> ParameterTypes, bool RequiresExactReceiver);
+internal sealed record BoundAsyncHookCallbackEmission(string ContractName, string MethodName)
+{
+    public BoundAsyncCallTargetEmission? CallTarget { get; init; }
+}
 internal sealed record BoundAsyncHookEmission(string HookName, BoundAsyncHookCallbackEmission Before,
     BoundAsyncHookCallbackEmission Success, BoundAsyncHookCallbackEmission Exception, BoundAsyncHookCallbackEmission Finally)
 {

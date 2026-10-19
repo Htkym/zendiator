@@ -175,16 +175,34 @@ public sealed partial class GeneratorTests
             Assert.Equal(route.SendGeneric, emission.Generic); Assert.Equal(route.SendOpenRegistration, emission.OpenRegistration); Assert.Equal(emission.OpenRegistration, CanonicalAsyncEmissionNormalizer.Registration(emission).OpenRegistration);
             var api = output.GetTypeByMetadataName(ns + ".Generated.Composition.IZendiator"); Assert.NotNull(api); Assert.False(api.IsGenericType);
             var mediator = output.GetTypeByMetadataName(ns + ".Generated.Composition.Zendiator")!; Assert.False(mediator.IsGenericType);
-            var methods = new[] { Assert.Single(api.GetMembers("SendAsync").OfType<IMethodSymbol>()), Assert.Single(mediator.GetMembers("SendAsync").OfType<IMethodSymbol>()), Assert.Single(mediator.GetMembers().OfType<IMethodSymbol>(), m => m.DeclaredAccessibility == Accessibility.Private && m.Name.StartsWith("ExecuteAsync", StringComparison.Ordinal)) };
+            var methods = new[] { Assert.Single(api.GetMembers("SendAsync").OfType<IMethodSymbol>()), Assert.Single(mediator.GetMembers("SendAsync").OfType<IMethodSymbol>()) };
             Assert.All(methods, m => { Assert.Equal(ns == "OpenAsyncVoid" ? 1 : 2, m.Arity); Assert.All(m.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); }); Assert.Equal(ns == "OpenAsyncVoid" ? 0 : 1, ((INamedTypeSymbol)m.ReturnType).Arity); });
             var declarations = methods.Select(m => (MethodDeclarationSyntax)m.DeclaringSyntaxReferences.Single().GetSyntax()).ToArray();
             Assert.All(declarations, d => Assert.Equal(declarations[0].ConstraintClauses.ToFullString().Trim(), d.ConstraintClauses.ToFullString().Trim()));
-            var call = Assert.Single(declarations[1].DescendantNodes().OfType<InvocationExpressionSyntax>(), i => i.Expression is GenericNameSyntax g && g.Identifier.ValueText == methods[2].Name);
-            var bound = Assert.IsAssignableFrom<IMethodSymbol>(output.GetSemanticModel(call.SyntaxTree).GetSymbolInfo(call).Symbol);
-            Assert.True(SymbolEqualityComparer.Default.Equals(bound.OriginalDefinition, methods[2])); Assert.Equal(methods[1].TypeParameters.Cast<ITypeSymbol>(), bound.TypeArguments, SymbolEqualityComparer.Default);
+            var invoke = AssertOpenAsyncInvoker(output, mediator, methods[1]);
+            Assert.Equal(ns == "OpenAsyncVoid" ? 0 : 1, ((INamedTypeSymbol)invoke.ReturnType).Arity);
         }
         var closed = output.GetTypeByMetadataName("AsyncSentinel.Generated.Composition.IZendiator")!; Assert.NotNull(closed); Assert.Equal(0, Assert.Single(closed.GetMembers("SendAsync").OfType<IMethodSymbol>()).Arity);
         var stream = output.GetTypeByMetadataName("AsyncStreamSentinel.Generated.Composition.IZendiator")!; Assert.NotNull(stream); Assert.Equal(1, Assert.Single(stream.GetMembers("StreamAsync").OfType<IMethodSymbol>()).Arity);
+    }
+
+    private static IMethodSymbol AssertOpenAsyncInvoker(Compilation output, INamedTypeSymbol mediator, IMethodSymbol entry)
+    {
+        var invoker = Assert.Single(mediator.GetTypeMembers(), t => t.Name.StartsWith("SendInvoker", StringComparison.Ordinal));
+        Assert.True(invoker.IsReadOnly); Assert.Equal(entry.Arity, invoker.Arity);
+        var declaration = (MethodDeclarationSyntax)entry.DeclaringSyntaxReferences.Single().GetSyntax();
+        Assert.Equal(declaration.ConstraintClauses.ToFullString().Trim(), ((StructDeclarationSyntax)invoker.DeclaringSyntaxReferences.Single().GetSyntax()).ConstraintClauses.ToFullString().Trim());
+        Assert.All(invoker.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); });
+        var invoke = Assert.Single(invoker.GetMembers("InvokeAsync").OfType<IMethodSymbol>()); Assert.Equal(0, invoke.Arity);
+        var creation = Assert.Single(declaration.DescendantNodes().OfType<ObjectCreationExpressionSyntax>());
+        var constructor = Assert.IsAssignableFrom<IMethodSymbol>(output.GetSemanticModel(creation.SyntaxTree).GetSymbolInfo(creation).Symbol);
+        Assert.True(SymbolEqualityComparer.Default.Equals(invoker, constructor.ContainingType.OriginalDefinition));
+        Assert.Equal(entry.TypeParameters.Cast<ITypeSymbol>(), constructor.ContainingType.TypeArguments, SymbolEqualityComparer.Default);
+        var call = Assert.Single(declaration.DescendantNodes().OfType<InvocationExpressionSyntax>(), i => i.Expression is MemberAccessExpressionSyntax m && m.Name.Identifier.ValueText == "InvokeAsync");
+        var bound = Assert.IsAssignableFrom<IMethodSymbol>(output.GetSemanticModel(call.SyntaxTree).GetSymbolInfo(call).Symbol);
+        Assert.True(SymbolEqualityComparer.Default.Equals(bound.OriginalDefinition, invoke));
+        Assert.True(SymbolEqualityComparer.Default.Equals(bound.ContainingType, constructor.ContainingType));
+        return invoke;
     }
 
     [Fact]
