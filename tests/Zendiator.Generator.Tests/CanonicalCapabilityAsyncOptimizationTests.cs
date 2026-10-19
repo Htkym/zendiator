@@ -76,12 +76,26 @@ public sealed partial class GeneratorTests
             File.WriteAllBytes(Path.Combine(folder, "generated.dll"), binary);
             static IEnumerable<Type> Types(Type type) => new[] { type }.Concat(type.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic).SelectMany(Types));
             var methods = Types(root).SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
-                .Select(m => new { owner = m.DeclaringType!.FullName, m.Name, token = m.MetadataToken,
+                .Select(m => new
+                {
+                    owner = m.DeclaringType!.FullName,
+                    m.Name,
+                    token = m.MetadataToken,
                     stateMachine = m.GetCustomAttribute<AsyncStateMachineAttribute>()?.StateMachineType.FullName,
-                    stateFields = m.DeclaringType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Select(f => new { f.Name, type = f.FieldType.FullName }) }).ToArray();
-            File.WriteAllText(Path.Combine(folder, "consumer.json"), JsonSerializer.Serialize(new { root = root.FullName, methods,
-                assembly = assembly.GetName().Name, moduleVersionId = root.Module.ModuleVersionId, bytes = binary.Length,
-                sha256 = Convert.ToHexString(SHA256.HashData(binary)), eligible, typed = eligible && CapabilityTyped, builder = execution.GetCustomAttribute<AsyncMethodBuilderAttribute>()?.BuilderType.FullName }));
+                    stateFields = m.DeclaringType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Select(f => new { f.Name, type = f.FieldType.FullName })
+                }).ToArray();
+            File.WriteAllText(Path.Combine(folder, "consumer.json"), JsonSerializer.Serialize(new
+            {
+                root = root.FullName,
+                methods,
+                assembly = assembly.GetName().Name,
+                moduleVersionId = root.Module.ModuleVersionId,
+                bytes = binary.Length,
+                sha256 = Convert.ToHexString(SHA256.HashData(binary)),
+                eligible,
+                typed = eligible && CapabilityTyped,
+                builder = execution.GetCustomAttribute<AsyncMethodBuilderAttribute>()?.BuilderType.FullName
+            }));
         }
         if (mediatorName.StartsWith("S07Pilot", StringComparison.Ordinal))
             return new(assembly, root, assembly.GetType("S07Pilot.Async.Query")!, [], assembly.GetType("S07Pilot.Async.Handler")!, assembly.GetType("S07Pilot.Async.Registration")!.GetMethod("Add")!, root.GetMethod("SendAsync")!);
