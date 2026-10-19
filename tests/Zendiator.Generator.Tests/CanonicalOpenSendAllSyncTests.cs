@@ -114,7 +114,8 @@ public sealed partial class GeneratorTests
         Reject("Overlap", normal, $"Stage.Hook(typeof({hook}))", "c.Handlers<OpenAll.Request<OpenAllFixture.A,OpenAllFixture.B>>(DispatchFamily.SendAllSync,typeof(OpenAll.ZHandler<OpenAllFixture.B,OpenAllFixture.A>),typeof(OpenAll.AHandler<OpenAllFixture.A,OpenAllFixture.B>));c.Pipeline<OpenAll.Request<OpenAllFixture.A,OpenAllFixture.B>>(DispatchFamily.SendAllSync,Stage.Hook<OpenAll.Hook<OpenAllFixture.B,OpenAllFixture.A>>());");
         Reject("Multiple", normal, $"Stage.Hook(typeof({hook}))", "c.Handlers<AllSync.Response.Ping>(DispatchFamily.SendAllSync,typeof(AllSync.Response.H2),typeof(AllSync.Response.H1));c.Pipeline<AllSync.Response.Ping>(DispatchFamily.SendAllSync,Stage.Hook<AllSync.Response.Hook>());");
         Reject("Three", normal + ",typeof(Third<,>)", $"Stage.Hook(typeof({hook}))");
-        Reject("Void", "typeof(VoidFirst<>),typeof(VoidSecond<>)", "Stage.Hook(typeof(VoidHook<>))", r: "VoidRequest<>");
+        declarations.Add("[ZendiatorComposition(\"Void\")]public sealed class Void;");
+        registrations.Add("public static IServiceCollection Void(IServiceCollection s)=>s.AddZendiator<Void>(c=>{c.Handlers(typeof(VoidRequest<>),DispatchFamily.SendAllSync,typeof(VoidFirst<>),typeof(VoidSecond<>));c.Pipeline(typeof(VoidRequest<>),DispatchFamily.SendAllSync,Stage.Hook(typeof(VoidHook<>)));});");
         return OpenSendAllSyncSource() + "namespace OpenAllRejected {" + string.Join("\n", declarations) + "public static class Registration {" + string.Join("\n", registrations) + "}" + """
             [ZendiatorHandler]public sealed class Unused<X,Y,Z>:ISyncRequestHandler<OpenAll.Request<X,Y>,int>{public int Handle(OpenAll.Request<X,Y> r,CancellationToken t)=>0;}
             [ZendiatorHandler]public sealed class StructHandler<X,Y>:ISyncRequestHandler<OpenAll.Request<X,Y>,int> where X:struct{public int Handle(OpenAll.Request<X,Y> r,CancellationToken t)=>0;}
@@ -190,13 +191,16 @@ public sealed partial class GeneratorTests
     {
         var source = OpenSendAllSyncNegative(); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "OpenSendAllSyncNegative_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
         var folder = OpenSendAllSyncFolder("negative"); SaveSendAllSync(folder, source, driver, output, diagnostics); AssertOpenSendAllSyncOutput(output, driver);
-        foreach (var name in new[] { "Undetermined", "ConstraintConflict", "PatternMismatch", "Wrapper", "HookSession", "HandlerSession", "Overlap", "Multiple", "Three", "Void" })
+        foreach (var name in new[] { "Undetermined", "ConstraintConflict", "PatternMismatch", "Wrapper", "HookSession", "HandlerSession", "Overlap", "Multiple", "Three" })
         {
             var ns = "OpenAllRejected.Generated." + name; Assert.Null(output.GetTypeByMetadataName(ns + ".IZendiator")); Assert.Null(output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar"));
             var start = source.IndexOf("public static IServiceCollection " + name + "(", StringComparison.Ordinal); var end = source.IndexOf("});", start, StringComparison.Ordinal) + 3;
             Assert.Contains(diagnostics, d => d.Location.IsInSource && d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.End <= end && d.Id == (name == "Overlap" ? "ZEN0028" : name == "Multiple" ? "ZEN0037" : "ZEN0035"));
             foreach (var interceptor in driver.GetRunResult().Results.Single().GeneratedSources.Where(f => f.SourceText.ToString().Contains("InterceptsLocation", StringComparison.Ordinal))) Assert.DoesNotContain("typeof(global::OpenAllRejected." + name + ")", interceptor.SourceText.ToString(), StringComparison.Ordinal);
         }
+        var acceptedVoid = output.GetTypeByMetadataName("OpenAllRejected.Generated.Void.IZendiator"); Assert.NotNull(acceptedVoid);
+        var voidMethod = Assert.Single(acceptedVoid.GetMembers("SendAll").OfType<IMethodSymbol>()); Assert.True(voidMethod.ReturnsVoid); Assert.Equal(1, voidMethod.Arity);
+        Assert.NotNull(output.GetTypeByMetadataName("OpenAllRejected.Generated.Void.ZendiatorGeneratedRegistrar"));
         foreach (var name in new[] { "Undetermined", "ConstraintConflict", "PatternMismatch", "HandlerSession" })
         {
             var start = source.IndexOf("public static IServiceCollection " + name + "(", StringComparison.Ordinal); var end = source.IndexOf("});", start, StringComparison.Ordinal) + 3;
@@ -206,6 +210,6 @@ public sealed partial class GeneratorTests
         var overlap = Assert.Single(diagnostics, d => d.Id == "ZEN0028"); Assert.Contains("Pipeline<OpenAll.Request<", source.Substring(overlap.Location.SourceSpan.Start, overlap.Location.SourceSpan.Length));
         var additional = Assert.Single(overlap.AdditionalLocations); Assert.True(additional.IsInSource); Assert.Contains("Pipeline(typeof(OpenAll.Request<,>)", source.Substring(additional.SourceSpan.Start, additional.SourceSpan.Length)); Assert.True(additional.SourceSpan.Start < overlap.Location.SourceSpan.Start);
         var errors = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray(); Assert.NotEmpty(errors); Assert.All(errors, d => { Assert.Equal("CS0310", d.Id); Assert.Contains("SendAll", source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length)); Assert.Contains("NoDefault", d.GetMessage()); });
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "negative-result.json"), JsonSerializer.Serialize(new { logicalInputs = 1, drivers = 1, dispatches = 0, validGeneratedCompositions = 11, rejectedCompositions = 10, compiler = errors.Select(d => new { d.Id, message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }), generator = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), primary = d.Location.SourceSpan.ToString(), additional = d.AdditionalLocations.Select(l => l.SourceSpan.ToString()) }) }));
+        if (folder != null) File.WriteAllText(Path.Combine(folder, "negative-result.json"), JsonSerializer.Serialize(new { logicalInputs = 1, drivers = 1, dispatches = 0, validGeneratedCompositions = 12, rejectedCompositions = 9, compiler = errors.Select(d => new { d.Id, message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }), generator = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), primary = d.Location.SourceSpan.ToString(), additional = d.AdditionalLocations.Select(l => l.SourceSpan.ToString()) }) }));
     }
 }

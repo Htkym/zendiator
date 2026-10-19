@@ -24,7 +24,7 @@ internal static class CanonicalSendAllSyncEmissionNormalizer
                 r.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void)) continue;
             if (r.RequestShape == BoundRequestShape.OpenAllSyncReference &&
                 (r.SendGeneric == null || r.SendOpenRegistration is not { } open || open.HandlerDefinitionNames.Count != 2 ||
-                r.Handlers.Count != 2 || r.ResultKind != FusionResultKind.Response || r.Stages.Count != 1 || open.Stages.Count != 1 ||
+                r.Handlers.Count != 2 || r.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void) || r.Stages.Count != 1 || open.Stages.Count != 1 ||
                 r.Handlers.Any(h => h.Sessions.Count != 0 || h.SyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false }) ||
                 r.Stages[0].Kind != FusionStageKind.Hook || r.Stages[0].Sessions.Count != 0 ||
                 r.Stages[0].SyncEmission is not { HookIsValueType: false } || c.Handlers.Any(h => !open.HandlerMembership.Contains(h.Identity)))) continue;
