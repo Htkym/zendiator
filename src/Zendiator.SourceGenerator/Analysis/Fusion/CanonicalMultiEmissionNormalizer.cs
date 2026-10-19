@@ -77,7 +77,9 @@ internal static class CanonicalMultiEmissionNormalizer
         c.Pipelines.All(r => r.Family == BoundDispatchFamily.SendAsync && r.ResultKind == FusionResultKind.Response &&
             r.Stages.Count == 0 && r.Handlers.Count == 1 && r.Handlers[0].Sessions.Count == 0 &&
             r.Handlers[0].ServiceOwnership == FusionOwnership.BorrowedService &&
-            r.Handlers[0].AsyncEmission is { HandlerIsValueType: false, RequestIsValueType: false, ResultName: "int" or "global::System.Int32" });
+            r.Handlers[0].AsyncEmission is { HandlerIsValueType: false, RequestIsValueType: false } handler &&
+            (handler.ResultName is "int" or "global::System.Int32" ||
+                r.RequestShape == BoundRequestShape.OpenAsyncReference && r.Handlers[0].RequestReferenceResponse));
 
     private static bool HasHandler(BoundPipelineModel route, SelectedHandlerModel handler) => route.SendOpenRegistration is { } open
         ? open.HandlerMembership.Contains(handler.Identity) : route.Handlers.Any(h => h.Type == handler.Identity);

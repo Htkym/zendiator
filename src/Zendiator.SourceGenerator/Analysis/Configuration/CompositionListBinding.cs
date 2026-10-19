@@ -217,7 +217,9 @@ internal sealed class CompositionListBinding
                 if (family == BoundDispatchFamily.Stream && handlerEntries.Length == 1)
                     open = CanonicalStreamOpenBinding.Create(request, handlerEntries[0].Type, _compilation, out error);
                 else if (family is (BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) && handlerEntries.Length == 1)
-                    open = CanonicalStreamOpenBinding.CreateSend(request, handlerEntries[0].Type, _compilation, asyncSend, out error);
+                    open = CanonicalStreamOpenBinding.CreateSend(request, handlerEntries[0].Type, _compilation, asyncSend, out error,
+                        allowReferenceResponse: family == BoundDispatchFamily.SendAsync && handlerEntries[0].Factory == null &&
+                            (declaration.HandlerList || declaration.Entries.Length == 0));
                 else if (family is (BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAllAsync) && handlerEntries.Length == 2 && handlerEntries.All(e => IsOpenDefinition(e.Type)))
                     open = CanonicalStreamOpenBinding.CreateSend(request, handlerEntries[0].Type, _compilation, asyncSend, out error);
                 if (open == null)
@@ -321,6 +323,7 @@ internal sealed class CompositionListBinding
                 result ??= nextResult;
                 var member = contract.GetMembers().OfType<IMethodSymbol>().SingleOrDefault();
                 var implementation = member == null ? null : entry.Type.FindImplementationForInterfaceMember(member) as IMethodSymbol;
+                var requestReferenceResponse = nextResult is ITypeParameterSymbol && open?.IsRequestReferenceResponse(nextResult) == true;
                 var handlerModel = new BoundHandlerModel(entry.Anchor, Identity(entry.Type), BoundName(entry.Type), Identity(contract), nextResult == null ? null : Identity(nextResult),
                     implementation == null ? "<missing>" : implementation.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) +
                     "/return=" + Identity(implementation.ReturnType) + "/constraints=" + Constraints(implementation.TypeParameters),
@@ -331,10 +334,10 @@ internal sealed class CompositionListBinding
                         new(implementation.Parameters.Select(p => new BoundParameterModel(Identity(p.Type), p.RefKind.ToString(), p.ScopedKind.ToString()))),
                         Identity(implementation.ReturnType), Constraints(implementation.TypeParameters),
                         family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync))
-                { ReceiverIsGeneric = entry.Type.IsGenericType, ReceiverIsPublic = open?.Public(entry.Type) ?? Public(entry.Type) };
+                { ReceiverIsGeneric = entry.Type.IsGenericType, ReceiverIsPublic = open?.Public(entry.Type) ?? Public(entry.Type), RequestReferenceResponse = requestReferenceResponse };
                 if ((family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync) && declaration.Request.TypeKind is TypeKind.Class or TypeKind.Struct &&
                     entry.Type.TypeKind is (TypeKind.Class or TypeKind.Struct) && _compilation.IsSymbolAccessibleWithin(entry.Type, _compilation.Assembly) && implementation != null && member != null &&
-                    (nextResult == null || nextResult is INamedTypeSymbol or IArrayTypeSymbol))
+                    (nextResult == null || nextResult is INamedTypeSymbol or IArrayTypeSymbol || requestReferenceResponse))
                 {
                     if (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync)
                         handlerModel = handlerModel with

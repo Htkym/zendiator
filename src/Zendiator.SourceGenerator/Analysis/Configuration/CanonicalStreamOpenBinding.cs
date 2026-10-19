@@ -16,6 +16,7 @@ internal sealed class CanonicalStreamOpenBinding
     private readonly INamedTypeSymbol _owner;
     private readonly Dictionary<ITypeParameterSymbol, string> _names = new(SymbolEqualityComparer.Default);
     private readonly MergedParam[] _constraints;
+    private ITypeParameterSymbol? _referenceResponse;
     internal INamedTypeSymbol Request { get; }
     private CanonicalStreamOpenBinding(Compilation compilation, INamedTypeSymbol owner, INamedTypeSymbol request)
     {
@@ -57,7 +58,7 @@ internal sealed class CanonicalStreamOpenBinding
     internal string Display(ITypeSymbol type) => CanonicalSymbolName.Display(type, _compilation, _names);
     // Share symbol projection and constraint merging, not Stream's request/item contract.
     internal static CanonicalStreamOpenBinding? CreateSend(INamedTypeSymbol definition, INamedTypeSymbol handler,
-        Compilation compilation, bool async, out string? error)
+        Compilation compilation, bool async, out string? error, bool allowReferenceResponse = false)
     {
         error = null;
         handler = handler.OriginalDefinition;
@@ -80,14 +81,28 @@ internal sealed class CanonicalStreamOpenBinding
         var responseRequest = assembly?.GetTypeByMetadataName(async ? ContractNames.Request : ContractNames.SyncRequest);
         var voidRequest = assembly?.GetTypeByMetadataName(async ? ContractNames.VoidRequest : ContractNames.SyncVoidRequest);
         var responses = pattern.AllInterfaces.Where(i => Same(i.OriginalDefinition, responseRequest)).ToArray();
+        var referenceResponse = async && allowReferenceResponse && response is ITypeParameterSymbol parameter &&
+            parameter.HasReferenceTypeConstraint && parameter.ReferenceTypeConstraintNullableAnnotation != NullableAnnotation.Annotated &&
+            parameter.NullableAnnotation != NullableAnnotation.Annotated && !parameter.AllowsRefLikeType &&
+            used.Any(p => Same(p, parameter)) && binding.Contains(parameter) && binding.Public(parameter) &&
+            parameter.ConstraintTypes.All(binding.Public) && responses.Length == 1 &&
+            SymbolEqualityComparer.IncludeNullability.Equals(responses[0].TypeArguments[0], parameter);
         // IRequest inherits IRequest<Unit>; the selected native void handler still has one type argument.
         var voidResponseMatches = async ? responses.Length == 1 && Same(responses[0].TypeArguments[0], assembly?.GetTypeByMetadataName("Zendiator.Unit")) : responses.Length == 0;
         if (response == null ? !voidResponseMatches || !pattern.AllInterfaces.Any(i => Same(i, voidRequest)) :
-            response.SpecialType != SpecialType.System_Int32 || responses.Length != 1 || !Same(responses[0].TypeArguments[0], response))
-        { error = "The open Send handler must match the selected family's request int response or void contract."; return null; }
+            response.SpecialType != SpecialType.System_Int32 && !referenceResponse || responses.Length != 1 || !Same(responses[0].TypeArguments[0], response))
+        {
+            error = allowReferenceResponse
+                ? "The open Send handler requires the matching int, void, or nonnullable request-owned class response contract."
+                : "The open Send handler must match the selected family's request int response or void contract.";
+            return null;
+        }
         error = binding.ApplyConstraints(pattern);
+        if (referenceResponse) binding._referenceResponse = (ITypeParameterSymbol)response!;
         return error == null ? binding : null;
     }
+    internal bool IsRequestReferenceResponse(ITypeSymbol type) => _referenceResponse != null &&
+        SymbolEqualityComparer.IncludeNullability.Equals(type, _referenceResponse);
     internal bool Contains(ITypeSymbol type) => Parameters(type).All(p => _names.ContainsKey(p));
     internal bool Public(ITypeSymbol type) => type switch
     {
