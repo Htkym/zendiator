@@ -35,6 +35,17 @@ internal static class CanonicalWrapperEmissionNormalizer
                 h.AsyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false } ||
                 w.Stage.Sessions.Count != 0 || w.Stage.WrapperEmission is not { WrapperIsValueType: false } ||
                 c.Handlers.Any(member => !open.HandlerMembership.Contains(member.Identity)))) continue;
+            if (route.RequestShape == BoundRequestShape.OpenSyncReference &&
+                (c.MarkerName == null || route.SendGeneric == null || route.SendOpenRegistration is not { } syncOpen ||
+                route.ResultKind != FusionResultKind.Response || route.Stages.Count != 2 || w.Index != 0 || wrappers.Length != 1 ||
+                syncOpen.Stages.Count != 2 || h.Sessions.Count != 0 ||
+                h.SyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false } ||
+                w.Stage.Sessions.Count != 0 || w.Stage.WrapperEmission is not { WrapperIsValueType: false } ||
+                route.Stages[1] is not
+                {
+                    Kind: FusionStageKind.Hook, Sessions.Count: 0, ServiceOwnership: FusionOwnership.BorrowedService,
+                    SyncEmission: { HookIsValueType: false }
+                } || c.Handlers.Any(member => !syncOpen.HandlerMembership.Contains(member.Identity)))) continue;
             if (h.CompilerOwnsError || !c.Handlers.Any(x => x.Identity == h.Type) || sync && h.SyncEmission == null || !sync && h.AsyncEmission == null) continue;
             var regions = new List<CanonicalWrapperRegionEmission>(); var pending = new List<HookCapabilityEmission>(); var invalid = false;
             foreach (var s in route.Stages)

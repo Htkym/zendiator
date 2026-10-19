@@ -21,9 +21,9 @@ internal static class CanonicalStreamTypeClosure
             "Zendiator.IAsyncSendExceptionObserver`1", "Zendiator.IAsyncSendFinallyObserver`1" } :
         new[] { "Zendiator.ISendRequestTransform`1", "Zendiator.ISendResponseTransform`2", "Zendiator.ISendSuccessObserver`1",
             "Zendiator.ISendExceptionObserver`1", "Zendiator.ISendFinallyObserver`1" }, compilation, open, requestOnly: true);
-    internal static Result AsyncSendWrapper(INamedTypeSymbol type, INamedTypeSymbol request, ITypeSymbol? result,
-        Compilation compilation, CanonicalStreamOpenBinding open) => Close(type, request, result,
-        new[] { result == null ? "Zendiator.IAsyncSendWrapper`1" : "Zendiator.IAsyncSendWrapper`2" }, compilation, open, requestOnly: result == null);
+    internal static Result SendWrapper(INamedTypeSymbol type, INamedTypeSymbol request, ITypeSymbol? result,
+        Compilation compilation, CanonicalStreamOpenBinding open, bool async) => Close(type, request, result,
+        new[] { (async ? "Zendiator.IAsyncSendWrapper" : "Zendiator.ISendWrapper") + (result == null ? "`1" : "`2") }, compilation, open, requestOnly: result == null);
     internal static Result Handler(INamedTypeSymbol type, INamedTypeSymbol request, Compilation compilation, CanonicalStreamOpenBinding? open = null)
     {
         var assembly = compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly;
