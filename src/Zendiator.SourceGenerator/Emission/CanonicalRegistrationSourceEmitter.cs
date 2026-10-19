@@ -79,7 +79,7 @@ internal static class CanonicalRegistrationSourceEmitter
             var stages = open.Stages.Count == 0 ? "" : ", " + Stages(open.Stages);
             if (open.FinalDefinitionName != null)
                 b.AppendLine($$"""            expected.StreamPipeline(typeof({{open.RequestDefinitionName}}), typeof({{open.FinalDefinitionName}}){{stages}});""");
-            else
+            else if (open.Stages.Count != 0 || c.HasEmptyPipeline || route.Family is not (BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync))
                 b.AppendLine($$"""            expected.Pipeline(typeof({{open.RequestDefinitionName}}){{(c.PipelineFamily == null ? "" : ", global::Zendiator.DispatchFamily." + route.Family)}}{{stages}});""");
         }
         else if (c.Handler.RequestIsRefLike)

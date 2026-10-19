@@ -466,15 +466,19 @@ internal sealed class CompositionListBinding
             var generic = open?.Emission(out constraintError);
             if (open != null && generic == null)
                 Reject("UnsupportedGenerationShape", declaration.Anchor, constraintError!);
+            var openHandlerOnly = handlers.Count == 1 && stages.Count == 0 && handlers[0].Sessions.Count == 0 &&
+                handlers[0].ServiceOwnership == FusionOwnership.BorrowedService &&
+                (family == BoundDispatchFamily.SendSync && handlers[0].SyncEmission is { HandlerIsValueType: false, RequestIsValueType: false } ||
+                family == BoundDispatchFamily.SendAsync && handlers[0].AsyncEmission is { HandlerIsValueType: false, RequestIsValueType: false });
             var openSyncWrapperHookRoute = resultKind is (FusionResultKind.Response or FusionResultKind.Void) && handlers.Count == 1 &&
                 handlers[0].SyncEmission is { HandlerIsValueType: false, RequestIsValueType: false } && stages.Count == 2 &&
                 stages[0].Kind == FusionStageKind.Wrapper && stages[0].WrapperEmission is { WrapperIsValueType: false } &&
                 stages[1].Kind == FusionStageKind.Hook && stages[1].SyncEmission is { HookIsValueType: false };
             if (open != null && family == BoundDispatchFamily.SendSync &&
                 (handlers.Count != 1 || handlers[0].SyncEmission == null ||
-                !openSyncWrapperHookRoute && (stages.Count != 1 || stages[0].SyncEmission is not { HookIsValueType: false }) ||
+                !openHandlerOnly && !openSyncWrapperHookRoute && (stages.Count != 1 || stages[0].SyncEmission is not { HookIsValueType: false }) ||
                 !declaration.HandlerList && declaration.Entries.Length != stages.Count))
-                Reject("UnsupportedGenerationShape", declaration.Anchor, "Open SendSync requires one class handler and borrowed class stages: one full synchronous hook, or one response/native void wrapper followed by one full synchronous hook.");
+                Reject("UnsupportedGenerationShape", declaration.Anchor, "Open SendSync requires one class handler and borrowed class stages: no stages, one full synchronous hook, or one response/native void wrapper followed by one full synchronous hook.");
             var openWrapperRoute = resultKind == FusionResultKind.Response && stages.Count == 1 &&
                 stages[0].Kind == FusionStageKind.Wrapper && stages[0].WrapperEmission is { WrapperIsValueType: false };
             var openWrapperHookRoute = resultKind is (FusionResultKind.Response or FusionResultKind.Void) && stages.Count == 2 &&
@@ -482,10 +486,10 @@ internal sealed class CompositionListBinding
                 stages[1].Kind == FusionStageKind.Hook && stages[1].AsyncEmission is { HookIsValueType: false };
             if (open != null && family == BoundDispatchFamily.SendAsync &&
                 (handlers.Count != 1 || handlers[0].AsyncEmission == null ||
-                !openWrapperRoute && !openWrapperHookRoute && (stages.Count != 1 && !(resultKind == FusionResultKind.Response && stages.Count == 2) ||
+                !openHandlerOnly && !openWrapperRoute && !openWrapperHookRoute && (stages.Count != 1 && !(resultKind == FusionResultKind.Response && stages.Count == 2) ||
                 stages.Any(s => s.AsyncEmission is not { HookIsValueType: false })) ||
                 !declaration.HandlerList && declaration.Entries.Length != stages.Count))
-                Reject("UnsupportedGenerationShape", declaration.Anchor, "Open SendAsync requires one class handler and borrowed class stages: one full asynchronous hook, two response hooks, one response wrapper, or one response/native void wrapper followed by one full asynchronous hook.");
+                Reject("UnsupportedGenerationShape", declaration.Anchor, "Open SendAsync requires one class handler and borrowed class stages: no stages, one full asynchronous hook, two response hooks, one response wrapper, or one response/native void wrapper followed by one full asynchronous hook.");
             var openAllSync = open != null && family == BoundDispatchFamily.SendAllSync;
             var openAllSyncWrapperHook = resultKind is (FusionResultKind.Response or FusionResultKind.Void) && stages.Count == 2 &&
                 stages[0] is { Kind: FusionStageKind.Wrapper, Sessions.Count: 0, ServiceOwnership: FusionOwnership.BorrowedService, WrapperEmission: { WrapperIsValueType: false } } &&

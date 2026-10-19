@@ -43,9 +43,9 @@ internal static class CanonicalSyncEmissionNormalizer
             var handler = route.Handlers[0];
             if (route.RequestShape == BoundRequestShape.OpenSyncReference &&
                 (composition.MarkerName == null || route.SendGeneric == null || route.SendOpenRegistration is not { } open ||
-                route.Stages.Count != 1 || open.Stages.Count != 1 || handler.Sessions.Count != 0 ||
+                route.Stages.Count is not (0 or 1) || open.Stages.Count != route.Stages.Count || handler.Sessions.Count != 0 ||
                 handler.SyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false } ||
-                route.Stages[0].Sessions.Count != 0 || route.Stages[0].SyncEmission is not { HookIsValueType: false } ||
+                route.Stages.Any(s => s.Sessions.Count != 0 || s.SyncEmission is not { HookIsValueType: false }) ||
                 composition.Handlers.Any(h => !open.HandlerMembership.Contains(h.Identity)))) continue;
             // Default membership may contain an open definition and its explicitly closed route.
             // Only the authoritative route participates in lowering or DI registration.

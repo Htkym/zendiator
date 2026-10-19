@@ -24,7 +24,7 @@ internal static class CanonicalAsyncEmissionNormalizer
             var h = route.Handlers[0];
             if (route.RequestShape == BoundRequestShape.OpenAsyncReference &&
                 (c.MarkerName == null || route.SendGeneric == null || route.SendOpenRegistration is not { } open ||
-                route.Stages.Count != 1 && !(route.ResultKind == FusionResultKind.Response && route.Stages.Count == 2) ||
+                route.Stages.Count is not (0 or 1) && !(route.ResultKind == FusionResultKind.Response && route.Stages.Count == 2) ||
                 open.Stages.Count != route.Stages.Count || h.Sessions.Count != 0 ||
                 h.AsyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false } ||
                 route.Stages.Any(s => s.Sessions.Count != 0 || s.AsyncEmission is not { HookIsValueType: false }) ||
