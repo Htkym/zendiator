@@ -31,7 +31,8 @@ internal static class CanonicalCapabilityEmissionNormalizer
             var registration = new CanonicalSyncCompositionEmission(i, c.GeneratedNamespace, c.MarkerName, c.UseLocalHandlers, handler,
                 hf == null ? null : new(hf.FactoryName, hf.ContractName, hf.MethodName, hf.CleanupContractName) { FactoryIsValueType = hf.FactoryIsValueType }, false, route.PipelineFamily, c.MicrosoftDiProviderName ?? "")
             { ExplicitHandlerTypes = c.ExplicitHandlerTypes, CatalogMarkerTypes = c.CatalogMarkerTypes, ExternAliases = c.ExternAliases, RegistrationStages = new(hooks.Select(s => new RegistrationStageEmission(s.HookName, "Hook", s.Factory?.FactoryName))) };
-            output.Add(new(registration, route.Family.Value, new(hooks), hf));
+            output.Add(new(registration, route.Family.Value, new(hooks), hf)
+            { HandlerCallTarget = sync ? null : h.AsyncEmission!.CallTarget });
         }
         return new(new(output));
     }

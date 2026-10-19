@@ -132,14 +132,15 @@ internal static class StageContractBinding
             if (role.Stream && !role.Wrapper && (role.Completion is BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask))
                 streamEmission = new(Name(type), Name(contract), members[0].Name, role.Phase, type.IsValueType, role.Completion)
                 { InputItemName = typedStream ? streamItems?.Input.Name : null, OutputItemName = typedStream ? streamItems?.Output.Name : null };
-            if (!role.Wrapper && !role.Stream && !role.ScopedObserver) capabilityCalls[role.Phase] = new(Name(contract), members[0].Name, role.Completion);
+            var callTarget = role.Completion == BoundCompletionKind.ValueTask && family == BoundDispatchFamily.SendAsync && kind == FusionStageKind.Hook
+                ? CanonicalAsyncCallBinding.Bind(type, members[0], implementation, compilation, Name) : null;
+            if (!role.Wrapper && !role.Stream && !role.ScopedObserver) capabilityCalls[role.Phase] = new(Name(contract), members[0].Name, role.Completion) { CallTarget = callTarget };
             if (role.Completion == BoundCompletionKind.Synchronous && !role.ScopedObserver)
                 syncCallbacks[role.Phase] = new(Name(contract), members[0].Name);
             else if (role.Completion == BoundCompletionKind.ValueTask)
                 asyncCallbacks[role.Phase] = new(Name(contract), members[0].Name)
                 {
-                    CallTarget = family == BoundDispatchFamily.SendAsync && kind == FusionStageKind.Hook
-                        ? CanonicalAsyncCallBinding.Bind(type, members[0], implementation, compilation, Name) : null
+                    CallTarget = callTarget
                 };
             callbacks.Add(new(role.Phase, role.Completion, Identity(contract),
                 implementation.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) + "/" + implementation.DeclaredAccessibility +

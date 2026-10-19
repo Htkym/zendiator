@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Text;
+using static Zendiator.SourceGenerator.CanonicalAsyncCallEmitter;
 
 namespace Zendiator.SourceGenerator;
 
@@ -46,7 +47,7 @@ internal static class CanonicalAsyncSourceEmitter
                 """);
             if (!h.RequestIsValueType && h.ResultName != null && c.Generic == null && c.OpenRegistration == null &&
                 c.Hooks.Count != 0 && c.Factory == null && c.Hooks.All(hook => hook.Factory == null))
-                b.AppendLine("        [global::System.Runtime.CompilerServices.AsyncMethodBuilder(typeof(global::System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder<>))]");
+                b.AppendLine("        " + PoolingBuilderAttribute);
             b.AppendLine($$"""
                         {{(typedInvoker ? "internal" : "private")}} async {{result}} {{(typedInvoker ? "InvokeAsync" : "ExecuteAsync" + typeParameters)}}({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken){{(typedInvoker ? "" : constraints)}}
                         {
@@ -198,18 +199,4 @@ internal static class CanonicalAsyncSourceEmitter
             h.ContractName, h.MethodName, h.CallTarget, new[] { h.RequestName, token }, new[] { "request", "cancellationToken" });
     }
 
-    private static void EmitCall(StringBuilder b, string name, string result, string receiver,
-        string contract, string method, BoundAsyncCallTargetEmission? target, string[] parameters, string[] names)
-    {
-        var fallback = "((" + contract + ")receiver)." + method + "(" + string.Join(", ", names) + ")";
-        var call = fallback;
-        if (target != null)
-        {
-            var arguments = string.Join(", ", names.Select((n, i) => "(" + target.ParameterTypes[i] + ")" + n));
-            var direct = "((" + target.ImplementationTypeName + ")receiver)." + target.MethodName + "(" + arguments + ")";
-            call = target.RequiresExactReceiver ? "((global::System.Object)receiver).GetType() == typeof(" + target.ReceiverName + ") ? " + direct + " : " + fallback : direct;
-        }
-        b.AppendLine("        private static " + result + " " + name + "(" + receiver + " receiver, " +
-            string.Join(", ", parameters.Select((p, i) => p + " " + names[i])) + ") => " + call + ";");
-    }
 }
