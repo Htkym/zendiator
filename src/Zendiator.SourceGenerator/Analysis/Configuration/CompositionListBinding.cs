@@ -471,12 +471,15 @@ internal sealed class CompositionListBinding
                 Reject("UnsupportedGenerationShape", declaration.Anchor, "Open SendSync requires one class handler and one borrowed class full synchronous hook.");
             var openWrapperRoute = resultKind == FusionResultKind.Response && stages.Count == 1 &&
                 stages[0].Kind == FusionStageKind.Wrapper && stages[0].WrapperEmission is { WrapperIsValueType: false };
+            var openWrapperHookRoute = resultKind == FusionResultKind.Response && stages.Count == 2 &&
+                stages[0].Kind == FusionStageKind.Wrapper && stages[0].WrapperEmission is { WrapperIsValueType: false } &&
+                stages[1].Kind == FusionStageKind.Hook && stages[1].AsyncEmission is { HookIsValueType: false };
             if (open != null && family == BoundDispatchFamily.SendAsync &&
                 (handlers.Count != 1 || handlers[0].AsyncEmission == null ||
-                !openWrapperRoute && (stages.Count != 1 && !(resultKind == FusionResultKind.Response && stages.Count == 2) ||
+                !openWrapperRoute && !openWrapperHookRoute && (stages.Count != 1 && !(resultKind == FusionResultKind.Response && stages.Count == 2) ||
                 stages.Any(s => s.AsyncEmission is not { HookIsValueType: false })) ||
                 !declaration.HandlerList && declaration.Entries.Length != stages.Count))
-                Reject("UnsupportedGenerationShape", declaration.Anchor, "Open SendAsync requires one class handler and borrowed class stages: one full asynchronous hook, two response hooks, or one response wrapper.");
+                Reject("UnsupportedGenerationShape", declaration.Anchor, "Open SendAsync requires one class handler and borrowed class stages: one full asynchronous hook, two response hooks, or one response wrapper optionally followed by one full asynchronous hook.");
             var openAllSync = open != null && family == BoundDispatchFamily.SendAllSync;
             if (openAllSync && (handlers.Count != 2 || handlers.Any(h => h.SyncEmission is not { HandlerIsValueType: false, ResultName: "int" or "global::System.Int32" }) ||
                 resultKind != FusionResultKind.Response || stages.Count != 1 || stages[0].SyncEmission is not { HookIsValueType: false } ||

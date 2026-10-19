@@ -146,11 +146,16 @@ public sealed partial class GeneratorTests
         if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
         using var json = JsonDocument.Parse(result);
         Assert.Equal(6, json.RootElement.GetProperty("pairs").GetInt32());
+    }
 
+    [Fact]
+    public void OpenSendAsync_wrapper_rejects_uninferred_sessions_and_reversed_hook_order()
+    {
+        var folder = OpenSendAsyncFolder("wrapper-rejected");
         var rejected = string.Join("\n", new[] {
             OpenSendWrapperConfiguration("Undetermined", "Stage.Wrapper(typeof(UninferredWrapper<,,>))"),
             OpenSendWrapperConfiguration("Session", "Stage.Wrapper(typeof(Logging<,>),typeof(Factory<>))"),
-            OpenSendWrapperConfiguration("Mixed", "Stage.Wrapper(typeof(Logging<,>)),Stage.Hook(typeof(Hook<>))") });
+            OpenSendWrapperConfiguration("Reversed", "Stage.Hook(typeof(Hook<>)),Stage.Wrapper(typeof(Logging<,>))") });
         var negative = OpenSendWrapperModule.Replace("__CONFIGURATION__", rejected) + """
             namespace OpenSendWrapper {
             public sealed class UninferredWrapper<R,S,Unused>(Probe p):Logging<R,S>(p) where R:class,IRequest<S>;
@@ -167,7 +172,7 @@ public sealed partial class GeneratorTests
         SaveSendAllSync(folder == null ? null : Path.Combine(folder, "rejected"), negative, negativeDriver, rejectedOutput, refused);
         Assert.NotEmpty(refused);
         Assert.All(refused, d => { Assert.Contains(d.Id, new[] { "ZEN0035", "ZEN0037" }); Assert.True(d.Location.IsInSource); });
-        foreach (var name in new[] { "Undetermined", "Session", "Mixed" })
+        foreach (var name in new[] { "Undetermined", "Session", "Reversed" })
         {
             Assert.Null(rejectedOutput.GetTypeByMetadataName("OpenSendWrapper.Generated." + name + ".IZendiator"));
             Assert.Null(rejectedOutput.GetTypeByMetadataName("OpenSendWrapper.Generated." + name + ".ZendiatorGeneratedRegistrar"));

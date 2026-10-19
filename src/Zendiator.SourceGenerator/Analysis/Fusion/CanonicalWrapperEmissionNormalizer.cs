@@ -22,10 +22,16 @@ internal static class CanonicalWrapperEmissionNormalizer
             var wrappers = route.Stages.Select((s, index) => (Stage: s, Index: index)).Where(s => s.Stage.Kind == FusionStageKind.Wrapper).ToArray();
             if (wrappers.Length == 0) continue; var w = wrappers[0];
             var sync = route.Family == BoundDispatchFamily.SendSync; var h = route.Handlers[0];
+            var openWrapperHook = route.Stages.Count == 2 && w.Index == 0 &&
+                route.Stages[1] is
+                {
+                    Kind: FusionStageKind.Hook, Sessions.Count: 0, ServiceOwnership: FusionOwnership.BorrowedService,
+                    AsyncEmission: { HookIsValueType: false }
+                };
             if (route.RequestShape == BoundRequestShape.OpenAsyncReference &&
                 (c.MarkerName == null || route.SendGeneric == null || route.SendOpenRegistration is not { } open ||
-                route.ResultKind != FusionResultKind.Response || route.Stages.Count != 1 || wrappers.Length != 1 ||
-                open.Stages.Count != 1 || h.Sessions.Count != 0 ||
+                route.ResultKind != FusionResultKind.Response || route.Stages.Count != 1 && !openWrapperHook || wrappers.Length != 1 ||
+                open.Stages.Count != route.Stages.Count || h.Sessions.Count != 0 ||
                 h.AsyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false } ||
                 w.Stage.Sessions.Count != 0 || w.Stage.WrapperEmission is not { WrapperIsValueType: false } ||
                 c.Handlers.Any(member => !open.HandlerMembership.Contains(member.Identity)))) continue;
