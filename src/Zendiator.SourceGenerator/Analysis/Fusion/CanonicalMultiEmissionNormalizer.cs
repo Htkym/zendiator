@@ -79,7 +79,8 @@ internal static class CanonicalMultiEmissionNormalizer
             r.Handlers[0].ServiceOwnership == FusionOwnership.BorrowedService &&
             r.Handlers[0].AsyncEmission is { HandlerIsValueType: false, RequestIsValueType: false } handler &&
             (handler.ResultName is "int" or "global::System.Int32" ||
-                r.RequestShape == BoundRequestShape.OpenAsyncReference && r.Handlers[0].RequestReferenceResponse));
+                r.RequestShape == BoundRequestShape.OpenAsyncReference && r.Handlers[0].RequestReferenceResponse ||
+                r.RequestShape == BoundRequestShape.ClosedReference && r.Handlers[0].ClosedReferenceResponse));
 
     private static bool HasHandler(BoundPipelineModel route, SelectedHandlerModel handler) => route.SendOpenRegistration is { } open
         ? open.HandlerMembership.Contains(handler.Identity) : route.Handlers.Any(h => h.Type == handler.Identity);

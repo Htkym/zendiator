@@ -29,7 +29,7 @@ public sealed partial class GeneratorTests
         using Microsoft.Extensions.DependencyInjection;using Zendiator;using Zendiator.DependencyInjection;
         namespace GenericLookup {
         public interface ICountedValue {int Consumptions{get;}void Complete();}
-        public sealed class CountedValue<T>:System.Threading.Tasks.Sources.IValueTaskSource<T>,ICountedValue where T:class,IEntity {
+        public sealed class CountedValue<T>:System.Threading.Tasks.Sources.IValueTaskSource<T>,ICountedValue where T:class {
             private System.Threading.Tasks.Sources.ManualResetValueTaskSourceCore<T> core;private readonly T value;private readonly LookupProbe p;private readonly string step;
             public int Consumptions{get;private set;}public CountedValue(T value,LookupProbe p){this.value=value;this.p=p;step=p.Step;core.RunContinuationsAsynchronously=true;}
             public ValueTask<T> Task=>new(this,core.Version);public void Complete()=>core.SetResult(value);
@@ -38,7 +38,7 @@ public sealed partial class GeneratorTests
             public void OnCompleted(Action<object?> continuation,object? state,short token,System.Threading.Tasks.Sources.ValueTaskSourceOnCompletedFlags flags)=>core.OnCompleted(continuation,state,token,flags);
         }
         public sealed class LookupProbe {
-            public static readonly AsyncLocal<string?> Ambient=new();public readonly Product Product=new("p-7","Keyboard");public readonly Customer Customer=new("c-3","Ada");
+            public static readonly AsyncLocal<string?> Ambient=new();public readonly Product Product=new("p-7","Keyboard");public readonly Customer Customer=new("c-3","Ada");public readonly InventoryStatus Status=new(2);
             public string Step="",ExpectedId="";public CancellationToken Token;public bool Pending;
             public readonly List<string> Steps=new(),Trace=new();public readonly List<string?> AmbientSeen=new();public readonly List<object> Created=new(),Disposed=new();public readonly List<ICountedValue> Sources=new();
             public static void Check(bool condition,string message){if(!condition)throw new InvalidOperationException(message);}
@@ -56,14 +56,16 @@ public sealed partial class GeneratorTests
             public void Dispose()=>p.Dispose(this);
         }
         public sealed class ProbeStatus: IStatusSource,IDisposable {
-            private readonly LookupProbe p;public ProbeStatus(LookupProbe p){this.p=p;p.Resolve(this);}public int ActiveCount{get{p.Hit("status");return 2;}}public void Dispose()=>p.Dispose(this);
+            private readonly LookupProbe p;public ProbeStatus(LookupProbe p){this.p=p;p.Resolve(this);}
+            public ValueTask<InventoryStatus> ReadAsync(CancellationToken token){LookupProbe.Check(token==p.Token,"status token");p.Hit(nameof(InventoryStatus));var source=new CountedValue<InventoryStatus>(p.Status,p);p.Sources.Add(source);if(!p.Pending)source.Complete();return source.Task;}
+            public void Dispose()=>p.Dispose(this);
         }
         public sealed record UnopenedEntity(string Id):IEntity;
         public static class TypedEntry {
             private static ValueTask<T> Reference<T>(IServiceProvider provider,Lookup<T> request,CancellationToken token) where T:class,IEntity {ArgumentNullException.ThrowIfNull(request);return Core(provider,request,token);}
             private static async ValueTask<T> Core<T>(IServiceProvider provider,Lookup<T> request,CancellationToken token) where T:class,IEntity {token.ThrowIfCancellationRequested();return await provider.GetRequiredService<LookupHandler<T>>().HandleAsync(request,token).ConfigureAwait(false);}
-            private static ValueTask<int> Reference(IServiceProvider provider,StatusQuery request,CancellationToken token){ArgumentNullException.ThrowIfNull(request);return Core(provider,request,token);}
-            private static async ValueTask<int> Core(IServiceProvider provider,StatusQuery request,CancellationToken token){token.ThrowIfCancellationRequested();return await provider.GetRequiredService<StatusHandler>().HandleAsync(request,token).ConfigureAwait(false);}
+            private static ValueTask<InventoryStatus> Reference(IServiceProvider provider,StatusQuery request,CancellationToken token){ArgumentNullException.ThrowIfNull(request);return Core(provider,request,token);}
+            private static async ValueTask<InventoryStatus> Core(IServiceProvider provider,StatusQuery request,CancellationToken token){token.ThrowIfCancellationRequested();return await provider.GetRequiredService<StatusHandler>().HandleAsync(request,token).ConfigureAwait(false);}
             private static async Task<string> Observe(bool generated){
                 var p=new LookupProbe();IServiceCollection services=new ServiceCollection();services.AddSingleton(p);services.AddScoped(typeof(IEntityStore<>),typeof(ProbeEntityStore<>));services.AddScoped<IStatusSource,ProbeStatus>();services.AddScoped(typeof(LookupHandler<>));var existing=services.Last();
                 AppServices.Add(services);var count=services.Count;AppServices.Add(services);LookupProbe.Check(count==7&&services.Count==count&&services.Contains(existing),"scoped TryAdd registration");
@@ -79,18 +81,23 @@ public sealed partial class GeneratorTests
                     if(pending){LookupProbe.Check(!operation.IsCompleted&&source.Consumptions==0,"genuine pending typed source");pendingCount++;source.Complete();}else LookupProbe.Check(operation.IsCompletedSuccessfully&&source.Consumptions==1,"immediate typed source");
                     T result=await operation.ConfigureAwait(false);LookupProbe.Check(source.Consumptions==1&&LookupProbe.Ambient.Value=="caller","typed return/one consumption/context");return result;
                 }
-                async Task<int> Status(string step){attempts++;p.Step=step;p.Token=normal.Token;LookupProbe.Ambient.Value="caller";var request=new StatusQuery();var operation=generated?mediator.SendAsync(request,normal.Token):Reference(sp,request,normal.Token);LookupProbe.Check(LookupProbe.Ambient.Value=="caller","closed call context");var result=await operation.ConfigureAwait(false);LookupProbe.Check(result==2&&LookupProbe.Ambient.Value=="caller","closed status/context");return result;}
+                async Task<InventoryStatus> Status(string step,bool pending){
+                    attempts++;p.Step=step;p.Token=normal.Token;p.Pending=pending;LookupProbe.Ambient.Value="caller";var previous=p.Sources.Count;var request=new StatusQuery();
+                    var operation=generated?mediator.SendAsync(request,normal.Token):Reference(sp,request,normal.Token);LookupProbe.Check(LookupProbe.Ambient.Value=="caller"&&p.Sources.Count==previous+1,"closed call boundary");var source=p.Sources.Last();
+                    if(pending){LookupProbe.Check(!operation.IsCompleted&&source.Consumptions==0,"genuine pending DTO source");pendingCount++;source.Complete();}else LookupProbe.Check(operation.IsCompletedSuccessfully&&source.Consumptions==1,"immediate DTO source");
+                    InventoryStatus result=await operation.ConfigureAwait(false);LookupProbe.Check(result.ActiveCount==2&&source.Consumptions==1&&LookupProbe.Ambient.Value=="caller","closed status/one consumption/context");return result;
+                }
                 Product first=await Find<Product>("product-1",p.Product.Id,false);var productHandler=sp.GetRequiredService<LookupHandler<Product>>();
-                var status=await Status("status-1");var statusHandler=sp.GetRequiredService<StatusHandler>();
+                InventoryStatus status=await Status("status-1",true);var statusHandler=sp.GetRequiredService<StatusHandler>();
                 Customer second=await Find<Customer>("customer",p.Customer.Id,true);Product again=await Find<Product>("product-repeat",p.Product.Id,false);
                 attempts++;p.Step="canceled";LookupProbe.Ambient.Value="caller";var eventCount=p.Trace.Count;var sourceCount=p.Sources.Count;var stopped=new Lookup<UnopenedEntity>("never");
                 var cancellation=generated?mediator.SendAsync(stopped,canceled.Token):Reference(sp,stopped,canceled.Token);
                 LookupProbe.Check(cancellation.IsCanceled&&p.Trace.Count==eventCount&&p.Sources.Count==sourceCount&&LookupProbe.Ambient.Value=="caller","cancel before Handler/store resolution");
                 try{_=await cancellation.ConfigureAwait(false);throw new InvalidOperationException("expected cancellation");}catch(OperationCanceledException error){LookupProbe.Check(error.CancellationToken==canceled.Token,"cancellation token identity");cancellationPhase="await";}
-                var after=await Status("status-after-cancel");
-                LookupProbe.Check(ReferenceEquals(first,p.Product)&&ReferenceEquals(again,p.Product)&&ReferenceEquals(second,p.Customer),"typed result instance identity");
+                InventoryStatus after=await Status("status-after-cancel",false);
+                LookupProbe.Check(ReferenceEquals(first,p.Product)&&ReferenceEquals(again,p.Product)&&ReferenceEquals(second,p.Customer)&&ReferenceEquals(status,p.Status)&&ReferenceEquals(after,p.Status),"typed result instance identity");
                 LookupProbe.Check(ReferenceEquals(productHandler,sp.GetRequiredService<LookupHandler<Product>>())&&ReferenceEquals(statusHandler,sp.GetRequiredService<StatusHandler>()),"same scoped Handler instances");
-                LookupProbe.Check(p.Steps.SequenceEqual(new[]{"product-1","status-1","customer","product-repeat","status-after-cancel"})&&p.Sources.Count==3&&p.Sources.All(s=>s.Consumptions==1),"route order/one invocation/typed consumption");
+                LookupProbe.Check(p.Steps.SequenceEqual(new[]{"product-1","status-1","customer","product-repeat","status-after-cancel"})&&pendingCount==2&&p.Sources.Count==5&&p.Sources.All(s=>s.Consumptions==1),"route order/one invocation/typed consumption");
                 LookupProbe.Check(p.Created.Select(r=>r.GetType()).SequenceEqual(new[]{typeof(ProbeEntityStore<Product>),typeof(ProbeStatus),typeof(ProbeEntityStore<Customer>)}),"typed DI keys/no canceled store");
                 LookupProbe.Check(p.AmbientSeen.SequenceEqual(new[]{"resolve","resolve","resolve","caller","caller"})&&p.Disposed.Count==0,"caller context/borrowed dependencies survive dispatch");scope.Dispose();LookupProbe.Check(p.Disposed.SequenceEqual(p.Created.AsEnumerable().Reverse()),"scope owns dependencies exactly once");
                 LookupProbe.Check(first.Name=="Keyboard"&&second.Name=="Ada","returned values remain usable");
@@ -105,7 +112,7 @@ public sealed partial class GeneratorTests
         using System;using System.Linq;using System.Text.Json;using Microsoft.Extensions.DependencyInjection;using Zendiator;using Zendiator.DependencyInjection;
         namespace GenericLookupEmpty {
         public static class EmptyEntry {
-            public static string Run(){IServiceCollection services=new ServiceCollection();services.AddScoped(typeof(IEntityStore<>),typeof(InMemoryEntityStore<>));services.AddSingleton<IStatusSource>(new InventoryStatus(2));AppServices.Add(services);var count=services.Count;AppServices.Add(services);if(count!=6||services.Count!=count)throw new InvalidOperationException("empty repeat registration");
+            public static string Run(){IServiceCollection services=new ServiceCollection();services.AddScoped(typeof(IEntityStore<>),typeof(InMemoryEntityStore<>));services.AddSingleton<IStatusSource>(new InMemoryStatusSource(new InventoryStatus(2)));AppServices.Add(services);var count=services.Count;AppServices.Add(services);if(count!=6||services.Count!=count)throw new InvalidOperationException("empty repeat registration");
                 var omitted=new ZendiatorConfiguration();omitted.Handlers(typeof(Lookup<>),DispatchFamily.SendAsync,typeof(LookupHandler<>));omitted.Handlers<StatusQuery>(DispatchFamily.SendAsync,typeof(StatusHandler));IServiceCollection rejected=new ServiceCollection();var mismatch=false;try{Generated.App.ZendiatorGeneratedRegistrar.Add(rejected,omitted.Snapshot());}catch(InvalidOperationException){mismatch=true;}if(!mismatch||rejected.Count!=0)throw new InvalidOperationException("explicit empty snapshot");
                 using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});using var scope=provider.CreateScope();if(!ReferenceEquals(scope.ServiceProvider.GetRequiredService<Generated.App.IZendiator>(),scope.ServiceProvider.GetRequiredService<Generated.App.Zendiator>()))throw new InvalidOperationException("empty facade alias");return JsonSerializer.Serialize(new{registrations=count,mismatchRejected=mismatch,dispatchAttempts=0});}
         }
@@ -135,14 +142,17 @@ public sealed partial class GeneratorTests
         {
             var composition = Assert.Single(model.Compositions, c => c.Namespace == ns); Assert.Equal(2, composition.Routes.Count); Assert.True(CanonicalRegistrationPlan.Compatible(composition));
             var bound = Assert.Single(catalog.Compositions, c => c.GeneratedNamespace == ns); var open = Assert.Single(bound.Pipelines, r => r.RequestShape == BoundRequestShape.OpenAsyncReference); var handler = Assert.Single(open.Handlers);
-            Assert.True(handler.RequestReferenceResponse); Assert.NotEqual(handler, handler with { RequestReferenceResponse = false }); Assert.Equal(Assert.Single(open.SendGeneric!.Parameters), handler.AsyncEmission!.ResultName); Assert.Empty(handler.Sessions); Assert.Empty(open.Stages);
+            Assert.True(handler.RequestReferenceResponse); Assert.False(handler.ClosedReferenceResponse); Assert.NotEqual(handler, handler with { RequestReferenceResponse = false }); Assert.Equal(Assert.Single(open.SendGeneric!.Parameters), handler.AsyncEmission!.ResultName); Assert.Empty(handler.Sessions); Assert.Empty(open.Stages);
+            var closedRoute = Assert.Single(bound.Pipelines, r => r.RequestShape == BoundRequestShape.ClosedReference); var closedHandler = Assert.Single(closedRoute.Handlers);
+            Assert.True(closedHandler.ClosedReferenceResponse); Assert.False(closedHandler.RequestReferenceResponse); Assert.NotEqual(closedHandler, closedHandler with { ClosedReferenceResponse = false }); Assert.Empty(closedHandler.Sessions); Assert.Empty(closedRoute.Stages);
             var api = output.GetTypeByMetadataName(ns + ".IZendiator")!; var mediator = output.GetTypeByMetadataName(ns + ".Zendiator")!; Assert.NotNull(api); Assert.NotNull(mediator); Assert.False(api.IsGenericType);
             foreach (var type in new[] { api, mediator })
             {
                 var methods = type.GetMembers("SendAsync").OfType<IMethodSymbol>().ToArray(); Assert.Equal(2, methods.Length); var generic = Assert.Single(methods, m => m.Arity == 1); var status = Assert.Single(methods, m => m.Arity == 0);
                 var parameter = Assert.Single(generic.TypeParameters); Assert.True(parameter.HasReferenceTypeConstraint); Assert.False(parameter.HasConstructorConstraint); Assert.Contains(parameter.ConstraintTypes, t => t.Name == "IEntity");
                 var result = Assert.IsAssignableFrom<INamedTypeSymbol>(generic.ReturnType); Assert.Equal("ValueTask", result.Name); var argument = Assert.Single(result.TypeArguments); Assert.True(SymbolEqualityComparer.Default.Equals(parameter, argument)); Assert.NotEqual(NullableAnnotation.Annotated, argument.NullableAnnotation);
-                Assert.Equal(SpecialType.System_Int32, Assert.Single(Assert.IsAssignableFrom<INamedTypeSymbol>(status.ReturnType).TypeArguments).SpecialType); Assert.All(methods, m => Assert.False(m.IsAsync));
+                var statusResult = Assert.Single(Assert.IsAssignableFrom<INamedTypeSymbol>(status.ReturnType).TypeArguments);
+                Assert.True(SymbolEqualityComparer.Default.Equals(output.GetTypeByMetadataName(ns.Replace(".Generated.App", ".InventoryStatus")), statusResult)); Assert.Equal(NullableAnnotation.NotAnnotated, statusResult.NullableAnnotation); Assert.All(methods, m => Assert.False(m.IsAsync));
             }
         }
         foreach (var ns in new[] { "OpenZeroPair.Generated.Omitted", "OpenSendWrapper.Generated.Pair", "OpenZero.AV.Generated.Omitted", "OpenZero.AV.Generated.Empty" }) Assert.NotNull(output.GetTypeByMetadataName(ns + ".IZendiator"));
@@ -171,6 +181,19 @@ public sealed partial class GeneratorTests
         {
             var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "TypedLookupRejected_" + name + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); SaveSendAllSync(TypedLookupFolder(name), source, driver, output, diagnostics);
             Assert.Contains(diagnostics, d => d.Id == "ZEN0035"); Assert.All(diagnostics, d => Assert.Contains(d.Id, new[] { "ZEN0035", "ZEN0037" })); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+            Assert.Null(output.GetTypeByMetadataName("GenericLookup.Generated.App.IZendiator")); Assert.Null(output.GetTypeByMetadataName("GenericLookup.Generated.App.ZendiatorGeneratedRegistrar")); Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal));
+        }
+        foreach (var (name, source) in new[]
+        {
+            ("closed-nullable", declarations.Replace("IRequest<InventoryStatus>", "IRequest<InventoryStatus?>").Replace("IRequestHandler<StatusQuery, InventoryStatus>", "IRequestHandler<StatusQuery, InventoryStatus?>").Replace("ValueTask<InventoryStatus>", "ValueTask<InventoryStatus?>")),
+            ("closed-value", declarations.Replace("InventoryStatus", "StatusValue").Replace("public sealed record StatusValue(int ActiveCount);", "public readonly record struct StatusValue(int ActiveCount);")),
+        })
+        {
+            var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "TypedLookupRejected_" + name + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); SaveSendAllSync(TypedLookupFolder(name), source, driver, output, diagnostics);
+            Assert.Equal(2, diagnostics.Length); Assert.All(diagnostics, d => { Assert.Equal("ZEN0037", d.Id); Assert.True(d.Location.IsInSource); });
+            Assert.Contains(diagnostics, d => source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length).Contains("Handlers<StatusQuery>"));
+            Assert.Contains(diagnostics, d => source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length).Contains("typeof(Lookup<>)"));
+            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
             Assert.Null(output.GetTypeByMetadataName("GenericLookup.Generated.App.IZendiator")); Assert.Null(output.GetTypeByMetadataName("GenericLookup.Generated.App.ZendiatorGeneratedRegistrar")); Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal));
         }
         var constraints = declarations + "public sealed class WrongEntity;public static class BadConsumer {public static ValueTask<WrongEntity> Send(Generated.App.IZendiator mediator)=>mediator.SendAsync(new Lookup<WrongEntity>(\"bad\"));}";

@@ -334,7 +334,14 @@ internal sealed class CompositionListBinding
                         new(implementation.Parameters.Select(p => new BoundParameterModel(Identity(p.Type), p.RefKind.ToString(), p.ScopedKind.ToString()))),
                         Identity(implementation.ReturnType), Constraints(implementation.TypeParameters),
                         family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync))
-                { ReceiverIsGeneric = entry.Type.IsGenericType, ReceiverIsPublic = open?.Public(entry.Type) ?? Public(entry.Type), RequestReferenceResponse = requestReferenceResponse };
+                {
+                    ReceiverIsGeneric = entry.Type.IsGenericType,
+                    ReceiverIsPublic = open?.Public(entry.Type) ?? Public(entry.Type),
+                    RequestReferenceResponse = requestReferenceResponse,
+                    ClosedReferenceResponse = open == null && family == BoundDispatchFamily.SendAsync &&
+                        entry.Type.TypeKind == TypeKind.Class && entry.Factory == null &&
+                        (declaration.HandlerList || declaration.Entries.Length == 0) && HasClosedReferenceResponse(request, nextResult)
+                };
                 if ((family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync) && declaration.Request.TypeKind is TypeKind.Class or TypeKind.Struct &&
                     entry.Type.TypeKind is (TypeKind.Class or TypeKind.Struct) && _compilation.IsSymbolAccessibleWithin(entry.Type, _compilation.Assembly) && implementation != null && member != null &&
                     (nextResult == null || nextResult is INamedTypeSymbol or IArrayTypeSymbol || requestReferenceResponse))
@@ -578,6 +585,16 @@ internal sealed class CompositionListBinding
         if (role == "Request" && !(open?.Public(type) ?? Public(type)))
         { Reject("UnsupportedGenerationShape", anchor, "Public route signatures require a public request type, including containing types and generic arguments."); return false; }
         return true;
+    }
+
+    private bool HasClosedReferenceResponse(INamedTypeSymbol request, ITypeSymbol? result)
+    {
+        if (request.TypeKind != TypeKind.Class || request.IsGenericType ||
+            result is not INamedTypeSymbol { TypeKind: TypeKind.Class, IsGenericType: false, NullableAnnotation: NullableAnnotation.NotAnnotated } ||
+            HasOpenShape(result) || !Public(result)) return false;
+        var contract = _compilation.GetTypeByMetadataName(ContractNames.Request);
+        var responses = request.AllInterfaces.Where(i => Same(i.OriginalDefinition, contract)).ToArray();
+        return responses.Length == 1 && SymbolEqualityComparer.IncludeNullability.Equals(responses[0].TypeArguments[0], result);
     }
 
     private IEnumerable<BoundDispatchFamily> AvailableFamilies(INamedTypeSymbol handler, INamedTypeSymbol request)

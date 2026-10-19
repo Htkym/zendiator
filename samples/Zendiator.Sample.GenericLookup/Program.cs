@@ -17,7 +17,7 @@ public static class Program
         var services = new ServiceCollection();
         services.AddSingleton<IEntityStore<Product>>(new InMemoryEntityStore<Product>([new("p-7", "Keyboard")]));
         services.AddSingleton<IEntityStore<Customer>>(new InMemoryEntityStore<Customer>([new("c-3", "Ada")]));
-        services.AddSingleton<IStatusSource>(new InventoryStatus(2));
+        services.AddSingleton<IStatusSource>(new InMemoryStatusSource(new InventoryStatus(2)));
         AppServices.Add(services);
 
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
@@ -25,11 +25,11 @@ public static class Program
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
         Product product = await mediator.SendAsync(new Lookup<Product>("p-7"));
         Customer customer = await mediator.SendAsync(new Lookup<Customer>("c-3"));
-        int status = await mediator.SendAsync(new StatusQuery());
+        InventoryStatus status = await mediator.SendAsync(new StatusQuery());
 
         Console.WriteLine($"Product: {product.Name}");
         Console.WriteLine($"Customer: {customer.Name}");
-        Console.WriteLine($"Status: {status}");
+        Console.WriteLine($"Status: {status.ActiveCount}");
     }
 }
 
@@ -53,7 +53,7 @@ public interface IEntity
 public sealed record Product(string Id, string Name) : IEntity;
 public sealed record Customer(string Id, string Name) : IEntity;
 public sealed record Lookup<T>(string Id) : IRequest<T> where T : class;
-public sealed record StatusQuery : IRequest<int>;
+public sealed record StatusQuery : IRequest<InventoryStatus>;
 
 public interface IEntityStore<T> where T : class, IEntity
 {
@@ -79,17 +79,22 @@ public sealed class LookupHandler<T>(IEntityStore<T> store) : IRequestHandler<Lo
 
 public interface IStatusSource
 {
-    int ActiveCount { get; }
+    ValueTask<InventoryStatus> ReadAsync(CancellationToken cancellationToken);
 }
 
-public sealed record InventoryStatus(int ActiveCount) : IStatusSource;
+public sealed record InventoryStatus(int ActiveCount);
 
-[ZendiatorHandler]
-public sealed class StatusHandler(IStatusSource status) : IRequestHandler<StatusQuery, int>
+public sealed class InMemoryStatusSource(InventoryStatus snapshot) : IStatusSource
 {
-    public ValueTask<int> HandleAsync(StatusQuery request, CancellationToken cancellationToken)
+    public ValueTask<InventoryStatus> ReadAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return new(status.ActiveCount);
+        return new(snapshot);
     }
+}
+
+[ZendiatorHandler]
+public sealed class StatusHandler(IStatusSource status) : IRequestHandler<StatusQuery, InventoryStatus>
+{
+    public ValueTask<InventoryStatus> HandleAsync(StatusQuery request, CancellationToken cancellationToken) => status.ReadAsync(cancellationToken);
 }
