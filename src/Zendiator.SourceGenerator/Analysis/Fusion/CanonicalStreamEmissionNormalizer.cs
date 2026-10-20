@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace Zendiator.SourceGenerator;
 
-internal enum CanonicalStreamConnectionKind { Candidate, CanonicalCandidate, CanonicalPending, InvalidContract, ConflictingComposition }
+internal enum CanonicalStreamConnectionKind { Candidate, CanonicalCandidate, CanonicalPending, InvalidContract, ConflictingComposition, HandlerOwned }
 internal sealed record CanonicalStreamConnection(string RouteKey, string CompositionIdentity, string Anchor,
     CanonicalStreamConnectionKind Kind, CanonicalStreamPrototypeModel? Candidate, string Reason)
 { public CanonicalStreamFallbackModel? Canonical { get; init; } }
@@ -42,8 +42,11 @@ internal static class CanonicalStreamEmissionNormalizer
             }
             else if (row.StreamCanonical is { } fallback)
             {
-                kind = CanonicalStreamConnectionKind.CanonicalCandidate; canonical = fallback;
-                reason = ValidGraph + "A same-contract canonical Stream candidate is generated for this " + (route.StreamGeneric == null ? "closed" : "open generic") + " shape. Public runtime generation and equivalence are pending; registration remains blocked. No legacy/reference adapter is selected.";
+                canonical = fallback;
+                kind = fallback.HandlerOwned ? CanonicalStreamConnectionKind.HandlerOwned : CanonicalStreamConnectionKind.CanonicalCandidate;
+                reason = fallback.HandlerOwned
+                    ? "Explicit handler-owned Stream capability: acquisition and enumeration follow the handler-owned contract. The framework cursor schedule is not an equivalence proof for this backend."
+                    : ValidGraph + "A same-contract canonical Stream candidate is generated for this " + (route.StreamGeneric == null ? "closed" : "open generic") + " shape. Public runtime generation and equivalence are pending; registration remains blocked. No legacy/reference adapter is selected.";
             }
             else
             {

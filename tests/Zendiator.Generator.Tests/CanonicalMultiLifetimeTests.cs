@@ -9,8 +9,9 @@ namespace Zendiator.Generator.Tests;
 public sealed class MultiLifetimeProbe
 {
     public readonly List<object> Calls = [], Created = [], Released = [];
-    public int Hit(object receiver, int value) { Calls.Add(receiver); return value; }
-    public void Construct(object receiver) => Created.Add(receiver);
+    public Action? BeforeConstruct;
+    public int Hit(object receiver, int value) { lock (Calls) Calls.Add(receiver); return value; }
+    public void Construct(object receiver) { BeforeConstruct?.Invoke(); lock (Created) Created.Add(receiver); }
     public void Release(object receiver) { Assert.DoesNotContain(Released, r => ReferenceEquals(r, receiver)); Released.Add(receiver); }
 }
 public sealed partial class GeneratorTests
@@ -91,5 +92,49 @@ public sealed partial class GeneratorTests
             Assert.Single(p.Created); Assert.Single(p.Released); Assert.DoesNotContain(typeof(IServiceScopeFactory), scope.Resolutions); Assert.Equal(new[] { "before", "factory", "body", "dispose", "after", "finally" }, p.Trace); MultiEvidence("multi-custom-owned", async.ToString(), new { async, created = p.Created.Count, released = p.Released.Count, p.Trace, providerBorrowed = true });
         }
         finally { p.Token.Dispose(); }
+    }
+
+    [Fact]
+    public async Task Route_cache_first_use_keeps_DI_synchronization_container_scope_and_disposal_ownership()
+    {
+        var f = LifetimeMulti.Value; var probe = new MultiLifetimeProbe();
+        IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe); f.Register.Invoke(null, [services]);
+        await using var firstProvider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+        await using var secondProvider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+        var firstScope = firstProvider.CreateAsyncScope();
+        var firstMediator = firstScope.ServiceProvider.GetRequiredService(f.Mediator);
+        Assert.Empty(probe.Created);
+        object Request(int value) => Activator.CreateInstance(f.Request1, [value])!;
+        Task<int> Invoke(object mediator, int value) => (Task<int>)f.Dispatch.Invoke(null, [mediator, Request(value)])!;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        probe.BeforeConstruct = () => { entered.TrySetResult(); Assert.True(release.Wait(TimeSpan.FromSeconds(10))); };
+        try
+        {
+            var first = Task.Run(() => Invoke(firstMediator, 11));
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var second = Task.Run(() => { secondStarted.TrySetResult(); return Invoke(firstMediator, 12); });
+            await secondStarted.Task.WaitAsync(TimeSpan.FromSeconds(10)); release.Set();
+            Assert.Equal(new[] { 11, 12 }, await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(10)));
+            Assert.Single(probe.Created); Assert.Equal(13, await Invoke(firstMediator, 13)); Assert.Single(probe.Created);
+            Assert.All(probe.Calls, receiver => Assert.Same(probe.Created[0], receiver));
+            probe.BeforeConstruct = null;
+            await using (var otherScope = firstProvider.CreateAsyncScope())
+            {
+                var other = otherScope.ServiceProvider.GetRequiredService(f.Mediator); Assert.Equal(14, await Invoke(other, 14));
+                Assert.NotSame(probe.Created[0], probe.Created[1]);
+            }
+            await using (var otherScope = secondProvider.CreateAsyncScope())
+            {
+                var other = otherScope.ServiceProvider.GetRequiredService(f.Mediator); Assert.Equal(15, await Invoke(other, 15));
+                Assert.NotSame(probe.Created[0], probe.Created[2]);
+            }
+            Assert.Equal(2, probe.Released.Count);
+        }
+        finally { release.Set(); await firstScope.DisposeAsync(); probe.BeforeConstruct = null; }
+        Assert.Equal(3, probe.Created.Count); Assert.Equal(3, probe.Released.Count);
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => Invoke(firstMediator, 16));
+        Assert.Equal(3, probe.Created.Count); Assert.Equal(3, probe.Released.Count);
     }
 }

@@ -2,7 +2,8 @@ namespace Zendiator.SourceGenerator;
 
 // Typed callable names are captured from current symbols, independently of diagnostic identities.
 internal sealed record BoundStreamHandlerEmission(string RequestName, string ItemName, string HandlerName,
-    string ContractName, string MethodName, bool RequestIsValueType, bool HandlerIsValueType);
+    string ContractName, string MethodName, bool RequestIsValueType, bool HandlerIsValueType)
+{ public bool OwnsStream { get; init; } }
 internal sealed record BoundStreamHookEmission(string HookName, string ContractName, string MethodName,
     BoundCallbackPhase Phase, bool HookIsValueType, BoundCompletionKind Completion = BoundCompletionKind.Synchronous)
 {

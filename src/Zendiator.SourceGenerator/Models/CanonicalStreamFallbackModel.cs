@@ -14,4 +14,6 @@ internal sealed record CanonicalStreamFallbackModel(string Namespace, string Cla
     public BoundStreamGenericEmission? Generic { get; init; }
     public BoundStreamItemFlow? ItemFlow { get; init; }
     public BoundAsyncFactoryEmission? HandlerFactory { get; init; }
+    internal bool HandlerOwned => Handler.OwnsStream && HandlerFactory == null && ItemFlow == null && Segments.Count == 1 &&
+        Segments[0].Wrapper == null && Segments[0].Hooks.Count == 0;
 }

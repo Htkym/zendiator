@@ -13,6 +13,12 @@ internal static class CanonicalAsyncSourceEmitter
         b.Append(CanonicalSymbolName.Declarations(model.Compositions.SelectMany(c => c.ExternAliases)));
         foreach (var c in model.Compositions)
         {
+            if (c.Factory == null && c.Hooks.Count == 0)
+            {
+                CanonicalAsyncFastPathEmitter.Emit(b, CanonicalAsyncEmissionNormalizer.Registration(c), c.Handler.CallTarget,
+                    System.Array.Empty<HookCapabilityEmission>());
+                continue;
+            }
             var h = c.Handler;
             var result = h.ResultName == null ? "global::System.Threading.Tasks.ValueTask" : "global::System.Threading.Tasks.ValueTask<" + h.ResultName + ">";
             var typeParameters = c.Generic?.TypeParameters ?? "";

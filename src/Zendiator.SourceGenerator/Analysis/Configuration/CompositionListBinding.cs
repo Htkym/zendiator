@@ -372,6 +372,7 @@ internal sealed class CompositionListBinding
                     {
                         StreamEmission = new(BoundName(request), BoundName(nextResult), BoundName(entry.Type),
                         BoundName(contract), member.Name, request.IsValueType, entry.Type.IsValueType)
+                        { OwnsStream = candidate.Model.OwnsStream }
                     };
                 if (entry.Factory != null && !handlerModel.CompilerOwnsError)
                 {

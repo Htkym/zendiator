@@ -56,7 +56,8 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         var streamPublicSites = streamPublic.Combine(compositions).Combine(context.CompilationProvider)
             .Select(static (input, ct) => CanonicalStreamPublicConnection.BindCallSites(input.Left.Left, input.Left.Right, input.Right, ct));
         var streamPublicFiles = streamPublic.Combine(streamPublicSites)
-            .SelectMany(static (input, _) => CanonicalStreamPublicConnection.Files(input.Left, input.Right));
+            .SelectMany(static (input, _) => CanonicalStreamPublicConnection.Files(input.Left, input.Right))
+            .Select(static (file, _) => CanonicalRouteServiceEmitter.Unsplit(file));
         context.RegisterSourceOutput(streamPublicFiles, static (ctx, file) => ctx.AddSource(file.HintName, SourceText.From(file.Source, Encoding.UTF8)));
         var streamPublicInterceptors = streamPublicSites.Select(static (model, _) =>
             CanonicalSyncSourceEmitter.EmitInterceptors(model, "CanonicalStreamShims"));
@@ -68,7 +69,7 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
             .Where(c => c.Kind == CanonicalStreamConnectionKind.Candidate).Select(c => c.Candidate!))
             .WithTrackingName("CanonicalStreamPrototypeProjection");
         var streamCanonicalModels = streamConnections.SelectMany(static (catalog, _) => catalog.Routes
-            .Where(c => c.Kind == CanonicalStreamConnectionKind.CanonicalCandidate).Select(c => c.Canonical!))
+            .Where(c => c.Kind is CanonicalStreamConnectionKind.CanonicalCandidate or CanonicalStreamConnectionKind.HandlerOwned).Select(c => c.Canonical!))
             .WithTrackingName("CanonicalStreamCanonicalProjection");
         var routeTextEntries = routeBackends.Select(static (route, _) => CanonicalRouteIncremental.Render(route)).WithTrackingName("CanonicalRouteSourceEntry");
         var routeTexts = routeTextEntries.Collect();
@@ -166,6 +167,20 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
             .Select(static (input, _) => CanonicalSplitSourceEmitter.SelectRoute(input.Left.Route, input.Left.File, input.Right))
             .Where(static (file) => file != null).Select(static (file, _) => file!).WithTrackingName("CanonicalRouteOutputFile");
         context.RegisterSourceOutput(selectedRouteFiles, static (ctx, file) => ctx.AddSource(file.HintName, SourceText.From(file.Source, Encoding.UTF8)));
+        var dispatchCandidates = context.SyntaxProvider.CreateSyntaxProvider(
+            static (node, _) => CanonicalMediatorCallSites.Candidate(node), static (ctx, _) => (InvocationExpressionSyntax)ctx.Node).Collect();
+        // These three streams contain the complete public API for the reserved canonical Mediator types.
+        // Mixed compositions are selected as a whole; legacy generation has a separate API family.
+        var dispatchApis = selectedRouteFiles.Select(static (file, _) => CanonicalMediatorCallSites.Api(file)).Collect()
+            .Combine(mixedStreamFiles.Select(static (file, _) => CanonicalMediatorCallSites.Api(file)).Collect())
+            .Combine(streamPublicFiles.Select(static (file, _) => CanonicalMediatorCallSites.Api(file)).Collect())
+            .Select(static (input, _) => new EquatableArray<CanonicalMediatorApi>(input.Left.Left.Concat(input.Left.Right).Concat(input.Right)));
+        var dispatchSites = dispatchCandidates.Combine(dispatchApis).Combine(context.CompilationProvider)
+            .Select(static (input, ct) => CanonicalMediatorCallSites.Bind(input.Left.Left, input.Left.Right, input.Right, ct))
+            .WithTrackingName("CanonicalMediatorCallSites");
+        var dispatchFiles = dispatchSites.SelectMany(static (sites, _) => sites)
+            .Select(static (site, _) => CanonicalMediatorCallSites.Emit(site)).WithTrackingName("CanonicalMediatorDispatchFile");
+        context.RegisterSourceOutput(dispatchFiles, static (ctx, file) => ctx.AddSource(file.HintName, SourceText.From(file.Source, Encoding.UTF8)));
         var multiInterceptors = multiSites.Select(static (model, _) => CanonicalSyncSourceEmitter.EmitInterceptors(model, "CanonicalMultiShims"));
         context.RegisterSourceOutput(multiInterceptors, static (ctx, text) => { if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.Multiple.Interceptors.g.cs", SourceText.From(text, Encoding.UTF8)); });
         context.RegisterSourceOutput(compositionModel.Combine(executionModel).Combine(compositions).Combine(canonicalSync).Combine(canonicalSyncSites)

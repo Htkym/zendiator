@@ -171,7 +171,7 @@ public sealed partial class GeneratorTests
         var stage = Assert.Single(registration.Stages); Assert.Equal("global::App.OpenMap<,>", stage.TypeName); Assert.Equal("global::App.OpenMapFactory<,>", stage.FactoryName);
         var facade = mixed ? Assert.Single(generated, f => IsCanonicalRoute(f) && f.SourceText.ToString().Contains(" StreamAsync", StringComparison.Ordinal)).SourceText.ToString() :
             Assert.Single(generated, f => f.HintName.StartsWith("Zendiator.Canonical.Stream.Public.", StringComparison.Ordinal)).SourceText.ToString();
-        var registrar = mixed ? CanonicalCompositionSource(generated).Replace("<, >", "<,>") : facade;
+        var registrar = (mixed ? CanonicalCompositionSource(generated) : facade).Replace("<, >", "<,>");
         if (mixed)
         {
             Assert.Equal(2, generated.Count(IsCanonicalRoute));

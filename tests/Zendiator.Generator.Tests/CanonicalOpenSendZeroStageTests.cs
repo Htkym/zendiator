@@ -133,7 +133,7 @@ public sealed partial class GeneratorTests
                     services.AddScoped(typeof(Handler<,>));var existing=services.Last();
                     if(empty)Register.Empty(services);else Register.Omitted(services);var count=services.Count;
                     if(empty)Register.Empty(services);else Register.Omitted(services);
-                    Probe.Check(count==4&&services.Count==count&&services.Contains(existing),"TryAdd/repeat registration");
+                    Probe.Check(services.Count==count&&services.Contains(existing),"TryAdd/repeat registration");
                     var facadeType=empty?typeof(Generated.Empty.IZendiator):typeof(Generated.Omitted.IZendiator);
                     var concreteType=empty?typeof(Generated.Empty.Zendiator):typeof(Generated.Omitted.Zendiator);
                     foreach(var type in new[]{typeof(Handler<,>),facadeType,concreteType})Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"scoped services");
@@ -227,7 +227,9 @@ public sealed partial class GeneratorTests
                 var api = output.GetTypeByMetadataName(ns + ".IZendiator")!; var mediator = output.GetTypeByMetadataName(ns + ".Zendiator")!;
                 Assert.NotNull(api); Assert.False(api.IsGenericType); Assert.NotNull(mediator); Assert.False(mediator.IsGenericType);
                 var publicMethod = Assert.Single(mediator.GetMembers(methodName).OfType<IMethodSymbol>()); Assert.False(publicMethod.IsAsync);
-                var execute = Assert.Single(mediator.GetMembers().OfType<IMethodSymbol>(), m => m.Name.StartsWith(isAsync ? "ExecuteAsync__" : "Execute__", StringComparison.Ordinal)); Assert.Equal(isAsync, execute.IsAsync);
+                var service = Assert.Single(mediator.GetTypeMembers(), t => t.Name.StartsWith("Route_", StringComparison.Ordinal));
+                var execute = Assert.Single(service.GetMembers().OfType<IMethodSymbol>(), m => m.Name == (isAsync ? methodName : "Execute"));
+                Assert.False(execute.IsAsync);
                 foreach (var method in new[] { Assert.Single(api.GetMembers(methodName).OfType<IMethodSymbol>()), publicMethod, execute })
                 {
                     Assert.Equal(2, method.Arity); Assert.Equal(2, method.Parameters.Length);

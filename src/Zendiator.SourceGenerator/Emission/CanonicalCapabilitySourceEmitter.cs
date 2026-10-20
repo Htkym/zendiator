@@ -11,6 +11,11 @@ internal static class CanonicalCapabilitySourceEmitter
         b.Append(CanonicalSymbolName.Declarations(model.Compositions.SelectMany(c => c.Registration.ExternAliases)));
         foreach (var c in model.Compositions)
         {
+            if (CanonicalAsyncFastPathEmitter.Supports(c))
+            {
+                CanonicalAsyncFastPathEmitter.Emit(b, c.Registration, c.HandlerCallTarget, c.Hooks);
+                continue;
+            }
             var r = c.Registration; var h = r.Handler; var async = c.Family == BoundDispatchFamily.SendAsync; var result = async ? (h.ResultName == null ? "global::System.Threading.Tasks.ValueTask" : "global::System.Threading.Tasks.ValueTask<" + h.ResultName + ">") : h.ResultName ?? "void";
             var typed = CanOptimizeAsync(c);
             b.AppendLine($$"""

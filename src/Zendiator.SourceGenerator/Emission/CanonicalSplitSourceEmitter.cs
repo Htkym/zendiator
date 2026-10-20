@@ -28,8 +28,8 @@ internal static class CanonicalSplitSourceEmitter
         if (route.Source.Length == 0) return new("", "");
         var root = CSharpSyntaxTree.ParseText(route.Source).GetCompilationUnitRoot(); var ns = root.Members.OfType<NamespaceDeclarationSyntax>().Single();
         var api = ns.Members.OfType<InterfaceDeclarationSyntax>().Single(); var mediator = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "Zendiator");
-        var id = Id(route.StableKey); var names = new CanonicalMultiSourceEmitter.RouteNames(mediator, "__" + id);
-        var methods = mediator.Members.Where(m => m is not (FieldDeclarationSyntax or ConstructorDeclarationSyntax)).Select(m => (MemberDeclarationSyntax)names.Visit(m)!);
+        var id = Id(route.StableKey);
+        var methods = CanonicalRouteServiceEmitter.Route(ns, mediator);
         var partial = SyntaxFactory.Token(SyntaxKind.PartialKeyword);
         return new("Zendiator.Route." + id + ".g.cs", File(Header(root), ns, new MemberDeclarationSyntax[]{
             api.WithModifiers(api.Modifiers.Add(partial)),mediator.WithModifiers(mediator.Modifiers.Add(partial)).WithMembers(SyntaxFactory.List(methods))}));
@@ -53,9 +53,8 @@ internal static class CanonicalSplitSourceEmitter
         {
             var mediator = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "Zendiator");
             var registrar = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "ZendiatorGeneratedRegistrar");
-            var shared = mediator.WithModifiers(mediator.Modifiers.Add(SyntaxFactory.Token(SyntaxKind.PartialKeyword)))
-                .WithMembers(SyntaxFactory.List(mediator.Members.Where(m => m is FieldDeclarationSyntax or ConstructorDeclarationSyntax)));
-            yield return new("Zendiator.Composition." + Id(ns.Name.ToString()) + ".g.cs", File(Header(root), ns, new MemberDeclarationSyntax[] { shared, registrar }));
+            var generated = CanonicalRouteServiceEmitter.Composition(ns, mediator, registrar);
+            yield return new("Zendiator.Composition." + Id(ns.Name.ToString()) + ".g.cs", File(Header(root), ns, new MemberDeclarationSyntax[] { generated.Shared, generated.Registrar }));
         }
     }
 }

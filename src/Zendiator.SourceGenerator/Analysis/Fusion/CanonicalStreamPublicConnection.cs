@@ -36,7 +36,7 @@ internal static class CanonicalStreamPublicConnection
             var route = c.Pipelines[0];
             var connection = connections.Routes.SingleOrDefault(r => r.CompositionIdentity == c.Identity && r.Anchor == route.Anchor);
             var prototype = connection?.Kind == CanonicalStreamConnectionKind.Candidate ? connection.Candidate : null;
-            var canonical = connection?.Kind == CanonicalStreamConnectionKind.CanonicalCandidate ? connection.Canonical : null;
+            var canonical = connection?.Kind is CanonicalStreamConnectionKind.CanonicalCandidate or CanonicalStreamConnectionKind.HandlerOwned ? connection.Canonical : null;
             var itemChange = canonical != null && (ClosedItemChangeShape(canonical) || ClosedTypedWrapperSessionShape(canonical) || OpenOwnedMapShape(canonical) || BorrowedMapShape(canonical));
             var zeroStage = canonical != null && route.HasEmptyPipeline && route.PipelineFamily == BoundDispatchFamily.Stream && PlainZeroStageShape(canonical);
             if (prototype == null && (canonical == null || !zeroStage && !PlainSynchronousItemShape(canonical) && !PlainWrapperShape(canonical) && !AsyncItemShape(canonical) && !PlainOwnedSessionShape(canonical) && !WrapperOwnedSessionShape(canonical) && !itemChange)) continue;
@@ -84,7 +84,7 @@ internal static class CanonicalStreamPublicConnection
             c.GeneratedNamespace == composition.GeneratedNamespace) != 1 ||
             route.Family != BoundDispatchFamily.Stream || route.Handlers.Count != 1) return null;
         var connection = connections.Routes.SingleOrDefault(c => c.CompositionIdentity == composition.Identity && c.Anchor == route.Anchor);
-        if (connection is not { Kind: CanonicalStreamConnectionKind.Candidate or CanonicalStreamConnectionKind.CanonicalCandidate }) return null;
+        if (connection is not { Kind: CanonicalStreamConnectionKind.Candidate or CanonicalStreamConnectionKind.CanonicalCandidate or CanonicalStreamConnectionKind.HandlerOwned }) return null;
         var projected = composition with
         {
             Pipelines = new(new[] { route }),

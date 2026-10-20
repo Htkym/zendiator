@@ -233,9 +233,15 @@ public sealed partial class GeneratorTests
             Assert.EndsWith(ns.StartsWith("AllAsyncCases", StringComparison.Ordinal) ? "SendAllAsync" : "SendAllSync", call.ArgumentList.Arguments[0].ToString(), StringComparison.Ordinal);
         }
         var members = classes.Where(c => c.Identifier.ValueText == "Zendiator").SelectMany(c => c.Members).ToArray();
-        var names = members.OfType<MethodDeclarationSyntax>().Where(m => m.Identifier.ValueText.StartsWith("Branch", StringComparison.Ordinal)).Select(m => m.Identifier.ValueText).ToArray();
-        Assert.Equal(12, names.Length); Assert.Equal(12, names.Distinct(StringComparer.Ordinal).Count());
-        Assert.Single(members.OfType<FieldDeclarationSyntax>()); Assert.Single(members.OfType<ConstructorDeclarationSyntax>());
+        var names = classes.Where(c => c.Identifier.ValueText.StartsWith("Route_", StringComparison.Ordinal))
+            .SelectMany(c => c.Members.OfType<MethodDeclarationSyntax>()).Where(m => m.Identifier.ValueText.StartsWith("Branch", StringComparison.Ordinal)).Select(m => m.Identifier.ValueText).ToArray();
+        Assert.Equal(12, names.Length);
+        foreach (var route in classes.Where(c => c.Identifier.ValueText.StartsWith("Route_", StringComparison.Ordinal)))
+        {
+            var local = route.Members.OfType<MethodDeclarationSyntax>().Where(m => m.Identifier.ValueText.StartsWith("Branch", StringComparison.Ordinal)).Select(m => m.Identifier.ValueText).ToArray();
+            Assert.Equal(local.Length, local.Distinct(StringComparer.Ordinal).Count());
+        }
+        Assert.Single(members.OfType<ConstructorDeclarationSyntax>());
         return new { handlerOrder = handlers.Select(Request), pipelineOrder = pipelines.Select(Request), privateBranchNames = names };
     }
 

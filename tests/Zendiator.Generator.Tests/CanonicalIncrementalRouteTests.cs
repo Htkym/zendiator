@@ -88,7 +88,7 @@ public sealed partial class GeneratorTests
         var legacyFiles = files.Where(s => s.HintName == "Zendiator.g.cs").ToArray();
         Assert.Equal(legacy ? 1 : 0, legacyFiles.Length);
         Assert.All(legacyFiles, s => Assert.Contains("partial class Zendiator", s.SourceText.ToString()));
-        Assert.All(files, s => Assert.True((legacy && s.HintName == "Zendiator.g.cs") || IsCanonicalRoute(s) || IsCanonicalComposition(s) || s.HintName.EndsWith(".Interceptors.g.cs", StringComparison.Ordinal) || s.HintName == "Zendiator.GeneratedCatalog.g.cs", s.HintName));
+        Assert.All(files, s => Assert.True((legacy && s.HintName == "Zendiator.g.cs") || IsCanonicalRoute(s) || IsCanonicalComposition(s) || s.HintName.StartsWith("Zendiator.Dispatch.", StringComparison.Ordinal) || s.HintName.EndsWith(".Interceptors.g.cs", StringComparison.Ordinal) || s.HintName == "Zendiator.GeneratedCatalog.g.cs", s.HintName));
     }
     private static void AssertNoCanonicalOutput(IEnumerable<GeneratedSourceResult> sources)
         => Assert.DoesNotContain(sources, s => IsCanonicalRoute(s) || IsCanonicalComposition(s));

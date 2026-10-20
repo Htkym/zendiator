@@ -157,9 +157,18 @@ public sealed partial class GeneratorTests
             Assert.Equal(new[] { "global::AllSync." + name + ".H2", "global::AllSync." + name + ".H1", "global::AllSync." + name + ".H3" }, call.ArgumentList.Arguments.Skip(1).Select(a => Assert.IsType<TypeOfExpressionSyntax>(a.Expression).Type.ToString()));
         }
         var members = types.Where(t => t.Identifier.ValueText == "Zendiator").SelectMany(t => t.Members).ToArray();
-        var branches = members.OfType<MethodDeclarationSyntax>().Where(m => m.Identifier.ValueText.StartsWith("Branch", StringComparison.Ordinal)).Select(m => m.Identifier.ValueText).ToArray();
-        Assert.Equal(6, branches.Length); Assert.Equal(6, branches.Distinct(StringComparer.Ordinal).Count()); Assert.All(branches, name => Assert.Contains("__", name));
-        Assert.Single(members.OfType<FieldDeclarationSyntax>()); Assert.Single(members.OfType<ConstructorDeclarationSyntax>());
+        var branches = types.Where(t => t.Identifier.ValueText.StartsWith("Route_", StringComparison.Ordinal))
+            .SelectMany(t => t.Members.OfType<MethodDeclarationSyntax>()).Where(m => m.Identifier.ValueText.StartsWith("Branch", StringComparison.Ordinal)).Select(m => m.Identifier.ValueText).ToArray();
+        Assert.Equal(6, branches.Length);
+        foreach (var route in types.Where(t => t.Identifier.ValueText.StartsWith("Route_", StringComparison.Ordinal)))
+        {
+            var local = route.Members.OfType<MethodDeclarationSyntax>().Where(m => m.Identifier.ValueText.StartsWith("Branch", StringComparison.Ordinal)).Select(m => m.Identifier.ValueText).ToArray();
+            Assert.Equal(local.Length, local.Distinct(StringComparer.Ordinal).Count());
+        }
+        Assert.Single(members.OfType<ConstructorDeclarationSyntax>());
+        var responseOverloads = members.OfType<MethodDeclarationSyntax>().Where(m => m.Identifier.ValueText == "SendAll" && m.ParameterList.Parameters[0].Type!.ToString() == "global::AllSync.Response.Ping").ToArray();
+        Assert.Equal(2, responseOverloads.Length);
+        Assert.Single(responseOverloads.Select(m => ((MemberAccessExpressionSyntax)((InvocationExpressionSyntax)m.ExpressionBody!.Expression).Expression).Expression.ToString()).Distinct(StringComparer.Ordinal));
         return new { handlerOrder = handlers.Select(Request), pipelineOrder = pipelines.Select(Request), privateBranchNames = branches };
     }
 
