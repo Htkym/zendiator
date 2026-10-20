@@ -34,6 +34,16 @@ the operation or Stream enumeration, including cleanup, has finished. Let DI
 dispose its scoped handler and hook services. Await each returned `ValueTask`
 once.
 
+## Use typed queries and an update command in one App
+
+The [GenericLookup sample](../samples/Zendiator.Sample.GenericLookup/) returns
+`T` from `Lookup<T>` and `InventoryStatus` from `StatusQuery`. It awaits
+`RefreshInventory` before querying the updated state.
+
+This example uses class requests and DI-owned class handlers. With no hooks,
+it can omit empty `Pipeline` declarations. Await each returned `ValueTask` once
+and keep the scope alive until the asynchronous operation finishes.
+
 ## Migrating from 0.4.0
 
 - Mark selected handlers with `[ZendiatorHandler]` and select them explicitly

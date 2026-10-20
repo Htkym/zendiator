@@ -16,7 +16,7 @@ internal sealed class CanonicalStreamOpenBinding
     private readonly INamedTypeSymbol _owner;
     private readonly Dictionary<ITypeParameterSymbol, string> _names = new(SymbolEqualityComparer.Default);
     private readonly MergedParam[] _constraints;
-    private ITypeParameterSymbol? _referenceResponse;
+    private ITypeSymbol? _sendResponse;
     internal INamedTypeSymbol Request { get; }
     private CanonicalStreamOpenBinding(Compilation compilation, INamedTypeSymbol owner, INamedTypeSymbol request)
     {
@@ -98,11 +98,12 @@ internal sealed class CanonicalStreamOpenBinding
             return null;
         }
         error = binding.ApplyConstraints(pattern);
-        if (referenceResponse) binding._referenceResponse = (ITypeParameterSymbol)response!;
+        binding._sendResponse = response;
         return error == null ? binding : null;
     }
-    internal bool IsRequestReferenceResponse(ITypeSymbol type) => _referenceResponse != null &&
-        SymbolEqualityComparer.IncludeNullability.Equals(type, _referenceResponse);
+    internal bool IsSendResponse(ITypeSymbol type) => _sendResponse != null &&
+        SymbolEqualityComparer.IncludeNullability.Equals(type, _sendResponse);
+    internal bool IsRequestReferenceResponse(ITypeSymbol type) => _sendResponse is ITypeParameterSymbol && IsSendResponse(type);
     internal bool Contains(ITypeSymbol type) => Parameters(type).All(p => _names.ContainsKey(p));
     internal bool Public(ITypeSymbol type) => type switch
     {

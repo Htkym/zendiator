@@ -200,6 +200,12 @@ Streamの返り値をscopeの外へ持ち出し、scopeを破棄してから列�
 
 `SendAsync`が返す`ValueTask`は、例のように1回だけ`await`します。同じ`ValueTask`を保存して複数回消費しないでください。
 
+## 型付きqueryと状態更新commandを同じAppで使う
+
+[GenericLookupサンプル](../samples/Zendiator.Sample.GenericLookup/)では`Lookup<T>`の結果を`T`、`StatusQuery`の結果を`InventoryStatus`で受け取ります。`RefreshInventory`の完了を`await`してからqueryを送り、更新後の状態を取得します。
+
+この例はclassのrequestと、DIが所有するclassのHandlerを使います。Hookがないため、空の`Pipeline`を追加する必要はありません。返された`ValueTask`はそれぞれ1回だけ`await`し、非同期処理が完了するまでscopeを保持してください。
+
 ## 0.4.0から移るとき
 
 0.5.0候補では、Handlerの属性と明示的な登録を使います。0.4.0のinterface実装やアセンブリ指定だけに依存した登録は、そのまま移せません。

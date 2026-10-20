@@ -30,7 +30,7 @@ internal sealed record BoundHandlerModel(string Anchor, string Type, string Name
     public bool ReceiverIsGeneric { get; init; }
     public bool ReceiverIsPublic { get; init; }
     public bool RequestReferenceResponse { get; init; }
-    public bool ClosedReferenceResponse { get; init; }
+    public bool ResponseContract { get; init; }
     public EquatableArray<BoundSessionModel> Sessions { get; init; }
     public BoundSyncHandlerEmission? SyncEmission { get; init; }
     public BoundAsyncHandlerEmission? AsyncEmission { get; init; }
