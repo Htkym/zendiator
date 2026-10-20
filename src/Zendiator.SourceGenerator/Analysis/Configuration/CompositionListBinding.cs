@@ -557,7 +557,7 @@ internal sealed class CompositionListBinding
                         request.TypeKind == TypeKind.Class && !HasOpenShape(request) ? BoundRequestShape.ClosedReference :
                         request.TypeKind == TypeKind.Struct && !request.IsRefLikeType && !request.IsGenericType && !HasOpenShape(request) ?
                             BoundRequestShape.ClosedNonGenericValue : BoundRequestShape.Unsupported,
-                    RequestRuntimeIdentity = request.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    RequestRuntimeIdentity = Key(request),
                     RequestIsGeneric = request.IsGenericType
                 };
         }

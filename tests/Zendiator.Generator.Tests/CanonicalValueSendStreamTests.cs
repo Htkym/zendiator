@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Zendiator.Generator.Tests;
@@ -54,15 +55,15 @@ public sealed partial class GeneratorTests
             [ZendiatorHandler]public sealed class GenericHandler:ISyncRequestHandler<GenericSend<int>,int>{
                 public int Handle(GenericSend<int> r,CancellationToken t)=>r.Value;
             }
-            [ZendiatorComposition("generic-send-stream")]public sealed class Rejected;
-            public static class RejectedBridge {
-                public static IServiceCollection RegisterRejected(IServiceCollection s)=>s.AddZendiator<Rejected>(c=>{
+            [ZendiatorComposition("generic-send-stream")]public sealed class GenericMix;
+            public static class GenericMixBridge {
+                public static IServiceCollection RegisterGenericMix(IServiceCollection s)=>s.AddZendiator<GenericMix>(c=>{
                     c.Handlers<S.Items>(DispatchFamily.Stream,typeof(S.H));
                     c.Handlers<GenericSend<int>>(DispatchFamily.SendSync,typeof(GenericHandler));
                     c.Pipeline<S.Items>(DispatchFamily.Stream,Stage.Hook<S.F1>(),Stage.Hook<S.M>(),Stage.Hook<S.F2>());
                     c.Pipeline<GenericSend<int>>(DispatchFamily.SendSync);
                 });
-            } /* rejected end */
+            }
             """ : "");
     }
 
@@ -154,29 +155,53 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
-    public void Value_Send_Stream_gate_accepts_all_four_Send_shapes_and_rejects_generic_mixture_as_a_whole()
+    public void Value_Send_Stream_composition_reuses_the_existing_single_route_closed_generic_value_backend()
     {
-        var source = ValueSendStreamSource(true);
+        var source = ValueSendStreamSource(true) + """
+            namespace ValueSendMix {
+            [Zendiator.ZendiatorComposition("generic-send-single")]public sealed class GenericSingle;
+            public static class GenericSingleBridge {
+                public static Microsoft.Extensions.DependencyInjection.IServiceCollection RegisterSingle(Microsoft.Extensions.DependencyInjection.IServiceCollection services)=>
+                    Zendiator.DependencyInjection.ZendiatorServiceCollectionExtensions.AddZendiator<GenericSingle>(services,c=>{
+                        c.Handlers<GenericSend<int>>(Zendiator.DispatchFamily.SendSync,typeof(GenericHandler));
+                        c.Pipeline<GenericSend<int>>(Zendiator.DispatchFamily.SendSync);
+                    });
+            }
+            }
+            """;
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "ValueSendStreamGate_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
-        var folder = string.IsNullOrEmpty(evidence) ? null : Path.Combine(evidence, "value-send-gate");
+        var folder = string.IsNullOrEmpty(evidence) ? null : Path.Combine(evidence, "value-send-generic-composition");
         SaveValueSendStream(folder, source, driver, output, diagnostics);
-        Assert.Equal(2, diagnostics.Length); Assert.All(diagnostics, d => Assert.Equal("ZEN0037", d.Id));
-        var start = source.IndexOf("public static IServiceCollection RegisterRejected(", StringComparison.Ordinal);
-        var end = source.IndexOf("/* rejected end */", start, StringComparison.Ordinal);
-        Assert.All(diagnostics, d => Assert.InRange(d.Location.SourceSpan.Start, start, end));
-        var anchors = diagnostics.Select(d => source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length)).ToArray();
-        Assert.Contains(anchors, a => a.StartsWith("c.Pipeline<S.Items>", StringComparison.Ordinal));
-        Assert.Contains(anchors, a => a.StartsWith("c.Pipeline<GenericSend<int>>", StringComparison.Ordinal));
+        Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         AssertValueSendStreamContract(output);
         Assert.NotNull(output.GetTypeByMetadataName("ValueSendMix.Generated.Many.ZendiatorGeneratedRegistrar"));
-        Assert.Null(output.GetTypeByMetadataName("ValueSendMix.Generated.Rejected.IZendiator"));
-        Assert.Null(output.GetTypeByMetadataName("ValueSendMix.Generated.Rejected.ZendiatorGeneratedRegistrar"));
+        AssertComposedProfile(output, "ValueSendMix.Generated.GenericMix", ("Send", 1), ("StreamAsync", 1));
+        AssertComposedProfile(output, "ValueSendMix.Generated.GenericSingle", ("Send", 1));
         var files = driver.GetRunResult().Results.Single().GeneratedSources;
         Assert.Contains(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains("ValueSendMix.Generated.Many.ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
-        Assert.DoesNotContain(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains("ValueSendMix.Generated.Rejected.ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, runtimeOperations = 0, acceptedRoutes = 5, rejectedPipelineDiagnostics = 2, genericMixedWholeCompositionRejected = true }));
+        foreach (var name in new[] { "GenericMix", "GenericSingle" }) Assert.Contains(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains("ValueSendMix.Generated." + name + ".ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
+        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var requestType = assembly.GetType("ValueSendMix.GenericSend`1")!.MakeGenericType(typeof(int));
+        var request = Activator.CreateInstance(requestType, [17])!;
+        var handlerType = assembly.GetType("ValueSendMix.GenericHandler")!;
+        var expected = (int)handlerType.GetMethod("Handle")!.Invoke(Activator.CreateInstance(handlerType), [request, CancellationToken.None])!;
+        Assert.Equal(17, expected);
+        var probe = new PublicValueRequestProbe(); IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe);
+        assembly.GetType("ValueSendMix.GenericSingleBridge")!.GetMethod("RegisterSingle")!.Invoke(null, [services]);
+        assembly.GetType("ValueSendMix.GenericMixBridge")!.GetMethod("RegisterGenericMix")!.Invoke(null, [services]);
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }); using var scope = provider.CreateScope();
+        var results = new List<int>();
+        foreach (var name in new[] { "GenericSingle", "GenericMix" })
+        {
+            var api = scope.ServiceProvider.GetRequiredService(assembly.GetType("ValueSendMix.Generated." + name + ".Zendiator")!);
+            results.Add((int)api.GetType().GetMethod("Send", [requestType, typeof(CancellationToken)])!.Invoke(api, [request, CancellationToken.None])!);
+        }
+        Assert.All(results, value => Assert.Equal(expected, value)); Assert.Equal(0, probe.Starts); Assert.Empty(probe.Resolved);
+        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, generatedDispatches = 2, referenceCalls = 1, acceptedRoutes = 8, reference = expected, single = results[0], mixed = results[1], streamStarts = probe.Starts, backendFilesChanged = false }));
     }
 
     [Fact]
