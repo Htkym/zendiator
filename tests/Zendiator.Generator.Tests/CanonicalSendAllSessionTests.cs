@@ -257,14 +257,14 @@ public sealed partial class GeneratorTests
                 Assert.Equal(profile == "SR" && id == 2 ? "typeof(global::SessionCases.SR.H2)" : "global::Zendiator.HandlerEntry.Session<global::SessionCases." + profile + ".H" + id + ", global::SessionCases." + profile + ".F" + id + ">()", entries[index]);
         }
         var mediator = output.GetTypeByMetadataName("AllMix.Generated.Many.Zendiator")!;
-        var seen = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         var names = new List<string>();
         foreach (var entry in mediator.GetMembers("SendAll").Concat(mediator.GetMembers("SendAllAsync")).OfType<IMethodSymbol>())
         {
-            var owner = CanonicalRouteEntry(output, entry).ContainingType;
-            if (!seen.Add(owner)) continue;
+            var implementation = CanonicalRouteEntry(output, entry);
+            if (!seen.Add(CanonicalEntrySuffix(implementation))) continue;
             var selected = Assert.Single(handlers, c => Request(c) == entry.Parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-            var branches = owner.GetMembers().OfType<IMethodSymbol>().Where(m => m.Name.StartsWith("Branch", StringComparison.Ordinal)).ToArray();
+            var branches = CanonicalEntryMethods(implementation, "Branch").ToArray();
             Assert.Equal(selected.ArgumentList.Arguments.Count - 1, branches.Length);
             Assert.Equal(branches.Length, branches.Select(m => m.Name).Distinct(StringComparer.Ordinal).Count());
             names.AddRange(branches.Select(m => m.ToDisplayString()));

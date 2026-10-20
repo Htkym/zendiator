@@ -41,13 +41,12 @@ public sealed partial class GeneratorTests
         var root = assembly.GetType(mediatorName)!;
         var facade = output.GetTypeByMetadataName(mediatorName)!;
         var routeEntry = CanonicalRouteEntry(output, Assert.Single(facade.GetMembers("SendAsync").OfType<IMethodSymbol>()));
-        var routeType = root.GetNestedType(routeEntry.ContainingType.MetadataName, BindingFlags.NonPublic)!;
-        Assert.NotNull(routeType);
-        var invoker = routeType.GetNestedTypes(BindingFlags.NonPublic).SingleOrDefault(t => t.Name == "SendInvoker");
+        var invokerSymbol = CanonicalEntryTypes(routeEntry, "SendInvoker").SingleOrDefault();
+        var invoker = invokerSymbol == null ? null : root.GetNestedType(invokerSymbol.MetadataName, BindingFlags.NonPublic);
         Assert.Equal(eligible && CapabilityTyped, invoker != null);
         var execution = eligible && CapabilityTyped
             ? invoker!.GetMethod("InvokeAsync", BindingFlags.NonPublic | BindingFlags.Instance)!
-            : Assert.Single(routeType.GetMethods(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly), m => m.Name == "Execute");
+            : root.GetMethod(Assert.Single(CanonicalEntryMethods(routeEntry, "Execute")).MetadataName, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)!;
         Assert.Equal(eligible ? typeof(PoolingAsyncValueTaskMethodBuilder<>) : null, execution.GetCustomAttribute<AsyncMethodBuilderAttribute>()?.BuilderType);
         var frame = execution.GetCustomAttribute<AsyncStateMachineAttribute>()!.StateMachineType;
         Assert.NotNull(frame.GetMethod("MoveNext", BindingFlags.NonPublic | BindingFlags.Instance));

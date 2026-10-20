@@ -202,15 +202,15 @@ public sealed partial class GeneratorTests
         var mediator = output.GetTypeByMetadataName("AllWrap.Generated.Many.Zendiator")!; Assert.NotNull(mediator);
         var handlers = declaration.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(c => c.Expression is
             MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "expected" }, Name: GenericNameSyntax { Identifier.ValueText: "Handlers" } }).ToArray();
-        var seen = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         var names = new List<string>();
         foreach (var entry in mediator.GetMembers("SendAll").Concat(mediator.GetMembers("SendAllAsync")).OfType<IMethodSymbol>())
         {
-            var owner = CanonicalRouteEntry(output, entry).ContainingType;
-            if (!seen.Add(owner)) continue;
+            var implementation = CanonicalRouteEntry(output, entry);
+            if (!seen.Add(CanonicalEntrySuffix(implementation))) continue;
             var request = entry.Parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var selected = Assert.Single(handlers, c => ((GenericNameSyntax)((MemberAccessExpressionSyntax)c.Expression).Name).TypeArgumentList.Arguments[0].ToString() == request);
-            var continuations = owner.GetTypeMembers().Where(t => t.TypeKind == TypeKind.Struct && t.Name.StartsWith("WrapperNext", StringComparison.Ordinal)).ToArray();
+            var continuations = CanonicalEntryTypes(implementation, "WrapperNext").Where(t => t.TypeKind == TypeKind.Struct).ToArray();
             Assert.Equal(selected.ArgumentList.Arguments.Count - 1, continuations.Length);
             Assert.Equal(continuations.Length, continuations.Select(t => t.Name).Distinct(StringComparer.Ordinal).Count());
             names.AddRange(continuations.Select(t => t.ToDisplayString()));

@@ -161,8 +161,8 @@ public sealed partial class GeneratorTests
         var api = output.GetTypeByMetadataName("OpenAllVoidWrapper.Generated.Composition.IZendiator")!; Assert.NotNull(api); Assert.False(api.IsGenericType);
         var mediator = output.GetTypeByMetadataName("OpenAllVoidWrapper.Generated.Composition.Zendiator")!;
         var publicMethod = Assert.Single(mediator.GetMembers("SendAll").OfType<IMethodSymbol>());
-        var implementation = CanonicalRouteEntry(output, publicMethod).ContainingType;
-        var branches = implementation.GetMembers().OfType<IMethodSymbol>().Where(m => m.Name.StartsWith("Branch", StringComparison.Ordinal)).ToArray(); Assert.Equal(2, branches.Length);
+        var implementation = CanonicalRouteEntry(output, publicMethod);
+        var branches = CanonicalEntryMethods(implementation, "Branch").ToArray(); Assert.Equal(2, branches.Length);
         foreach (var method in new[] { Assert.Single(api.GetMembers("SendAll").OfType<IMethodSymbol>()), publicMethod }.Concat(branches))
         {
             Assert.True(method.ReturnsVoid); Assert.False(method.IsAsync); Assert.Equal(2, method.Arity); Assert.Equal(2, method.Parameters.Length);

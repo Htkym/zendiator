@@ -233,14 +233,17 @@ public sealed partial class GeneratorTests
             Assert.EndsWith(ns.StartsWith("AllAsyncCases", StringComparison.Ordinal) ? "SendAllAsync" : "SendAllSync", call.ArgumentList.Arguments[0].ToString(), StringComparison.Ordinal);
         }
         var members = classes.Where(c => c.Identifier.ValueText == "Zendiator").SelectMany(c => c.Members).ToArray();
-        var names = classes.Where(c => c.Identifier.ValueText.StartsWith("Route_", StringComparison.Ordinal))
-            .SelectMany(c => c.Members.OfType<MethodDeclarationSyntax>()).Where(m => m.Identifier.ValueText.StartsWith("Branch", StringComparison.Ordinal)).Select(m => m.Identifier.ValueText).ToArray();
+        var mediator = output.GetTypeByMetadataName("AllMix.Generated.Many.Zendiator")!;
+        var names = mediator.GetMembers().OfType<IMethodSymbol>().Where(m => m.DeclaredAccessibility == Accessibility.Private &&
+            m.Name.StartsWith("Branch", StringComparison.Ordinal)).Select(m => m.Name).ToArray();
         Assert.Equal(12, names.Length);
-        foreach (var route in classes.Where(c => c.Identifier.ValueText.StartsWith("Route_", StringComparison.Ordinal)))
+        foreach (var entry in mediator.GetMembers("SendAll").Concat(mediator.GetMembers("SendAllAsync")).OfType<IMethodSymbol>().GroupBy(CanonicalEntrySuffix).Select(g => g.First()))
         {
-            var local = route.Members.OfType<MethodDeclarationSyntax>().Where(m => m.Identifier.ValueText.StartsWith("Branch", StringComparison.Ordinal)).Select(m => m.Identifier.ValueText).ToArray();
+            var local = CanonicalEntryMethods(entry, "Branch").Select(m => m.Name).ToArray();
+            Assert.Equal(3, local.Length);
             Assert.Equal(local.Length, local.Distinct(StringComparer.Ordinal).Count());
         }
+        Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
         Assert.Single(members.OfType<ConstructorDeclarationSyntax>());
         return new { handlerOrder = handlers.Select(Request), pipelineOrder = pipelines.Select(Request), privateBranchNames = names };
     }

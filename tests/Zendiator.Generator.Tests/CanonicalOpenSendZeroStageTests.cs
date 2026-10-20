@@ -227,8 +227,7 @@ public sealed partial class GeneratorTests
                 var api = output.GetTypeByMetadataName(ns + ".IZendiator")!; var mediator = output.GetTypeByMetadataName(ns + ".Zendiator")!;
                 Assert.NotNull(api); Assert.False(api.IsGenericType); Assert.NotNull(mediator); Assert.False(mediator.IsGenericType);
                 var publicMethod = Assert.Single(mediator.GetMembers(methodName).OfType<IMethodSymbol>()); Assert.False(publicMethod.IsAsync);
-                var service = Assert.Single(mediator.GetTypeMembers(), t => t.Name.StartsWith("Route_", StringComparison.Ordinal));
-                var execute = Assert.Single(service.GetMembers().OfType<IMethodSymbol>(), m => m.Name == (isAsync ? methodName : "Execute"));
+                var execute = isAsync ? CanonicalRouteEntry(output, publicMethod) : Assert.Single(CanonicalEntryMethods(publicMethod, "Execute"));
                 Assert.False(execute.IsAsync);
                 foreach (var method in new[] { Assert.Single(api.GetMembers(methodName).OfType<IMethodSymbol>()), publicMethod, execute })
                 {

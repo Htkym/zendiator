@@ -2,8 +2,10 @@ using System.Reflection;
 using System.Runtime.Loader;
 using System.Text.Json;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Zendiator.SourceGenerator;
 namespace Zendiator.Generator.Tests;
 
 public sealed class StructReceiverProbe
@@ -54,7 +56,18 @@ public sealed partial class GeneratorTests
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "StructConsumer_" + Guid.NewGuid().ToString("N")).AddReferences(references), out var output, out var diagnostics);
         Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); var sources = driver.GetRunResult().Results.Single().GeneratedSources;
         AssertCanonicalOutputRoles(sources); var body = CanonicalDispatchSource(sources);
-        Assert.Contains("GetRequiredService(_provider, typeof(global::Boxes.", body); Assert.DoesNotContain("GetRequiredService<global::Boxes.", body);
+        var routes = sources.Where(IsCanonicalRoute).Select(s => s.SyntaxTree).ToArray();
+        var calls = routes.SelectMany(tree => tree.GetRoot().DescendantNodes().OfType<InvocationExpressionSyntax>()
+            .Select(call => output.GetSemanticModel(tree).GetSymbolInfo(call).Symbol).OfType<IMethodSymbol>()).ToArray();
+        foreach (var type in output.GlobalNamespace.GetNamespaceMembers().Single(n => n.Name == "Boxes").GetTypeMembers().Where(t => t.TypeKind == TypeKind.Struct))
+        {
+            var accessor = "Required_" + CanonicalSplitSourceEmitter.Id(type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+            var acquisitions = calls.Where(call => call.Name == accessor).ToArray();
+            Assert.NotEmpty(acquisitions); Assert.All(acquisitions, call => Assert.Equal(SpecialType.System_Object, call.ReturnType.SpecialType));
+        }
+        foreach (var tree in routes)
+            Assert.DoesNotContain(tree.GetRoot().DescendantNodes().OfType<CastExpressionSyntax>(), cast =>
+                output.GetSemanticModel(tree).GetTypeInfo(cast.Type).Type is INamedTypeSymbol { TypeKind: TypeKind.Struct } target && target.ContainingNamespace.ToDisplayString() == "Boxes");
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR"); if (!string.IsNullOrEmpty(evidence)) { var p = Path.Combine(evidence, "generated-artifacts", "struct-" + profile); Directory.CreateDirectory(p); File.WriteAllText(Path.Combine(p, "input.cs"), source); foreach (var s in sources) File.WriteAllText(Path.Combine(p, s.HintName), s.SourceText.ToString()); File.WriteAllBytes(Path.Combine(p, "generated.dll"), bytes.ToArray()); File.WriteAllText(Path.Combine(p, "compile.json"), JsonSerializer.Serialize(new { emitted.Success, productionEnabled = true, candidateOnly = false, warnings = 0, errors = 0, generatorErrors = 0, metadata, boxedLookup = true })); }
         bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var bridge = assembly.GetType("StructConsumer.Bridge")!; return new(producer ?? assembly, assembly.GetType("StructConsumer.Generated.Reads.Zendiator")!, (producer ?? assembly).GetType("Boxes.Ping")!, bridge.GetMethod("Register")!, bridge.GetMethod("Dispatch")!, body);
     }

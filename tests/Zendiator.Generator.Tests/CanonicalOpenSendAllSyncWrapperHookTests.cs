@@ -175,8 +175,8 @@ public sealed partial class GeneratorTests
         Assert.Single(methods, m => m.ReturnType is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_Int32 });
         Assert.Single(methods, m => m.ReturnType.SpecialType == SpecialType.System_Int32 && m.Parameters[1].Type.Name == "Span");
         var publicMethod = Assert.Single(mediator.GetMembers("SendAll").OfType<IMethodSymbol>(), m => m.ReturnType is IArrayTypeSymbol);
-        var implementation = CanonicalRouteEntry(output, publicMethod).ContainingType;
-        var branches = implementation.GetMembers().OfType<IMethodSymbol>().Where(m => m.Name.StartsWith("Branch", StringComparison.Ordinal)).ToArray(); Assert.Equal(2, branches.Length);
+        var implementation = CanonicalRouteEntry(output, publicMethod);
+        var branches = CanonicalEntryMethods(implementation, "Branch").ToArray(); Assert.Equal(2, branches.Length);
         foreach (var method in methods.Concat(branches))
         {
             Assert.False(method.IsAsync); Assert.Equal(2, method.Arity); Assert.All(method.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); });

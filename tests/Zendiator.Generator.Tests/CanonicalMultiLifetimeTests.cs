@@ -72,7 +72,7 @@ public sealed partial class GeneratorTests
         {
             for (var scopeIndex = 0; scopeIndex < 2; scopeIndex++)
             {
-                using (var scope = root.Child()) { var mediator = scope.GetService(f.Mediator)!; for (var route = 0; route < 2; route++) { var value = scopeIndex * 2 + route + 5; var request = Activator.CreateInstance(route == 0 ? f.Request0 : f.Request1, [value])!; Assert.Equal(value, await ((Task<int>)f.Dispatch.Invoke(null, [mediator, request])!).WaitAsync(TimeSpan.FromSeconds(10))); } Assert.DoesNotContain(p.Released, x => p.Calls.Skip(scopeIndex * 2).Any(c => ReferenceEquals(c, x))); Assert.DoesNotContain(typeof(IServiceScopeFactory), scope.Resolutions); Assert.Equal(2, scope.Resolutions.Count(t => t == f.Handler)); }
+                using (var scope = root.Child()) { var mediator = scope.GetService(f.Mediator)!; for (var route = 0; route < 2; route++) { var value = scopeIndex * 2 + route + 5; var request = Activator.CreateInstance(route == 0 ? f.Request0 : f.Request1, [value])!; Assert.Equal(value, await ((Task<int>)f.Dispatch.Invoke(null, [mediator, request])!).WaitAsync(TimeSpan.FromSeconds(10))); } Assert.DoesNotContain(p.Released, x => p.Calls.Skip(scopeIndex * 2).Any(c => ReferenceEquals(c, x))); Assert.DoesNotContain(typeof(IServiceScopeFactory), scope.Resolutions); Assert.Equal(lifetime == ServiceLifetime.Transient ? 2 : 1, scope.Resolutions.Count(t => t == f.Handler)); }
                 Assert.Equal(lifetime == ServiceLifetime.Singleton ? 0 : lifetime == ServiceLifetime.Scoped ? scopeIndex + 1 : (scopeIndex + 1) * 2, p.Released.Count);
             }
             Assert.Equal(lifetime == ServiceLifetime.Transient ? 4 : lifetime == ServiceLifetime.Scoped ? 2 : 1, p.Created.Count); if (lifetime == ServiceLifetime.Scoped) { Assert.Same(p.Calls[0], p.Calls[1]); Assert.Same(p.Calls[2], p.Calls[3]); Assert.NotSame(p.Calls[0], p.Calls[2]); }
@@ -104,15 +104,15 @@ public sealed partial class GeneratorTests
         var firstScope = firstProvider.CreateAsyncScope();
         var firstMediator = firstScope.ServiceProvider.GetRequiredService(f.Mediator);
         Assert.Empty(probe.Created);
-        object Request(int value) => Activator.CreateInstance(f.Request1, [value])!;
-        Task<int> Invoke(object mediator, int value) => (Task<int>)f.Dispatch.Invoke(null, [mediator, Request(value)])!;
+        Task<int> Invoke(object mediator, int value, bool sync = false) => (Task<int>)f.Dispatch.Invoke(null,
+            [mediator, Activator.CreateInstance(sync ? f.Request0 : f.Request1, [value])!])!;
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var secondStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var release = new ManualResetEventSlim();
         probe.BeforeConstruct = () => { entered.TrySetResult(); Assert.True(release.Wait(TimeSpan.FromSeconds(10))); };
         try
         {
-            var first = Task.Run(() => Invoke(firstMediator, 11));
+            var first = Task.Run(() => Invoke(firstMediator, 11, sync: true));
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
             var second = Task.Run(() => { secondStarted.TrySetResult(); return Invoke(firstMediator, 12); });
             await secondStarted.Task.WaitAsync(TimeSpan.FromSeconds(10)); release.Set();
