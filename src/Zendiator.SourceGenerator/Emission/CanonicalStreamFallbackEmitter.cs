@@ -61,6 +61,7 @@ internal static class CanonicalStreamFallbackEmitter
             var wrapperFactory = segment.WrapperFactory;
             var hasSessions = handlerFactory != null || wrapperFactory != null || segment.Hooks.Any(hook => hook.Factory != null);
             var fastMove = !hasSessions && segment.Hooks.All(hook => hook.Completion == BoundCompletionKind.Synchronous);
+            var directCurrent = fastMove && segment.Hooks.Count == 0;
             if (segment.Upstream is { } upstream)
                 b.AppendLine($$"""
                         private sealed class Upstream{{n}}(global::System.IServiceProvider services)
@@ -147,11 +148,13 @@ internal static class CanonicalStreamFallbackEmitter
                 """);
             if (hasSessions) b.AppendLine("                        _started = true;");
             b.AppendLine("                    }");
-            b.AppendLine("                    while (true)"); b.AppendLine("                    {");
+            if (!directCurrent) b.AppendLine("                    while (true)");
+            b.AppendLine("                    {");
             b.AppendLine("                        _token.ThrowIfCancellationRequested();");
             b.AppendLine("                        if (!await _source!.MoveNextAsync().ConfigureAwait(false))");
             b.AppendLine(hasSessions ? "                        { _ended = true; return false; }" : "                        { _ended = true; await Close().ConfigureAwait(false); return false; }");
-            if (fastMove) b.AppendLine("                        if (TryPublishCurrent()) return true;");
+            if (directCurrent) b.AppendLine("                        _current = _source!.Current; _hasCurrent = true; return true;");
+            else if (fastMove) b.AppendLine("                        if (TryPublishCurrent()) return true;");
             else
             {
                 var item = model.ItemFlow == null ? "item" : "item0";
@@ -228,6 +231,12 @@ internal static class CanonicalStreamFallbackEmitter
     }
     private static void EmitSynchronousMove(StringBuilder b, string cursor, CanonicalStreamFallbackModel model, CanonicalStreamFallbackSegment segment)
     {
+        if (segment.Hooks.Count == 0)
+        {
+            // With no hooks, publishing cannot reject an item or require another source move.
+            CanonicalStreamCursorFastPathEmitter.Emit(b, cursor, "_source", directCurrent: true);
+            return;
+        }
         b.AppendLine("private bool TryPublishCurrent() {");
         var item = model.ItemFlow == null ? "item" : "item0";
         b.AppendLine("var " + item + " = _source!.Current;");

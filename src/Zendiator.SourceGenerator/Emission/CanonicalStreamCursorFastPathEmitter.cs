@@ -4,7 +4,7 @@ namespace Zendiator.SourceGenerator;
 
 internal static class CanonicalStreamCursorFastPathEmitter
 {
-    internal static void Emit(StringBuilder b, string cursor, string sourceField)
+    internal static void Emit(StringBuilder b, string cursor, string sourceField, bool directCurrent = false)
     {
         b.AppendLine($$"""
                     private global::System.Threading.Tasks.ValueTask<bool> StartMove()
@@ -24,15 +24,14 @@ internal static class CanonicalStreamCursorFastPathEmitter
                         {
                             try
                             {
-                                while (true)
-                                {
+                                {{(directCurrent ? "" : "while (true)\n                    {")}}
                                 _owner._token.ThrowIfCancellationRequested();
                                 var operation = _owner.{{sourceField}}!.MoveNextAsync();
                                 if (operation.IsCompletedSuccessfully)
                                 {
                                     if (operation.GetAwaiter().GetResult())
                                     {
-                                        if (!_owner.TryPublishCurrent()) continue;
+                                        {{(directCurrent ? "_owner._current = _owner." + sourceField + "!.Current; _owner._hasCurrent = true;" : "if (!_owner.TryPublishCurrent()) continue;")}}
                                         Operation = new(true);
                                         global::System.Threading.Volatile.Write(ref _owner._busy, 0);
                                     }
@@ -40,7 +39,7 @@ internal static class CanonicalStreamCursorFastPathEmitter
                                 }
                                 else Operation = _owner.FinishMove(operation);
                                 return;
-                                }
+                                {{(directCurrent ? "" : "}")}}
                             }
                             catch (global::System.Exception error)
                             {
@@ -52,14 +51,11 @@ internal static class CanonicalStreamCursorFastPathEmitter
                     {
                         try
                         {
-                            while (true)
-                            {
+                            {{(directCurrent ? "" : "while (true)\n                {")}}
                                 if (!await operation.ConfigureAwait(false))
                                 { _ended = true; await Close().ConfigureAwait(false); return false; }
-                                if (TryPublishCurrent()) return true;
-                                _token.ThrowIfCancellationRequested();
-                                operation = {{sourceField}}!.MoveNextAsync();
-                            }
+                                {{(directCurrent ? "_current = " + sourceField + "!.Current; _hasCurrent = true; return true;" : "if (TryPublishCurrent()) return true;\n                    _token.ThrowIfCancellationRequested();\n                    operation = " + sourceField + "!.MoveNextAsync();")}}
+                            {{(directCurrent ? "" : "}")}}
                         }
                         catch { _ended = true; await Close().ConfigureAwait(false); throw; }
                         finally { global::System.Threading.Volatile.Write(ref _busy, 0); }
