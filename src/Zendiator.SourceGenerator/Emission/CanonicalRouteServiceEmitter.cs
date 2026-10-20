@@ -8,6 +8,8 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Zendiator.SourceGenerator;
 
+internal sealed record CanonicalStreamResolverConnection(string HintName, string Namespace, string ClassName, string HandlerName);
+
 // Route files own execution; one private resolver owns the Mediator's borrowed service slots.
 internal static class CanonicalRouteServiceEmitter
 {
@@ -30,7 +32,7 @@ internal static class CanonicalRouteServiceEmitter
         var mediator = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "Zendiator");
         var registrar = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "ZendiatorGeneratedRegistrar");
         var generated = Composition(ns, mediator, registrar);
-        var joined = mediator.WithMembers(SyntaxFactory.List(generated.Shared.Members.Concat(Route(ns, mediator))));
+        var joined = generated.Shared.WithMembers(SyntaxFactory.List(generated.Shared.Members.Concat(Route(ns, mediator))));
         return file with
         {
             Source = root.ReplaceNode(ns, ns.WithMembers(SyntaxFactory.List(ns.Members.Select(m =>
@@ -45,6 +47,46 @@ internal static class CanonicalRouteServiceEmitter
         var services = new ResolverCalls(Dependencies(ns).Where(Closed));
         foreach (var member in mediator.Members.Where(m => m is not ConstructorDeclarationSyntax && !ProviderField(m)))
             yield return (MemberDeclarationSyntax)names.Visit(services.Visit(member))!;
+    }
+
+    internal static EquatableArray<CanonicalStreamResolverConnection> StreamConnections(IEnumerable<CanonicalSourceFile> facades,
+        IEnumerable<CanonicalStreamFallbackModel> candidates)
+    {
+        var connected = new HashSet<(string Namespace, string ClassName)>();
+        foreach (var file in facades)
+        {
+            var root = CSharpSyntaxTree.ParseText(file.Source).GetCompilationUnitRoot();
+            foreach (var ns in root.Members.OfType<NamespaceDeclarationSyntax>())
+            {
+                var mediator = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "Zendiator");
+                foreach (var call in Entries(mediator).SelectMany(m => m.DescendantNodes().OfType<InvocationExpressionSyntax>()))
+                    if (call.Expression is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax helper, Name.Identifier.ValueText: "Create" } &&
+                        call.ArgumentList.Arguments.FirstOrDefault()?.Expression is IdentifierNameSyntax { Identifier.ValueText: "_provider" })
+                        connected.Add((ns.Name.ToString(), helper.Identifier.ValueText));
+            }
+        }
+        return new(candidates.Where(c => c.Generic == null && !c.HandlerOwned && CanonicalStreamPublicConnection.PlainZeroStageShape(c) &&
+            connected.Contains((c.Namespace, c.ClassName))).Select(c => new CanonicalStreamResolverConnection(c.HintName, c.Namespace, c.ClassName, c.Handler.HandlerName))
+            .OrderBy(c => c.HintName, StringComparer.Ordinal));
+    }
+
+    internal static CanonicalSourceFile Stream(CanonicalSourceFile file, EquatableArray<CanonicalStreamResolverConnection> connected)
+    {
+        var selected = connected.SingleOrDefault(c => c.HintName == file.HintName);
+        if (selected == null) return file;
+        var root = CSharpSyntaxTree.ParseText(file.Source).GetCompilationUnitRoot();
+        var ns = root.Members.OfType<NamespaceDeclarationSyntax>().Single(n => n.Name.ToString() == selected.Namespace);
+        var helper = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == selected.ClassName);
+        var typed = (ClassDeclarationSyntax)new ResolverCalls(new[] { SyntaxFactory.ParseTypeName(selected.HandlerName) }, "services").Visit(helper)!;
+        var parameters = typed.DescendantNodes().OfType<ParameterSyntax>().Where(p =>
+            p.Identifier.ValueText == "services" && p.Type?.ToString() == "global::System.IServiceProvider").ToArray();
+        typed = typed.ReplaceNodes(parameters, (parameter, _) => parameter.WithType(SyntaxFactory.ParseTypeName("DependencyResolver").WithTriviaFrom(parameter.Type!)))
+            .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PrivateKeyword), SyntaxFactory.Token(SyntaxKind.StaticKeyword)));
+        // The connected helper shares the Mediator's private resolver without an adapter or a second cursor type.
+        var mediator = SyntaxFactory.ClassDeclaration("Zendiator").WithModifiers(SyntaxFactory.TokenList(
+            SyntaxFactory.Token(SyntaxKind.PublicKeyword), SyntaxFactory.Token(SyntaxKind.SealedKeyword), SyntaxFactory.Token(SyntaxKind.PartialKeyword)))
+            .WithMembers(SyntaxFactory.SingletonList<MemberDeclarationSyntax>(typed));
+        return file with { Source = root.ReplaceNode(helper, mediator).NormalizeWhitespace().ToFullString() };
     }
 
     private static IEnumerable<TypeSyntax> Dependencies(NamespaceDeclarationSyntax ns)
@@ -161,7 +203,7 @@ internal static class CanonicalRouteServiceEmitter
         return SyntaxFactory.ParseMemberDeclaration(b.ToString())!;
     }
 
-    private sealed class ResolverCalls(IEnumerable<TypeSyntax> closed) : CSharpSyntaxRewriter
+    private sealed class ResolverCalls(IEnumerable<TypeSyntax> closed, string receiver = "_provider") : CSharpSyntaxRewriter
     {
         private readonly HashSet<string> _closed = new(closed.Select(TypeKey), StringComparer.Ordinal);
         public override SyntaxNode? VisitFieldDeclaration(FieldDeclarationSyntax node) => ProviderField(node)
@@ -176,14 +218,14 @@ internal static class CanonicalRouteServiceEmitter
             if (node.Expression is MemberAccessExpressionSyntax access &&
                 access.Expression.ToString() == "global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions" &&
                 access.Name.Identifier.ValueText == "GetRequiredService" &&
-                node.ArgumentList.Arguments.FirstOrDefault()?.Expression is IdentifierNameSyntax { Identifier.ValueText: "_provider" })
+                node.ArgumentList.Arguments.FirstOrDefault()?.Expression is IdentifierNameSyntax provider && provider.Identifier.ValueText == receiver)
             {
                 TypeSyntax? type = access.Name is GenericNameSyntax generic && generic.TypeArgumentList.Arguments.Count == 1 && node.ArgumentList.Arguments.Count == 1
                     ? generic.TypeArgumentList.Arguments[0]
                     : node.ArgumentList.Arguments.Count == 2 && node.ArgumentList.Arguments[1].Expression is TypeOfExpressionSyntax of ? of.Type : null;
                 if (type != null && _closed.Contains(TypeKey(type)))
                 {
-                    ExpressionSyntax call = SyntaxFactory.ParseExpression("_provider.Required_" + TypeId(type) + "()");
+                    ExpressionSyntax call = SyntaxFactory.ParseExpression(receiver + ".Required_" + TypeId(type) + "()");
                     if (access.Name is GenericNameSyntax) call = SyntaxFactory.CastExpression(type.WithoutTrivia(), call);
                     return call.WithTriviaFrom(node);
                 }

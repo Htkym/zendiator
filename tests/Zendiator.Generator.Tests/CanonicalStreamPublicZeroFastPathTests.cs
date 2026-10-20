@@ -184,9 +184,10 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Stream_public_zero_hook_Current_failure_closes_once_and_preserves_cleanup_error_priority(bool cleanupFails)
+    [InlineData(2, false)]
+    [InlineData(2, true)]
+    [InlineData(1, false)]
+    public async Task Stream_public_zero_hook_Current_failure_closes_once_and_preserves_cleanup_error_priority(int failingMove, bool cleanupFails)
     {
         var first = new ContractOnce<bool>(); first.Complete(true);
         var second = new ContractOnce<bool>(); second.Complete(true);
@@ -196,7 +197,7 @@ public sealed partial class GeneratorTests
         var probe = new ZeroFastPathProbe
         {
             Move = index => index == 1 ? first.Task : second.Task,
-            Read = index => index == 1 ? 1 : throw currentError,
+            Read = index => index < failingMove ? 1 : throw currentError,
             Cleanup = () => cleanup.Void
         };
         using var provider = ZeroFastPathProvider(probe);
@@ -206,7 +207,8 @@ public sealed partial class GeneratorTests
         var cleanupReleased = false;
         try
         {
-            Assert.True(await cursor.MoveNextAsync()); Assert.Equal(1, cursor.Current);
+            if (failingMove == 2)
+            { Assert.True(await cursor.MoveNextAsync()); Assert.Equal(1, cursor.Current); }
             var move = pendingMove = cursor.MoveNextAsync().AsTask();
             Assert.False(move.IsCompleted); Assert.Equal(1, probe.Disposals); Assert.Equal(0, cleanup.Consumptions);
             cleanupReleased = true;
@@ -214,10 +216,10 @@ public sealed partial class GeneratorTests
             var error = await Record.ExceptionAsync(async () => { await move.WaitAsync(TimeSpan.FromSeconds(5)); });
             Assert.Same(cleanupFails ? cleanupError : currentError, error);
             Assert.True(move.IsFaulted); Assert.False(move.IsCanceled);
-            Assert.Equal(1, first.Consumptions); Assert.Equal(1, second.Consumptions); Assert.Equal(1, cleanup.Consumptions);
+            Assert.Equal(1, first.Consumptions); Assert.Equal(failingMove == 2 ? 1 : 0, second.Consumptions); Assert.Equal(1, cleanup.Consumptions);
             Assert.Throws<InvalidOperationException>(() => cursor.Current);
             Assert.False(await cursor.MoveNextAsync());
-            Assert.Equal(2, probe.Moves); Assert.Equal(2, probe.Reads);
+            Assert.Equal(failingMove, probe.Moves); Assert.Equal(failingMove, probe.Reads);
         }
         finally
         {

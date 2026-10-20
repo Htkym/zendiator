@@ -76,7 +76,6 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         var streamPrototypeFiles = streamPrototypeModels.Collect().Combine(streamCanonicalModels.Collect()).Combine(routeTexts)
             .SelectMany(static (input, _) => CanonicalStreamEmissionNormalizer.Files(input.Left.Left, input.Left.Right, input.Right))
             .WithTrackingName("CanonicalStreamPrototypeSource");
-        context.RegisterSourceOutput(streamPrototypeFiles, static (ctx, file) => ctx.AddSource(file.HintName, SourceText.From(file.Source, Encoding.UTF8)));
         var splitRouteEntries = routeTextEntries.Select(static (route, _) => new CanonicalRouteFile(route, CanonicalSplitSourceEmitter.Route(route))).WithTrackingName("CanonicalRouteFileEntry");
         var executionValue = compositionModel.Combine(routeGraphs.Collect()).Select(static (input, _) => CanonicalRouteIncremental.AssembleGraphs(input.Left, input.Right));
         var executionModel = executionValue.Select(static (model, _) => model).WithTrackingName("CanonicalExecutionGraphModel");
@@ -153,6 +152,11 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
             .WithTrackingName("CanonicalMixedStreamFacadeEntry");
         var mixedStreamFiles = mixedStreamTexts.Select(static (route, _) => CanonicalSplitSourceEmitter.Route(route));
         context.RegisterSourceOutput(mixedStreamFiles, static (ctx, file) => ctx.AddSource(file.HintName, SourceText.From(file.Source, Encoding.UTF8)));
+        var streamResolverConnections = streamPublicFiles.Collect().Combine(mixedStreamFiles.Collect()).Combine(streamCanonicalModels.Collect())
+            .Select(static (input, _) => CanonicalRouteServiceEmitter.StreamConnections(input.Left.Left.Concat(input.Left.Right), input.Right));
+        var resolvedStreamFiles = streamPrototypeFiles.Combine(streamResolverConnections)
+            .Select(static (input, _) => CanonicalRouteServiceEmitter.Stream(input.Left, input.Right));
+        context.RegisterSourceOutput(resolvedStreamFiles, static (ctx, file) => ctx.AddSource(file.HintName, SourceText.From(file.Source, Encoding.UTF8)));
         var multiSource = multi.Combine(routeTexts).Select(static (input, _) => CanonicalMultiSourceEmitter.Emit(input.Left, r => r.Stream != null ? CanonicalStreamPublicConnection.Source(r.Stream) :
                 CanonicalRouteIncremental.Find(input.Right, r.Registration.Namespace, r.Registration.Handler.RequestName, r.Family))).WithTrackingName("CanonicalMultiSourceEmission");
         var multiSourceFiles = multiSource.SelectMany(static (text, _) => CanonicalSplitSourceEmitter.Composition(text)).WithTrackingName("multiSourceCompositionFiles");

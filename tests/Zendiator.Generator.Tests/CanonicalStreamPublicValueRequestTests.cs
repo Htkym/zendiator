@@ -266,7 +266,8 @@ public sealed partial class GeneratorTests
         bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var inventory = PublicValueRequestIl(assembly);
         if (!string.IsNullOrEmpty(evidence)) File.WriteAllText(Path.Combine(evidence, "stream-zero-value-public", "accepted", "request-il.json"), JsonSerializer.Serialize(inventory));
-        Assert.Equal(4, inventory.Owners.Length); Assert.Empty(inventory.Boxes); Assert.NotEmpty(inventory.TypedFields);
+        Assert.Equal(new[] { "ValuePublic.Generated.Mixed.Zendiator", "ValuePublic.Generated.Single.Zendiator" }, inventory.Owners);
+        Assert.Empty(inventory.Boxes); Assert.NotEmpty(inventory.TypedFields);
         var run = assembly.GetType("ValuePublic.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>();
         var runtime = await run().WaitAsync(TimeSpan.FromSeconds(15));
         if (!string.IsNullOrEmpty(evidence)) File.WriteAllText(Path.Combine(evidence, "stream-zero-value-public", "accepted", "runtime.json"), runtime);

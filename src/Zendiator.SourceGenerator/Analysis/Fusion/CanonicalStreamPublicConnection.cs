@@ -95,7 +95,7 @@ internal static class CanonicalStreamPublicConnection
         return accepted == null ? null : accepted with { Registration = accepted.Registration with { Index = index } };
     }
 
-    private static bool PlainZeroStageShape(CanonicalStreamFallbackModel model)
+    internal static bool PlainZeroStageShape(CanonicalStreamFallbackModel model)
     {
         if (model.ItemFlow != null || model.HandlerFactory != null || model.Handler.HandlerIsValueType ||
             model.Segments.Count != 1 || model.ConsumerSegment != 0) return false;
