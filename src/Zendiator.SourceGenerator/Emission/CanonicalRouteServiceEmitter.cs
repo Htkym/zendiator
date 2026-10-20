@@ -63,6 +63,8 @@ internal static class CanonicalRouteServiceEmitter
     internal static (ClassDeclarationSyntax Shared, ClassDeclarationSyntax Registrar) Composition(
         NamespaceDeclarationSyntax ns, ClassDeclarationSyntax mediator, ClassDeclarationSyntax registrar)
     {
+        var dependencies = Dependencies(ns).ToArray();
+        var closed = dependencies.Where(Closed).ToArray();
         var members = new List<MemberDeclarationSyntax>
         {
             SyntaxFactory.ParseMemberDeclaration("private readonly DependencyResolver _provider;")!,
@@ -73,11 +75,15 @@ internal static class CanonicalRouteServiceEmitter
                     _provider = new DependencyResolver(provider, policy);
                 }
                 """)!,
-            Resolver(Dependencies(ns).ToArray()),
-            SyntaxFactory.ParseMemberDeclaration("""
+            Resolver(dependencies),
+            SyntaxFactory.ParseMemberDeclaration($$"""
                 internal sealed class ResolutionPolicy {
                     private readonly global::System.Collections.Generic.Dictionary<global::System.Type, bool> _lifetimes;
-                    internal ResolutionPolicy(global::System.Collections.Generic.Dictionary<global::System.Type, bool> lifetimes) { _lifetimes = lifetimes; }
+                    {{string.Join("\n", closed.Select(type => "internal readonly bool Cache_" + TypeId(type) + ";"))}}
+                    internal ResolutionPolicy(global::System.Collections.Generic.Dictionary<global::System.Type, bool> lifetimes) {
+                        _lifetimes = lifetimes;
+                        {{string.Join("\n", closed.Select(type => "Cache_" + TypeId(type) + " = Cacheable(typeof(" + type + "));"))}}
+                    }
                     internal bool Cacheable(global::System.Type type) => _lifetimes.TryGetValue(type, out var cached) ? cached :
                         type.IsConstructedGenericType && _lifetimes.TryGetValue(type.GetGenericTypeDefinition(), out cached) && cached;
                     internal static global::System.Collections.Generic.Dictionary<global::System.Type, bool> Capture(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services) {
@@ -117,7 +123,7 @@ internal static class CanonicalRouteServiceEmitter
         b.AppendLine("internal DependencyResolver(global::System.IServiceProvider services, ResolutionPolicy policy) { _services = services;");
         if (open.Length != 0) b.AppendLine("_policy = policy;");
         foreach (var type in closed)
-            b.AppendLine("_cache_" + TypeId(type) + " = policy.Cacheable(typeof(" + type + ")); ");
+            b.AppendLine("_cache_" + TypeId(type) + " = policy.Cache_" + TypeId(type) + ";");
         b.AppendLine("}");
         foreach (var type in closed)
         {
