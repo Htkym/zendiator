@@ -85,8 +85,12 @@ public sealed partial class GeneratorTests
         using var foreign = new CancellationTokenSource();
         foreach (var mode in new[] { "success", "pending", "throw", "throw-oce", "fault-oce", "source-oce", "pending-oce", "pre-cancel" })
         {
-            var probe = new SynchronousCompletionProbe { Mode = mode, Failure = mode.Contains("oce", StringComparison.Ordinal)
-                ? new OperationCanceledException("foreign, uncanceled token", foreign.Token) : new InvalidOperationException("body") };
+            var probe = new SynchronousCompletionProbe
+            {
+                Mode = mode,
+                Failure = mode.Contains("oce", StringComparison.Ordinal)
+                ? new OperationCanceledException("foreign, uncanceled token", foreign.Token) : new InvalidOperationException("body")
+            };
             IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe); bridge.GetMethod("Register")!.Invoke(null, [services]);
             await using var provider = services.BuildServiceProvider(); await using var scope = provider.CreateAsyncScope();
             var mediator = scope.ServiceProvider.GetRequiredService(mediatorType); var request = Activator.CreateInstance(requestType, [7]);
