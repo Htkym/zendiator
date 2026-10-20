@@ -23,9 +23,10 @@ internal static class MissingHandlerAttribute
 
     internal sealed class Target
     {
-        internal Target(INamedTypeSymbol handler, ClassDeclarationSyntax declaration, SyntaxTree source, CancellationToken ct)
+        internal Target(INamedTypeSymbol handler, ClassDeclarationSyntax declaration, SyntaxTree source, bool requiresGenerationCheck, CancellationToken ct)
         {
             Declaration = declaration;
+            RequiresGenerationCheck = requiresGenerationCheck;
             Properties = ImmutableDictionary<string, string?>.Empty
                 .Add(ReasonKey, Reason)
                 .Add(HandlerKey, DocumentationCommentId.CreateDeclarationId(handler))
@@ -33,6 +34,7 @@ internal static class MissingHandlerAttribute
                 .Add(TargetChecksumKey, Checksum(declaration.SyntaxTree, ct));
         }
         internal ClassDeclarationSyntax Declaration { get; }
+        internal bool RequiresGenerationCheck { get; }
         internal ImmutableDictionary<string, string?> Properties { get; }
     }
 
@@ -82,13 +84,14 @@ internal static class MissingHandlerAttribute
         if (contracts.Length != 1 || contracts[0].GetMembers().OfType<IMethodSymbol>().Any(m =>
             handler.FindImplementationForInterfaceMember(m) is not IMethodSymbol { IsAbstract: false })) return null;
         if (call.ArgumentList.Arguments.Skip(1).Count(a => Same(model.GetTypeInfo(((TypeOfExpressionSyntax)a.Expression).Type, ct).Type, handler)) != 1) return null;
-        if (!ExplicitCompositionsOnly(compilation, configuration, bootstrap, contractAssembly!, call, ct)) return null;
-        return new Target(handler, declaration, source, ct);
+        if (!ExplicitCompositionsOnly(compilation, configuration, bootstrap, contractAssembly!, call, ct, out var requiresGenerationCheck)) return null;
+        return new Target(handler, declaration, source, requiresGenerationCheck, ct);
     }
 
     private static bool ExplicitCompositionsOnly(Compilation compilation, INamedTypeSymbol configuration, INamedTypeSymbol bootstrap,
-        IAssemblySymbol contracts, InvocationExpressionSyntax selected, CancellationToken ct)
+        IAssemblySymbol contracts, InvocationExpressionSyntax selected, CancellationToken ct, out bool requiresGenerationCheck)
     {
+        requiresGenerationCheck = false;
         var compositionMarker = contracts.GetTypeByMetadataName("Zendiator.ZendiatorCompositionAttribute");
         var legacyMarker = contracts.GetTypeByMetadataName("Zendiator.GenerateZendiatorAttribute");
         var keys = new HashSet<string>(StringComparer.Ordinal);
@@ -116,19 +119,26 @@ internal static class MissingHandlerAttribute
                 if (attributes.Length != 1 || attributes[0].ConstructorArguments.FirstOrDefault().Value is not string key ||
                     string.IsNullOrWhiteSpace(key) || !keys.Add(key)) return false;
                 var parameter = model.GetDeclaredSymbol(lambda.Parameter, ct);
-                var routes = new HashSet<string>(StringComparer.Ordinal);
+                var routes = new List<(ITypeSymbol Request, int Family)>();
                 foreach (var statement in body.Statements)
                 {
                     if (statement is not ExpressionStatementSyntax { Expression: InvocationExpressionSyntax recorder } ||
                         recorder.Expression is not MemberAccessExpressionSyntax access ||
                         !Same(model.GetSymbolInfo(access.Expression, ct).Symbol, parameter) ||
-                        model.GetSymbolInfo(recorder, ct).Symbol is not IMethodSymbol { Arity: 1 } record ||
+                        model.GetSymbolInfo(recorder, ct).Symbol is not IMethodSymbol { Arity: 0 or 1 } record ||
                         !Same(record.ContainingType, configuration) || record.Name is not ("Handlers" or "Pipeline")) return false;
+                    var offset = record.Arity == 0 ? 1 : 0;
+                    var request = record.Arity == 1 ? record.TypeArguments[0] :
+                        recorder.ArgumentList.Arguments.FirstOrDefault()?.Expression is TypeOfExpressionSyntax type
+                            ? model.GetTypeInfo(type.Type, ct).Type : null;
+                    if (request == null || request.TypeKind == TypeKind.Error) return false;
+                    requiresGenerationCheck |= record.Arity == 0;
                     if (record.Name == "Handlers")
                     {
-                        if (recorder.ArgumentList.Arguments.Count < 2 || !model.GetConstantValue(recorder.ArgumentList.Arguments[0].Expression, ct).HasValue ||
-                            !routes.Add(record.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ":" +
-                                model.GetConstantValue(recorder.ArgumentList.Arguments[0].Expression, ct).Value)) return false;
+                        if (recorder.ArgumentList.Arguments.Count < offset + 2 ||
+                            model.GetConstantValue(recorder.ArgumentList.Arguments[offset].Expression, ct) is not { HasValue: true, Value: int family } ||
+                            routes.Any(route => route.Family == family && Same(route.Request, request))) return false;
+                        routes.Add((request, family));
                     }
                     if (recorder == selected) found = true;
                 }

@@ -59,6 +59,38 @@ This example uses class requests and DI-owned class handlers, hooks and wrappers
 Await each returned `ValueTask` once. Keep the scope alive until asynchronous
 operations and Stream enumeration, including cleanup, have finished.
 
+## Repair a missing handler marker
+
+Add the optional CodeFix package at the same candidate version as `Zendiator`:
+
+```xml
+<PackageReference Include="Zendiator.CodeFixes"
+                  Version="$(ZendiatorPackageVersion)" PrivateAssets="all" />
+```
+
+Restore the ComposedApp project from the selected feed:
+
+```powershell
+$project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
+dotnet restore $project -p:ZendiatorPackageVersion=$version --source $feed --source https://api.nuget.org/v3/index.json
+```
+
+Open the project in current Visual Studio. If `RefreshInventoryHandler` is missing
+its attribute, use **Add ZendiatorHandler attribute** on ZEN0035. The fix adds only
+the attribute. Existing Type registrations in the App are preserved; the installed
+generator must accept the complete App after the edit. Ambiguous handlers, invalid
+contracts and unadopted compositions receive no speculative fix. If the action
+is absent, check that the generator is loaded and the contracts are supported.
+
+After applying the fix, rebuild:
+
+```powershell
+dotnet build $project -c Release --no-restore -p:ZendiatorPackageVersion=$version
+```
+
+Migrate registration order, wrapper retry/cache logic and scope boundaries manually.
+Do not convert an arbitrary wrapper body to hooks without checking its intent.
+
 ## Migrating from 0.4.0
 
 - Mark selected handlers with `[ZendiatorHandler]` and select them explicitly

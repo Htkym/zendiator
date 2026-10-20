@@ -214,6 +214,28 @@ Streamの返り値をscopeの外へ持ち出し、scopeを破棄してから列�
 
 この例はclassのrequestと、DIが所有するclassのHandler・Hook・Wrapperを使います。返された`ValueTask`はそれぞれ1回だけ`await`し、非同期処理とStreamの列挙・後始末が終わるまでscopeを保持してください。
 
+### Handler属性を補って再buildする
+
+CodeFixを使う場合は、`Zendiator`と同じ候補版の`Zendiator.CodeFixes`を`PrivateAssets="all"`で追加し、同じpackage feedからrestoreしてください。現在のVisual Studioでプロジェクトを開き、ZEN0035の修正候補から`Add ZendiatorHandler attribute`を選びます。
+
+```xml
+<PackageReference Include="Zendiator.CodeFixes"
+                  Version="$(ZendiatorPackageVersion)" PrivateAssets="all" />
+```
+
+```powershell
+$project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
+dotnet restore $project -p:ZendiatorPackageVersion=$version --source $feed --source https://api.nuget.org/v3/index.json
+```
+
+たとえばComposedAppの`RefreshInventoryHandler`に属性が欠けている場合、候補を一意に特定でき、属性を追加した後のApp全体を生成できるときに修正できます。同じAppのType登録も保持します。変更する利用者コードはHandler属性だけです。曖昧な候補、不正な契約、未採用の構成を推測して直すことはありません。候補が出ない場合は、generatorの読み込みと契約を確認してください。
+
+修正後はComposedAppを再buildします。登録順、wrapperのretryやcache、scopeの境界は手動で移行してください。既存のwrapper本文は意図を確認せずhookへ変換しません。
+
+```powershell
+dotnet build $project -c Release --no-restore -p:ZendiatorPackageVersion=$version
+```
+
 ## 0.4.0から移るとき
 
 0.5.0候補では、Handlerの属性と明示的な登録を使います。0.4.0のinterface実装やアセンブリ指定だけに依存した登録は、そのまま移せません。

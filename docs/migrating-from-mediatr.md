@@ -7,9 +7,10 @@ See also the [README](../README.md).
 Procedures for moving MediatR 12 code to Zendiator. Covers API correspondences,
 required rewrites, and unsupported features.
 
-This guide describes the current repository. Published packages may differ;
-check the release notes for the version you install before applying the lifetime
-and configuration guidance below.
+This guide targets published 0.4.0. For the unreleased 0.5.0 API, follow
+[getting started with 0.5.0](getting-started-0.5.0.md). Move 0.4.0
+`AddOpenBehavior`/`Order` registrations to each route's ordered `Pipeline` and
+explicit wrapper contract rather than copying the old configuration.
 
 The current preview uses standard DI construction and captures Handler/Behavior dependencies lazily per mediator instance, including Transient dependencies. Use a new scope for a new default Scoped mediator, or configure a Transient mediator when each resolution needs a fresh composition. Custom provider APIs were removed. The generated mediator does not implement `IDisposable`; DI owns dependency disposal. Keep the scope alive until sends and stream enumeration finish. See [construction and dispatch lifetime](optimized-dispatch.md).
 

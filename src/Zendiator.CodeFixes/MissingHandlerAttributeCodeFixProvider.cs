@@ -51,8 +51,33 @@ public sealed class MissingHandlerAttributeCodeFixProvider : CodeFixProvider
         var location = diagnostic.AdditionalLocations[0];
         if (location.SourceTree != target.Declaration.SyntaxTree || location.SourceSpan != target.Declaration.Identifier.Span) return null;
         var targetDocument = document.Project.Solution.GetDocument(target.Declaration.SyntaxTree);
-        return targetDocument == null || targetDocument.Project.Id != document.Project.Id || IsLinked(targetDocument)
-            ? null : (targetDocument, target.Declaration);
+        if (targetDocument == null || targetDocument.Project.Id != document.Project.Id || IsLinked(targetDocument)) return null;
+        if (target.RequiresGenerationCheck && !await RegeneratesAsync(targetDocument, target.Declaration, ct).ConfigureAwait(false)) return null;
+        return (targetDocument, target.Declaration);
+    }
+
+    private static async Task<bool> RegeneratesAsync(Document document, ClassDeclarationSyntax declaration, CancellationToken ct)
+    {
+        // Reuse the generator installed in this host; do not duplicate its route eligibility rules.
+        var references = document.Project.AnalyzerReferences.Where(reference => reference.GetGenerators(LanguageNames.CSharp).Any(generator =>
+            generator.GetGeneratorType().FullName == "Zendiator.SourceGenerator.ZendiatorGenerator" &&
+            generator.GetGeneratorType().Assembly.GetName().Name == "Zendiator.SourceGenerator")).ToArray();
+        if (references.Length != 1) return false;
+        var generators = references[0].GetGenerators(LanguageNames.CSharp);
+        if (generators.Length != 1) return false;
+        var root = await document.GetSyntaxRootAsync(ct).ConfigureAwait(false);
+        if (root == null || document.Project.ParseOptions is not CSharpParseOptions parse) return false;
+        var project = document.WithSyntaxRoot(root.ReplaceNode(declaration, AddAttribute(declaration))).Project;
+        // Removing only this generator reference also removes its old generated trees.
+        var input = await project.WithAnalyzerReferences(project.AnalyzerReferences.Where(reference => reference != references[0]))
+            .GetCompilationAsync(ct).ConfigureAwait(false);
+        if (input == null) return false;
+        var options = project.AnalyzerOptions;
+        var driver = CSharpGeneratorDriver.Create(generators, options.AdditionalFiles, parse, options.AnalyzerConfigOptionsProvider)
+            .RunGeneratorsAndUpdateCompilation(input, out var output, out var diagnostics, ct);
+        return !diagnostics.Any(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error) &&
+            !output.GetDiagnostics(ct).Any(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error) &&
+            driver.GetRunResult().Results.Single().GeneratedSources.Any();
     }
 
     private static bool IsLinked(Document document) => document.FilePath != null &&
