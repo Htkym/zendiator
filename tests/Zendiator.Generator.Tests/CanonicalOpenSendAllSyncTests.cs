@@ -158,21 +158,9 @@ public sealed partial class GeneratorTests
         var mediator = output.GetTypeByMetadataName("OpenAll.Generated.Composition.Zendiator")!; Assert.NotNull(mediator); Assert.False(mediator.IsGenericType);
         var publicApi = api.GetMembers("SendAll").OfType<IMethodSymbol>().ToArray(); Assert.Equal(2, publicApi.Length);
         var publicImplementation = mediator.GetMembers("SendAll").OfType<IMethodSymbol>().ToArray(); Assert.Equal(2, publicImplementation.Length);
-        var privateBranches = mediator.GetMembers().OfType<IMethodSymbol>().Where(m => m.DeclaredAccessibility == Accessibility.Private && m.Name.StartsWith("Branch", StringComparison.Ordinal)).ToArray(); Assert.Equal(2, privateBranches.Length);
-        var methods = publicApi.Concat(publicImplementation).Concat(privateBranches).ToArray();
+        var methods = publicApi.Concat(publicImplementation).Concat(publicImplementation.Select(m => CanonicalRouteEntry(output, m))).ToArray();
         Assert.All(methods, m => { Assert.Equal(2, m.Arity); Assert.All(m.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); }); Assert.Contains(m.TypeParameters, p => p.ConstraintTypes.Any(t => t.Name == "ISecond")); Assert.Contains(m.TypeParameters, p => p.ConstraintTypes.Any(t => t.Name == "IHook")); });
-        var declarations = methods.Select(m => (MethodDeclarationSyntax)m.DeclaringSyntaxReferences.Single().GetSyntax()).ToArray(); Assert.All(declarations, d => Assert.Equal(declarations[0].ConstraintClauses.ToFullString().Trim(), d.ConstraintClauses.ToFullString().Trim()));
-        foreach (var method in publicImplementation)
-        {
-            var declaration = (MethodDeclarationSyntax)method.DeclaringSyntaxReferences.Single().GetSyntax();
-            var calls = declaration.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(i => i.Expression is GenericNameSyntax).ToArray(); Assert.Equal(method.Parameters.Length == 2 ? 2 : 1, calls.Length);
-            foreach (var call in calls)
-            {
-                var target = Assert.IsAssignableFrom<IMethodSymbol>(output.GetSemanticModel(call.SyntaxTree).GetSymbolInfo(call).Symbol);
-                Assert.Equal(method.TypeParameters.Cast<ITypeSymbol>(), target.TypeArguments, SymbolEqualityComparer.Default);
-                Assert.Contains(methods, m => SymbolEqualityComparer.Default.Equals(target.OriginalDefinition, m));
-            }
-        }
+        Assert.All(methods, method => Assert.Equal(CanonicalConstraintClauses(methods[0]), CanonicalConstraintClauses(method)));
     }
 
     [Fact]

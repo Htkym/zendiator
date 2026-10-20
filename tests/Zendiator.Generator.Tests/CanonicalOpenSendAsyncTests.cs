@@ -177,8 +177,7 @@ public sealed partial class GeneratorTests
             var mediator = output.GetTypeByMetadataName(ns + ".Generated.Composition.Zendiator")!; Assert.False(mediator.IsGenericType);
             var methods = new[] { Assert.Single(api.GetMembers("SendAsync").OfType<IMethodSymbol>()), Assert.Single(mediator.GetMembers("SendAsync").OfType<IMethodSymbol>()) };
             Assert.All(methods, m => { Assert.Equal(ns == "OpenAsyncVoid" ? 1 : 2, m.Arity); Assert.All(m.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); }); Assert.Equal(ns == "OpenAsyncVoid" ? 0 : 1, ((INamedTypeSymbol)m.ReturnType).Arity); });
-            var declarations = methods.Select(m => (MethodDeclarationSyntax)m.DeclaringSyntaxReferences.Single().GetSyntax()).ToArray();
-            Assert.All(declarations, d => Assert.Equal(declarations[0].ConstraintClauses.ToFullString().Trim(), d.ConstraintClauses.ToFullString().Trim()));
+            Assert.All(methods, method => Assert.Equal(CanonicalConstraintClauses(methods[0]), CanonicalConstraintClauses(method)));
             var invoke = AssertOpenAsyncInvoker(output, mediator, methods[1]);
             Assert.Equal(ns == "OpenAsyncVoid" ? 0 : 1, ((INamedTypeSymbol)invoke.ReturnType).Arity);
         }
@@ -188,21 +187,12 @@ public sealed partial class GeneratorTests
 
     private static IMethodSymbol AssertOpenAsyncInvoker(Compilation output, INamedTypeSymbol mediator, IMethodSymbol entry)
     {
-        var invoker = Assert.Single(mediator.GetTypeMembers(), t => t.Name.StartsWith("SendInvoker", StringComparison.Ordinal));
-        Assert.True(invoker.IsReadOnly); Assert.Equal(entry.Arity, invoker.Arity);
-        var declaration = (MethodDeclarationSyntax)entry.DeclaringSyntaxReferences.Single().GetSyntax();
-        Assert.Equal(declaration.ConstraintClauses.ToFullString().Trim(), ((StructDeclarationSyntax)invoker.DeclaringSyntaxReferences.Single().GetSyntax()).ConstraintClauses.ToFullString().Trim());
-        Assert.All(invoker.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); });
-        var invoke = Assert.Single(invoker.GetMembers("InvokeAsync").OfType<IMethodSymbol>()); Assert.Equal(0, invoke.Arity);
-        var creation = Assert.Single(declaration.DescendantNodes().OfType<ObjectCreationExpressionSyntax>());
-        var constructor = Assert.IsAssignableFrom<IMethodSymbol>(output.GetSemanticModel(creation.SyntaxTree).GetSymbolInfo(creation).Symbol);
-        Assert.True(SymbolEqualityComparer.Default.Equals(invoker, constructor.ContainingType.OriginalDefinition));
-        Assert.Equal(entry.TypeParameters.Cast<ITypeSymbol>(), constructor.ContainingType.TypeArguments, SymbolEqualityComparer.Default);
-        var call = Assert.Single(declaration.DescendantNodes().OfType<InvocationExpressionSyntax>(), i => i.Expression is MemberAccessExpressionSyntax m && m.Name.Identifier.ValueText == "InvokeAsync");
-        var bound = Assert.IsAssignableFrom<IMethodSymbol>(output.GetSemanticModel(call.SyntaxTree).GetSymbolInfo(call).Symbol);
-        Assert.True(SymbolEqualityComparer.Default.Equals(bound.OriginalDefinition, invoke));
-        Assert.True(SymbolEqualityComparer.Default.Equals(bound.ContainingType, constructor.ContainingType));
-        return invoke;
+        Assert.True(SymbolEqualityComparer.Default.Equals(mediator, entry.ContainingType));
+        var target = CanonicalRouteEntry(output, entry);
+        Assert.Equal(entry.Arity, target.Arity);
+        Assert.Equal(CanonicalConstraintClauses(entry), CanonicalConstraintClauses(target));
+        Assert.All(target.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); });
+        return target;
     }
 
     [Fact]

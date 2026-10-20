@@ -1,6 +1,8 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.DependencyInjection;
 using Zendiator.SourceGenerator;
 using Zendiator.Tests.Contracts;
@@ -173,9 +175,10 @@ public sealed partial class GeneratorTests
         Assert.Equal(new StreamSiteId(StreamProgram.Dispose, StreamPhase.DetachSource), fixture.Projection.TerminalCleanupEntry);
         Assert.All(fixture.Projection.Schedule.Awaits, a => { Assert.True(a.ConsumeOnce); Assert.True(a.ConfigureAwaitFalse); });
         Assert.Equal(new[] { BoundCallbackPhase.Filter, BoundCallbackPhase.Map, BoundCallbackPhase.Filter }, fixture.Projection.Hooks.Select(h => h.Phase));
-        Assert.Equal(1, fixture.GeneratedSource.Split("while (true)", StringSplitOptions.None).Length - 1);
-        Assert.Contains("await source.MoveNextAsync().ConfigureAwait(false)", fixture.GeneratedSource);
-        Assert.Contains("await detached.DisposeAsync().ConfigureAwait(false)", fixture.GeneratedSource);
+        var segment = Assert.Single(CSharpSyntaxTree.ParseText(fixture.GeneratedSource).GetRoot().DescendantNodes().OfType<MethodDeclarationSyntax>(), m => m.Identifier.ValueText == "RunSegment");
+        Assert.Single(segment.DescendantNodes().OfType<WhileStatementSyntax>());
+        Assert.Contains("await source.MoveNextAsync().ConfigureAwait(false)", segment.ToFullString());
+        Assert.Contains("await detached.DisposeAsync().ConfigureAwait(false)", segment.ToFullString());
         var driver = BindLists(StreamGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"));
         Assert.NotNull(Graph(driver).StreamWrapperSchedule);
         Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.StreamPrototype.", StringComparison.Ordinal));

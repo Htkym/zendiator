@@ -89,7 +89,7 @@ public sealed partial class GeneratorTests
             private static string Observe(bool generated,string mode){
                 var p=new Probe(mode);using var token=p.Cancellation;IServiceCollection services=new ServiceCollection();services.AddSingleton(p);
                 services.AddScoped(typeof(ZHandler<,>));var existing=services.Last();Register.Add(services);var count=services.Count;Register.Add(services);
-                Probe.Check(count==6&&services.Count==count&&services.Contains(existing),"TryAdd/repeat registration");
+                Probe.Check(services.Count(d=>d.ServiceType.DeclaringType!=typeof(Generated.Composition.Zendiator))==6&&services.Count==count&&services.Contains(existing),"TryAdd/repeat registration");
                 foreach(var type in new[]{typeof(ZHandler<,>),typeof(AHandler<,>),typeof(Hook<,>),typeof(Generated.Composition.IZendiator),typeof(Generated.Composition.Zendiator)})Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"scoped receivers/facade");
                 var mismatch=new ZendiatorConfiguration();mismatch.Handlers(typeof(Request<,>),DispatchFamily.SendAllSync,typeof(AHandler<,>),typeof(ZHandler<,>));mismatch.Pipeline(typeof(Request<,>),DispatchFamily.SendAllSync,Stage.Hook(typeof(Hook<,>)));
                 IServiceCollection rejected=new ServiceCollection();var mismatchRejected=false;try{Generated.Composition.ZendiatorGeneratedRegistrar.Add(rejected,mismatch.Snapshot());}catch(InvalidOperationException){mismatchRejected=true;}
@@ -133,7 +133,8 @@ public sealed partial class GeneratorTests
         var api = output.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.IZendiator")!; Assert.NotNull(api); Assert.False(api.IsGenericType);
         var mediator = output.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.Zendiator")!;
         var publicMethod = Assert.Single(mediator.GetMembers("SendAll").OfType<IMethodSymbol>());
-        var branches = mediator.GetMembers().OfType<IMethodSymbol>().Where(m => m.DeclaredAccessibility == Accessibility.Private && m.Name.StartsWith("Branch", StringComparison.Ordinal)).ToArray(); Assert.Equal(2, branches.Length);
+        var implementation = CanonicalRouteEntry(output, publicMethod).ContainingType;
+        var branches = implementation.GetMembers().OfType<IMethodSymbol>().Where(m => m.DeclaredAccessibility == Accessibility.Private && m.Name.StartsWith("Branch", StringComparison.Ordinal)).ToArray(); Assert.Equal(2, branches.Length);
         foreach (var method in new[] { Assert.Single(api.GetMembers("SendAll").OfType<IMethodSymbol>()), publicMethod }.Concat(branches))
         {
             Assert.True(method.ReturnsVoid); Assert.False(method.IsAsync); Assert.Equal(2, method.Arity);

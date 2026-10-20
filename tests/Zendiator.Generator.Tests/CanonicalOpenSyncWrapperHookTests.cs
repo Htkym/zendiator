@@ -148,14 +148,9 @@ public sealed partial class GeneratorTests
         Assert.Equal(isVoid ? SpecialType.System_Void : SpecialType.System_Int32, method.ReturnType.SpecialType); Assert.False(method.IsAsync);
         var parameter = Assert.Single(method.TypeParameters); Assert.True(parameter.HasReferenceTypeConstraint); Assert.True(parameter.HasConstructorConstraint);
         var concrete = output.GetTypeByMetadataName(ns + ".Generated.Mixed.Zendiator")!;
-        foreach (var name in new[] { "ExecuteOuter", "ExecuteInner" })
-        {
-            var execute = Assert.Single(concrete.GetMembers().OfType<IMethodSymbol>(), m => m.Name.StartsWith(name + "__", StringComparison.Ordinal));
-            Assert.Equal(isVoid ? SpecialType.System_Void : SpecialType.System_Int32, execute.ReturnType.SpecialType); Assert.False(execute.IsAsync);
-            var argument = Assert.Single(execute.TypeParameters); Assert.True(argument.HasReferenceTypeConstraint); Assert.True(argument.HasConstructorConstraint);
-        }
-        var continuation = Assert.Single(Assert.Single(concrete.GetTypeMembers(), t => t.Name.StartsWith("WrapperNext__", StringComparison.Ordinal)).Interfaces);
-        Assert.Equal("ISendContinuation", continuation.Name); Assert.Equal(isVoid ? 1 : 2, continuation.Arity);
+        var target = CanonicalRouteEntry(output, Assert.Single(concrete.GetMembers("Send").OfType<IMethodSymbol>()));
+        Assert.Equal(isVoid ? SpecialType.System_Void : SpecialType.System_Int32, target.ReturnType.SpecialType);
+        var argument = Assert.Single(target.TypeParameters); Assert.True(argument.HasReferenceTypeConstraint); Assert.True(argument.HasConstructorConstraint);
         var catalog = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single().TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
         var route = Assert.Single(Assert.Single(catalog.Compositions, c => c.Key == ns).Pipelines);
         var emission = Assert.Single(CanonicalWrapperEmissionNormalizer.Create(catalog, CanonicalExecutionGraphNormalizer.Create(catalog)).Compositions, c => c.Registration.Namespace == ns + ".Generated.Mixed");

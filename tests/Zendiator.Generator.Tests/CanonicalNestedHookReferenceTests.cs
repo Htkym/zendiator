@@ -300,7 +300,7 @@ public sealed partial class GeneratorTests
         => RunNestedHookLifetimes(isVoid, lifetime, lifetime, lifetime);
 
     private static string RunNestedHookLifetimes(bool isVoid, ServiceLifetime outerLifetime, ServiceLifetime innerLifetime,
-        ServiceLifetime handlerLifetime, SyncFixture? fixture = null, bool generated = false, bool registerAfter = false)
+        ServiceLifetime handlerLifetime, SyncFixture? fixture = null, bool generated = false)
     {
         var probe = new NestedSendProbe(); var ambient = NestedSendProbe.Ambient.Value; var culture = CultureInfo.CurrentCulture;
         try
@@ -309,9 +309,8 @@ public sealed partial class GeneratorTests
             var types = fixture != null ? NestedHookFixtureTypes(fixture) : isVoid ? new[] { typeof(NestedVoidHook<OuterHookTag>), typeof(NestedVoidHook<InnerHookTag>), typeof(NestedVoidHandler) } :
                 new[] { typeof(NestedResponseHook<OuterHookTag>), typeof(NestedResponseHook<InnerHookTag>), typeof(NestedResponseHandler) };
             var owners = new[] { "A", "B", "handler" }; var lifetimes = new[] { outerLifetime, innerLifetime, handlerLifetime };
-            if (fixture != null && registerAfter) Assert.Same(services, fixture.Register.Invoke(null, [services]));
             for (var t = 0; t < types.Length; t++) services.Add(ServiceDescriptor.Describe(types[t], types[t], lifetimes[t]));
-            if (fixture != null && !registerAfter) Assert.Same(services, fixture.Register.Invoke(null, [services]));
+            if (fixture != null) Assert.Same(services, fixture.Register.Invoke(null, [services]));
             var cleanup = new List<int[]>();
             using (var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
             {

@@ -111,7 +111,7 @@ public sealed partial class GeneratorTests
                 var p=new Probe(mode);using var outer=p.Outer;using var inner=p.Inner;
                 p.Destination=mode=="short"?new[]{701}:new[]{701,702,703};p.Initial=p.Destination.ToArray();IServiceCollection services=new ServiceCollection();services.AddSingleton(p);
                 services.AddScoped(typeof(Hook<,>));var existing=services.Last();Register.Add(services);var count=services.Count;Register.Add(services);
-                Probe.Check(count==7&&services.Count==count&&services.Contains(existing),"TryAdd/repeat registration");
+                Probe.Check(services.Count(d=>d.ServiceType.DeclaringType!=typeof(Generated.Composition.Zendiator))==7&&services.Count==count&&services.Contains(existing),"TryAdd/repeat registration");
                 foreach(var type in new[]{typeof(ZHandler<,>),typeof(AHandler<,>),typeof(Hook<,>),typeof(Logging<,>),typeof(Generated.Composition.IZendiator),typeof(Generated.Composition.Zendiator)})Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"scoped receivers/facade");
                 var mismatchRejected=0;foreach(var reverseHandlers in new[]{true,false}){
                     var c=new ZendiatorConfiguration();c.Handlers(typeof(Request<,>),DispatchFamily.SendAllSync,reverseHandlers?new[]{typeof(AHandler<,>),typeof(ZHandler<,>)}:new[]{typeof(ZHandler<,>),typeof(AHandler<,>)});
@@ -174,7 +174,9 @@ public sealed partial class GeneratorTests
         var methods = api.GetMembers("SendAll").OfType<IMethodSymbol>().ToArray(); Assert.Equal(2, methods.Length);
         Assert.Single(methods, m => m.ReturnType is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_Int32 });
         Assert.Single(methods, m => m.ReturnType.SpecialType == SpecialType.System_Int32 && m.Parameters[1].Type.Name == "Span");
-        var branches = mediator.GetMembers().OfType<IMethodSymbol>().Where(m => m.Name.StartsWith("Branch", StringComparison.Ordinal)).ToArray(); Assert.Equal(2, branches.Length);
+        var publicMethod = Assert.Single(mediator.GetMembers("SendAll").OfType<IMethodSymbol>(), m => m.ReturnType is IArrayTypeSymbol);
+        var implementation = CanonicalRouteEntry(output, publicMethod).ContainingType;
+        var branches = implementation.GetMembers().OfType<IMethodSymbol>().Where(m => m.Name.StartsWith("Branch", StringComparison.Ordinal)).ToArray(); Assert.Equal(2, branches.Length);
         foreach (var method in methods.Concat(branches))
         {
             Assert.False(method.IsAsync); Assert.Equal(2, method.Arity); Assert.All(method.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); });

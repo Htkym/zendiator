@@ -147,16 +147,13 @@ public sealed partial class GeneratorTests
     public void Enabled_two_Hooks_SendSync_preserves_independent_DI_lifetimes(bool isVoid, ServiceLifetime outer,
         ServiceLifetime inner, ServiceLifetime handler)
     {
-        var fixture = NestedHookBackendFixture(isVoid); var snapshots = new List<object>();
-        foreach (var registerAfter in new[] { false, true })
-        {
-            var reference = RunNestedHookLifetimes(isVoid, outer, inner, handler, fixture, registerAfter: registerAfter);
-            var generated = RunNestedHookLifetimes(isVoid, outer, inner, handler, fixture, generated: true, registerAfter: registerAfter);
-            Assert.Equal(reference, generated);
-            snapshots.Add(new { registerAfter, reference = JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
-        }
+        // Lifetime overrides precede AddZendiator's immutable policy snapshot.
+        var fixture = NestedHookBackendFixture(isVoid);
+        var reference = RunNestedHookLifetimes(isVoid, outer, inner, handler, fixture);
+        var generated = RunNestedHookLifetimes(isVoid, outer, inner, handler, fixture, generated: true);
+        Assert.Equal(reference, generated);
         WriteNestedHookEvidence("nested-hook-lifetimes", (isVoid ? "void-" : "response-") + outer + "-" + inner + "-" + handler,
-            new { isVoid, outer = outer.ToString(), inner = inner.ToString(), handler = handler.ToString(), snapshots });
+            new { isVoid, outer = outer.ToString(), inner = inner.ToString(), handler = handler.ToString(), reference = JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
     }
 
     [Theory]

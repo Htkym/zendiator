@@ -27,8 +27,11 @@ internal static class CanonicalRouteServiceEmitter
         var registrar = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "ZendiatorGeneratedRegistrar");
         var generated = Composition(ns, mediator, registrar);
         var joined = mediator.WithMembers(SyntaxFactory.List(generated.Shared.Members.Concat(Route(ns, mediator))));
-        return file with { Source = root.ReplaceNode(ns, ns.WithMembers(SyntaxFactory.List(ns.Members.Select(m =>
-            ReferenceEquals(m, mediator) ? joined : ReferenceEquals(m, registrar) ? generated.Registrar : m)))).NormalizeWhitespace().ToFullString() };
+        return file with
+        {
+            Source = root.ReplaceNode(ns, ns.WithMembers(SyntaxFactory.List(ns.Members.Select(m =>
+            ReferenceEquals(m, mediator) ? joined : ReferenceEquals(m, registrar) ? generated.Registrar : m)))).NormalizeWhitespace().ToFullString()
+        };
     }
 
     internal static IEnumerable<MemberDeclarationSyntax> Route(NamespaceDeclarationSyntax ns, ClassDeclarationSyntax mediator)
@@ -133,7 +136,7 @@ internal static class CanonicalRouteServiceEmitter
         foreach (var entry in entries)
         {
             var type = "global::" + ns.Name + ".Zendiator." + Name(ns.Name.ToString(), entry);
-            registration.AppendLine("global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services, global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Scoped(typeof(" + type + "), typeof(" + type + "))); ");
+            registration.AppendLine("global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services, global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Transient(typeof(" + type + "), typeof(" + type + "))); ");
         }
         var policy = "global::" + ns.Name + ".Zendiator.ResolutionPolicy";
         registration.AppendLine("var lifetimes = " + policy + ".Capture(services);");

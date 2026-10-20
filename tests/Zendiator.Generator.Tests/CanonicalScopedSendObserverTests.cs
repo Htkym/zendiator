@@ -150,8 +150,10 @@ public sealed partial class GeneratorTests
             var api = output.GetTypeByMetadataName(ns + ".Generated.Composition.IZendiator"); Assert.NotNull(api);
             var send = Assert.Single(api.GetMembers("Send").OfType<IMethodSymbol>()); Assert.Equal(ScopedKind.ScopedValue, send.Parameters[0].ScopedKind); Assert.True(send.Parameters[0].Type.IsRefLikeType);
             var mediator = output.GetTypeByMetadataName(ns + ".Generated.Composition.Zendiator")!;
-            var execute = Assert.Single(mediator.GetMembers().OfType<IMethodSymbol>(), m => m.Name.StartsWith("Execute", StringComparison.Ordinal)); Assert.Equal(ScopedKind.ScopedValue, execute.Parameters[0].ScopedKind); Assert.False(execute.IsAsync);
-            Assert.All(mediator.GetMembers().OfType<IFieldSymbol>(), f => Assert.False(f.Type.IsRefLikeType));
+            var publicMethod = Assert.Single(mediator.GetMembers("Send").OfType<IMethodSymbol>());
+            var target = CanonicalRouteEntry(output, publicMethod);
+            Assert.All(new[] { publicMethod, target }, m => { Assert.Equal(ScopedKind.ScopedValue, m.Parameters[0].ScopedKind); Assert.True(m.Parameters[0].Type.IsRefLikeType); });
+            Assert.All(new[] { mediator, target.ContainingType }.SelectMany(t => t.GetMembers().OfType<IFieldSymbol>()), f => Assert.False(f.Type.IsRefLikeType));
             var observer = output.GetTypeByMetadataName(ns + ".Observer")!;
             Assert.All(observer.AllInterfaces.Where(i => i.Name.StartsWith("IScopedSend", StringComparison.Ordinal)).SelectMany(i => i.GetMembers().OfType<IMethodSymbol>()), m => { Assert.True(m.ReturnsVoid); Assert.Equal(ScopedKind.ScopedValue, m.Parameters[0].ScopedKind); });
         }

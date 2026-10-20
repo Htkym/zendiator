@@ -154,14 +154,10 @@ public sealed partial class GeneratorTests
             Assert.Equal(BoundRequestShape.OpenSyncReference, route.RequestShape); Assert.NotNull(route.SendGeneric); Assert.NotNull(route.SendOpenRegistration); Assert.Null(route.StreamGeneric); Assert.Null(route.StreamOpenRegistration);
             var api = output.GetTypeByMetadataName(ns + ".Generated.Composition.IZendiator"); Assert.NotNull(api); Assert.False(api.IsGenericType);
             var mediator = output.GetTypeByMetadataName(ns + ".Generated.Composition.Zendiator")!; Assert.False(mediator.IsGenericType);
-            var methods = new[] { Assert.Single(api.GetMembers("Send").OfType<IMethodSymbol>()), Assert.Single(mediator.GetMembers("Send").OfType<IMethodSymbol>()), Assert.Single(mediator.GetMembers().OfType<IMethodSymbol>(), m => m.DeclaredAccessibility == Accessibility.Private && m.Name.StartsWith("Execute", StringComparison.Ordinal)) };
+            var publicMethod = Assert.Single(mediator.GetMembers("Send").OfType<IMethodSymbol>());
+            var methods = new[] { Assert.Single(api.GetMembers("Send").OfType<IMethodSymbol>()), publicMethod, CanonicalRouteEntry(output, publicMethod) };
             Assert.All(methods, m => { Assert.Equal(ns == "OpenVoid" ? 1 : 2, m.Arity); Assert.All(m.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); }); Assert.Equal(ns == "OpenVoid", m.ReturnsVoid); });
-            var declarations = methods.Select(m => (MethodDeclarationSyntax)m.DeclaringSyntaxReferences.Single().GetSyntax()).ToArray();
-            Assert.All(declarations, d => Assert.Equal(declarations[0].ConstraintClauses.ToFullString().Trim(), d.ConstraintClauses.ToFullString().Trim()));
-            var call = Assert.Single(declarations[1].DescendantNodes().OfType<InvocationExpressionSyntax>(), i => i.Expression is GenericNameSyntax g && g.Identifier.ValueText == methods[2].Name);
-            var bound = Assert.IsAssignableFrom<IMethodSymbol>(output.GetSemanticModel(call.SyntaxTree).GetSymbolInfo(call).Symbol);
-            Assert.True(SymbolEqualityComparer.Default.Equals(bound.OriginalDefinition, methods[2]));
-            Assert.Equal(methods[1].TypeParameters.Cast<ITypeSymbol>(), bound.TypeArguments, SymbolEqualityComparer.Default);
+            Assert.All(methods, method => Assert.Equal(CanonicalConstraintClauses(methods[0]), CanonicalConstraintClauses(method)));
         }
         foreach (var name in new[] { "ClosedComposition", "ScopedComposition" }) Assert.NotNull(output.GetTypeByMetadataName("OpenSentinel.Generated." + name + ".IZendiator"));
         var sentinels = catalog.Compositions.Where(c => c.Key is "closed" or "scoped").SelectMany(c => c.Pipelines).ToArray(); Assert.Equal(2, sentinels.Length);

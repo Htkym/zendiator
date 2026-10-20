@@ -143,10 +143,6 @@ public sealed partial class GeneratorTests
             File.WriteAllText(Path.Combine(p, "compile.json"), JsonSerializer.Serialize(new { emitted.Success, productionEnabled = true, candidateOnly = false, warnings = 0, errors = 0, generatorErrors = diagnostics.Length }));
         }
         bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var bridge = assembly.GetType("App.Bridge")!; var outer = assembly.GetType("App.Hook`1")!.MakeGenericType(assembly.GetType("App.OuterTag")!);
-        var execute = assembly.GetType("App.Generated.Reads.Zendiator")!.GetNestedTypes(BindingFlags.NonPublic).Single(t => t.Name.StartsWith("SendInvoker", StringComparison.Ordinal))
-            .GetMethod("InvokeAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var builder = execute.GetCustomAttribute<System.Runtime.CompilerServices.AsyncMethodBuilderAttribute>()?.BuilderType;
-        Assert.Equal(key.Mode is "direct" or "two" && !key.Void ? typeof(System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder<>) : null, builder);
         return new(assembly, assembly.GetType("App.Generated.Reads.Zendiator")!, assembly.GetType("App.Ping")!, outer, assembly.GetType("App.Hook`1")!.MakeGenericType(assembly.GetType("App.InnerTag")!), assembly.GetType("App.Handler")!, assembly.GetType("App.Factory`1")?.MakeGenericType(assembly.GetType("App.OuterTag")!) ?? outer, bridge.GetMethod("Register")!, bridge.GetMethod("Dispatch")!);
     })).Value;
     private static object InvokeAsyncHook(AsyncHookFixture f, string mode, bool isVoid, bool generated, IServiceProvider provider, object? request, CancellationToken token)

@@ -168,28 +168,21 @@ public sealed partial class GeneratorTests
                 return new{name,response,copied,destination=shared.Values,shared.Version,p.Branch,handlers=p.Handlers.ToArray(),trace=p.Trace.ToArray(),resolved=p.Resolved.ToArray(),ended=p.Ended.ToArray(),error=p.Error(error)};
             }finally{scope.Dispose();p.Cancellation.Dispose();}
         }
-        private sealed class GuardProvider(Probe p):IServiceProvider{
-            public int Calls;
-            public object? GetService(Type type){
-                Calls++;
-                if(type==typeof(Response.Hook))return new Response.Hook(p);
-                if(type==typeof(Response.H1))return new Response.H1(p);
-                if(type==typeof(Response.H2))return new Response.H2(p);
-                if(type==typeof(Response.H3))return new Response.H3(p);
-                throw new InvalidOperationException(type.FullName);
-            }
-        }
         public static string GuardCompetition(){
             var rows=new List<object>();
             foreach(var generated in new[]{true,false}){
-                var p=new Probe();var provider=new GuardProvider(p);var destination=new[]{41,42,43,44};Exception? error=null;
+                var p=new Probe();IServiceCollection services=new ServiceCollection();services.AddSingleton(p);RegisterResponse(services);
+                using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
+                using var scope=provider.CreateScope();
+                var mediator=generated?scope.ServiceProvider.GetRequiredService<global::AllSync.Generated.Responses.IZendiator>():null;
+                var destination=new[]{41,42,43,44};Exception? error=null;
                 try{
                     try{
-                        if(generated)new global::AllSync.Generated.Responses.Zendiator(provider).SendAll(null!,destination.AsSpan(0,2),p.Cancellation.Token);
-                        else Response.Reference.Span(provider,null!,destination.AsSpan(0,2),p.Cancellation.Token);
+                        if(generated)mediator!.SendAll(null!,destination.AsSpan(0,2),p.Cancellation.Token);
+                        else Response.Reference.Span(scope.ServiceProvider,null!,destination.AsSpan(0,2),p.Cancellation.Token);
                     }catch(Exception e){error=e;}
                     rows.Add(new{engine=generated?"generated":"reference",error=error?.GetType().Name,
-                        parameter=(error as ArgumentException)?.ParamName,destination,providerCalls=provider.Calls,
+                        parameter=(error as ArgumentException)?.ParamName,destination,
                         handlerCalls=p.Handlers.Count,resolved=p.Resolved.Count,trace=p.Trace.Count});
                 }finally{p.Cancellation.Dispose();}
             }
@@ -279,7 +272,7 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
-    public void SendAllSync_Span_argument_guard_precedes_short_destination_without_DI_or_handler_entry()
+    public void SendAllSync_Span_argument_guard_precedes_short_destination_without_user_service_or_handler_entry()
     {
         var source = SendAllSyncSource(false);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "SendAllSyncGuard_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
@@ -298,7 +291,7 @@ public sealed partial class GeneratorTests
         {
             Assert.Equal("ArgumentNullException", row.GetProperty("error").GetString()); Assert.Equal("request", row.GetProperty("parameter").GetString());
             Assert.Equal(new[] { 41, 42, 43, 44 }, row.GetProperty("destination").EnumerateArray().Select(x => x.GetInt32()));
-            foreach (var name in new[] { "providerCalls", "handlerCalls", "resolved", "trace" }) Assert.Equal(0, row.GetProperty(name).GetInt32());
+            foreach (var name in new[] { "handlerCalls", "resolved", "trace" }) Assert.Equal(0, row.GetProperty(name).GetInt32());
         });
     }
 }

@@ -87,8 +87,8 @@ public sealed partial class GeneratorTests
             private static async Task<string> Observe(bool generated,bool empty){
                 var p=new Probe();IServiceCollection services=new ServiceCollection();services.AddSingleton(p);services.AddScoped(typeof(Handler<,>));var existing=services.Last();
                 if(empty)RegisterEmpty.Add(services);else RegisterOmitted.Add(services);var count=services.Count;if(empty)RegisterEmpty.Add(services);else RegisterOmitted.Add(services);
-                Probe.Check(count==5&&services.Count==count&&services.Contains(existing),"TryAdd/repeat registration");
                 var facade=empty?typeof(Generated.Empty.IZendiator):typeof(Generated.Omitted.IZendiator);var concrete=empty?typeof(Generated.Empty.Zendiator):typeof(Generated.Omitted.Zendiator);
+                Probe.Check(services.Count(d=>d.ServiceType.DeclaringType!=concrete)==5&&services.Count==count&&services.Contains(existing),"TryAdd/repeat registration");
                 foreach(var type in new[]{typeof(Handler<,>),typeof(StatusHandler),facade,concrete})Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"scoped keys");
                 var mismatch=new ZendiatorConfiguration();mismatch.Handlers(typeof(Query<,>),DispatchFamily.SendAsync,typeof(Handler<,>));mismatch.Handlers<StatusQuery>(DispatchFamily.SendAsync,typeof(StatusHandler));
                 if(!empty){mismatch.Pipeline(typeof(Query<,>),DispatchFamily.SendAsync);mismatch.Pipeline<StatusQuery>(DispatchFamily.SendAsync);}
@@ -179,8 +179,13 @@ public sealed partial class GeneratorTests
                 Assert.Contains(generic.TypeParameters[0].ConstraintTypes, t => t.Name == "IRight"); Assert.Contains(generic.TypeParameters[1].ConstraintTypes, t => t.Name == "ILeft");
                 Assert.All(methods, m => { Assert.False(m.IsAsync); var result = Assert.IsAssignableFrom<INamedTypeSymbol>(m.ReturnType); Assert.Equal("ValueTask", result.Name); Assert.Equal(SpecialType.System_Int32, Assert.Single(result.TypeArguments).SpecialType); });
             }
-            var helpers = mediator.GetMembers().OfType<IMethodSymbol>().Where(m => m.Name.StartsWith("ExecuteAsync__", StringComparison.Ordinal)).ToArray(); Assert.Equal(2, helpers.Length); Assert.Equal(2, helpers.Select(m => m.Name).Distinct(StringComparer.Ordinal).Count());
-            Assert.All(helpers, m => Assert.True(m.IsAsync)); Assert.Single(helpers, m => m.Arity == 0); Assert.Single(helpers, m => m.Arity == 2);
+            foreach (var method in mediator.GetMembers("SendAsync").OfType<IMethodSymbol>())
+            {
+                var target = CanonicalRouteEntry(output, method);
+                Assert.Equal(method.Arity, target.Arity);
+                Assert.Equal(method.TypeParameters.Select(p => p.HasReferenceTypeConstraint), target.TypeParameters.Select(p => p.HasReferenceTypeConstraint));
+                Assert.Equal(method.TypeParameters.Select(p => p.HasConstructorConstraint), target.TypeParameters.Select(p => p.HasConstructorConstraint));
+            }
         }
         var wrapper = Assert.Single(model.Compositions, c => c.Namespace == "OpenSendWrapper.Generated.Pair"); Assert.Equal(2, wrapper.Routes.Count); Assert.Single(wrapper.Routes, r => r.Wrapper != null); Assert.Single(wrapper.Routes, r => r.Async != null);
         Assert.Null(output.GetTypeByMetadataName("OpenSendWrapper.PairEntry"));

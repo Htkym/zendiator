@@ -466,7 +466,7 @@ public sealed partial class GeneratorTests
     [Theory]
     [InlineData("collection")]
     [InlineData("provider")]
-    public void Enabled_SendSync_rejects_custom_container_or_candidate_only_provider_decorator(string boundary)
+    public void Enabled_SendSync_accepts_custom_collection_and_registered_provider_decorator(string boundary)
     {
         var f = SyncRuntimeFixture("owned", false); var probe = new CanonicalSyncRuntimeProbe();
         if (boundary == "collection")
@@ -476,7 +476,8 @@ public sealed partial class GeneratorTests
         }
         else
         {
-            using var provider = new ServiceCollection().BuildServiceProvider();
+            IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe); f.Register.Invoke(null, [services]);
+            using var provider = services.BuildServiceProvider();
             Assert.NotNull(Activator.CreateInstance(f.Mediator, new RecordingSyncProvider(provider, probe, f.Service)));
         }
         Assert.Empty(probe.Trace); probe.Cancellation.Dispose();

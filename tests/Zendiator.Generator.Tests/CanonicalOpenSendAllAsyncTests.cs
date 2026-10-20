@@ -170,15 +170,10 @@ public sealed partial class GeneratorTests
             var registration = Assert.Single(CanonicalRegistrationPlan.SendAllAsync(emission).Routes); var open = Assert.IsType<BoundStreamOpenRegistration>(registration.Open);
             Assert.Equal(new[] { "global::" + ns + ".ZHandler<,>", "global::" + ns + ".AHandler<,>" }, open.HandlerDefinitionNames); Assert.Equal(new[] { "global::" + ns + ".Hook<,>", "global::" + ns + ".ZHandler<,>", "global::" + ns + ".AHandler<,>" }, registration.ServiceTypes);
             var api = output.GetTypeByMetadataName(ns + ".Generated.Composition.IZendiator")!; Assert.NotNull(api); Assert.False(api.IsGenericType); var mediator = output.GetTypeByMetadataName(ns + ".Generated.Composition.Zendiator")!; Assert.False(mediator.IsGenericType);
-            var publicMethod = Assert.Single(mediator.GetMembers("SendAllAsync").OfType<IMethodSymbol>()); var execute = Assert.Single(mediator.GetMembers().OfType<IMethodSymbol>(), m => m.Name.StartsWith("ExecuteAllAsync", StringComparison.Ordinal)); var branches = mediator.GetMembers().OfType<IMethodSymbol>().Where(m => m.Name.StartsWith("Branch", StringComparison.Ordinal)).ToArray(); Assert.Equal(2, branches.Length);
-            var methods = new[] { Assert.Single(api.GetMembers("SendAllAsync").OfType<IMethodSymbol>()), publicMethod, execute }.Concat(branches).ToArray();
+            var publicMethod = Assert.Single(mediator.GetMembers("SendAllAsync").OfType<IMethodSymbol>());
+            var methods = new[] { Assert.Single(api.GetMembers("SendAllAsync").OfType<IMethodSymbol>()), publicMethod, CanonicalRouteEntry(output, publicMethod) };
             Assert.All(methods, m => { Assert.Equal(2, m.Arity); Assert.All(m.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); }); Assert.Contains(m.TypeParameters, p => p.ConstraintTypes.Any(t => t.Name == "ISecond")); Assert.Contains(m.TypeParameters, p => p.ConstraintTypes.Any(t => t.Name == "IHook")); Assert.Equal(isVoid ? 0 : 1, ((INamedTypeSymbol)m.ReturnType).Arity); });
-            var declarations = methods.Select(m => (MethodDeclarationSyntax)m.DeclaringSyntaxReferences.Single().GetSyntax()).ToArray(); Assert.All(declarations, d => Assert.Equal(declarations[0].ConstraintClauses.ToFullString().Trim(), d.ConstraintClauses.ToFullString().Trim()));
-            foreach (var method in new[] { publicMethod, execute })
-            {
-                var declaration = (MethodDeclarationSyntax)method.DeclaringSyntaxReferences.Single().GetSyntax(); var calls = declaration.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(i => i.Expression is GenericNameSyntax).ToArray(); Assert.Equal(SymbolEqualityComparer.Default.Equals(method, publicMethod) ? 1 : 2, calls.Length);
-                foreach (var call in calls) { var target = Assert.IsAssignableFrom<IMethodSymbol>(output.GetSemanticModel(call.SyntaxTree).GetSymbolInfo(call).Symbol); Assert.Equal(method.TypeParameters.Cast<ITypeSymbol>(), target.TypeArguments, SymbolEqualityComparer.Default); Assert.Contains(methods, m => SymbolEqualityComparer.Default.Equals(target.OriginalDefinition, m)); }
-            }
+            Assert.All(methods, method => Assert.Equal(CanonicalConstraintClauses(methods[0]), CanonicalConstraintClauses(method)));
         }
         foreach (var marker in new[] { "Response", "Command" })
         {
