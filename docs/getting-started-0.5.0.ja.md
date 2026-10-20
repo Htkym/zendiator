@@ -206,6 +206,14 @@ Streamの返り値をscopeの外へ持ち出し、scopeを破棄してから列�
 
 この例はclassのrequestと、DIが所有するclassのHandlerを使います。Hookがないため、空の`Pipeline`を追加する必要はありません。返された`ValueTask`はそれぞれ1回だけ`await`し、非同期処理が完了するまでscopeを保持してください。
 
+## 複数の配送方法を一つのAppで使う
+
+[ComposedAppサンプル](../samples/Zendiator.Sample.ComposedApp/)では型付きquery、更新command、同期Send、SendAllとStreamの7つのrouteを同じAppとDI scopeで使います。`Pipeline`はrouteごとに指定し、Hookの順序とWrapper自身のcache・retry処理を保ちます。
+
+各routeはその配送方法で対応している構成に従います。構成が不適合なrouteが一つでもあれば、App全体の生成を止めます。scoped ref-like requestを含む複数routeの合成は今回の対応範囲外です。
+
+この例はclassのrequestと、DIが所有するclassのHandler・Hook・Wrapperを使います。返された`ValueTask`はそれぞれ1回だけ`await`し、非同期処理とStreamの列挙・後始末が終わるまでscopeを保持してください。
+
 ## 0.4.0から移るとき
 
 0.5.0候補では、Handlerの属性と明示的な登録を使います。0.4.0のinterface実装やアセンブリ指定だけに依存した登録は、そのまま移せません。

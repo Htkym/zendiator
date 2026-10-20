@@ -268,15 +268,19 @@ public sealed partial class GeneratorTests
             ("handler-session", source.Replace("typeof(Handler<,>)", "HandlerEntry.Session(typeof(Handler<,>),typeof(Factory<,>))") + factory),
             ("wrong-family", source.Replace("DispatchFamily.SendSync", "DispatchFamily.SendAsync")),
             ("partial-hook", source.Replace(pipeline, "").Replace(handlers, handlers + "c.Pipeline(typeof(Query<,>),DispatchFamily.SendSync,Stage.Hook(typeof(Partial<,>)));")),
-            ("multiple-routes", source.Replace(handlers, handlers + "c.Handlers(typeof(OtherQuery<,>),DispatchFamily.SendSync,typeof(OtherHandler<,>));")),
         })
         {
             var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(invalid, "OpenSendZeroRejected_" + name + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
             SaveSendAllSync(OpenSendZeroFolder(name), invalid, driver, output, diagnostics);
-            Assert.NotEmpty(diagnostics); Assert.All(diagnostics, d => Assert.Equal(name == "multiple-routes" ? "ZEN0037" : "ZEN0035", d.Id));
+            Assert.NotEmpty(diagnostics); Assert.All(diagnostics, d => Assert.Equal("ZEN0035", d.Id));
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
             foreach (var form in new[] { "Omitted", "Empty" }) { Assert.Null(output.GetTypeByMetadataName("OpenZero.SR.Generated." + form + ".IZendiator")); Assert.Null(output.GetTypeByMetadataName("OpenZero.SR.Generated." + form + ".ZendiatorGeneratedRegistrar")); }
         }
+        var multiSource = source.Replace(handlers, handlers + "c.Handlers(typeof(OtherQuery<,>),DispatchFamily.SendSync,typeof(OtherHandler<,>));");
+        var multiDriver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(multiSource, "OpenSendZeroMultiple_" + Guid.NewGuid().ToString("N")), out var multiOutput, out var multiDiagnostics);
+        SaveSendAllSync(OpenSendZeroFolder("multiple-routes"), multiSource, multiDriver, multiOutput, multiDiagnostics);
+        Assert.Empty(multiDiagnostics); Assert.Empty(multiOutput.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        foreach (var form in new[] { "Omitted", "Empty" }) AssertComposedProfile(multiOutput, "OpenZero.SR.Generated." + form, ("Send", 2));
         var constraints = OpenSendZeroCommon + string.Concat(new[] { "SR", "SV", "AR", "AV" }.Select(OpenSendZeroDefinition)) + """
             namespace OpenZero {
             public sealed class NoDefault:ILeft {public NoDefault(int value){}}

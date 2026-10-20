@@ -84,47 +84,16 @@ internal static class CanonicalStreamPublicConnection
             c.GeneratedNamespace == composition.GeneratedNamespace) != 1 ||
             route.Family != BoundDispatchFamily.Stream || route.Handlers.Count != 1) return null;
         var connection = connections.Routes.SingleOrDefault(c => c.CompositionIdentity == composition.Identity && c.Anchor == route.Anchor);
-        if (connection is not { Kind: CanonicalStreamConnectionKind.Candidate or CanonicalStreamConnectionKind.CanonicalCandidate } ||
-            !HasMixedRequestShape(route)) return null;
+        if (connection is not { Kind: CanonicalStreamConnectionKind.Candidate or CanonicalStreamConnectionKind.CanonicalCandidate }) return null;
         var projected = composition with
         {
             Pipelines = new(new[] { route }),
             Facts = new(composition.Facts.Where(f => f.Anchor == route.Anchor)),
-            Handlers = new(composition.Handlers.Where(h => h.Identity == route.Handlers[0].Type))
+            Handlers = new(composition.Handlers.Where(h => CanonicalMultiEmissionNormalizer.HasHandler(route, h)))
         };
         var accepted = Create(new(new(new[] { projected })), connections).Compositions.SingleOrDefault();
         return accepted == null ? null : accepted with { Registration = accepted.Registration with { Index = index } };
     }
-
-    internal static bool HasMixedRequestShape(BoundPipelineModel route) =>
-        route.RequestShape is BoundRequestShape.ClosedReference or BoundRequestShape.ClosedNonGenericValue ||
-        route.Family == BoundDispatchFamily.Stream && route.PipelineFamily == BoundDispatchFamily.Stream &&
-        route.StreamGeneric != null && route.StreamOpenRegistration is { } open &&
-        (route.HasEmptyPipeline && open.Stages.Count == 0 ||
-            route.StreamItemFlow == null && route.Handlers.Count == 1 && route.Handlers[0].Sessions.Count == 0 &&
-            open.Stages.Count == route.Stages.Count && ((route.Stages.Count is 1 or 2 ||
-                route.Stages.Count == 3 && route.Stages.Any(s => s.Kind == FusionStageKind.Wrapper)) &&
-            route.Stages.Count(s => s.Kind == FusionStageKind.Wrapper) <= 1 &&
-            route.Stages.All(s => s.Sessions.Count == 0 &&
-                (s.Kind == FusionStageKind.Hook && s.StreamEmission is
-                { HookIsValueType: false, Completion: BoundCompletionKind.Synchronous, Phase: BoundCallbackPhase.Filter or BoundCallbackPhase.Map } ||
-                    s.Kind == FusionStageKind.Wrapper && s.StreamWrapperEmission is
-                    { WrapperIsValueType: false, Completion: BoundCompletionKind.Enumerable })) ||
-                route.Stages.Count == 3 && route.Stages.All(s => s.Kind == FusionStageKind.Hook && s.Sessions.Count == 0 &&
-                    s.StreamEmission is { HookIsValueType: false }) &&
-                route.Stages.Select(s => s.StreamEmission!.Phase).SequenceEqual(new[] { BoundCallbackPhase.Filter, BoundCallbackPhase.Map, BoundCallbackPhase.Filter }) &&
-                route.Stages.Select(s => s.StreamEmission!.Completion).SequenceEqual(new[] { BoundCompletionKind.ValueTask, BoundCompletionKind.ValueTask, BoundCompletionKind.Synchronous })) ||
-            route.StreamItemFlow is { } flow && flow.Stages.Count == 1 && flow.Source.Identity != flow.Final.Identity &&
-            route.Handlers.Count == 1 && route.Handlers[0].Sessions.Count == 1 &&
-            (route.Handlers[0].Sessions[0].Acquire.Completion is BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask) &&
-            open.Stages.Count == 1 && route.Stages.Count == 1 && route.Stages[0].Kind == FusionStageKind.Hook &&
-            route.Stages[0].Sessions.Count == 1 && (route.Stages[0].Sessions[0].Acquire.Completion is BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask) &&
-            route.Stages[0].StreamEmission is
-            { HookIsValueType: false, Phase: BoundCallbackPhase.Map, Completion: BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask } ||
-            route.StreamItemFlow is { } borrowedFlow && borrowedFlow.Stages.Count == 1 && borrowedFlow.Source.Identity != borrowedFlow.Final.Identity &&
-            route.Handlers.Count == 1 && route.Handlers[0].Sessions.Count == 0 && open.Stages.Count == 1 && route.Stages.Count == 1 &&
-            route.Stages[0].Kind == FusionStageKind.Hook && route.Stages[0].Sessions.Count == 0 && route.Stages[0].StreamEmission is
-            { HookIsValueType: false, Phase: BoundCallbackPhase.Map, Completion: BoundCompletionKind.Synchronous });
 
     private static bool PlainZeroStageShape(CanonicalStreamFallbackModel model)
     {

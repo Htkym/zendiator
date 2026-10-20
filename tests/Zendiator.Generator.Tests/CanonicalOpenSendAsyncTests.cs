@@ -221,11 +221,12 @@ public sealed partial class GeneratorTests
     {
         var source = OpenSendAsyncNegative(); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "OpenSendAsyncNegative_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
         var folder = OpenSendAsyncFolder("negative"); SaveSendAllSync(folder, source, driver, output, diagnostics); AssertOpenSendAsyncOutput(output, driver);
-        foreach (var name in new[] { "Undetermined", "ConstraintConflict", "Wrapper", "Session", "WrongAll", "Overlap", "Multiple" })
+        AssertComposedProfile(output, "AsyncRejected.Generated.Multiple", ("SendAsync", 2));
+        foreach (var name in new[] { "Undetermined", "ConstraintConflict", "Wrapper", "Session", "WrongAll", "Overlap" })
         {
             Assert.Null(output.GetTypeByMetadataName("AsyncRejected.Generated." + name + ".IZendiator")); Assert.Null(output.GetTypeByMetadataName("AsyncRejected.Generated." + name + ".ZendiatorGeneratedRegistrar"));
             var start = source.IndexOf("public static IServiceCollection " + name + "(", StringComparison.Ordinal); var end = source.IndexOf("});", start, StringComparison.Ordinal) + 3;
-            Assert.Contains(diagnostics, d => d.Location.IsInSource && d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.End <= end && d.Id == (name == "Overlap" ? "ZEN0028" : name == "Multiple" ? "ZEN0037" : "ZEN0035"));
+            Assert.Contains(diagnostics, d => d.Location.IsInSource && d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.End <= end && d.Id == (name == "Overlap" ? "ZEN0028" : "ZEN0035"));
             foreach (var interceptor in driver.GetRunResult().Results.Single().GeneratedSources.Where(f => f.SourceText.ToString().Contains("InterceptsLocation", StringComparison.Ordinal))) Assert.DoesNotContain("typeof(global::AsyncRejected." + name + ")", interceptor.SourceText.ToString(), StringComparison.Ordinal);
         }
         foreach (var name in new[] { "Undetermined", "ConstraintConflict" })
@@ -237,6 +238,6 @@ public sealed partial class GeneratorTests
         var overlap = Assert.Single(diagnostics, d => d.Id == "ZEN0028"); Assert.Contains("Pipeline<OpenAsyncResponse.Request<", source.Substring(overlap.Location.SourceSpan.Start, overlap.Location.SourceSpan.Length));
         var additional = Assert.Single(overlap.AdditionalLocations); Assert.True(additional.IsInSource); Assert.Contains("Pipeline(typeof(OpenAsyncResponse.Request<,>)", source.Substring(additional.SourceSpan.Start, additional.SourceSpan.Length)); Assert.True(additional.SourceSpan.Start < overlap.Location.SourceSpan.Start);
         var errors = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray(); Assert.NotEmpty(errors); Assert.All(errors, d => { Assert.Equal("CS0310", d.Id); Assert.Contains("SendAsync", source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length)); Assert.Contains("NoDefault", d.GetMessage()); });
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "negative-result.json"), JsonSerializer.Serialize(new { logicalInputs = 1, drivers = 1, dispatches = 0, unrelatedGeneratedCompositions = 8, rejectedCompositions = 7, compiler = errors.Select(d => new { d.Id, message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }), generator = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), primary = d.Location.SourceSpan.ToString(), additional = d.AdditionalLocations.Select(l => l.SourceSpan.ToString()) }) }));
+        if (folder != null) File.WriteAllText(Path.Combine(folder, "negative-result.json"), JsonSerializer.Serialize(new { logicalInputs = 1, drivers = 1, dispatches = 0, unrelatedGeneratedCompositions = 8, newlyComposedProfiles = new[] { "Multiple" }, rejectedCompositions = 6, compiler = errors.Select(d => new { d.Id, message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }), generator = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), primary = d.Location.SourceSpan.ToString(), additional = d.AdditionalLocations.Select(l => l.SourceSpan.ToString()) }) }));
     }
 }

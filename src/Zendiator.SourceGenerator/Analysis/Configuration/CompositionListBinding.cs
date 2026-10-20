@@ -338,10 +338,8 @@ internal sealed class CompositionListBinding
                     ReceiverIsGeneric = entry.Type.IsGenericType,
                     ReceiverIsPublic = open?.Public(entry.Type) ?? Public(entry.Type),
                     RequestReferenceResponse = requestReferenceResponse,
-                    ResponseContract = nextResult != null && family == BoundDispatchFamily.SendAsync &&
-                        entry.Type.TypeKind == TypeKind.Class && entry.Factory == null &&
-                        (declaration.HandlerList || declaration.Entries.Length == 0) &&
-                        (open == null ? HasClosedResponseContract(request, nextResult) : open.IsSendResponse(nextResult))
+                    ResponseContract = nextResult != null && family is (BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllAsync or BoundDispatchFamily.SendAllSync) &&
+                        (open == null ? HasResponseContract(request, nextResult, family.Value) : open.IsSendResponse(nextResult))
                 };
                 if ((family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync) && declaration.Request.TypeKind is TypeKind.Class or TypeKind.Struct &&
                     entry.Type.TypeKind is (TypeKind.Class or TypeKind.Struct) && _compilation.IsSymbolAccessibleWithin(entry.Type, _compilation.Assembly) && implementation != null && member != null &&
@@ -588,12 +586,11 @@ internal sealed class CompositionListBinding
         return true;
     }
 
-    private bool HasClosedResponseContract(INamedTypeSymbol request, ITypeSymbol result)
+    private bool HasResponseContract(INamedTypeSymbol request, ITypeSymbol result, BoundDispatchFamily family)
     {
-        if (request.TypeKind != TypeKind.Class || request.IsGenericType ||
-            result is not (INamedTypeSymbol or IArrayTypeSymbol) || result.IsRefLikeType ||
+        if (result is not (INamedTypeSymbol or IArrayTypeSymbol) || result.IsRefLikeType ||
             HasOpenShape(result) || !Public(result)) return false;
-        var contract = _compilation.GetTypeByMetadataName(ContractNames.Request);
+        var contract = _compilation.GetTypeByMetadataName(family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync ? ContractNames.SyncRequest : ContractNames.Request);
         var responses = request.AllInterfaces.Where(i => Same(i.OriginalDefinition, contract)).ToArray();
         return responses.Length == 1 && SymbolEqualityComparer.IncludeNullability.Equals(responses[0].TypeArguments[0], result);
     }

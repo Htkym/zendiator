@@ -44,6 +44,21 @@ This example uses class requests and DI-owned class handlers. With no hooks,
 it can omit empty `Pipeline` declarations. Await each returned `ValueTask` once
 and keep the scope alive until the asynchronous operation finishes.
 
+## Use several dispatch families in one App
+
+The [ComposedApp sample](../samples/Zendiator.Sample.ComposedApp/) combines seven
+routes for typed queries, an update command, synchronous Send, SendAll and Stream
+in one App and DI scope. Each route declares its own pipeline, preserving hook
+order and the wrapper's own caching and retry behavior.
+
+Each route must satisfy the supported contract for its dispatch family. An
+ineligible route blocks generation for the whole App. Compositions containing
+scoped ref-like requests remain outside this scope.
+
+This example uses class requests and DI-owned class handlers, hooks and wrappers.
+Await each returned `ValueTask` once. Keep the scope alive until asynchronous
+operations and Stream enumeration, including cleanup, have finished.
+
 ## Migrating from 0.4.0
 
 - Mark selected handlers with `[ZendiatorHandler]` and select them explicitly

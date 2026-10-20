@@ -191,11 +191,12 @@ public sealed partial class GeneratorTests
     {
         var source = OpenSendAllSyncNegative(); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "OpenSendAllSyncNegative_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
         var folder = OpenSendAllSyncFolder("negative"); SaveSendAllSync(folder, source, driver, output, diagnostics); AssertOpenSendAllSyncOutput(output, driver);
-        foreach (var name in new[] { "Undetermined", "ConstraintConflict", "PatternMismatch", "Wrapper", "HookSession", "HandlerSession", "Overlap", "Multiple", "Three" })
+        AssertComposedProfile(output, "OpenAllRejected.Generated.Multiple", ("SendAll", 4));
+        foreach (var name in new[] { "Undetermined", "ConstraintConflict", "PatternMismatch", "Wrapper", "HookSession", "HandlerSession", "Overlap", "Three" })
         {
             var ns = "OpenAllRejected.Generated." + name; Assert.Null(output.GetTypeByMetadataName(ns + ".IZendiator")); Assert.Null(output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar"));
             var start = source.IndexOf("public static IServiceCollection " + name + "(", StringComparison.Ordinal); var end = source.IndexOf("});", start, StringComparison.Ordinal) + 3;
-            Assert.Contains(diagnostics, d => d.Location.IsInSource && d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.End <= end && d.Id == (name == "Overlap" ? "ZEN0028" : name == "Multiple" ? "ZEN0037" : "ZEN0035"));
+            Assert.Contains(diagnostics, d => d.Location.IsInSource && d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.End <= end && d.Id == (name == "Overlap" ? "ZEN0028" : "ZEN0035"));
             foreach (var interceptor in driver.GetRunResult().Results.Single().GeneratedSources.Where(f => f.SourceText.ToString().Contains("InterceptsLocation", StringComparison.Ordinal))) Assert.DoesNotContain("typeof(global::OpenAllRejected." + name + ")", interceptor.SourceText.ToString(), StringComparison.Ordinal);
         }
         var acceptedVoid = output.GetTypeByMetadataName("OpenAllRejected.Generated.Void.IZendiator"); Assert.NotNull(acceptedVoid);
@@ -210,6 +211,6 @@ public sealed partial class GeneratorTests
         var overlap = Assert.Single(diagnostics, d => d.Id == "ZEN0028"); Assert.Contains("Pipeline<OpenAll.Request<", source.Substring(overlap.Location.SourceSpan.Start, overlap.Location.SourceSpan.Length));
         var additional = Assert.Single(overlap.AdditionalLocations); Assert.True(additional.IsInSource); Assert.Contains("Pipeline(typeof(OpenAll.Request<,>)", source.Substring(additional.SourceSpan.Start, additional.SourceSpan.Length)); Assert.True(additional.SourceSpan.Start < overlap.Location.SourceSpan.Start);
         var errors = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray(); Assert.NotEmpty(errors); Assert.All(errors, d => { Assert.Equal("CS0310", d.Id); Assert.Contains("SendAll", source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length)); Assert.Contains("NoDefault", d.GetMessage()); });
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "negative-result.json"), JsonSerializer.Serialize(new { logicalInputs = 1, drivers = 1, dispatches = 0, validGeneratedCompositions = 12, rejectedCompositions = 9, compiler = errors.Select(d => new { d.Id, message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }), generator = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), primary = d.Location.SourceSpan.ToString(), additional = d.AdditionalLocations.Select(l => l.SourceSpan.ToString()) }) }));
+        if (folder != null) File.WriteAllText(Path.Combine(folder, "negative-result.json"), JsonSerializer.Serialize(new { logicalInputs = 1, drivers = 1, dispatches = 0, validGeneratedCompositions = 13, newlyComposedProfiles = new[] { "Multiple" }, rejectedCompositions = 8, compiler = errors.Select(d => new { d.Id, message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }), generator = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), primary = d.Location.SourceSpan.ToString(), additional = d.AdditionalLocations.Select(l => l.SourceSpan.ToString()) }) }));
     }
 }

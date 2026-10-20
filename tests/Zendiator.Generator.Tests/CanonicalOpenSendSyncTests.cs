@@ -184,13 +184,14 @@ public sealed partial class GeneratorTests
     {
         var source = OpenSendSyncNegative(); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "OpenSendSyncNegative_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
         var folder = OpenSendSyncFolder("negative"); SaveSendAllSync(folder, source, driver, output, diagnostics); AssertOpenSendSyncOutput(output, driver);
-        foreach (var name in new[] { "UndeterminedHook", "UndeterminedHandler", "ConstraintConflict", "ResponseMismatch", "WrongAsync", "WrongAll", "Wrapper", "Session", "Overlap", "Multiple" })
+        AssertComposedProfile(output, "OpenRejected.Generated.Multiple", ("Send", 2));
+        foreach (var name in new[] { "UndeterminedHook", "UndeterminedHandler", "ConstraintConflict", "ResponseMismatch", "WrongAsync", "WrongAll", "Wrapper", "Session", "Overlap" })
         { Assert.Null(output.GetTypeByMetadataName("OpenRejected.Generated." + name + ".IZendiator")); Assert.Null(output.GetTypeByMetadataName("OpenRejected.Generated." + name + ".ZendiatorGeneratedRegistrar")); }
         var overlap = Assert.Single(diagnostics, d => d.Id == "ZEN0028"); Assert.True(overlap.Location.IsInSource);
         Assert.Contains("Pipeline<OpenResponse.Request<", source.Substring(overlap.Location.SourceSpan.Start, overlap.Location.SourceSpan.Length));
         var additional = Assert.Single(overlap.AdditionalLocations); Assert.True(additional.IsInSource); Assert.Contains("Pipeline(typeof(OpenResponse.Request<,>)", source.Substring(additional.SourceSpan.Start, additional.SourceSpan.Length)); Assert.True(additional.SourceSpan.Start < overlap.Location.SourceSpan.Start);
         var errors = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray(); Assert.NotEmpty(errors); Assert.All(errors, d => { Assert.Equal("CS0310", d.Id); Assert.Contains("Send", source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length)); Assert.Contains("NoDefault", d.GetMessage()); });
         Assert.Contains(diagnostics, d => d.Id == "ZEN0035"); Assert.Contains(diagnostics, d => d.Id == "ZEN0026"); Assert.Contains(diagnostics, d => d.Id == "ZEN0037");
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "negative-result.json"), JsonSerializer.Serialize(new { logicalInputs = 1, drivers = 1, dispatches = 0, unrelatedGeneratedCompositions = 4, rejectedCompositions = 10, compiler = errors.Select(d => new { d.Id, message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }), generator = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), primary = d.Location.SourceSpan.ToString(), additional = d.AdditionalLocations.Select(l => l.SourceSpan.ToString()) }) }));
+        if (folder != null) File.WriteAllText(Path.Combine(folder, "negative-result.json"), JsonSerializer.Serialize(new { logicalInputs = 1, drivers = 1, dispatches = 0, unrelatedGeneratedCompositions = 4, newlyComposedProfiles = new[] { "Multiple" }, rejectedCompositions = 9, compiler = errors.Select(d => new { d.Id, message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }), generator = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), primary = d.Location.SourceSpan.ToString(), additional = d.AdditionalLocations.Select(l => l.SourceSpan.ToString()) }) }));
     }
 }
