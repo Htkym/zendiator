@@ -57,17 +57,17 @@ public sealed partial class GeneratorTests
         }
         """;
 
-    private static string OpenSendZeroPairSource(bool consumer, bool sentinel = true, string invalid = "")
+    private static string OpenSendZeroPairSource(bool consumer, bool sentinel = true, string profile = "")
     {
         string Configuration(string form, bool empty) => $$"""
             namespace OpenZeroPair {
             [ZendiatorComposition("openZeroPair-{{form}}")]public sealed class {{form}};
             public static class Register{{form}} {
                 public static IServiceCollection Add(IServiceCollection s)=>s.AddZendiator<{{form}}>(c=>{
-                    c.Handlers(typeof(Query<,>),DispatchFamily.SendAsync,typeof({{(invalid == "unbound-handler" ? "Missing<,,>" : "Handler<,>")}}));
-                    {{(invalid == "second-open" ? "c.Handlers(typeof(ExtraQuery<>),DispatchFamily.SendAsync,typeof(ExtraHandler<>));" : "c.Handlers<StatusQuery>(DispatchFamily.SendAsync,typeof(StatusHandler));")}}
+                    c.Handlers(typeof(Query<,>),DispatchFamily.SendAsync,typeof({{(profile == "unbound-handler" ? "Missing<,,>" : "Handler<,>")}}));
+                    {{(profile == "second-open" ? "c.Handlers(typeof(ExtraQuery<>),DispatchFamily.SendAsync,typeof(ExtraHandler<>));" : "c.Handlers<StatusQuery>(DispatchFamily.SendAsync,typeof(StatusHandler));")}}
                     {{(empty ? "c.Pipeline(typeof(Query<,>),DispatchFamily.SendAsync);c.Pipeline<StatusQuery>(DispatchFamily.SendAsync);" : "")}}
-                    {{(invalid == "orphan" ? "c.AddHandler(typeof(ExtraHandler<>));" : "")}}
+                    {{(profile == "orphan" ? "c.AddHandler(typeof(ExtraHandler<>));" : "")}}
                 });
             }
             }
@@ -197,9 +197,9 @@ public sealed partial class GeneratorTests
     [Fact]
     public void OpenSend_zero_stage_pair_rejects_partial_compositions_and_preserves_compiler_constraints()
     {
-        foreach (var name in new[] { "orphan", "second-open", "unbound-handler" })
+        foreach (var name in new[] { "orphan", "unbound-handler" })
         {
-            var source = OpenSendZeroPairSource(consumer: false, sentinel: false, invalid: name);
+            var source = OpenSendZeroPairSource(consumer: false, sentinel: false, profile: name);
             var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "OpenSendZeroPairRejected_" + name + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
             SaveSendAllSync(OpenSendZeroPairFolder(name), source, driver, output, diagnostics);
             Assert.NotEmpty(diagnostics);
@@ -215,6 +215,21 @@ public sealed partial class GeneratorTests
             Assert.Null(output.GetTypeByMetadataName("OpenZeroPair.Generated.Omitted.IZendiator")); Assert.Null(output.GetTypeByMetadataName("OpenZeroPair.Generated.Omitted.ZendiatorGeneratedRegistrar"));
             Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal));
         }
+        var multiSource = OpenSendZeroPairSource(consumer: false, sentinel: false, profile: "second-open") + """
+            namespace OpenZeroPair {
+            public static class TwoOpenConsumer {
+                public static ValueTask<int> SendQuery(Generated.Omitted.IZendiator mediator)=>mediator.SendAsync(new Query<Left,Right>(7,new Shared()));
+                public static ValueTask<int> SendExtra(Generated.Omitted.IZendiator mediator)=>mediator.SendAsync(new ExtraQuery<int>());
+            }
+            }
+            """;
+        var multiDriver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(multiSource, "OpenSendZeroTwoOpen_" + Guid.NewGuid().ToString("N")), out var multiOutput, out var multiDiagnostics);
+        SaveSendAllSync(OpenSendZeroPairFolder("second-open"), multiSource, multiDriver, multiOutput, multiDiagnostics);
+        Assert.Empty(multiDiagnostics); Assert.Empty(multiOutput.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var multiApi = multiOutput.GetTypeByMetadataName("OpenZeroPair.Generated.Omitted.IZendiator")!; Assert.NotNull(multiApi);
+        Assert.Equal(new[] { 1, 2 }, multiApi.GetMembers("SendAsync").OfType<IMethodSymbol>().Select(m => m.Arity).OrderBy(a => a));
+        Assert.NotNull(multiOutput.GetTypeByMetadataName("OpenZeroPair.Generated.Omitted.ZendiatorGeneratedRegistrar"));
+        Assert.Equal(2, multiDriver.GetRunResult().Results.Single().GeneratedSources.Count(s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal)));
         var constraints = OpenSendZeroPairSource(consumer: false, sentinel: false) + """
             namespace OpenZeroPair {
             public sealed class NoDefault:ILeft{public NoDefault(int value){}}
