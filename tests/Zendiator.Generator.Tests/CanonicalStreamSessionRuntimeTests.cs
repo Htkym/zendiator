@@ -109,7 +109,6 @@ public sealed partial class GeneratorTests
         {
             Assert.DoesNotContain(graph.StreamSchedule!.Owners, o => o.Kind == StreamOwnerKind.Session);
             Assert.DoesNotContain("Factory)", text); Assert.DoesNotContain("factory returned null", text); Assert.DoesNotContain("private global::Zendiator.IStreamRequestHandler", text);
-            Assert.Contains("{ _ended = true; await Close().ConfigureAwait(false); return false; }", text);
         }
         bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var names = new[] { "SessionHandler", "FirstSession", "BorrowedMiddle", "LastSession", "HandlerFactory", "FirstFactory", "LastFactory" };
@@ -156,6 +155,7 @@ public sealed partial class GeneratorTests
                 Assert.True(await move.WaitAsync(TimeSpan.FromSeconds(5))); values.Add(cursor.Current); _ = cursor.Current;
                 Assert.False(await cursor.MoveNextAsync());
                 if (f.Owned) { Assert.Equal(i, p.SourceDisposals); Assert.Equal(i * 3, p.SessionDisposals); }
+                else Assert.Equal(i + 1, p.SourceDisposals);
             }
             Assert.False(await cursor.MoveNextAsync()); Assert.Equal(0, p.ServiceDisposals);
             await cursor.DisposeAsync(); var events = p.Events.Count; await cursor.DisposeAsync(); Assert.Equal(events, p.Events.Count);

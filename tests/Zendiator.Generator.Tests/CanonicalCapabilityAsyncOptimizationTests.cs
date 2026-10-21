@@ -195,17 +195,29 @@ public sealed partial class GeneratorTests
     public async Task Capability_three_hook_overlapping_operations_keep_separate_frames_and_DI_receivers()
     {
         var f = CapabilityThree();
+        IServiceCollection defaults = new ServiceCollection(); f.Register.Invoke(null, [defaults]);
+        foreach (var type in f.Hooks.Append(f.Handler))
+        {
+            var descriptor = Assert.Single(defaults, d => d.ServiceType == type);
+            Assert.Equal(ServiceLifetime.Transient, descriptor.Lifetime); Assert.Equal(type, descriptor.ImplementationType);
+        }
         foreach (var generated in new[] { false, true })
         {
-            var p = new AsyncHookProbe { Pending = "handler" }; IServiceCollection services = new ServiceCollection(); services.AddSingleton(p); f.Register.Invoke(null, [services]);
-            await using var provider = services.BuildServiceProvider(); await using var scope = provider.CreateAsyncScope();
-            Task<int> Start(int value) => ((ValueTask<int>)InvokeCapability(f, generated, scope.ServiceProvider, Activator.CreateInstance(f.Request, [value])!, p.Cancellation.Token)).AsTask();
-            var first = Start(10); var second = Start(20); Assert.False(first.IsCompleted); Assert.False(second.IsCompleted); Assert.Equal(2, p.Gates.Count);
-            using var foreign = new CancellationTokenSource(); var cancellation = new OperationCanceledException("second", foreign.Token); p.Gates[1].Fail(cancellation);
-            Assert.Same(cancellation, await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second.WaitAsync(TimeSpan.FromSeconds(10)))); Assert.True(second.IsCanceled); Assert.False(first.IsCompleted);
-            p.Gates[0].Complete(); Assert.Equal(16, await first.WaitAsync(TimeSpan.FromSeconds(10)));
-            var followup = Start(30); p.Gates[2].Complete(); Assert.Equal(36, await followup.WaitAsync(TimeSpan.FromSeconds(10))); Assert.All(p.Gates, g => Assert.Equal(1, g.Consumptions));
-            Assert.Equal(3, p.Hooks.Count); Assert.Empty(p.ReleasedHooks);
+            var p = new AsyncHookProbe { Pending = "handler" }; IServiceCollection services = new ServiceCollection(); services.AddSingleton(p);
+            foreach (var type in f.Hooks.Append(f.Handler)) services.AddScoped(type, type);
+            f.Register.Invoke(null, [services]);
+            await using var provider = services.BuildServiceProvider();
+            await using (var scope = provider.CreateAsyncScope())
+            {
+                Task<int> Start(int value) => ((ValueTask<int>)InvokeCapability(f, generated, scope.ServiceProvider, Activator.CreateInstance(f.Request, [value])!, p.Cancellation.Token)).AsTask();
+                var first = Start(10); var second = Start(20); Assert.False(first.IsCompleted); Assert.False(second.IsCompleted); Assert.Equal(2, p.Gates.Count);
+                using var foreign = new CancellationTokenSource(); var cancellation = new OperationCanceledException("second", foreign.Token); p.Gates[1].Fail(cancellation);
+                Assert.Same(cancellation, await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second.WaitAsync(TimeSpan.FromSeconds(10)))); Assert.True(second.IsCanceled); Assert.False(first.IsCompleted);
+                p.Gates[0].Complete(); Assert.Equal(16, await first.WaitAsync(TimeSpan.FromSeconds(10)));
+                var followup = Start(30); p.Gates[2].Complete(); Assert.Equal(36, await followup.WaitAsync(TimeSpan.FromSeconds(10))); Assert.All(p.Gates, g => Assert.Equal(1, g.Consumptions));
+                Assert.Equal(3, p.Hooks.Count); Assert.Empty(p.ReleasedHooks); Assert.Equal(0, p.HandlerDisposals);
+            }
+            Assert.Equal(3, p.ReleasedHooks.Count); Assert.All(p.Hooks, h => Assert.Single(p.ReleasedHooks, x => ReferenceEquals(x, h))); Assert.Equal(1, p.HandlerDisposals);
         }
     }
 

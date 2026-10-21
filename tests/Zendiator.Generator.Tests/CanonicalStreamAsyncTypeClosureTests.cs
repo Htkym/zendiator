@@ -1,4 +1,6 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Zendiator.SourceGenerator;
 using Xunit;
 
@@ -139,8 +141,16 @@ public sealed partial class GeneratorTests
             if (id == "closed-inferred") { Assert.NotNull(explicitClosed); Assert.Equal(explicitClosed, typedStages); }
             var connection = Assert.Single(StreamConnections(driver).Routes); Assert.Equal(CanonicalStreamConnectionKind.CanonicalCandidate, connection.Kind);
             var canonical = Assert.Single(generated, s => s.HintName.StartsWith("Zendiator.StreamCanonical.", StringComparison.Ordinal)).SourceText.ToString();
-            Assert.Contains("await _hook0.AcceptAsync(request, item, _token).ConfigureAwait(false)", canonical);
-            Assert.Contains("await _hook1.MapAsync(request, item, _token).ConfigureAwait(false)", canonical);
+            var canonicalRoot = CSharpSyntaxTree.ParseText(canonical).GetRoot();
+            foreach (var method in new[] { "AcceptAsync", "MapAsync" })
+            {
+                var callback = Assert.Single(canonicalRoot.DescendantNodes().OfType<InvocationExpressionSyntax>(),
+                    call => call.Expression is MemberAccessExpressionSyntax member && member.Name.Identifier.ValueText == method);
+                var awaited = Assert.Single(callback.Ancestors().OfType<AwaitExpressionSyntax>());
+                var configured = Assert.IsType<InvocationExpressionSyntax>(awaited.Expression);
+                Assert.Equal("ConfigureAwait", Assert.IsType<MemberAccessExpressionSyntax>(configured.Expression).Name.Identifier.ValueText);
+                Assert.True(Assert.Single(configured.ArgumentList.Arguments).Expression.IsKind(SyntaxKind.FalseLiteralExpression));
+            }
             Assert.DoesNotContain(generated, s => s.HintName.StartsWith("Zendiator.StreamPrototype.", StringComparison.Ordinal) ||
                 s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal) || s.HintName.StartsWith("Zendiator.Composition.", StringComparison.Ordinal));
         }

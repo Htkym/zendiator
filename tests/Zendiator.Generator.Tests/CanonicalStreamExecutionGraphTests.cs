@@ -54,10 +54,15 @@ public sealed partial class GeneratorTests
         Assert.Empty(CanonicalStreamControlValidator.Validate(graph.Contract, schedule));
         if (!accepted)
         {
-            Assert.Contains("Stream execution graph satisfies", Assert.Single(driver.GetRunResult().Diagnostics).GetMessage());
-            Assert.Contains("runtime generation and equivalence are pending", Assert.Single(driver.GetRunResult().Diagnostics).GetMessage());
+            var connection = Assert.Single(StreamConnections(driver).Routes);
+            Assert.Equal(CanonicalStreamConnectionKind.HandlerOwned, connection.Kind);
+            Assert.True(connection.Canonical!.HandlerOwned);
+            var diagnostic = Assert.Single(driver.GetRunResult().Diagnostics).GetMessage();
+            Assert.Contains("handler-owned Stream capability", diagnostic);
+            Assert.Contains("not an equivalence proof", diagnostic);
         }
-        Assert.Empty(driver.GetRunResult().Results.Single().GeneratedSources.Where(s => s.HintName.Contains("Items")));
+        Assert.Equal(accepted, driver.GetRunResult().Results.Single().GeneratedSources.Any(s =>
+            s.HintName.StartsWith("Zendiator.Canonical.Stream.Public.", StringComparison.Ordinal)));
         Assert.True(schedule.FreshCursorPerEnumeration);
         Assert.False(schedule.RequestSnapshot);
         Assert.False(schedule.ReLendPublicCursor);

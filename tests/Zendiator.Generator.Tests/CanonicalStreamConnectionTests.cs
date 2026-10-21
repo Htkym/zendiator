@@ -192,7 +192,8 @@ public sealed partial class GeneratorTests
         var run = RunStreamConnection(source, "sibling"); var connections = StreamConnections(run.Driver).Routes;
         Assert.Equal(2, connections.Count);
         var candidate = Assert.Single(connections, c => c.Kind == CanonicalStreamConnectionKind.Candidate);
-        var canonical = Assert.Single(connections, c => c.Kind == CanonicalStreamConnectionKind.CanonicalCandidate);
+        var canonical = Assert.Single(connections, c => c.Kind == CanonicalStreamConnectionKind.HandlerOwned);
+        Assert.True(canonical.Canonical!.HandlerOwned);
         Assert.Single(run.Driver.GetRunResult().Results.Single().GeneratedSources, f => f.HintName == candidate.Candidate!.HintName);
         Assert.Single(run.Driver.GetRunResult().Results.Single().GeneratedSources, f => f.HintName == canonical.Canonical!.HintName);
         Assert.Equal(2, run.Diagnostics.Length); Assert.All(run.Diagnostics, d => Assert.Equal("ZEN0037", d.Id));

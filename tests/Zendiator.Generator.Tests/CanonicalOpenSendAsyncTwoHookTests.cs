@@ -1,7 +1,6 @@
 using System.Runtime.Loader;
 using System.Text.Json;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Xunit;
 using Zendiator.SourceGenerator;
 
@@ -130,8 +129,7 @@ public sealed partial class GeneratorTests
         var mediator = output.GetTypeByMetadataName("OpenAsyncTwoHooks.Generated.Composition.Zendiator")!; Assert.False(mediator.IsGenericType);
         var methods = new[] { Assert.Single(api.GetMembers("SendAsync").OfType<IMethodSymbol>()), Assert.Single(mediator.GetMembers("SendAsync").OfType<IMethodSymbol>()) };
         Assert.All(methods, m => { Assert.Equal(2, m.Arity); Assert.All(m.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); }); Assert.Equal(SpecialType.System_Int32, ((INamedTypeSymbol)m.ReturnType).TypeArguments.Single().SpecialType); });
-        var declarations = methods.Select(m => (MethodDeclarationSyntax)m.DeclaringSyntaxReferences.Single().GetSyntax()).ToArray();
-        Assert.All(declarations, d => Assert.Equal(declarations[0].ConstraintClauses.ToFullString().Trim(), d.ConstraintClauses.ToFullString().Trim()));
+        Assert.Equal(CanonicalConstraintClauses(methods[0]), CanonicalConstraintClauses(methods[1]));
         var invoke = AssertOpenAsyncInvoker(output, mediator, methods[1]);
         Assert.Equal(SpecialType.System_Int32, ((INamedTypeSymbol)invoke.ReturnType).TypeArguments.Single().SpecialType);
         if (negative)
