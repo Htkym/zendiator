@@ -132,7 +132,9 @@ internal static class StageContractBinding
             if (role.Stream && !role.Wrapper && (role.Completion is BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask))
                 streamEmission = new(Name(type), Name(contract), members[0].Name, role.Phase, type.IsValueType, role.Completion)
                 { InputItemName = typedStream ? streamItems?.Input.Name : null, OutputItemName = typedStream ? streamItems?.Output.Name : null };
-            var callTarget = role.Completion == BoundCompletionKind.ValueTask && family == BoundDispatchFamily.SendAsync && kind == FusionStageKind.Hook
+            var callTarget = family == BoundDispatchFamily.SendAsync && kind == FusionStageKind.Hook &&
+                (role.Completion == BoundCompletionKind.ValueTask ||
+                    role.Completion == BoundCompletionKind.Synchronous && role.Phase == BoundCallbackPhase.Before)
                 ? CanonicalAsyncCallBinding.Bind(type, members[0], implementation, compilation, Name) : null;
             if (!role.Wrapper && !role.Stream && !role.ScopedObserver) capabilityCalls[role.Phase] = new(Name(contract), members[0].Name, role.Completion) { CallTarget = callTarget };
             if (role.Completion == BoundCompletionKind.Synchronous && !role.ScopedObserver)

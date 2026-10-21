@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.Loader;
 using System.Threading.Tasks.Sources;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -57,6 +58,76 @@ public sealed class SynchronousCompletionProbe : CapabilityProbe, IValueTaskSour
 
 public sealed partial class GeneratorTests
 {
+    [Fact]
+    public async Task Plain_SendAsync_synchronous_before_binding_preserves_generic_DI_overrides_and_contract_fallbacks()
+    {
+        var source = CapabilitySource(true, false, "s---", false)
+            .Replace("s.AddZendiator<Reads>", "s.AddTransient<Reimplemented<Ping>,DerivedReimplemented<Ping>>().AddTransient<Virtual<Ping>,DerivedVirtual<Ping>>().AddZendiator<Reads>")
+            .Replace("Stage.Hook<Hook0>()", "Stage.Hook<Reimplemented<Ping>>(),Stage.Hook<Virtual<Ping>>(),Stage.Hook<Explicit<Ping>>(),Stage.Hook<Restricted<Ping>>()") + """
+            namespace App{
+                public class Reimplemented<T>:ISendRequestTransform<Ping> where T:class,IRequest<int>{
+                    protected readonly Probe P;public Reimplemented(Probe p){P=p;}
+                    public Ping Before(Ping r,CancellationToken t)=>throw new InvalidOperationException("Wrong base contract");
+                }
+                public sealed class DerivedReimplemented<T>:Reimplemented<T>,ISendRequestTransform<Ping> where T:class,IRequest<int>{
+                    public DerivedReimplemented(Probe p):base(p){}
+                    public new Ping Before(Ping r,CancellationToken t)=>P.Before(0,r,new Ping(r.Value+1),t);
+                }
+                public class Virtual<T>:ISendRequestTransform<Ping> where T:class,IRequest<int>{
+                    protected readonly Probe P;public Virtual(Probe p){P=p;}
+                    public virtual Ping Before(Ping r,CancellationToken t)=>throw new InvalidOperationException("Wrong virtual dispatch");
+                }
+                public sealed class DerivedVirtual<T>:Virtual<T> where T:class,IRequest<int>{
+                    public DerivedVirtual(Probe p):base(p){}
+                    public override Ping Before(Ping r,CancellationToken t)=>P.Before(1,r,new Ping(r.Value+1),t);
+                }
+                public sealed class Explicit<T>:ISendRequestTransform<Ping> where T:class,IRequest<int>{
+                    private readonly Probe _p;public Explicit(Probe p){_p=p;}
+                    public Ping Before(Ping r,CancellationToken t)=>throw new InvalidOperationException("Wrong public method");
+                    Ping ISendRequestTransform<Ping>.Before(Ping r,CancellationToken t)=>_p.Before(2,r,new Ping(r.Value+1),t);
+                }
+                public sealed class Restricted<T>:ISendRequestTransform<Ping> where T:class,IRequest<int>{
+                    private readonly Probe _p;public Restricted(Probe p){_p=p;}
+                    [Obsolete("Call through the contract",true)]
+                    public Ping Before(Ping r,CancellationToken t)=>_p.Before(3,r,new Ping(r.Value+1),t);
+                }
+            }
+            """;
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "SyncBeforeBinding_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var generated = driver.GetRunResult().Results.Single().GeneratedSources;
+        var route = Assert.Single(generated, IsCanonicalRoute); var model = output.GetSemanticModel(route.SyntaxTree);
+        var before = route.SyntaxTree.GetRoot().DescendantNodes().OfType<MethodDeclarationSyntax>()
+            .Where(m => m.Identifier.ValueText.StartsWith("Before", StringComparison.Ordinal)).OrderBy(m => m.Identifier.ValueText, StringComparer.Ordinal).ToArray();
+        Assert.Equal(4, before.Length);
+        for (var i = 0; i < before.Length; i++)
+        {
+            var calls = before[i].DescendantNodes().OfType<InvocationExpressionSyntax>().Select(n => model.GetSymbolInfo(n).Symbol).OfType<IMethodSymbol>().Where(m => m.Name == "Before").ToArray();
+            Assert.Contains(calls, m => m.ContainingType.TypeKind == TypeKind.Interface);
+            Assert.Equal(i < 2, before[i].ToString().Contains("GetType()", StringComparison.Ordinal));
+            var direct = calls.Where(m => m.ContainingType.TypeKind == TypeKind.Class).ToArray();
+            if (i >= 2) Assert.Empty(direct);
+            else Assert.Equal(i == 0 ? "Reimplemented" : "Virtual", Assert.Single(direct).ContainingType.Name);
+        }
+        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
+        if (!string.IsNullOrEmpty(evidence))
+        {
+            var path = Path.Combine(evidence, "sync-before-binding"); Directory.CreateDirectory(path); File.WriteAllText(Path.Combine(path, "input.cs"), source);
+            foreach (var item in generated) File.WriteAllText(Path.Combine(path, item.HintName), item.SourceText.ToString());
+        }
+        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var bridge = assembly.GetType("App.Bridge")!;
+        var probe = new CapabilityProbe(); using var cancellation = probe.Cancellation;
+        IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe); bridge.GetMethod("Register")!.Invoke(null, [services]);
+        await using var provider = services.BuildServiceProvider(); await using var scope = provider.CreateAsyncScope();
+        var mediator = scope.ServiceProvider.GetRequiredService(CanonicalEntryService(assembly.GetType("App.Generated.Reads.Zendiator")!));
+        var request = Activator.CreateInstance(assembly.GetType("App.Ping")!, [7]);
+        var result = (ValueTask<int>)bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, request, cancellation.Token])!;
+        Assert.Equal(11, await result);
+        Assert.Equal(new[] { "h0.before", "h1.before", "h2.before", "h3.before", "handler" }, probe.Trace);
+        Assert.All(probe.Calls, c => Assert.Equal(cancellation.Token, c.Token));
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
