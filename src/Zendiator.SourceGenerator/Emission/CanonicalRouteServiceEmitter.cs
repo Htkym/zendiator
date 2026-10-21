@@ -17,7 +17,8 @@ internal static class CanonicalRouteServiceEmitter
     private static IEnumerable<MethodDeclarationSyntax> Entries(ClassDeclarationSyntax mediator) =>
         mediator.Members.OfType<MethodDeclarationSyntax>().Where(m => m.Modifiers.Any(SyntaxKind.PublicKeyword));
     private static string Id(string ns, MethodDeclarationSyntax method) => CanonicalSplitSourceEmitter.Id(ns + "|" +
-        method.Identifier.ValueText + "|" + (method.TypeParameterList?.Parameters.Count ?? 0) + "|" +
+        (method.Identifier.ValueText == "StreamSource" ? "StreamAsync" : method.Identifier.ValueText) + "|" +
+        (method.TypeParameterList?.Parameters.Count ?? 0) + "|" +
         method.ParameterList.Parameters[0].Type);
     private static string TypeKey(TypeSyntax type) => type.WithoutTrivia().NormalizeWhitespace().ToFullString();
     private static string TypeId(TypeSyntax type) => CanonicalSplitSourceEmitter.Id(TypeKey(type));
@@ -76,7 +77,7 @@ internal static class CanonicalRouteServiceEmitter
             {
                 var mediator = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "Zendiator");
                 foreach (var call in Entries(mediator).SelectMany(m => m.DescendantNodes().OfType<InvocationExpressionSyntax>()))
-                    if (call.Expression is MemberAccessExpressionSyntax { Expression: SimpleNameSyntax helper, Name.Identifier.ValueText: "Create" } &&
+                    if (call.Expression is MemberAccessExpressionSyntax { Expression: SimpleNameSyntax helper, Name.Identifier.ValueText: "Create" or "CreateSource" } &&
                         call.ArgumentList.Arguments.FirstOrDefault()?.Expression is IdentifierNameSyntax { Identifier.ValueText: "_provider" })
                         connected.Add((ns.Name.ToString(), helper.Identifier.ValueText));
             }

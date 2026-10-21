@@ -42,12 +42,12 @@ public sealed partial class GeneratorTests
             var p=new Probe();var services=new ServiceCollection();services.AddSingleton(p);Register(services);
             await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
             await using var scope=provider.CreateAsyncScope();var m=scope.ServiceProvider.GetRequiredService<global::NativeStream.Generated.Reads.IZendiator>();
-            var request=new Items<Tag>(7,new Tag());var feed=m.StreamAsync(request);request.Value=99;
+            var request=new Items<Tag>(7,new Tag());var feed=m.StreamAsync(request);var plan=m.StreamSource(request);request.Value=99;
             IAsyncEnumerable<long> http=feed;Check.That(p.Opened==0&&p.Seen.Count==0,"open generic HTTP source stays lazy");
             Check.That(m.Send(new Query(41))==42,"closed Send before native generic Stream");
             var values=new List<long>();await foreach(var item in http.ConfigureAwait(false))values.Add(item);
             Check.That(values.SequenceEqual(new[]{107L,108L})&&p.Seen.All(v=>v==7)&&request.Value==99,"value request copies and concrete type-changing item ports");
-            var terminal=new List<long>();await feed.ConsumeAsync(new Sink(terminal));
+            var terminal=new List<long>();await plan.ConsumeAsync(new Sink(terminal));
             Check.That(terminal.SequenceEqual(values)&&p.Opened==2&&p.Disposed==2&&p.Boundaries==2,"typed terminal and type-changed opaque port share one independently cleaned cursor per operation");
             Check.That(m.Send(new Query(9))==10&&p.Sends==2,"closed Send after native generic Stream");
             """);

@@ -67,7 +67,7 @@ public static class Program
         var sum = mediator.Send(new AddNumbers(20, 22));
         var greeting = await mediator.SendAsync(new Greet(" Ada "));
         var numbers = new List<int>();
-        await mediator.StreamAsync(new ReadNumbers(6)).ConsumeAsync(new NumberSink(numbers));
+        await mediator.StreamSource(new ReadNumbers(6)).ConsumeAsync(new NumberSink(numbers));
 
         Console.WriteLine($"Send: {sum}");
         Console.WriteLine($"SendAsync: {greeting}");
@@ -197,7 +197,7 @@ StreamAsync: 20, 40
 |---|---|---|
 | `DispatchFamily.SendSync` | `Send` | 20と22を足す |
 | `DispatchFamily.SendAsync` | `SendAsync` | 名前の空白を除き、応答の末尾に`!`を付ける |
-| `DispatchFamily.Stream` | `StreamAsync` | 偶数を選び、10倍し、40以下を残す |
+| `DispatchFamily.Stream` | `StreamSource(...).ConsumeAsync(...)` | 偶数を選び、10倍し、40以下を残す |
 
 Send系の`Before`はリストの先頭から、`After`は末尾から呼びます。この例では`TrimName.Before`、Handler、`AddExclamation.After`の順に動きます。Streamの各項目は`KeepEven`、`TimesTen`、`KeepAtMostForty`の順に処理します。
 
@@ -207,13 +207,13 @@ Send系の`Before`はリストの先頭から、`After`は末尾から呼びま�
 
 `Send`の例外は呼出し元へ伝わります。Hookがないか同期Beforeだけを使い、factory・Wrapper・sessionを使わないplain `SendAsync`では、依存解決と同期callbackが呼出し中に動きます。その例外や取消は、`ValueTask`が返る前に同期throwとなることがあります。同期部分で行った`AsyncLocal`、`CultureInfo`、`SynchronizationContext`の変更も呼出し側に見えます。返された`ValueTask`の非同期の失敗は`await`で受け取ります。`try`には呼出しと待機を含めてください。
 
-この例のStreamは生成された融合iteratorを使うため、HandlerやHookの例外を列挙時に受け取ります。Handler所有のStreamでは同期失敗の時点が異なります。どちらの経路でも`request`がnullの場合は呼出し時に例外が出るため、`try`には呼出しと列挙を含めてください。
+この例のStreamではConsumeAsyncによる消費時にHandlerやHookが動きます。`request`がnullの場合は入口の呼出し時に例外が出るため、これらの失敗を扱う`try`には呼出しと待機を含めてください。
 
 取消tokenは各入口の`CancellationToken`引数で渡します。この例で取消が検出されると、`OperationCanceledException`が伝わります。この例のStreamでは列挙時のtokenも受け取り、呼出し時・列挙時のどちらの取消も反映します。既に取消済みの場合も、取消の検出は最初の項目を要求したときです。
 
 ## Streamの開始と再列挙
 
-名前付きNumberCursorをOpenAsyncで開きます。sourceは標準IAsyncEnumerableを実装し、同じcoreを使うConsumeAsyncも持ちます。この例はreadonly sinkと共有Listで結果を集めます。API呼出しやcursor取得だけではuser DIやI/Oを始めず、列挙ごとに独立した状態を最初のMoveで開始します。
+名前付きNumberCursorをOpenAsyncで開きます。標準列挙にはStreamAsyncが返すsource classを使います。この例はStreamSourceのreadonly計画値とConsumeAsync、readonly sinkと共有Listで結果を集めます。計画値はIAsyncEnumerableではなく、ConsumeAsyncごとに非公開の専用ownerを作ります。入口の呼出しやcursor取得だけではuser DIやI/Oを始めず、各ownerの最初のMoveで開始します。標準source objectはStreamAsyncの呼出し時に割り当てます。
 
 pending Moveの完了前に別MoveやDisposeを始めると拒否します。Moveを一度awaitしてからDisposeし、scopeは後始末まで保持してください。false Filterは同じMove内で次itemへ進み、terminalのfalseは正常な全体停止です。sink/serializer例外はsource middlewareへ注入しません。
 

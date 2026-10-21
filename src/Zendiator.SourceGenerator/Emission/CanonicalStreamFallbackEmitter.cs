@@ -28,23 +28,26 @@ internal static class CanonicalStreamFallbackEmitter
             {
                 internal static class {{model.ClassName}}{{generic}}{{constraints}}
                 {
-                    internal static {{source}}{{generic}} Create(global::System.IServiceProvider services, {{h.RequestName}} request,
+                    internal static global::System.Collections.Generic.IAsyncEnumerable<{{item}}> Create(global::System.IServiceProvider services, {{h.RequestName}} request,
+                        global::System.Threading.CancellationToken token = default) => {{source}}{{generic}}.CreateEnumerable(services, request, token);
+                    internal static {{source}}{{generic}} CreateSource(global::System.IServiceProvider services, {{h.RequestName}} request,
                         global::System.Threading.CancellationToken token = default) => new(services, request, token);
                 }
-                public readonly struct {{source}}{{generic}} : global::System.Collections.Generic.IAsyncEnumerable<{{item}}>{{constraints}}
+                public readonly struct {{source}}{{generic}}{{constraints}}
                 {
                     private readonly global::System.IServiceProvider _services;
                     private readonly {{h.RequestName}} _request;
                     private readonly global::System.Threading.CancellationToken _api;
                     internal {{source}}(global::System.IServiceProvider services, {{h.RequestName}} request, global::System.Threading.CancellationToken api)
                     { _services = services; _request = request; _api = api; }
+                    internal static global::System.Collections.Generic.IAsyncEnumerable<{{item}}> CreateEnumerable(
+                        global::System.IServiceProvider services, {{h.RequestName}} request, global::System.Threading.CancellationToken api) =>
+                        {{(standalone ? "new Cursor" + model.ConsumerSegment + "(services, request, api, default, reserveFirstEnumeration: true)" : "new Enumerable(new(services, request, api))")}};
                     private Cursor{{model.ConsumerSegment}} CreateCursor(global::System.Threading.CancellationToken token)
                     {
                         if (_services is null) throw new global::System.InvalidOperationException("The Stream source is uninitialized.");
                         return new Cursor{{model.ConsumerSegment}}(_services, _request, _api, token{{(standalone ? "" : ", null")}});
                     }
-                    public global::System.Collections.Generic.IAsyncEnumerator<{{item}}> GetAsyncEnumerator(
-                        global::System.Threading.CancellationToken cancellationToken = default) => CreateCursor(cancellationToken);
                     public global::System.Threading.Tasks.ValueTask ConsumeAsync<{{sink}}>({{sink}} sink,
                         global::System.Threading.CancellationToken cancellationToken = default)
                         where {{sink}} : global::Zendiator.IStreamSink<{{item}}>
@@ -71,6 +74,16 @@ internal static class CanonicalStreamFallbackEmitter
                         }
                     }
             """);
+        if (!standalone)
+            b.AppendLine($$"""
+                    private sealed class Enumerable : global::System.Collections.Generic.IAsyncEnumerable<{{item}}>
+                    {
+                        private readonly {{source}}{{generic}} _plan;
+                        internal Enumerable({{source}}{{generic}} plan) => _plan = plan;
+                        public global::System.Collections.Generic.IAsyncEnumerator<{{item}}> GetAsyncEnumerator(
+                            global::System.Threading.CancellationToken cancellationToken = default) => _plan.CreateCursor(cancellationToken);
+                    }
+                """);
         foreach (var segment in model.Segments) EmitCursor(b, model, segment);
         CanonicalAsyncCallEmitter.EmitCall(b, "OpenHandler", "global::System.Threading.Tasks.ValueTask<" + h.CursorName + ">",
             h.HandlerIsValueType ? "object" : h.HandlerName, h.ContractName, h.MethodName, h.CallTarget,
@@ -107,7 +120,7 @@ internal static class CanonicalStreamFallbackEmitter
             """ : "else operation = ObserveMove(MoveCoreAsync());";
         b.AppendLine($$"""
                     private sealed class Cursor{{n}} : global::Zendiator.Streaming.StreamCursorState,
-                        global::System.Collections.Generic.IAsyncEnumerator<{{output}}>
+                        global::System.Collections.Generic.IAsyncEnumerator<{{output}}>{{(standalone ? ", global::System.Collections.Generic.IAsyncEnumerable<" + output + ">" : "")}}
                     {
                         private readonly global::System.IServiceProvider _services;
                         private readonly {{h.RequestName}} _request;
@@ -116,7 +129,7 @@ internal static class CanonicalStreamFallbackEmitter
                         private bool _acquired;
                         {{(standalone ? "" : "private bool _normalEnd;\ninternal bool CanReopen => _normalEnd && !HasPendingOperation;")}}
                         internal Cursor{{n}}(global::System.IServiceProvider services, {{h.RequestName}} request,
-                            global::System.Threading.CancellationToken api, global::System.Threading.CancellationToken enumeration{{(standalone ? "" : ", global::Zendiator.Streaming.StreamCursorState? root")}}) : base(api, enumeration)
+                            global::System.Threading.CancellationToken api, global::System.Threading.CancellationToken enumeration{{(standalone ? ", bool reserveFirstEnumeration = false" : ", global::Zendiator.Streaming.StreamCursorState? root")}}) : base(api, enumeration{{(standalone ? ", reserveFirstEnumeration" : "")}})
                         { _services = services; _request = request; {{(standalone ? "" : "_root = root ?? this;")}} }
             """);
         if (segment.Hooks.Count != 0) b.AppendLine("private " + output + " _current = default!;");
@@ -146,10 +159,10 @@ internal static class CanonicalStreamFallbackEmitter
                         {
                             try { await InitializeAsync().ConfigureAwait(false); }
                             catch (global::System.Exception error) { return await MoveFailed(error).ConfigureAwait(false); }
-                            global::System.Threading.Tasks.ValueTask<bool> pending;
-                            try { pending = MoveCoreAsync(); }
+                            bool moved;
+                            try { moved = await MoveCoreAsync().ConfigureAwait(false); }
                             catch (global::System.Exception error) { return await MoveFailed(error).ConfigureAwait(false); }
-                            return await ObserveMove(pending).ConfigureAwait(false);
+                            return moved ? await MoveSucceeded(true).ConfigureAwait(false) : await EndAsync().ConfigureAwait(false);
                         }
                         private global::System.Threading.Tasks.ValueTask<bool> ObserveMove(global::System.Threading.Tasks.ValueTask<bool> pending)
                         {
@@ -177,6 +190,12 @@ internal static class CanonicalStreamFallbackEmitter
         if (standalone)
         {
             b.AppendLine($$"""
+                        public global::System.Collections.Generic.IAsyncEnumerator<{{output}}> GetAsyncEnumerator(
+                            global::System.Threading.CancellationToken cancellationToken = default)
+                        {
+                            if (TryClaimFirstEnumeration(cancellationToken)) return this;
+                            return new Cursor{{n}}(_services, _request, OriginalApiToken, cancellationToken);
+                        }
                         // This fresh owner is kept inside one Consume operation and is never passed to user code.
                         internal global::System.Threading.Tasks.ValueTask<bool> MoveNextForTerminalAsync()
                         {

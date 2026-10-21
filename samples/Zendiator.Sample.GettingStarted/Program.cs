@@ -32,7 +32,7 @@ public static class Program
         var sum = mediator.Send(new AddNumbers(20, 22));
         var greeting = await mediator.SendAsync(new Greet(" Ada "));
         var numbers = new List<int>();
-        await mediator.StreamAsync(new ReadNumbers(6)).ConsumeAsync(new NumberSink(numbers));
+        await mediator.StreamSource(new ReadNumbers(6)).ConsumeAsync(new NumberSink(numbers));
 
         Console.WriteLine($"Send: {sum}");
         Console.WriteLine($"SendAsync: {greeting}");

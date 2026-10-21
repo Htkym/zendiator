@@ -106,12 +106,12 @@ public sealed partial class GeneratorTests
             Check.That(await first.MoveNextAsync()&&first.Current==2&&!await first.MoveNextAsync(),"normal EOF");
             Check.Invalid(()=>{_=first.Current;});await first.DisposeAsync();await first.DisposeAsync();await second.DisposeAsync();
             Check.That(p.CursorDisposals==2,"cursor cleanup exactly once per started enumeration");
-            var all=new State();await feed.ConsumeAsync(new Sink(all));
+            var plan=mediator.StreamSource(new PlainItems(3));var all=new State();await plan.ConsumeAsync(new Sink(all));
             Check.That(all.Values.SequenceEqual(new[]{0,1,2}),"terminal sink uses same value cursor contract");
             var filtered=new List<int>();await foreach(var item in mediator.StreamAsync(new Items(4)).ConfigureAwait(false))filtered.Add(item);
             Check.That(filtered.SequenceEqual(new[]{2,4,6}),"ordered reject and map");
             var before=p.Produced;var filters=p.Filters;var maps=p.Maps;var stopped=new State{Limit=1};
-            await mediator.StreamAsync(new Items(4)).ConsumeAsync(new Sink(stopped));
+            await mediator.StreamSource(new Items(4)).ConsumeAsync(new Sink(stopped));
             Check.That(stopped.Values.SequenceEqual(new[]{2})&&p.Produced-before==2&&p.Filters-filters==2&&p.Maps-maps==1,"reject continues, sink false stops without reading ahead");
             Check.That(p.MapVersions.SequenceEqual(new[]{1,2,3,4}),"mutable value hook keeps its captured box across callbacks and operations");
             Check.That(p.ServiceDisposals==0&&!all.SinkDisposed&&!stopped.SinkDisposed,"DI receivers and caller sink stay borrowed");

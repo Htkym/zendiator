@@ -147,16 +147,19 @@ IAsyncEnumerator cursor through OpenAsync. Register explicit Handlers/Pipeline s
 Opaque IStreamMiddleware uses Stage.Wrapper; dedicated Filter/Map hooks and session
 factories retain their typed flow.
 
-Mediator.StreamAsync(request, token) returns a generated public source implementing
+Mediator.StreamAsync(request, token) returns a source object implementing
 standard IAsyncEnumerable. Use it with await foreach or return it from a Controller.
-Its instance `ConsumeAsync<TSink>`(sink, token) uses the same concrete cursor core.
+For a typed terminal, use `mediator.StreamSource(request, apiToken).ConsumeAsync(sink, enumerationToken)`.
+StreamSource returns a readonly plan, not IAsyncEnumerable, and creates a private owner
+for each consumption.
 
 ~~~csharp
 await foreach (var name in mediator.StreamAsync(new ReadNames(3), cancellationToken))
     Console.WriteLine(name);
 ~~~
 
-DI, opening and I/O start on the first move, with independent state per enumeration.
+The standard source object is allocated by StreamAsync; DI, opening and I/O start on
+the first move, with independent state per enumeration.
 Await a pending move before another move or disposal; overlap is rejected. Consume
 each ValueTask once and keep the DI scope alive through final cleanup. A sink's false
 stops normally; true checks cancellation before the next item. Struct sinks are passed
@@ -319,7 +322,7 @@ The source generator creates a concrete overload for each configured route. Call
 |`IMultiRequest<T>`, `IMultiRequest`|`SendAllAsync(request, cancellationToken)`|
 |`ISyncMultiRequest<T>`, `ISyncMultiRequest`|`SendAllSync(request, cancellationToken)`|
 |`INotification`|Sequential `PublishAsync`; `Publish` is an alias returning `ValueTask`|
-|`IStreamRequest<T>`|StreamAsync returning a generated standard enumerable with ConsumeAsync|
+|`IStreamRequest<T>`|StreamAsync for standard enumeration; StreamSource for typed consumption|
 
 Request and stream dispatch do not accept arbitrary runtime objects or a request stored only as its contract interface. Notification erasure is a separate supported path. Configure assembly discovery, behavior order and lifetimes with `AddZendiator`; use attributes as an alternative, not in the same compilation. Keep the runtime and generator package versions aligned.
 

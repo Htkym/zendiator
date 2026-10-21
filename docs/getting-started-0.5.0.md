@@ -49,10 +49,13 @@ result. Put both the call and the await inside your `try` block.
 ## Stream execution
 
 The sample opens a named NumberCursor through IStreamSourceHandler. Dedicated Filter/Map
-hooks use the typed pipeline. The generated source is a standard IAsyncEnumerable and
-also exposes ConsumeAsync; the example uses a readonly sink with a shared List result.
+hooks use the typed pipeline. StreamAsync returns a class implementing standard
+IAsyncEnumerable. This example uses `StreamSource(...).ConsumeAsync(...)`, a readonly
+plan with a fresh private owner per consumption, and a readonly sink with a shared List
+result. The plan is not IAsyncEnumerable.
 
-DI/Open are deferred until the first move. Await it before another move or disposal,
+The standard source object is allocated at the StreamAsync call; DI/Open are deferred
+until the first move. Await it before another move or disposal,
 consume each ValueTask once and keep the scope alive through cleanup. A sink's false
 is a normal stop; sink exceptions are not source middleware input. No Channel bridge
 or independent producer task is added. These paths have not been benchmarked here.

@@ -28,6 +28,7 @@ public sealed partial class GeneratorTests
             ("ZEN0023", "direct.Send(new Ping())"),
             ("ZEN0023", "mediator.SendAsync(new Pong())"),
             ("ZEN0023", "mediator.StreamAsync(new Numbers())"),
+            ("ZEN0023", "mediator.StreamSource(new Numbers())"),
             ("ZEN0023", "mediator.SendAll(new Ping())"),
             ("ZEN0023", "mediator.SendAllAsync(new Pong())"),
             ("ZEN0023", "fromFactory.SendAsync(new Pong())")
@@ -123,6 +124,7 @@ public sealed partial class GeneratorTests
             public ValueTask<Cursor> OpenAsync(Numbers r,CancellationToken token)=>new(new Cursor());
             public sealed class Cursor:IAsyncEnumerator<int>{public int Current=>42;public async ValueTask<bool> MoveNextAsync(){await Task.Yield();return false;}public ValueTask DisposeAsync()=>default;}
         }
+        public readonly struct TerminalSink:IStreamSink<int>{public ValueTask<bool> OnNextAsync(int item,CancellationToken token)=>new(true);}
         public sealed class SyncHook : ISendRequestTransform<Ping>,ISendResponseTransform<Ping,int>,ISendExceptionObserver<Ping>,ISendFinallyObserver<Ping> {
             public Ping Before(Ping r,CancellationToken token)=>r;
             public int After(Ping r,int response,CancellationToken token)=>response;
@@ -156,6 +158,7 @@ public sealed partial class GeneratorTests
                 _=direct.Send(new Ping());
                 _=await mediator.SendAsync(new Pong());
                 await foreach(var item in mediator.StreamAsync(new Numbers())){}
+                await mediator.StreamSource(new Numbers()).ConsumeAsync(new TerminalSink());
                 _=mediator.SendAll(new Ping());
                 _=await mediator.SendAllAsync(new Pong());
             }
@@ -165,6 +168,7 @@ public sealed partial class GeneratorTests
                 var mediator=scope.ServiceProvider.GetRequiredService<IZendiator>();
                 _=direct.Send(new Ping());_=await mediator.SendAsync(new Pong());
                 await foreach(var item in mediator.StreamAsync(new Numbers())){}
+                await mediator.StreamSource(new Numbers()).ConsumeAsync(new TerminalSink());
                 _=mediator.SendAll(new Ping());_=await mediator.SendAllAsync(new Pong());
             }
             public static async Task UnrelatedExtension(IServiceProvider provider){

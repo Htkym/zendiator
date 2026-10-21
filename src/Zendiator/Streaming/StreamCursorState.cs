@@ -12,9 +12,10 @@ namespace Zendiator.Streaming;
 public abstract class StreamCursorState : IAsyncDisposable
 {
     private readonly CancellationToken _apiToken;
-    private readonly CancellationToken _enumerationToken;
+    private CancellationToken _enumerationToken;
     private CancellationTokenSource? _linked;
     private CancellationToken _token;
+    // -1 reserves the first enumeration, -2 binds its token; 0/1/2 are ready/Move/Dispose.
     private int _busy;
     private bool _started;
     private bool _hasCurrent;
@@ -26,10 +27,26 @@ public abstract class StreamCursorState : IAsyncDisposable
     private Task<bool>? _pendingMove;
 
     /// <summary>Creates a cursor owner without acquiring dependencies or combining tokens.</summary>
-    protected StreamCursorState(CancellationToken apiToken = default, CancellationToken enumerationToken = default)
+    protected StreamCursorState(CancellationToken apiToken = default, CancellationToken enumerationToken = default,
+        bool reserveFirstEnumeration = false)
     {
         _apiToken = apiToken;
         _enumerationToken = enumerationToken;
+        _busy = reserveFirstEnumeration ? -1 : 0;
+    }
+
+    /// <summary>The original API token, retained when creating an independent enumeration.</summary>
+    protected CancellationToken OriginalApiToken => _apiToken;
+
+    /// <summary>Binds the first enumeration token to an owner reserved at construction.</summary>
+    protected bool TryClaimFirstEnumeration(CancellationToken enumerationToken)
+    {
+        if (Interlocked.CompareExchange(ref _busy, -2, -1) != -1)
+            return false;
+
+        _enumerationToken = enumerationToken;
+        Volatile.Write(ref _busy, 0);
+        return true;
     }
 
     /// <summary>The effective token, initialized by the first successful call to TryStart.</summary>
@@ -180,7 +197,22 @@ public abstract class StreamCursorState : IAsyncDisposable
         if (Volatile.Read(ref _pendingMove) is { IsCompleted: false })
             throw new InvalidOperationException("Await the pending Move before disposing the cursor.");
 
-        var busy = Interlocked.CompareExchange(ref _busy, 2, 0);
+        int busy;
+        while (true)
+        {
+            busy = Interlocked.CompareExchange(ref _busy, 2, 0);
+            if (busy != -1)
+                break;
+            if (Interlocked.CompareExchange(ref _busy, 2, -1) == -1)
+            {
+                busy = 0;
+                break;
+            }
+            // A lost cold claim must reacquire the ordinary gate, never release the binding winner.
+        }
+
+        if (busy == -2)
+            throw new InvalidOperationException("Await the first enumeration binding before disposing the cursor.");
         if (busy == 1)
             throw new InvalidOperationException("Await the pending Move before disposing the cursor.");
         if (busy == 2)
@@ -204,17 +236,28 @@ public abstract class StreamCursorState : IAsyncDisposable
             return completed is null ? default : new(completed.Task);
         }
 
+        var cleanupTransferred = false;
         try
         {
-            var cleanup = BeginClose();
-            if (!cleanup.IsCompleted)
+            try
             {
-                var completion = GetDisposeCompletion();
-                _ = CompleteDisposeAsync(cleanup);
-                return new(completion.Task);
+                var cleanup = BeginClose();
+                if (!cleanup.IsCompleted)
+                {
+                    var completion = GetDisposeCompletion();
+                    cleanupTransferred = true;
+                    _ = CompleteDisposeAsync(cleanup);
+                    return new(completion.Task);
+                }
+
+                cleanup.GetAwaiter().GetResult();
+            }
+            finally
+            {
+                if (!cleanupTransferred)
+                    DisposeLinkedToken();
             }
 
-            cleanup.GetAwaiter().GetResult();
             FinishClose(null, disposing: true);
             var shared = Volatile.Read(ref _disposeCompletion);
             return shared is null ? default : new(shared.Task);
@@ -229,13 +272,25 @@ public abstract class StreamCursorState : IAsyncDisposable
 
     private ValueTask<bool> CloseMove(Exception? error)
     {
+        var cleanupTransferred = false;
         try
         {
-            var cleanup = BeginClose();
-            if (!cleanup.IsCompleted)
-                return CompleteMoveAsync(cleanup, error);
+            try
+            {
+                var cleanup = BeginClose();
+                if (!cleanup.IsCompleted)
+                {
+                    cleanupTransferred = true;
+                    return CompleteMoveAsync(cleanup, error);
+                }
 
-            cleanup.GetAwaiter().GetResult();
+                cleanup.GetAwaiter().GetResult();
+            }
+            finally
+            {
+                if (!cleanupTransferred)
+                    DisposeLinkedToken();
+            }
         }
         catch (Exception cleanupError)
         {
@@ -254,41 +309,21 @@ public abstract class StreamCursorState : IAsyncDisposable
             return default;
 
         _cleanupStarted = true;
-        try
-        {
-            var cleanup = _started ? DisposeCoreAsync() : default;
-            if (!cleanup.IsCompleted)
-                return AwaitCleanupAsync(cleanup);
-
-            cleanup.GetAwaiter().GetResult();
-        }
-        catch
-        {
-            DisposeLinkedToken();
-            throw;
-        }
-
-        DisposeLinkedToken();
-        return default;
-    }
-
-    private async ValueTask AwaitCleanupAsync(ValueTask cleanup)
-    {
-        try
-        {
-            await cleanup.ConfigureAwait(false);
-        }
-        finally
-        {
-            DisposeLinkedToken();
-        }
+        return _started ? DisposeCoreAsync() : default;
     }
 
     private async ValueTask<bool> CompleteMoveAsync(ValueTask cleanup, Exception? error)
     {
         try
         {
-            await cleanup.ConfigureAwait(false);
+            try
+            {
+                await cleanup.ConfigureAwait(false);
+            }
+            finally
+            {
+                DisposeLinkedToken();
+            }
         }
         catch (Exception cleanupError)
         {
@@ -306,7 +341,14 @@ public abstract class StreamCursorState : IAsyncDisposable
         Exception? error = null;
         try
         {
-            await cleanup.ConfigureAwait(false);
+            try
+            {
+                await cleanup.ConfigureAwait(false);
+            }
+            finally
+            {
+                DisposeLinkedToken();
+            }
         }
         catch (Exception cleanupError)
         {

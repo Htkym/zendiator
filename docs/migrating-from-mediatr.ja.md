@@ -523,7 +523,7 @@ Transient として登録されている場合も同様です。
 
 消費側は標準IAsyncEnumerableのまま使えます。Handlerは名前付きcursorを開くIStreamSourceHandlerへ移し、ZendiatorHandler属性とHandlers/Pipelineで明示します。yield本体の状態、実I/O、取消し、finallyの所有資源の破棄をcursorへ移してください。private compiler iterator型を公開cursor型には使えません。
 
-StreamAsyncは標準列挙とConsumeAsyncを持つ生成sourceを返します。任意middlewareはIStreamMiddlewareとStage.Wrapper、専用Filter/MapはStage.Hookを使います。旧Stream Behavior登録・Validator・OwnsStreamは使用しません。
+StreamAsyncは標準IAsyncEnumerableを実装するsource classを返します。typed terminalはStreamSource(request, apiToken).ConsumeAsync(sink, enumerationToken)へ移してください。StreamSourceはreadonlyの計画値であり、IAsyncEnumerableではありません。任意middlewareはIStreamMiddlewareとStage.Wrapper、専用Filter/MapはStage.Hookを使います。旧Stream Behavior登録・Validator・OwnsStreamは使用しません。
 
 [移行例と実行契約](streaming-0.5.0.ja.md)にnamed cursor、shared sink、HTTP、pending操作、部分retry、所有権をまとめています。標準列挙、typed terminal、HTTPの性能は別々に検証します。
 

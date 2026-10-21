@@ -48,8 +48,10 @@ The generated fixture and matrix are in [Zendiator.UseCaseBenchmarks](Zendiator.
 
 Zendiator Stream fixtures use named typed cursors and a dedicated canonical composition.
 Peer/direct class bodies and Work.Stream remain unchanged. Full/EarlyBreak use standard
-enumeration; FullTyped/EarlyBreakTyped use the same source's terminal with a sequentially
-reused class sink. These DI/config and protocol differences distinguish this work from
+enumeration through StreamAsync; FullTyped/EarlyBreakTyped use
+StreamSource(...).ConsumeAsync(...) with a sequentially reused class sink. The typed
+plan is not IAsyncEnumerable and creates a private owner per consumption. These
+DI/config and protocol differences distinguish this work from
 saved historical/w64 evidence. Screening uses public Mediator routes and handwritten
 enumerable references; large-middleware-session replaces the old wrapper fixture.
 Do not combine old protocol artifacts or infer speedup from source changes. HTTP is a

@@ -95,7 +95,7 @@ public sealed partial class GeneratorTests
                 var p=new Probe(mode);var services=new ServiceCollection();services.AddSingleton(p);Register(services);
                 await using var provider=services.BuildServiceProvider();var scope=provider.CreateAsyncScope();
                 var mediator=scope.ServiceProvider.GetRequiredService<global::NativeStream.Generated.Reads.IZendiator>();
-                var task=mediator.StreamAsync(new Items(),p.Cancellation.Token).ConsumeAsync(new Sink(p)).AsTask();
+                var task=mediator.StreamSource(new Items(),p.Cancellation.Token).ConsumeAsync(new Sink(p)).AsTask();
                 if(mode=="pending-factory"){
                     Check.That(!task.IsCompleted&&p.FactoryGate!=null&&p.FactoryGate.Consumptions==0&&p.Opened==0&&p.Released.Count==0,"pending factory ownership is not released early");p.FactoryGate!.Complete();
                 }else if(mode=="pending-map"){
@@ -183,7 +183,7 @@ public sealed partial class GeneratorTests
                 var p=new Probe();var services=new ServiceCollection();services.AddSingleton(p);Register(services);
                 await using var provider=services.BuildServiceProvider();var scope=provider.CreateAsyncScope();
                 var mediator=scope.ServiceProvider.GetRequiredService<global::NativeStream.Generated.Reads.IZendiator>();
-                var operation=mediator.StreamAsync(new Items(),p.Cancellation.Token).ConsumeAsync(new Sink(p)).AsTask();
+                var operation=mediator.StreamSource(new Items(),p.Cancellation.Token).ConsumeAsync(new Sink(p)).AsTask();
                 Check.That(!operation.IsCompleted&&p.FilterGate.Consumptions==0&&p.Opened==1&&p.SessionsCreated==1&&p.Pulls==1&&p.Filtered.SequenceEqual(new[]{1}),"first item waits in the actual async filter");
                 Check.That(p.Mapped.Count==0&&p.Values.Count==0&&p.CursorDisposals==0&&p.SessionDisposals==0,"pending filter neither publishes nor releases acquired ownership");
                 if(cancel){

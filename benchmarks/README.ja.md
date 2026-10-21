@@ -46,6 +46,6 @@ fixtureとmatrixは [Zendiator.UseCaseBenchmarks](Zendiator.UseCaseBenchmarks) �
 
 ## 新Stream protocolの準備
 
-現在のZ側fixtureは名前付きtyped cursorとStream専用canonical compositionを使います。peer/Directのclass本体とWork.Streamは保持します。Full/EarlyBreakは標準列挙、FullTyped/EarlyBreakTypedは同じsourceのterminalで、fixture内のclass sinkを逐次再利用します。このDI/configとprotocolの違いをhistorical/w64の証拠と区別してください。
+現在のZ側fixtureは名前付きtyped cursorとStream専用canonical compositionを使います。peer/Directのclass本体とWork.Streamは保持します。Full/EarlyBreakはStreamAsyncの標準列挙、FullTyped/EarlyBreakTypedはStreamSource(...).ConsumeAsync(...)で、fixture内のclass sinkを逐次再利用します。typedの計画値はIAsyncEnumerableではなく、消費ごとに専用ownerを作ります。このDI/configとprotocolの違いをhistorical/w64の証拠と区別してください。
 
 Screeningは新protocolの公開Mediatorと手書き列挙referenceを使い、旧wrapper fixtureをlarge-middleware-sessionへ移します。旧protocolのartifactと混ぜず、source変更から速度を断定しません。HTTPも別の未測定経路です。今回の移行ではbuild/test/測定を行っていません。

@@ -88,7 +88,7 @@ public sealed class AllocationTests
         var mediator = scope.ServiceProvider.GetRequiredService<NativeMediator>();
         var request = new AllocStream(16);
         var sink = new SumSink();
-        var allocated = Measure(() => mediator.StreamAsync(request).ConsumeAsync(sink).GetAwaiter().GetResult());
+        var allocated = Measure(() => mediator.StreamSource(request).ConsumeAsync(sink).GetAwaiter().GetResult());
         Assert.True(allocated / 1024d < 256, $"per-operation {allocated / 1024d}B");
         Assert.Equal(120 * 1025, sink.Sum);
         Assert.Equal(16 * 1025, sink.Calls);

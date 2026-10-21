@@ -142,6 +142,111 @@ public sealed class StreamCursorProtocolTests
     }
 
     [Fact]
+    public async Task Reserved_owner_binds_one_enumeration_and_cold_disposal_never_acquires()
+    {
+        using var api = new CancellationTokenSource();
+        using var enumeration = new CancellationTokenSource();
+        using var other = new CancellationTokenSource();
+        var cursor = new ProtocolCursor(api.Token, reserveFirstEnumeration: true);
+        Assert.Equal(api.Token, cursor.ApiToken);
+        Assert.Equal(default, cursor.CancellationToken);
+        Assert.Throws<InvalidOperationException>(() => { _ = cursor.MoveNextAsync(); });
+        Assert.Throws<InvalidOperationException>(() => cursor.Current);
+        Assert.True(cursor.Claim(enumeration.Token));
+        Assert.False(cursor.Claim(other.Token));
+        Assert.True(await cursor.MoveNextAsync());
+        other.Cancel();
+        Assert.False(cursor.CancellationToken.IsCancellationRequested);
+        enumeration.Cancel();
+        Assert.True(cursor.CancellationToken.IsCancellationRequested);
+        await cursor.DisposeAsync();
+        Assert.Equal(1, cursor.Disposals);
+
+        var abandoned = new ProtocolCursor(api.Token, reserveFirstEnumeration: true);
+        await abandoned.DisposeAsync();
+        await abandoned.DisposeAsync();
+        Assert.False(abandoned.Claim(enumeration.Token));
+        Assert.False(await abandoned.MoveNextAsync());
+        Assert.Equal(0, abandoned.Disposals);
+        Assert.Equal(default, abandoned.CancellationToken);
+    }
+
+    [Theory]
+    [InlineData("invoke")]
+    [InlineData("status")]
+    [InlineData("result")]
+    public async Task Synchronous_cleanup_failure_releases_linked_cancellation_and_finishes_disposal(string failurePoint)
+    {
+        using var api = new CancellationTokenSource();
+        using var enumeration = new CancellationTokenSource();
+        var failure = new ArithmeticException("cleanup " + failurePoint);
+        var cleanup = new CleanupSource
+        {
+            StatusError = failurePoint == "status" ? failure : null,
+            ResultError = failurePoint == "result" ? failure : null,
+        };
+        cleanup.Complete();
+        var cursor = new ProtocolCursor(api.Token, enumeration.Token)
+        {
+            Cleanup = () => failurePoint == "invoke" ? throw failure : cleanup.Operation,
+        };
+        Assert.True(await cursor.MoveNextAsync());
+        var linkedToken = cursor.CancellationToken;
+        Assert.Same(failure, await Assert.ThrowsAsync<ArithmeticException>(async () => await cursor.DisposeAsync()));
+        Assert.Equal(failurePoint == "result" ? 1 : 0, cleanup.Consumptions);
+        api.Cancel();
+        Assert.False(linkedToken.IsCancellationRequested);
+        await cursor.DisposeAsync();
+        Assert.False(await cursor.MoveNextAsync());
+        Assert.Equal(1, cursor.Disposals);
+    }
+
+    [Fact]
+    public async Task Pending_cleanup_owns_linked_cancellation_until_consumed_and_shares_disposal_completion()
+    {
+        using var api = new CancellationTokenSource();
+        using var enumeration = new CancellationTokenSource();
+        var cleanup = new CleanupSource();
+        var cursor = new ProtocolCursor(api.Token, enumeration.Token) { Cleanup = () => cleanup.Operation };
+        Assert.True(await cursor.MoveNextAsync());
+        var linkedToken = cursor.CancellationToken;
+        var disposal = cursor.DisposeAsync().AsTask();
+        Assert.False(disposal.IsCompleted);
+        Assert.Same(disposal, cursor.DisposeAsync().AsTask());
+        api.Cancel();
+        Assert.True(linkedToken.IsCancellationRequested);
+        cleanup.Complete();
+        await disposal;
+        await cursor.DisposeAsync();
+        Assert.Equal(1, cleanup.Consumptions);
+        Assert.Equal(1, cursor.Disposals);
+        Assert.False(await cursor.MoveNextAsync());
+    }
+
+    [Fact]
+    public async Task Pending_move_cleanup_failure_takes_priority_and_keeps_ownership_until_completion()
+    {
+        using var api = new CancellationTokenSource();
+        using var enumeration = new CancellationTokenSource();
+        var cleanup = new CleanupSource();
+        var cursor = new ProtocolCursor(api.Token, enumeration.Token) { Cleanup = () => cleanup.Operation };
+        Assert.True(await cursor.MoveNextAsync());
+        cursor.MoveError = new FormatException("move failed");
+        var pending = cursor.MoveNextAsync();
+        Assert.False(pending.IsCompleted);
+        Assert.Throws<InvalidOperationException>(() => { _ = cursor.DisposeAsync(); });
+        api.Cancel();
+        Assert.True(cursor.CancellationToken.IsCancellationRequested);
+        var failure = new ArithmeticException("pending cleanup failed");
+        cleanup.Complete(failure);
+        Assert.Same(failure, await Assert.ThrowsAsync<ArithmeticException>(async () => await pending));
+        await cursor.DisposeAsync();
+        Assert.False(await cursor.MoveNextAsync());
+        Assert.Equal(1, cleanup.Consumptions);
+        Assert.Equal(1, cursor.Disposals);
+    }
+
+    [Fact]
     public async Task Json_request_cancellation_and_serializer_failure_dispose_the_acquired_cursor()
     {
         var cancellationProbe = new StreamProbe { WaitForSecondMove = true };
@@ -184,7 +289,7 @@ public sealed class StreamCursorProtocolTests
         await using var scope = provider.CreateAsyncScope();
         using var cancellation = new CancellationTokenSource();
         var sink = new StoppingSink(cancellation);
-        var stream = scope.ServiceProvider.GetRequiredService<StreamMediator>().StreamAsync(new StreamRequest(8));
+        var stream = scope.ServiceProvider.GetRequiredService<StreamMediator>().StreamSource(new StreamRequest(8));
         await stream.ConsumeAsync(sink, cancellation.Token);
         Assert.Equal([0], sink.Items);
         Assert.Equal(1, probe.Opened);
@@ -204,7 +309,7 @@ public sealed class StreamCursorProtocolTests
         using var api = new CancellationTokenSource();
         using var terminal = new CancellationTokenSource();
         var sink = new PendingSink();
-        var stream = scope.ServiceProvider.GetRequiredService<StreamMediator>().StreamAsync(new StreamRequest(4), api.Token);
+        var stream = scope.ServiceProvider.GetRequiredService<StreamMediator>().StreamSource(new StreamRequest(4), api.Token);
         var operation = stream.ConsumeAsync(sink, terminal.Token);
         await sink.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.False(operation.IsCompleted);
@@ -229,7 +334,7 @@ public sealed class StreamCursorProtocolTests
         var probe = new StreamProbe { DisposalError = cleanupFails ? cleanupError : null };
         await using var provider = Services(probe).BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
-        var stream = scope.ServiceProvider.GetRequiredService<StreamMediator>().StreamAsync(new WrappedStreamRequest(3));
+        var stream = scope.ServiceProvider.GetRequiredService<StreamMediator>().StreamSource(new WrappedStreamRequest(3));
         Exception? observed = null;
         try { await stream.ConsumeAsync(new FailingSink(sinkError)); }
         catch (Exception error) { observed = error; }
@@ -257,6 +362,65 @@ public sealed class StreamCursorProtocolTests
     private static Task CompleteOutsideRequestContext(Action complete)
     {
         using (ExecutionContext.SuppressFlow()) return Task.Run(complete);
+    }
+
+    private sealed class ProtocolCursor(CancellationToken apiToken, CancellationToken enumerationToken = default,
+        bool reserveFirstEnumeration = false)
+        : global::Zendiator.Streaming.StreamCursorState(apiToken, enumerationToken, reserveFirstEnumeration), IAsyncEnumerator<int>
+    {
+        public Func<ValueTask>? Cleanup { get; init; }
+        public Exception? MoveError { get; set; }
+        public int Disposals { get; private set; }
+        public CancellationToken ApiToken => OriginalApiToken;
+        public bool Claim(CancellationToken token) => TryClaimFirstEnumeration(token);
+        public int Current { get { ValidateCurrent(); return 7; } }
+
+        public ValueTask<bool> MoveNextAsync()
+        {
+            if (!TryBeginMove()) return new(false);
+            ValueTask<bool> operation;
+            try
+            {
+                _ = TryStart();
+                if (MoveError is { } error) throw error;
+                operation = MoveSucceeded(true);
+            }
+            catch (Exception error) { operation = MoveFailed(error); }
+            return PublishMove(operation);
+        }
+
+        protected override ValueTask DisposeCoreAsync()
+        {
+            Disposals++;
+            return Cleanup?.Invoke() ?? default;
+        }
+    }
+
+    private sealed class CleanupSource : IValueTaskSource
+    {
+        private ManualResetValueTaskSourceCore<bool> _source = new() { RunContinuationsAsynchronously = true };
+        public Exception? StatusError { get; init; }
+        public Exception? ResultError { get; init; }
+        public int Consumptions;
+        public ValueTask Operation => new(this, _source.Version);
+
+        public void Complete(Exception? error = null)
+        {
+            if (error is null) _source.SetResult(true);
+            else _source.SetException(error);
+        }
+
+        public void GetResult(short token)
+        {
+            if (Interlocked.Increment(ref Consumptions) != 1) throw new InvalidOperationException("Cleanup was consumed twice.");
+            _ = _source.GetResult(token);
+            if (ResultError is { } error) throw error;
+        }
+
+        public ValueTaskSourceStatus GetStatus(short token) =>
+            StatusError is { } error ? throw error : _source.GetStatus(token);
+        public void OnCompleted(Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags) =>
+            _source.OnCompleted(continuation, state, token, flags);
     }
 
     private sealed class DelayedPublicationCursor(bool hasValue)

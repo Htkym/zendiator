@@ -19,7 +19,7 @@ internal static class CanonicalMediatorCallSites
 {
     internal static bool Candidate(SyntaxNode node) => node is InvocationExpressionSyntax
     {
-        Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Send" or "SendAsync" or "SendAll" or "SendAllAsync" or "StreamAsync" }
+        Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Send" or "SendAsync" or "SendAll" or "SendAllAsync" or "StreamAsync" or "StreamSource" }
     };
 
     internal static CanonicalMediatorApi Api(CanonicalSourceFile file)

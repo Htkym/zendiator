@@ -52,7 +52,7 @@ internal static class CanonicalSplitSourceEmitter
             Composition = fragment,
             StreamHelpers = new(mediator.Members.OfType<MethodDeclarationSyntax>().Where(method => method.Modifiers.Any(SyntaxKind.PublicKeyword))
                 .SelectMany(method => method.DescendantNodes().OfType<InvocationExpressionSyntax>())
-                .Where(call => call.Expression is MemberAccessExpressionSyntax { Expression: SimpleNameSyntax, Name.Identifier.ValueText: "Create" } &&
+                .Where(call => call.Expression is MemberAccessExpressionSyntax { Expression: SimpleNameSyntax, Name.Identifier.ValueText: "Create" or "CreateSource" } &&
                     call.ArgumentList.Arguments.FirstOrDefault()?.Expression is IdentifierNameSyntax { Identifier.ValueText: "_provider" })
                 .Select(call => ((SimpleNameSyntax)((MemberAccessExpressionSyntax)call.Expression).Expression).Identifier.ValueText).Distinct(StringComparer.Ordinal))
         };

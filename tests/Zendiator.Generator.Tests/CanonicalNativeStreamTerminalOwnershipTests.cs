@@ -5,7 +5,7 @@ namespace Zendiator.Generator.Tests;
 public sealed partial class GeneratorTests
 {
     [Fact]
-    public async Task Native_stream_terminal_operations_on_one_source_are_independent_during_pending_sink_and_reentry()
+    public async Task Native_stream_terminal_operations_on_one_plan_are_independent_during_pending_sink_and_reentry()
     {
         var source = NativeStreamFixture("""
             c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));c.Pipeline<Items>(DispatchFamily.Stream);
@@ -56,13 +56,14 @@ public sealed partial class GeneratorTests
             var p=new Probe();var services=new ServiceCollection();services.AddSingleton(p);Register(services);
             await using var provider=services.BuildServiceProvider();await using var scope=provider.CreateAsyncScope();
             var mediator=scope.ServiceProvider.GetRequiredService<global::NativeStream.Generated.Reads.IZendiator>();
-            var feed=mediator.StreamAsync(new Items());p.Consume=sink=>feed.ConsumeAsync(sink);
-            Check.That(p.Opened==0&&p.HandlerConstructions==0,"creating the reusable source does not acquire its handler or cursor");
-            var firstSink=new FirstSink(p);var first=feed.ConsumeAsync(firstSink).AsTask();
+            var plan=mediator.StreamSource(new Items());p.Consume=sink=>plan.ConsumeAsync(sink);
+            Check.That((object)plan is not IAsyncEnumerable<int>,"the typed plan cannot silently enter a boxed standard enumeration path");
+            Check.That(p.Opened==0&&p.HandlerConstructions==0,"creating the reusable plan does not acquire its handler or cursor");
+            var firstSink=new FirstSink(p);var first=plan.ConsumeAsync(firstSink).AsTask();
             var secondSink=new ReenteringSink(p);
             try{
                 Check.That(!first.IsCompleted&&firstSink.Values.SequenceEqual(new[]{100})&&p.Active.SetEquals(new[]{1}),"first operation is suspended only in its own sink");
-                await feed.ConsumeAsync(secondSink).ConfigureAwait(false);
+                await plan.ConsumeAsync(secondSink).ConfigureAwait(false);
                 Check.That(secondSink.Values.SequenceEqual(new[]{200,201})&&secondSink.NestedValues.SequenceEqual(new[]{300,301}),"sink reentry consumes a fresh cursor without replacing its caller's progress");
                 Check.That(!first.IsCompleted&&firstSink.Values.SequenceEqual(new[]{100})&&p.Active.SetEquals(new[]{1}),"other terminal completion leaves the pending operation untouched");
                 Check.That(p.Disposed.SequenceEqual(new[]{3,2}),"nested and second operations close only their own source cursors");
@@ -125,9 +126,10 @@ public sealed partial class GeneratorTests
             await using var provider=services.BuildServiceProvider();await using var scope=provider.CreateAsyncScope();
             var mediator=scope.ServiceProvider.GetRequiredService<global::NativeStream.Generated.Reads.IZendiator>();
             var plain=mediator.StreamAsync(new Plain());var mapped=mediator.StreamAsync(new Mapped());
+            var plainPlan=mediator.StreamSource(new Plain());var mappedPlan=mediator.StreamSource(new Mapped());
             try{
-                await Verify("plain",plain,sink=>plain.ConsumeAsync(sink));
-                await Verify("mapped",mapped,sink=>mapped.ConsumeAsync(sink));
+                await Verify("plain",plain,sink=>plainPlan.ConsumeAsync(sink));
+                await Verify("mapped",mapped,sink=>mappedPlan.ConsumeAsync(sink));
             }finally{Probe.Ambient.Value=null;}
 
             async ValueTask Verify(string route,IAsyncEnumerable<int> feed,Func<Sink,ValueTask> consume){

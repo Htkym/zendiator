@@ -738,7 +738,7 @@ public class ZendiatorStream0
     [GlobalSetup] public void Setup() { provider=StreamRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.BenchmarkStreams.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorStream0", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public IAsyncEnumerable<int> Invoke(Stream0 r,CancellationToken t=default) => entry.StreamAsync(r,t);
-    public ValueTask InvokeTyped<TSink>(Stream0 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamAsync(r,t).ConsumeAsync(sink);
+    public ValueTask InvokeTyped<TSink>(Stream0 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamSource(r,t).ConsumeAsync(sink);
     [Benchmark] public async ValueTask<int> FullTyped() { typedSink.Reset(false); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.Sum; }
     [Benchmark] public async ValueTask<int> EarlyBreakTyped() { typedSink.Reset(true); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.First; }
     [Benchmark] public IAsyncEnumerable<int> Creation() => Invoke(request);
@@ -845,7 +845,7 @@ public class ZendiatorStream1
     [GlobalSetup] public void Setup() { provider=StreamRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.BenchmarkStreams.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorStream1", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public IAsyncEnumerable<int> Invoke(Stream1 r,CancellationToken t=default) => entry.StreamAsync(r,t);
-    public ValueTask InvokeTyped<TSink>(Stream1 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamAsync(r,t).ConsumeAsync(sink);
+    public ValueTask InvokeTyped<TSink>(Stream1 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamSource(r,t).ConsumeAsync(sink);
     [Benchmark] public async ValueTask<int> FullTyped() { typedSink.Reset(false); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.Sum; }
     [Benchmark] public async ValueTask<int> EarlyBreakTyped() { typedSink.Reset(true); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.First; }
     [Benchmark] public IAsyncEnumerable<int> Creation() => Invoke(request);
@@ -952,7 +952,7 @@ public class ZendiatorStream3
     [GlobalSetup] public void Setup() { provider=StreamRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.BenchmarkStreams.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorStream3", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public IAsyncEnumerable<int> Invoke(Stream3 r,CancellationToken t=default) => entry.StreamAsync(r,t);
-    public ValueTask InvokeTyped<TSink>(Stream3 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamAsync(r,t).ConsumeAsync(sink);
+    public ValueTask InvokeTyped<TSink>(Stream3 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamSource(r,t).ConsumeAsync(sink);
     [Benchmark] public async ValueTask<int> FullTyped() { typedSink.Reset(false); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.Sum; }
     [Benchmark] public async ValueTask<int> EarlyBreakTyped() { typedSink.Reset(true); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.First; }
     [Benchmark] public IAsyncEnumerable<int> Creation() => Invoke(request);
@@ -1059,7 +1059,7 @@ public class ZendiatorStream5
     [GlobalSetup] public void Setup() { provider=StreamRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.BenchmarkStreams.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorStream5", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public IAsyncEnumerable<int> Invoke(Stream5 r,CancellationToken t=default) => entry.StreamAsync(r,t);
-    public ValueTask InvokeTyped<TSink>(Stream5 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamAsync(r,t).ConsumeAsync(sink);
+    public ValueTask InvokeTyped<TSink>(Stream5 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamSource(r,t).ConsumeAsync(sink);
     [Benchmark] public async ValueTask<int> FullTyped() { typedSink.Reset(false); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.Sum; }
     [Benchmark] public async ValueTask<int> EarlyBreakTyped() { typedSink.Reset(true); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.First; }
     [Benchmark] public IAsyncEnumerable<int> Creation() => Invoke(request);
@@ -3210,7 +3210,7 @@ public class ZendiatorRelay1
     [GlobalSetup] public void Setup() { provider=StreamRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.BenchmarkStreams.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorRelay1", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public IAsyncEnumerable<int> Invoke(Relay1 r,CancellationToken t=default) => entry.StreamAsync(r,t);
-    public ValueTask InvokeTyped<TSink>(Relay1 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamAsync(r,t).ConsumeAsync(sink);
+    public ValueTask InvokeTyped<TSink>(Relay1 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamSource(r,t).ConsumeAsync(sink);
     [Benchmark] public async ValueTask<int> FullTyped() { typedSink.Reset(false); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.Sum; }
     [Benchmark] public async ValueTask<int> EarlyBreakTyped() { typedSink.Reset(true); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.First; }
     [Benchmark] public IAsyncEnumerable<int> Creation() => Invoke(request);
@@ -3239,7 +3239,7 @@ public class ZendiatorRelay5
     [GlobalSetup] public void Setup() { provider=StreamRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.BenchmarkStreams.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorRelay5", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public IAsyncEnumerable<int> Invoke(Relay5 r,CancellationToken t=default) => entry.StreamAsync(r,t);
-    public ValueTask InvokeTyped<TSink>(Relay5 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamAsync(r,t).ConsumeAsync(sink);
+    public ValueTask InvokeTyped<TSink>(Relay5 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamSource(r,t).ConsumeAsync(sink);
     [Benchmark] public async ValueTask<int> FullTyped() { typedSink.Reset(false); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.Sum; }
     [Benchmark] public async ValueTask<int> EarlyBreakTyped() { typedSink.Reset(true); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.First; }
     [Benchmark] public IAsyncEnumerable<int> Creation() => Invoke(request);

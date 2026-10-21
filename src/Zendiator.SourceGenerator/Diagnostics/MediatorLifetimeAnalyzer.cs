@@ -129,7 +129,7 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
     }
 
     private static bool IsDispatch(string name, bool canonical) => name == "SendAsync" ||
-        canonical && name is "Send" or "SendAll" or "SendAllAsync" or "StreamAsync";
+        canonical && name is "Send" or "SendAll" or "SendAllAsync" or "StreamAsync" or "StreamSource";
 
     private static bool TryMediatorScope(ILocalSymbol mediator, SemanticModel model, ImmutableHashSet<ITypeSymbol> canonical, out ILocalSymbol scope)
     {

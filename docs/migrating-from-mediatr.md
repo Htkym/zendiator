@@ -538,7 +538,9 @@ Keep standard IAsyncEnumerable consumers. Replace yield handlers with a marked
 Move state, real I/O, cancellation and finally/ownership cleanup into that cursor;
 a private compiler iterator type cannot serve as the named public declaration.
 
-StreamAsync returns a generated standard enumerable with instance ConsumeAsync.
+StreamAsync returns a generated class implementing standard IAsyncEnumerable. Move
+typed terminals to `StreamSource(request, apiToken).ConsumeAsync(sink, enumerationToken)`.
+StreamSource returns a readonly plan and is not IAsyncEnumerable.
 Use explicit Handlers/Pipeline declarations: IStreamMiddleware with Stage.Wrapper
 for opaque stages, dedicated Filter/Map contracts with Stage.Hook for typed stages.
 The old global Stream Behavior, Validator and OwnsStream APIs are not the new protocol.

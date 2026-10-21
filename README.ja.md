@@ -141,14 +141,14 @@ services.AddZendiator();
 
 0.5.0では、`IStreamSourceHandler<TRequest,TItem,TCursor>`を実装したHandlerにZendiatorHandler属性を付け、OpenAsyncで名前付きcursorを開きます。Handlers/Pipelineで要求と順序を明示します。任意middlewareはIStreamMiddlewareとStage.Wrapper、Filter/Mapは専用hook、所有sessionはfactory付き登録を使います。
 
-mediator.StreamAsync(request, token)は、標準IAsyncEnumerableを実装する公開sourceを返します。同じsourceのConsumeAsync(sink, token)は、具体cursorを使うterminalです。
+mediator.StreamAsync(request, token)は、標準IAsyncEnumerableとしてsource objectを返します。typed terminalにはmediator.StreamSource(request, apiToken).ConsumeAsync(sink, enumerationToken)を使います。StreamSourceはIAsyncEnumerableではないreadonlyの計画値を返し、消費ごとに専用ownerを作ります。
 
 ~~~csharp
 await foreach (var name in mediator.StreamAsync(new ReadNames(3), cancellationToken))
     Console.WriteLine(name);
 ~~~
 
-user DI、Handler、session、I/Oは最初のMoveで開始し、列挙ごとに状態を分けます。pending Moveを一度awaitしてから次のMoveやDisposeを行い、各ValueTaskは一度だけ消費します。DI scopeは後始末まで保持してください。
+標準source objectはStreamAsyncの呼出し時に割り当てます。user DI、Handler、session、I/Oは最初のMoveで開始し、列挙ごとに状態を分けます。pending Moveを一度awaitしてから次のMoveやDisposeを行い、各ValueTaskは一度だけ消費します。DI scopeは後始末まで保持してください。
 
 sinkのfalseは正常な全体停止、trueの後は次itemの前に取消しを確認します。struct sinkは値渡しなので、外部から観測する結果は共有ownerへ保存します。sink/serializer例外をsource middlewareへ注入しません。owned cursor/sessionを一度だけ後始末し、借用したDI serviceやsinkは破棄しません。UI contextへの復帰は保証せず、ExecutionContextは抑制しません。
 
@@ -302,7 +302,7 @@ Source Generatorが、設定した経路ごとの具体的なオーバーロー�
 |`IMultiRequest<T>`、`IMultiRequest`|`SendAllAsync(request, cancellationToken)`|
 |`ISyncMultiRequest<T>`、`ISyncMultiRequest`|`SendAllSync(request, cancellationToken)`|
 |`INotification`|逐次の `PublishAsync`。`Publish` も `ValueTask` を返す別名|
-|`IStreamRequest<T>`|標準列挙とConsumeAsyncに対応するStreamAsync|
+|`IStreamRequest<T>`|標準列挙はStreamAsync、typed terminalはStreamSource|
 
 要求とStreamは、任意のruntime objectや契約インターフェース型だけの変数から送信できません。Notificationの型消去は別の対応経路です。アセンブリ、Behaviorの順序、有効期間は `AddZendiator` で設定します。属性による宣言も使えますが、同じコンパイル単位で設定lambdaと併用しません。本体とGeneratorのパッケージ版は揃えてください。
 

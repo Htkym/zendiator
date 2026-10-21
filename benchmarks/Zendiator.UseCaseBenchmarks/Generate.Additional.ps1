@@ -6,7 +6,7 @@ function Add-StreamBenchmark([string]$lib, [string]$name, [string]$request, [str
     $typedField = if($lib -eq 'Zendiator') {"    private readonly StreamBenchmarkSink typedSink = new();`n"} else {''}
     $typedMethods = if($lib -eq 'Zendiator') {
 @"
-    public ValueTask InvokeTyped<TSink>($request r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamAsync(r,t).ConsumeAsync(sink);
+    public ValueTask InvokeTyped<TSink>($request r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamSource(r,t).ConsumeAsync(sink);
     [Benchmark] public async ValueTask<int> FullTyped() { typedSink.Reset(false); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.Sum; }
     [Benchmark] public async ValueTask<int> EarlyBreakTyped() { typedSink.Reset(true); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.First; }
 "@

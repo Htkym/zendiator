@@ -1,6 +1,6 @@
 # 0.5.0 Streamの移行と実行契約
 
-0.5.0では、名前付きcursorを開くHandlerと生成sourceを使います。入口はMediatorの要求別StreamAsync(request, token)です。返り値はValueTaskではなく、標準IAsyncEnumerableを実装する公開sourceです。同じsourceのConsumeAsync(sink, token)は、具体cursorを使うterminalです。既定のChannelや別producer taskは置きません。速度やallocationの改善は未測定です。
+0.5.0では、名前付きcursorを開くHandlerを使います。MediatorのStreamAsync(request, apiToken)は、標準IAsyncEnumerableとしてsource objectを返します。typed terminalにはStreamSource(request, apiToken).ConsumeAsync(sink, enumerationToken)を使います。StreamSourceの返り値はreadonlyの計画値で、IAsyncEnumerableではありません。既定のChannelや別producer taskは置きません。この入口の分離による速度やallocationの改善は未測定です。
 
 ## yield Handlerから名前付きcursorへ
 
@@ -56,11 +56,11 @@ await foreach (var name in source.WithCancellation(enumerationToken))
     Console.WriteLine(name);
 ~~~
 
-同じsourceをterminalで消費するときは、IStreamSinkのOnNextAsync(item, token)を実装します。trueは継続、falseは正常停止です。
+typed terminalではIStreamSinkのOnNextAsync(item, token)を実装します。trueは継続、falseは正常停止です。
 
 ~~~csharp
 var names = new List<string>();
-await mediator.StreamAsync(new ReadNames(3), token).ConsumeAsync(new NameSink(names));
+await mediator.StreamSource(new ReadNames(3), token).ConsumeAsync(new NameSink(names), enumerationToken);
 
 public readonly struct NameSink(List<string> names) : IStreamSink<string>
 {
@@ -74,9 +74,19 @@ public readonly struct NameSink(List<string> names) : IStreamSink<string>
 
 sinkは値渡しなので、struct sinkの結果はList等の共有ownerへ保存します。class sinkの状態も共有されます。同じsinkを複数の列挙で共有する場合、状態の分離や同期は利用者の責任です。生成コードは借用sinkをDisposeしません。
 
+StreamSourceの計画値は標準列挙用sourceとは別です。ConsumeAsyncごとに非公開の専用ownerを新しく作り、標準列挙のownerとは共有しません。計画値を再利用しても、各消費の停止状態とcleanupは独立します。標準列挙やHTTPへ返す場合はStreamAsyncを使ってください。
+
 ## 開始・取消し・操作の重複
 
-StreamAsyncとGetAsyncEnumeratorだけでは、user DI、HandlerのOpenAsync、owned session、I/Oを開始しません。最初のMoveで開始します。列挙ごとに独立したcursorと停止状態を作ります。API tokenと列挙tokenは、両方が取消可能で異なる場合だけ初回Moveで連結します。terminalのtokenも列挙tokenと同様です。開始前のDisposeはuser DIやlinked CTSを作りません。
+opaque middlewareを挟まない単一segmentの経路（standalone）では、StreamAsyncの呼出し時に割り当てたsource objectを最初の列挙のownerとして使います。後続のGetAsyncEnumeratorは独立したownerを作ります。このsourceはIAsyncEnumeratorも実装し、そのinterface経由でDisposeしても閉じるのは最初のownerだけです。その後のGetAsyncEnumeratorは独立したcloneを返します。このcastは全StreamAsyncに共通する契約ではありません。
+
+最初のGetAsyncEnumeratorより前のsource aliasからのMoveは拒否します。初回Getがtokenを設定している間のDisposeもInvalidOperationExceptionとなり、設定中のownerを閉じたり資源を解放したりしません。
+
+opaque middlewareを含む経路は、immutableな計画を保持するclassのenumerable adapterを返し、GetAsyncEnumeratorごとに新しいguarded cursorを作ります。standaloneでは列挙しない場合も最初のownerを入口で割り当てる一方、この経路ではsource adapterと列挙ownerが別です。
+
+従来の値型sourceだけを作って列挙せずに捨てる使い方と比べ、standaloneの入口でowner objectを割り当てる費用が増えます。typed処理ではStreamSourceの値型計画を使い、標準source objectを作らずに消費できます。割当量や時間の改善は、実測で確認するまで成果とは扱いません。
+
+StreamAsync、StreamSource、GetAsyncEnumeratorだけでは、user DI、HandlerのOpenAsync、owned session、I/Oを開始しません。各ownerの最初のMoveで開始します。API tokenと列挙tokenは、両方が取消可能で異なる場合だけ初回Moveで連結します。ConsumeAsyncのtokenも列挙tokenと同様です。開始前のDisposeはuser DIやlinked CTSを作りません。
 
 pending Move中の別MoveとDisposeは、同期的にInvalidOperationExceptionとなります。停止を予約したり、自動joinしたりしません。先のMoveを一度awaitしてからDisposeしてください。Disposeがpendingの間は新しいMoveを開始できません。その間の重複Disposeは同じTask-backed完了を共有します。返された各ValueTaskは一度だけ消費します。
 
