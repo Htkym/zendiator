@@ -100,6 +100,8 @@ internal static class CanonicalStreamFallbackEmitter
         var input = segment.SourceItemName ?? h.ItemName;
         var output = segment.OutputItemName ?? h.ItemName;
         var source = segment.Wrapper == null ? h.CursorName : "global::System.Collections.Generic.IAsyncEnumerator<" + input + ">";
+        // Bound handler cursors are named classes or structs; opaque segments keep their acquisition flag.
+        var referenceSource = segment.Wrapper == null && !h.CursorIsValueType;
         var factory = segment.Wrapper == null ? model.HandlerFactory : segment.WrapperFactory;
         var receiver = segment.Wrapper == null ? Storage(h.HandlerName, h.HandlerIsValueType)
             : Storage(segment.Wrapper.WrapperName, segment.Wrapper.WrapperIsValueType);
@@ -126,7 +128,7 @@ internal static class CanonicalStreamFallbackEmitter
                         private readonly {{h.RequestName}} _request;
                         {{(standalone ? "" : "private readonly global::Zendiator.Streaming.StreamCursorState _root;")}}
                         private {{source}} _source = default!;
-                        private bool _acquired;
+                        {{(referenceSource ? "" : "private bool _acquired;")}}
                         {{(standalone ? "" : "private bool _normalEnd;\ninternal bool CanReopen => _normalEnd && !HasPendingOperation;")}}
                         internal Cursor{{n}}(global::System.IServiceProvider services, {{h.RequestName}} request,
                             global::System.Threading.CancellationToken api, global::System.Threading.CancellationToken enumeration{{(standalone ? ", bool reserveFirstEnumeration = false" : ", global::Zendiator.Streaming.StreamCursorState? root")}}) : base(api, enumeration{{(standalone ? ", reserveFirstEnumeration" : "")}})
@@ -162,7 +164,7 @@ internal static class CanonicalStreamFallbackEmitter
                             bool moved;
                             try { moved = await MoveCoreAsync().ConfigureAwait(false); }
                             catch (global::System.Exception error) { return await MoveFailed(error).ConfigureAwait(false); }
-                            return moved ? await MoveSucceeded(true).ConfigureAwait(false) : await EndAsync().ConfigureAwait(false);
+                            return moved ? MoveSucceeded(true).GetAwaiter().GetResult() : await EndAsync().ConfigureAwait(false);
                         }
                         private global::System.Threading.Tasks.ValueTask<bool> ObserveMove(global::System.Threading.Tasks.ValueTask<bool> pending)
                         {
@@ -178,7 +180,7 @@ internal static class CanonicalStreamFallbackEmitter
                             bool moved;
                             try { moved = await pending.ConfigureAwait(false); }
                             catch (global::System.Exception error) { return await MoveFailed(error).ConfigureAwait(false); }
-                            return moved ? await MoveSucceeded(true).ConfigureAwait(false) : await EndAsync().ConfigureAwait(false);
+                            return moved ? MoveSucceeded(true).GetAwaiter().GetResult() : await EndAsync().ConfigureAwait(false);
                         }
                         private async global::System.Threading.Tasks.ValueTask<bool> EndAsync()
                         {
@@ -252,7 +254,7 @@ internal static class CanonicalStreamFallbackEmitter
             b.AppendLine("_source = await OpenHandler(" + value + ", _request, Token).ConfigureAwait(false);");
             if (!h.CursorIsValueType) b.AppendLine("""if (_source is null) throw new global::System.InvalidOperationException("A Stream handler returned a null cursor.");""");
         }
-        b.AppendLine("_acquired = true;");
+        if (!referenceSource) b.AppendLine("_acquired = true;");
         b.AppendLine("}");
         var cursorType = "TSourceCursor";
         while (model.Generic?.Parameters.Contains(cursorType) == true) cursorType = "_" + cursorType;
@@ -260,7 +262,7 @@ internal static class CanonicalStreamFallbackEmitter
         b.AppendLine("private static " + input + " ReadSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.Current;");
         b.AppendLine("private static global::System.Threading.Tasks.ValueTask DisposeSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.DisposeAsync();");
         EmitMove(b, segment);
-        EmitCleanup(b, segment, factory);
+        EmitCleanup(b, segment, factory, referenceSource);
         b.AppendLine("}");
         if (segment.Upstream is { } upstream) EmitUpstream(b, h, segment, upstream);
     }
@@ -315,10 +317,12 @@ internal static class CanonicalStreamFallbackEmitter
         b.AppendLine("_current = " + item + "; return true; }");
     }
 
-    private static void EmitCleanup(StringBuilder b, CanonicalStreamFallbackSegment segment, BoundAsyncFactoryEmission? receiverFactory)
+    private static void EmitCleanup(StringBuilder b, CanonicalStreamFallbackSegment segment, BoundAsyncFactoryEmission? receiverFactory, bool referenceSource)
     {
         b.AppendLine("protected override async global::System.Threading.Tasks.ValueTask DisposeCoreAsync() {");
-        b.AppendLine("try { if (_acquired) { _acquired = false; var source = _source; _source = default!; await DisposeSource(ref source).ConfigureAwait(false); } }");
+        b.AppendLine(referenceSource
+            ? "try { var source = _source; if (source is not null) { _source = default!; await DisposeSource(ref source).ConfigureAwait(false); } }"
+            : "try { if (_acquired) { _acquired = false; var source = _source; _source = default!; await DisposeSource(ref source).ConfigureAwait(false); } }");
         b.AppendLine("finally {");
         var depth = 1;
         if (segment.Upstream != null)

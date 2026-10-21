@@ -17,15 +17,21 @@ public sealed partial class GeneratorTests
                 public readonly List<string> Created=new(),Released=new(),Live=new();public readonly List<int> Values=new();
                 public int Id,Opened,Produced,CursorDisposals,MiddlewareCursorDisposals,Maps,SinkCalls,DiCreated,DiReleased,HandlerFactoryDiCreated,BorrowedFilterDiCreated,ReopenDenied;
                 public readonly Exception FactoryError=new InvalidOperationException("factory");
+                public readonly Exception OpenError=new FormatException("open");
                 public readonly Exception SourceError=new FormatException("source");public readonly Exception CleanupError=new ArithmeticException("cleanup");
                 public global::Zendiator.Generator.Tests.AsyncOnceGate<Handler>? FactoryGate;
+                public global::Zendiator.Generator.Tests.AsyncOnceGate<Cursor>? OpenGate;
                 public readonly global::Zendiator.Generator.Tests.AsyncOnceGate<int> MapGate=new(10);
                 public readonly global::Zendiator.Generator.Tests.AsyncOnceGate<bool> SinkGate=new(false);
                 public string Create(string role){var name=role+(++Id);Created.Add(name);Live.Add(name);return name;}
                 public void Release(string name){Check.That(Live.Count!=0&&Live[^1]==name,"owned resources release in reverse acquisition order");Live.RemoveAt(Live.Count-1);Released.Add(name);}
             }
             [ZendiatorHandler]public sealed class Handler(Probe p,string name):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
-                public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){p.Opened++;return new(new Cursor(p,t));}
+                public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){
+                    p.Opened++;if(p.Mode=="null-open")return new((Cursor)null!);
+                    if(p.Mode=="pending-open-failure"){p.OpenGate=new(null!);return p.OpenGate.Task;}
+                    return new(new Cursor(p,t));
+                }
                 public ValueTask DisposeAsync(){p.Release(name);return default;}
             }
             public sealed class Cursor(Probe p,CancellationToken token):IAsyncEnumerator<int>{
@@ -91,13 +97,15 @@ public sealed partial class GeneratorTests
                 }
             }
             """, """
-            foreach(var mode in new[]{"short-circuit","repeat","pending-factory","pending-map","pending-sink","stop-cancel","cancel-continue","partial-startup","source-failure","cleanup-failure"}){
+            foreach(var mode in new[]{"short-circuit","repeat","pending-factory","pending-map","pending-sink","stop-cancel","cancel-continue","partial-startup","null-open","pending-open-failure","source-failure","cleanup-failure"}){
                 var p=new Probe(mode);var services=new ServiceCollection();services.AddSingleton(p);Register(services);
                 await using var provider=services.BuildServiceProvider();var scope=provider.CreateAsyncScope();
                 var mediator=scope.ServiceProvider.GetRequiredService<global::NativeStream.Generated.Reads.IZendiator>();
                 var task=mediator.StreamSource(new Items(),p.Cancellation.Token).ConsumeAsync(new Sink(p)).AsTask();
                 if(mode=="pending-factory"){
                     Check.That(!task.IsCompleted&&p.FactoryGate!=null&&p.FactoryGate.Consumptions==0&&p.Opened==0&&p.Released.Count==0,"pending factory ownership is not released early");p.FactoryGate!.Complete();
+                }else if(mode=="pending-open-failure"){
+                    Check.That(!task.IsCompleted&&p.OpenGate!=null&&p.OpenGate.Consumptions==0&&p.Opened==1&&p.Produced==0&&p.CursorDisposals==0&&p.Released.Count==0,"pending Open retains acquired sessions without publishing or disposing a raw cursor");p.OpenGate!.Fail(p.OpenError);
                 }else if(mode=="pending-map"){
                     Check.That(!task.IsCompleted&&p.Produced==1&&p.SinkCalls==0&&p.Released.Count==0,"async map preserves backpressure");p.MapGate.Complete();
                 }else if(mode=="pending-sink"){
@@ -105,6 +113,11 @@ public sealed partial class GeneratorTests
                 }
                 Exception? error=null;try{await task.ConfigureAwait(false);}catch(Exception caught){error=caught;}
                 if(mode=="partial-startup")Check.That(ReferenceEquals(error,p.FactoryError)&&p.CursorDisposals==p.Opened&&p.Created.All(n=>!n.StartsWith("M",StringComparison.Ordinal))&&p.Released.SequenceEqual(p.Created.AsEnumerable().Reverse()),"partial acquisition preserves factory error and unwinds exactly the acquired sessions and cursor");
+                else if(mode is "null-open" or "pending-open-failure"){
+                    Check.That(mode=="null-open"?error is InvalidOperationException:ReferenceEquals(error,p.OpenError),"null and failed Open preserve their expected failure");
+                    Check.That(p.Opened==1&&p.CursorDisposals==0&&p.Produced==0&&p.Maps==0&&p.SinkCalls==0,"failed Open never owns or disposes a raw cursor and publishes no item");
+                    Check.That(p.Created.Select(n=>n[0]).SequenceEqual(new[]{'M','W','H'})&&p.Released.SequenceEqual(p.Created.AsEnumerable().Reverse()),"failed Open releases the acquired Map, middleware and Handler sessions once in reverse order");
+                }
                 else if(mode=="source-failure")Check.That(ReferenceEquals(error,p.SourceError)&&p.CursorDisposals==1,"source error and cursor cleanup");
                 else if(mode=="cleanup-failure")Check.That(ReferenceEquals(error,p.CleanupError)&&p.CursorDisposals==1,"cleanup failure follows finally priority without skipping outer cleanup");
                 else if(mode=="cancel-continue")Check.That(error is OperationCanceledException&&p.SinkCalls==1&&p.CursorDisposals==1,"true permits the next cancellation check");
@@ -122,6 +135,7 @@ public sealed partial class GeneratorTests
                 }
                 if(mode=="stop-cancel")Check.That(p.ReopenDenied==1&&p.Produced==1,"accepted false is monotonic and wins cancellation");
                 if(mode=="pending-factory")Check.That(p.FactoryGate!.Consumptions==1,"factory ValueTask consumed once");
+                if(mode=="pending-open-failure")Check.That(p.OpenGate!.Consumptions==1,"failed Open ValueTask GetResult consumed once");
                 if(mode=="pending-map")Check.That(p.MapGate.Consumptions==1,"map ValueTask consumed once");
                 if(mode=="pending-sink")Check.That(p.SinkGate.Consumptions==1,"sink ValueTask consumed once");
                 Check.That(p.Live.Count==0&&p.Created.Count==p.Released.Count&&p.DiReleased==0,"owned cleanup complete while DI services stay borrowed");

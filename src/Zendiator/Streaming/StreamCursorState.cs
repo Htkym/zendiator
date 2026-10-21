@@ -20,7 +20,6 @@ public abstract class StreamCursorState : IAsyncDisposable
     private bool _started;
     private bool _hasCurrent;
     private bool _closed;
-    private bool _cleanupStarted;
     private bool _cleanupComplete;
     private Exception? _disposeError;
     private DisposeCompletion? _disposeCompletion;
@@ -303,12 +302,12 @@ public abstract class StreamCursorState : IAsyncDisposable
 
     private ValueTask BeginClose()
     {
+        var wasClosed = _closed;
         Volatile.Write(ref _closed, true);
         _hasCurrent = false;
-        if (_cleanupStarted)
+        if (wasClosed)
             return default;
 
-        _cleanupStarted = true;
         return _started ? DisposeCoreAsync() : default;
     }
 

@@ -1,9 +1,10 @@
-# Known limitations (0.4.0)
+# Known limitations and Stream contracts
 
-For the new 0.5.0 Stream protocol, see [migration and contracts](../streaming-0.5.0.ja.md).
-The Stream sections below describe historical 0.4.0 behavior.
+Except for the explicitly labeled 0.5.0 Stream enumeration section, this page records
+historical 0.4.0 boundaries. For the current Stream protocol, see
+[migration and contracts](../streaming-0.5.0.ja.md).
 
-These boundaries apply to the 0.4.0 design. See the [release notes](0.4.0-release-notes.md)
+For the historical design, see the [0.4.0 release notes](0.4.0-release-notes.md)
 and [construction and dispatch lifetime](../optimized-dispatch.md) before upgrading.
 
 ## Dependency capture and lifetime
@@ -35,13 +36,23 @@ report this limitation. Reference-type closures are covered by AOT04/AOT10.
 The release verification target is AOT01-AOT12 on win-x64 with package consumers;
 it is not an every-RID guarantee.
 
-## Stream enumeration
+## Stream enumeration (0.5.0)
 
-Re-enumerating the same returned stream and concurrently enumerating it are not
-guaranteed. Call `StreamAsync` again for a fresh stream. Early termination and disposal
-are covered separately by tests.
+The generated Mediator's `StreamAsync` returns standard `IAsyncEnumerable<T>`.
+Each enumeration of the same returned source has an independent cursor owner,
+including concurrent enumerations. Each enumerator must be used sequentially:
+await a pending Move before another Move or disposal. Independent owners do not make
+shared handlers, hooks, or other borrowed dependencies safe for concurrent use.
 
-## Stream entry validation
+Creating the source or obtaining an enumerator does not acquire user dependencies
+or start handler I/O. DI resolution, opening, and owned sessions start on that owner's
+first Move. Keep the caller's DI scope alive through enumeration and final cleanup.
+
+Use the source with `await foreach` or return it naturally as `IAsyncEnumerable<T>`
+from an HTTP action for the host to serialize. Do not return a source from an
+action-local scope that is disposed before serialization and cleanup finish.
+
+## Stream entry validation (0.4.0)
 
 Synchronous Stream validators are explicitly registered closed classes; they do
 not provide asynchronous validation, I/O, open-generic matching, or validation

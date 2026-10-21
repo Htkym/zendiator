@@ -52,17 +52,28 @@ public sealed partial class GeneratorTests
     {
         var source = NativeStreamFixture("""
             c.Handlers<PlainItems>(DispatchFamily.Stream,typeof(Handler));c.Pipeline<PlainItems>(DispatchFamily.Stream);
+            c.Handlers<EmptyItems>(DispatchFamily.Stream,typeof(EmptyHandler));c.Pipeline<EmptyItems>(DispatchFamily.Stream);
             c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));
             c.Pipeline<Items>(DispatchFamily.Stream,Stage.Hook<Positive>(),Stage.Hook<DoubleItem>());
             """, """
             public readonly record struct PlainItems(int Count):IStreamRequest<int>;
+            public readonly record struct EmptyItems:IStreamRequest<int>;
             public sealed record Items(int Count):IStreamRequest<int>;
-            public sealed class Probe{public int Resolved,ServiceResolutions,Opened,Produced,Reads,CursorDisposals,ServiceDisposals,Filters,Maps,DisposedMapCalls;public readonly List<int> MapVersions=new();}
+            public sealed class Probe{public int Resolved,ServiceResolutions,Opened,EmptyOpened,Produced,Reads,CursorDisposals,ServiceDisposals,Filters,Maps,DisposedMapCalls;public readonly List<int> MapVersions=new();}
             [ZendiatorHandler] public sealed class Handler: IStreamSourceHandler<PlainItems,int,Cursor>,IStreamSourceHandler<Items,int,Cursor>,IDisposable{
                 private readonly Probe p;public Handler(Probe p){this.p=p;p.Resolved++;p.ServiceResolutions++;}
                 public ValueTask<Cursor> OpenAsync(PlainItems r,CancellationToken t){p.Opened++;return new(new Cursor(p,r.Count,t));}
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){p.Opened++;return new(new Cursor(p,r.Count,t));}
                 public void Dispose()=>p.ServiceDisposals++;
+            }
+            [ZendiatorHandler]public sealed class EmptyHandler(Probe p):IStreamSourceHandler<EmptyItems,int,EmptyCursor>{
+                public ValueTask<EmptyCursor> OpenAsync(EmptyItems r,CancellationToken t){p.EmptyOpened++;return new(default(EmptyCursor));}
+            }
+            public readonly struct EmptyCursor:IAsyncEnumerator<int>{
+                public static int Disposals;
+                public int Current=>throw new InvalidOperationException("Empty cursor has no Current");
+                public ValueTask<bool> MoveNextAsync()=>new(false);
+                public ValueTask DisposeAsync(){Disposals++;return default;}
             }
             public struct Cursor:IAsyncEnumerator<int>{
                 private readonly Probe p;private readonly int count;private readonly CancellationToken token;private int next,current;
@@ -114,6 +125,13 @@ public sealed partial class GeneratorTests
             await mediator.StreamSource(new Items(4)).ConsumeAsync(new Sink(stopped));
             Check.That(stopped.Values.SequenceEqual(new[]{2})&&p.Produced-before==2&&p.Filters-filters==2&&p.Maps-maps==1,"reject continues, sink false stops without reading ahead");
             Check.That(p.MapVersions.SequenceEqual(new[]{1,2,3,4}),"mutable value hook keeps its captured box across callbacks and operations");
+            var empty=mediator.StreamAsync(new EmptyItems()).GetAsyncEnumerator();
+            Check.That(p.EmptyOpened==0&&EmptyCursor.Disposals==0,"default-valued cursor remains unopened before Move");
+            Check.That(!await empty.MoveNextAsync()&&p.EmptyOpened==1&&EmptyCursor.Disposals==1,"default is a valid acquired empty struct cursor and EOF disposes it");
+            Check.Invalid(()=>{_=empty.Current;});await empty.DisposeAsync();await empty.DisposeAsync();
+            Check.That(EmptyCursor.Disposals==1,"EOF and repeated Dispose do not dispose the default cursor twice");
+            var emptySink=new State();await mediator.StreamSource(new EmptyItems()).ConsumeAsync(new Sink(emptySink));
+            Check.That(p.EmptyOpened==2&&EmptyCursor.Disposals==2&&emptySink.Values.Count==0&&!emptySink.SinkDisposed,"terminal EOF and finally dispose one default cursor without publishing an item");
             Check.That(p.ServiceDisposals==0&&!all.SinkDisposed&&!stopped.SinkDisposed,"DI receivers and caller sink stay borrowed");
             await scope.DisposeAsync();Check.That(p.ServiceDisposals==p.ServiceResolutions&&p.DisposedMapCalls==4,"DI owner releases the same captured hook box");
             """);
