@@ -56,9 +56,9 @@ public sealed partial class GeneratorTests
                     finally{await f.FinallyAsync(saved,new(success,error),t).ConfigureAwait(false);}
                 }
                 public static async Task<string> Observe<TLeft,TRight>(bool generated,string mode) where TLeft:class,OpenAllFixture.ISecond,new() where TRight:class,OpenAllFixture.IHook,new(){
-                    var p=new AllAsyncFixture.Probe{Mode=mode};using var token=p.Cancellation;IServiceCollection s=new ServiceCollection();s.AddSingleton(p);s.AddScoped(typeof(ZHandler<,>));var existing=s.Last();Register(s);var count=s.Count;Register(s);
+                    var p=new AllAsyncFixture.Probe{Mode=mode};using var token=p.Cancellation;IServiceCollection s=new ServiceCollection();s.AddSingleton(p);s.AddScoped(typeof(Hook<,>));s.AddScoped(typeof(ZHandler<,>));var existing=s.Last();Register(s);var count=s.Count;Register(s);
                     AllAsyncFixture.Probe.Check(s.Count==count&&s.Contains(existing),"TryAdd/repeat snapshot");
-                    foreach(var definition in new[]{typeof(ZHandler<,>),typeof(AHandler<,>),typeof(Hook<,>)})AllAsyncFixture.Probe.Check(s.Count(d=>d.ServiceType==definition&&d.ImplementationType==definition&&d.Lifetime==ServiceLifetime.Scoped)==1,"all ordered open definitions registered");
+                    foreach(var definition in new[]{typeof(ZHandler<,>),typeof(AHandler<,>),typeof(Hook<,>)})AllAsyncFixture.Probe.Check(s.Count(d=>d.ServiceType==definition&&d.ImplementationType==definition&&d.Lifetime==(definition==typeof(ZHandler<,>)||definition==typeof(Hook<,>)?ServiceLifetime.Scoped:ServiceLifetime.Transient))==1,"all ordered open definitions registered");
                     using var provider=s.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});using var scope=provider.CreateScope();var sp=scope.ServiceProvider;var m=sp.GetRequiredService<{{ns}}.Generated.Composition.IZendiator>();var request=new Request<TLeft,TRight>(7);p.Original=request;AllAsyncFixture.Probe.Ambient.Value="caller";
                     var operation=generated?m.SendAllAsync(request,token.Token):Reference(sp,request,token.Token);var sync=operation.IsCompletedSuccessfully;
                     AllAsyncFixture.Probe.Check(AllAsyncFixture.Probe.Ambient.Value=="caller","public context boundary");

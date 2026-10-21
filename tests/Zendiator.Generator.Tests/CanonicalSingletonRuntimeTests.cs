@@ -107,14 +107,13 @@ public sealed partial class GeneratorTests
     public static IEnumerable<object[]> SingletonMediatorCases()
     {
         foreach (var receiver in new[] { "direct", "borrowed", "owned" })
-            foreach (var role in new[] { "mediator", "interface" })
-                foreach (var lifetime in new[] { ServiceLifetime.Singleton, ServiceLifetime.Scoped, ServiceLifetime.Transient })
-                    yield return [receiver, role, lifetime];
+            foreach (var lifetime in new[] { ServiceLifetime.Singleton, ServiceLifetime.Scoped, ServiceLifetime.Transient })
+                yield return [receiver, lifetime];
     }
 
     [Theory]
     [MemberData(nameof(SingletonMediatorCases))]
-    public void Generated_Singleton_mediator_uses_root_dependency_ownership_and_ValidateScopes(string receiver, string role, ServiceLifetime lifetime)
+    public void Generated_Singleton_interface_entry_captures_root_dependencies_and_preserves_ValidateScopes(string receiver, ServiceLifetime lifetime)
     {
         var f = SyncRuntimeFixture(receiver, false); var probe = new CanonicalSyncRuntimeProbe();
         var ambient = CanonicalSyncRuntimeProbe.Ambient.Value; var culture = CultureInfo.CurrentCulture;
@@ -122,7 +121,7 @@ public sealed partial class GeneratorTests
         {
             IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe);
             services.Add(ServiceDescriptor.Describe(f.Service, f.Service, lifetime));
-            services.Add(ServiceDescriptor.Singleton(role == "mediator" ? f.Mediator : f.Interface, f.Mediator));
+            services.Add(ServiceDescriptor.Singleton(f.Interface, f.Mediator));
             Assert.Same(services, f.Register.Invoke(null, [services]));
             using (var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
             {
@@ -148,10 +147,10 @@ public sealed partial class GeneratorTests
                 else
                 {
                     var receivers = probe.Calls.Where(c => c.Phase == (receiver == "direct" ? "handler" : "factory")).Select(c => c.Receiver).ToArray();
-                    Assert.Equal(lifetime == ServiceLifetime.Singleton ? 1 : 4, receivers.Distinct(ReferenceEqualityComparer.Instance).Count());
+                    Assert.Single(receivers.Distinct(ReferenceEqualityComparer.Instance));
                 }
             }
-            var resolved = lifetime == ServiceLifetime.Scoped ? 0 : lifetime == ServiceLifetime.Singleton ? 1 : 4;
+            var resolved = lifetime == ServiceLifetime.Scoped ? 0 : 1;
             Assert.Equal(receiver == "direct" ? resolved : receiver == "owned" && resolved != 0 ? 4 : 0, probe.Released.Count);
             Assert.Equal(receiver == "direct" ? 0 : resolved, probe.FactoryDisposals);
         }

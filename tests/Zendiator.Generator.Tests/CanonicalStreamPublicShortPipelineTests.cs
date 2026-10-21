@@ -127,7 +127,7 @@ public sealed partial class GeneratorTests
                 var services=new ServiceCollection();services.AddSingleton(p);Register(services);
                 var selected=new[]{typeof(H),__TYPES__};
                 foreach(var type in selected)
-                    Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"borrowed registration");
+                    Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Transient,"borrowed registration");
                 await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
                 var scope=provider.CreateAsyncScope();
                 var mediator=scope.ServiceProvider.GetRequiredService<global::App.Generated.Reads.IZendiator>();

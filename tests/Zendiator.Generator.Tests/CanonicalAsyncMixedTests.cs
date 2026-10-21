@@ -93,7 +93,7 @@ public sealed partial class GeneratorTests
     {
         try
         {
-            if (generated) return f.Hook.Dispatch.Invoke(null, [p.GetRequiredService(f.Hook.Mediator), r, t])!;
+            if (generated) return f.Hook.Dispatch.Invoke(null, [p.GetRequiredService(CanonicalEntryService(f.Hook.Mediator)), r, t])!;
             var args = new List<Type> { f.Hook.Request }; if (!isVoid) args.Add(typeof(int)); args.AddRange([f.Hook.Outer, f.Hook.Handler, MixedLeaseType(hookMode, f.Hook.Request, f.Hook.Outer, f.Hook.Factory), MixedLeaseType(handlerMode, f.Hook.Request, f.Hook.Handler, f.HandlerFactory)]);
             return typeof(CanonicalAsyncMixedReference).GetMethod(isVoid ? "SendVoid" : "SendResponse", BindingFlags.Static | BindingFlags.NonPublic)!.MakeGenericMethod(args.ToArray()).Invoke(null, [p, r, t])!;
         }
@@ -160,8 +160,8 @@ public sealed partial class GeneratorTests
         p.CancelHandlerFactory = scenario == "cancel-handler-factory"; p.CancelHandler = scenario == "cancel-handler"; core.CancelPhase = scenario == "cancel-before" ? "h0.before" : null;
         try
         {
-            IServiceCollection services = new ServiceCollection(); services.AddSingleton(p); f.Hook.Register.Invoke(null, [services]); Assert.DoesNotContain(services, d => d.ServiceType == f.Hook.Handler); Assert.Contains(services, d => d.ServiceType == f.HandlerFactory && d.Lifetime == ServiceLifetime.Scoped);
-            if (hookMode != "direct") { Assert.DoesNotContain(services, d => d.ServiceType == f.Hook.Outer); Assert.Contains(services, d => d.ServiceType == f.Hook.Factory && d.Lifetime == ServiceLifetime.Scoped); }
+            IServiceCollection services = new ServiceCollection(); services.AddSingleton(p); f.Hook.Register.Invoke(null, [services]); Assert.DoesNotContain(services, d => d.ServiceType == f.Hook.Handler); Assert.Contains(services, d => d.ServiceType == f.HandlerFactory && d.Lifetime == ServiceLifetime.Transient);
+            if (hookMode != "direct") { Assert.DoesNotContain(services, d => d.ServiceType == f.Hook.Outer); Assert.Contains(services, d => d.ServiceType == f.Hook.Factory && d.Lifetime == ServiceLifetime.Transient); }
             await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }); var request = Activator.CreateInstance(f.Hook.Request, [10])!;
             await using (var scope = provider.CreateAsyncScope())
             {

@@ -96,18 +96,18 @@ public sealed partial class GeneratorTests
     }
     [Theory]
     [MemberData(nameof(HookSessionReferenceLifetimeCases))]
-    public void Candidate_single_Hook_session_matches_reference_factory_Handler_and_transfer_owners(bool owned, bool isVoid, ServiceLifetime lifetime)
+    public void Candidate_single_Hook_session_captures_factory_Handler_and_preserves_transfer_owners(bool owned, bool isVoid, ServiceLifetime lifetime)
     {
         var fixture = HookSessionBackendFixture(owned, isVoid);
-        var reference = RunHookSessionLifetimes(owned, isVoid, lifetime, fixture);
+        var reference = lifetime == ServiceLifetime.Transient ? null : RunHookSessionLifetimes(owned, isVoid, lifetime, fixture);
         var generated = RunHookSessionLifetimes(owned, isVoid, lifetime, fixture, generated: true);
-        Assert.Equal(reference, generated);
+        if (reference is not null) Assert.Equal(reference, generated);
         WriteNestedHookEvidence("hook-session-differential-lifetimes", owned + "-" + isVoid + "-" + lifetime, new
         {
             owned,
             isVoid,
             lifetime = lifetime.ToString(),
-            reference = JsonSerializer.Deserialize<JsonElement>(reference),
+            reference = reference is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(reference),
             generated = JsonSerializer.Deserialize<JsonElement>(generated)
         });
     }

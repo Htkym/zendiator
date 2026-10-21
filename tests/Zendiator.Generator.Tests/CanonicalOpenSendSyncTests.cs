@@ -56,7 +56,7 @@ public sealed partial class GeneratorTests
                     s.AddScoped(typeof(Handler<{{(isVoid ? "" : ",")}}>));var existing=s.Last();Register(s);var count=s.Count;Register(s);
                     OpenFixture.Probe.Check(s.Count==count&&s.Contains(existing),"TryAdd and repeat registration");
                     foreach(var definition in new[]{typeof(Handler<{{(isVoid ? "" : ",")}}>),typeof(Hook<{{(isVoid ? "" : ",")}}>)} )
-                        OpenFixture.Probe.Check(s.Count(d=>d.ServiceType==definition&&d.ImplementationType==definition&&d.Lifetime==ServiceLifetime.Scoped)==1,"open scoped definition");
+                        OpenFixture.Probe.Check(s.Count(d=>d.ServiceType==definition&&d.ImplementationType==definition&&d.Lifetime==(definition==typeof(Handler<{{(isVoid ? "" : ",")}}>)?ServiceLifetime.Scoped:ServiceLifetime.Transient))==1,"open transient definition");
                     using var provider=s.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});using var scope=provider.CreateScope();var sp=scope.ServiceProvider;
                     var m=sp.GetRequiredService<{{ns}}.Generated.Composition.IZendiator>();var r=new {{request}}(7);p.Original=r;int? value=null;
                     if(generated){ {{(isVoid ? "m.Send(r,p.Token);" : "value=m.Send(r,p.Token);")}} }else{ {{(isVoid ? "Reference(sp,r,p.Token);" : "value=Reference(sp,r,p.Token);")}} }

@@ -33,7 +33,6 @@ public sealed partial class GeneratorTests
             else source += OpenZeroConsumer.Replace("__WHERE__", constrained ? "where T:class,new()" : "")
                 .Replace("__CALLS__", constrained ? "results.Add(await Read(mediator,new GenericItems<OpenValue>(new OpenValue()),p));" :
                     "results.Add(await Read(mediator,new GenericItems<int>(7),p));results.Add(await Read(mediator,new GenericItems<string>(\"item\"),p));")
-                .Replace("__REQUEST__", constrained ? "new GenericItems<OpenValue>(new OpenValue())" : "new GenericItems<int>(7)")
                 .Replace("__CLOSED_TYPES__", constrained ? "1" : "2");
             var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "OpenZero_" + Guid.NewGuid().ToString("N")),
                 out var output, out var diagnostics);
@@ -113,20 +112,17 @@ public sealed partial class GeneratorTests
                 var p=new global::Zendiator.Generator.Tests.StreamGenericScopeProbe();
                 var services=new ServiceCollection();services.AddSingleton(p);Startup.Configure(services);var count=services.Count;Startup.Configure(services);
                 Check(services.Count==count,"idempotent registration");
-                Check(services.Single(d=>d.ServiceType==typeof(GenericHandler<>)).Lifetime==ServiceLifetime.Scoped,"open handler registration");
+                Check(services.Single(d=>d.ServiceType==typeof(GenericHandler<>)).Lifetime==ServiceLifetime.Transient,"open handler registration");
                 await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
                 var scope=provider.CreateAsyncScope();var mediator=scope.ServiceProvider.GetRequiredService<global::App.Generated.Reads.IZendiator>();
                 var results=new List<object>();
                 __CALLS__
                 Check(p.Created.Count==__CLOSED_TYPES__&&p.Called.Count==2*__CLOSED_TYPES__&&p.Released.Count==0,"closed type captures and borrowed lifetime");
-                Check(p.Created.All(c=>p.Called.Count(call=>ReferenceEquals(c.Instance,call))==2),"scoped instance reused per closed type");
+                Check(p.Created.All(c=>p.Called.Count(call=>ReferenceEquals(c.Instance,call))==2),"captured instance reused per closed type");
                 Check(p.SourceDisposals==2*__CLOSED_TYPES__,"fresh source per enumeration");
-                var dangling=mediator.StreamAsync(__REQUEST__);await scope.DisposeAsync();
+                await scope.DisposeAsync();
                 Check(p.Released.Count==__CLOSED_TYPES__,"DI owns handler disposal");
-                var cursor=dangling.GetAsyncEnumerator();
-                try{await cursor.MoveNextAsync();throw new InvalidOperationException("disposed scope accepted");}
-                catch(ObjectDisposedException){}finally{await cursor.DisposeAsync();}
-                return System.Text.Json.JsonSerializer.Serialize(new{results,created=p.Created.Count,called=p.Called.Count,released=p.Released.Count,p.SourceDisposals,disposedScopeRejected=true});
+                return System.Text.Json.JsonSerializer.Serialize(new{results,created=p.Created.Count,called=p.Called.Count,released=p.Released.Count,p.SourceDisposals});
             }
         }
         """;

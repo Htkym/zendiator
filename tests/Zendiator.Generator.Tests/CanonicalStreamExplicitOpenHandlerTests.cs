@@ -47,7 +47,7 @@ public sealed partial class GeneratorTests
         var register = assembly.GetType("App.ExplicitOpenEntry")!.GetMethod("Register")!.CreateDelegate<Action<IServiceCollection>>();
         var services = new ServiceCollection(); register(services); // Exercises only the generated snapshot guard; no provider or stream.
         var definitions = new[] { "OpenAsyncHandler`1", "OpenAsyncFirst`2", "OpenAsyncMap`2", "OpenAsyncLast`2" }.Select(name => assembly.GetType("App." + name)!).ToArray();
-        Assert.All(definitions, type => Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == type).Lifetime));
+        Assert.All(definitions, type => Assert.Equal(ServiceLifetime.Transient, Assert.Single(services, d => d.ServiceType == type).Lifetime));
         if (!string.IsNullOrEmpty(root)) File.WriteAllText(Path.Combine(root, "snapshot-check.json"), System.Text.Json.JsonSerializer.Serialize(new
         {
             expectedExplicitCall = "expected.AddHandler(typeof(global::App.OpenAsyncHandler<>));",

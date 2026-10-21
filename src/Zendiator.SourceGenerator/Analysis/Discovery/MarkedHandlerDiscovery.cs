@@ -69,7 +69,7 @@ internal static class MarkedHandlerDiscovery
             new(contracts.OrderBy(c => c.Contract, StringComparer.Ordinal).ThenBy(c => c.Request, StringComparer.Ordinal)
                 .ThenBy(c => c.Result, StringComparer.Ordinal)),
             (markerRequired && attributes.Length != 1) || type.TypeKind is not (TypeKind.Class or TypeKind.Struct))
-        { OwnsStream = attributes.Any(a => a.NamedArguments.Any(p => p.Key == "OwnsStream" && p.Value.Value is true)) };
+        { OwnsStream = !attributes.Any(a => a.NamedArguments.Any(p => p.Key == "OwnsStream" && p.Value.Value is false)) };
         return new(model, type, attributes.FirstOrDefault()?.ApplicationSyntaxReference?.GetSyntax(ct).GetLocation() ?? Location.None);
     }
 

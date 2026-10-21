@@ -1,9 +1,7 @@
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading;
-using Microsoft.CodeAnalysis;
 
 namespace Zendiator.SourceGenerator;
 
@@ -233,9 +231,8 @@ internal static class CanonicalStreamPublicConnection
     }
 
     internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalStreamPublicModel model,
-        ImmutableArray<CompositionSelectionDiscovery.Binding> current, Compilation compilation, CancellationToken token) =>
-        CanonicalSyncEmissionNormalizer.BindCallSites(new(new(model.Compositions.Select(c => c.Registration))),
-            current, compilation, token);
+        EquatableArray<CanonicalSyncCallSite?> current, CancellationToken token) =>
+        CanonicalSyncEmissionNormalizer.BindCallSites(model.Compositions.Select(c => c.Registration.Index), current, token);
 
     internal static bool IsConnected(CanonicalStreamPublicComposition c, CanonicalSyncInterceptorModel sites) =>
         sites.CallSites.Any(s => s.Namespace == c.Registration.Namespace && s.MarkerName == c.Registration.MarkerName);

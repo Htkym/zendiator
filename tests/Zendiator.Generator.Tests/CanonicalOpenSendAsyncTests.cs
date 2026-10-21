@@ -58,7 +58,7 @@ public sealed partial class GeneratorTests
                     s.AddScoped(typeof(Handler<{{(isVoid ? "" : ",")}}>));var existing=s.Last();Register(s);var count=s.Count;Register(s);
                     OpenAsyncFixture.Probe.Check(s.Count==count&&s.Contains(existing),"TryAdd and repeated registration");
                     foreach(var definition in new[]{typeof(Handler<{{(isVoid ? "" : ",")}}>),typeof(Hook<{{(isVoid ? "" : ",")}}>)} )
-                        OpenAsyncFixture.Probe.Check(s.Count(d=>d.ServiceType==definition&&d.ImplementationType==definition&&d.Lifetime==ServiceLifetime.Scoped)==1,"open scoped definitions");
+                        OpenAsyncFixture.Probe.Check(s.Count(d=>d.ServiceType==definition&&d.ImplementationType==definition&&d.Lifetime==(definition==typeof(Handler<{{(isVoid ? "" : ",")}}>)?ServiceLifetime.Scoped:ServiceLifetime.Transient))==1,"open transient definitions");
                     using var provider=s.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});using var scope=provider.CreateScope();var sp=scope.ServiceProvider;
                     var m=sp.GetRequiredService<{{ns}}.Generated.Composition.IZendiator>();var r=new {{request}}(7);p.Original=r;OpenAsyncFixture.Probe.Ambient.Value="caller";
                     var dispatch=generated?m.SendAsync(r,token.Token):Reference(sp,r,token.Token);

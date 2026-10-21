@@ -89,9 +89,9 @@ public sealed partial class GeneratorTests
         foreach (var (receiver, factory, kind) in new[] { ("ToLarge", "ToLargeFactory", "Hook"), ("BigWrapper", "BigWrapperFactory", "Wrapper"), ("LastLarge", "LastLargeFactory", "Hook") })
         {
             Assert.Contains("Stage." + kind + "(typeof(global::App." + receiver + "), typeof(global::App." + factory + "))", facade);
-            Assert.Contains("ServiceDescriptor.Scoped(typeof(global::App." + factory + "), typeof(global::App." + factory + "))", facade);
+            Assert.Contains("ServiceDescriptor.Transient(typeof(global::App." + factory + "), typeof(global::App." + factory + "))", facade);
         }
-        Assert.Contains("ServiceDescriptor.Scoped(typeof(global::App.BigHandlerFactory), typeof(global::App.BigHandlerFactory))", facade);
+        Assert.Contains("ServiceDescriptor.Transient(typeof(global::App.BigHandlerFactory), typeof(global::App.BigHandlerFactory))", facade);
         Assert.Contains("__ZendiatorStreamCanonical_", facade); Assert.DoesNotContain("IAsyncEnumerable<object>", facade);
         var backend = Assert.Single(generated, f => f.HintName.StartsWith("Zendiator.StreamCanonical.", StringComparison.Ordinal)).SourceText.ToString();
         Assert.Contains("IAsyncEnumerator<int>? _source", backend); Assert.Contains("IAsyncEnumerator<global::App.LargeItem>? _source", backend);
@@ -120,7 +120,7 @@ public sealed partial class GeneratorTests
         var probe = new CanonicalStreamTypedIntegrationProbe { Request = request };
         var services = new ServiceCollection(); services.AddSingleton(probe); register(services);
         foreach (var name in new[] { "BigHandlerFactory", "ToLargeFactory", "BigWrapperFactory", "LastLargeFactory" })
-            Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == assembly.GetType("App." + name)).Lifetime);
+            Assert.Equal(ServiceLifetime.Transient, Assert.Single(services, d => d.ServiceType == assembly.GetType("App." + name)).Lifetime);
         foreach (var name in new[] { "BigHandler", "ToLarge", "BigWrapper", "LastLarge" })
             Assert.DoesNotContain(services, d => d.ServiceType == assembly.GetType("App." + name));
         Assert.Empty(probe.Events);

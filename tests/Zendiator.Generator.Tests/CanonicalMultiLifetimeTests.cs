@@ -65,17 +65,17 @@ public sealed partial class GeneratorTests
     [InlineData(ServiceLifetime.Transient)]
     [InlineData(ServiceLifetime.Scoped)]
     [InlineData(ServiceLifetime.Singleton)]
-    public async Task Multi_route_custom_collection_provider_preserve_registered_lifetime_and_DI_ownership(ServiceLifetime lifetime)
+    public async Task Multi_route_capture_preserves_native_lifetime_and_DI_ownership(ServiceLifetime lifetime)
     {
         var f = LifetimeMulti.Value; var p = new MultiLifetimeProbe(); IServiceCollection collection = new MultiCollection(); collection.AddSingleton(p); collection.Add(new(f.Handler, f.Handler, lifetime)); Assert.Same(collection, f.Register.Invoke(null, [collection])); Assert.Single(collection, d => d.ServiceType == f.Handler);
         using (var root = new MultiContainer(collection))
         {
             for (var scopeIndex = 0; scopeIndex < 2; scopeIndex++)
             {
-                using (var scope = root.Child()) { var mediator = scope.GetService(f.Mediator)!; for (var route = 0; route < 2; route++) { var value = scopeIndex * 2 + route + 5; var request = Activator.CreateInstance(route == 0 ? f.Request0 : f.Request1, [value])!; Assert.Equal(value, await ((Task<int>)f.Dispatch.Invoke(null, [mediator, request])!).WaitAsync(TimeSpan.FromSeconds(10))); } Assert.DoesNotContain(p.Released, x => p.Calls.Skip(scopeIndex * 2).Any(c => ReferenceEquals(c, x))); Assert.DoesNotContain(typeof(IServiceScopeFactory), scope.Resolutions); Assert.Equal(lifetime == ServiceLifetime.Transient ? 2 : 1, scope.Resolutions.Count(t => t == f.Handler)); }
-                Assert.Equal(lifetime == ServiceLifetime.Singleton ? 0 : lifetime == ServiceLifetime.Scoped ? scopeIndex + 1 : (scopeIndex + 1) * 2, p.Released.Count);
+                using (var scope = root.Child()) { var mediator = scope.GetService(CanonicalEntryService(f.Mediator))!; for (var route = 0; route < 2; route++) { var value = scopeIndex * 2 + route + 5; var request = Activator.CreateInstance(route == 0 ? f.Request0 : f.Request1, [value])!; Assert.Equal(value, await ((Task<int>)f.Dispatch.Invoke(null, [mediator, request])!).WaitAsync(TimeSpan.FromSeconds(10))); } Assert.DoesNotContain(p.Released, x => p.Calls.Skip(scopeIndex * 2).Any(c => ReferenceEquals(c, x))); Assert.DoesNotContain(typeof(IServiceScopeFactory), scope.Resolutions); Assert.Equal(1, scope.Resolutions.Count(t => t == f.Handler)); }
+                Assert.Equal(lifetime == ServiceLifetime.Singleton ? 0 : scopeIndex + 1, p.Released.Count);
             }
-            Assert.Equal(lifetime == ServiceLifetime.Transient ? 4 : lifetime == ServiceLifetime.Scoped ? 2 : 1, p.Created.Count); if (lifetime == ServiceLifetime.Scoped) { Assert.Same(p.Calls[0], p.Calls[1]); Assert.Same(p.Calls[2], p.Calls[3]); Assert.NotSame(p.Calls[0], p.Calls[2]); }
+            Assert.Equal(lifetime == ServiceLifetime.Singleton ? 1 : 2, p.Created.Count); if (lifetime != ServiceLifetime.Singleton) { Assert.Same(p.Calls[0], p.Calls[1]); Assert.Same(p.Calls[2], p.Calls[3]); Assert.NotSame(p.Calls[0], p.Calls[2]); }
             if (lifetime == ServiceLifetime.Singleton) Assert.All(p.Calls, c => Assert.Same(p.Calls[0], c));
         }
         Assert.Equal(p.Created.Count, p.Released.Count); MultiEvidence("multi-lifetime", lifetime.ToString(), new { lifetime = lifetime.ToString(), operations = 4, created = p.Created.Count, released = p.Released.Count, registrationCount = collection.Count(d => d.ServiceType == f.Handler), operationCleanup = 0, implicitScopeCreations = 0 });
@@ -87,7 +87,7 @@ public sealed partial class GeneratorTests
     {
         var f = MultiRuntimeFixture("mixed"); var route = async ? f.B : f.A; var p = new ManagedShapeProbe(); try
         {
-            IServiceCollection collection = new MultiCollection(); collection.AddSingleton(p); f.Register.Invoke(null, [collection]); using var root = new MultiContainer(collection); using var scope = root.Child(); var mediator = scope.GetService(f.Mediator)!; var request = Activator.CreateInstance(route.Request, [5])!; var result = route.Dispatch.Invoke(null, [mediator, request, p.Token.Token])!;
+            IServiceCollection collection = new MultiCollection(); collection.AddSingleton(p); f.Register.Invoke(null, [collection]); using var root = new MultiContainer(collection); using var scope = root.Child(); var mediator = scope.GetService(CanonicalEntryService(f.Mediator))!; var request = Activator.CreateInstance(route.Request, [5])!; var result = route.Dispatch.Invoke(null, [mediator, request, p.Token.Token])!;
             if (async) { var task = (Task)result.GetType().GetMethod("AsTask")!.Invoke(result, null)!; await task.WaitAsync(TimeSpan.FromSeconds(10)); Assert.Equal(17, ((int[])task.GetType().GetProperty("Result")!.GetValue(task)!)[0]); } else Assert.Equal(7, Convert.ToInt32(route.Result.GetProperty("A")!.GetValue(result)));
             Assert.Single(p.Created); Assert.Single(p.Released); Assert.DoesNotContain(typeof(IServiceScopeFactory), scope.Resolutions); Assert.Equal(new[] { "before", "factory", "body", "dispose", "after", "finally" }, p.Trace); MultiEvidence("multi-custom-owned", async.ToString(), new { async, created = p.Created.Count, released = p.Released.Count, p.Trace, providerBorrowed = true });
         }
@@ -98,11 +98,11 @@ public sealed partial class GeneratorTests
     public async Task Route_cache_first_use_keeps_DI_synchronization_container_scope_and_disposal_ownership()
     {
         var f = LifetimeMulti.Value; var probe = new MultiLifetimeProbe();
-        IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe); f.Register.Invoke(null, [services]);
+        IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe); services.AddScoped(f.Handler); f.Register.Invoke(null, [services]);
         await using var firstProvider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
         await using var secondProvider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
         var firstScope = firstProvider.CreateAsyncScope();
-        var firstMediator = firstScope.ServiceProvider.GetRequiredService(f.Mediator);
+        var firstMediator = firstScope.ServiceProvider.GetRequiredService(CanonicalEntryService(f.Mediator));
         Assert.Empty(probe.Created);
         Task<int> Invoke(object mediator, int value, bool sync = false) => (Task<int>)f.Dispatch.Invoke(null,
             [mediator, Activator.CreateInstance(sync ? f.Request0 : f.Request1, [value])!])!;
@@ -122,19 +122,69 @@ public sealed partial class GeneratorTests
             probe.BeforeConstruct = null;
             await using (var otherScope = firstProvider.CreateAsyncScope())
             {
-                var other = otherScope.ServiceProvider.GetRequiredService(f.Mediator); Assert.Equal(14, await Invoke(other, 14));
+                var other = otherScope.ServiceProvider.GetRequiredService(CanonicalEntryService(f.Mediator)); Assert.Equal(14, await Invoke(other, 14));
                 Assert.NotSame(probe.Created[0], probe.Created[1]);
             }
             await using (var otherScope = secondProvider.CreateAsyncScope())
             {
-                var other = otherScope.ServiceProvider.GetRequiredService(f.Mediator); Assert.Equal(15, await Invoke(other, 15));
+                var other = otherScope.ServiceProvider.GetRequiredService(CanonicalEntryService(f.Mediator)); Assert.Equal(15, await Invoke(other, 15));
                 Assert.NotSame(probe.Created[0], probe.Created[2]);
             }
             Assert.Equal(2, probe.Released.Count);
         }
         finally { release.Set(); await firstScope.DisposeAsync(); probe.BeforeConstruct = null; }
         Assert.Equal(3, probe.Created.Count); Assert.Equal(3, probe.Released.Count);
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => Invoke(firstMediator, 16));
-        Assert.Equal(3, probe.Created.Count); Assert.Equal(3, probe.Released.Count);
+    }
+
+    [Fact]
+    public async Task Transient_parallel_first_use_shares_one_capture_and_leaves_all_activations_DI_owned()
+    {
+        var f = LifetimeMulti.Value;
+        var probe = new MultiLifetimeProbe();
+        IServiceCollection services = new ServiceCollection();
+        services.AddSingleton(probe);
+        f.Register.Invoke(null, [services]);
+        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+        var scope = provider.CreateAsyncScope();
+        var mediator = scope.ServiceProvider.GetRequiredService(CanonicalEntryService(f.Mediator));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        Task<int> Invoke(int value, bool sync) => (Task<int>)f.Dispatch.Invoke(null,
+            [mediator, Activator.CreateInstance(sync ? f.Request0 : f.Request1, [value])!])!;
+        var failure = new InvalidOperationException("initial native activation failure");
+        var constructors = 0;
+        Task<int>[] operations = [];
+        try
+        {
+            probe.BeforeConstruct = () => throw failure;
+            Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(() => Invoke(10, true)));
+            Assert.Empty(probe.Created);
+            probe.BeforeConstruct = () =>
+            {
+                if (Interlocked.Increment(ref constructors) == 2) entered.TrySetResult();
+                Assert.True(release.Wait(TimeSpan.FromSeconds(10)));
+            };
+            operations = new[] { true, false }.Select((sync, index) => Task.Factory.StartNew(
+                () => Invoke(index + 11, sync), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap()).ToArray();
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            release.Set();
+            Assert.Equal(new[] { 11, 12 }, await Task.WhenAll(operations).WaitAsync(TimeSpan.FromSeconds(10)));
+            probe.BeforeConstruct = null;
+            Assert.Equal(2, probe.Created.Count);
+            Assert.Equal(13, await Invoke(13, false));
+            Assert.Equal(2, probe.Created.Count);
+            Assert.All(probe.Calls, receiver => Assert.Same(probe.Calls[0], receiver));
+            Assert.Contains(probe.Calls[0], probe.Created);
+            Assert.Empty(probe.Released);
+        }
+        finally
+        {
+            release.Set();
+            probe.BeforeConstruct = null;
+            try { await Task.WhenAll(operations).WaitAsync(TimeSpan.FromSeconds(10)); }
+            finally { await scope.DisposeAsync(); }
+        }
+        Assert.Equal(2, probe.Released.Count);
+        Assert.All(probe.Created, receiver => Assert.Contains(receiver, probe.Released));
     }
 }

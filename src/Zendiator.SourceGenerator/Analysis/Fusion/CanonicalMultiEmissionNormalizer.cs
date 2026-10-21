@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
-using Microsoft.CodeAnalysis;
 namespace Zendiator.SourceGenerator;
 
 internal static class CanonicalMultiEmissionNormalizer
@@ -70,6 +68,7 @@ internal static class CanonicalMultiEmissionNormalizer
                 CanonicalStreamPublicConnection.Source(r.Stream!))
             { StableKey = r.StreamStableKey! }));
 
-    internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalMultiEmissionModel model, ImmutableArray<CompositionSelectionDiscovery.Binding> current, Compilation compilation, CancellationToken ct) =>
-        CanonicalSyncEmissionNormalizer.BindCallSites(new(new(model.Compositions.Select(c => c.Routes[0].Registration with { Index = c.Index }))), current, compilation, ct);
+    internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalMultiEmissionModel model,
+        EquatableArray<CanonicalSyncCallSite?> current, CancellationToken ct) =>
+        CanonicalSyncEmissionNormalizer.BindCallSites(model.Compositions.Select(c => c.Index), current, ct);
 }

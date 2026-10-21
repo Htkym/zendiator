@@ -1,9 +1,6 @@
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 
 namespace Zendiator.SourceGenerator;
 
@@ -103,17 +100,17 @@ internal static class CanonicalSyncEmissionNormalizer
     }
 
     internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalSyncEmissionModel model,
-        ImmutableArray<CompositionSelectionDiscovery.Binding> current, Compilation compilation, CancellationToken ct)
+        EquatableArray<CanonicalSyncCallSite?> current, CancellationToken ct) =>
+        BindCallSites(model.Compositions.Select(c => c.Index), current, ct);
+
+    internal static CanonicalSyncInterceptorModel BindCallSites(IEnumerable<int> compositionIndices,
+        EquatableArray<CanonicalSyncCallSite?> current, CancellationToken ct)
     {
         var output = new List<CanonicalSyncCallSite>();
-        foreach (var composition in model.Compositions)
+        foreach (var index in compositionIndices)
         {
             ct.ThrowIfCancellationRequested();
-            var invocation = current[composition.Index].Invocation;
-            var semantic = compilation.GetSemanticModel(invocation.SyntaxTree);
-            var location = semantic.GetInterceptableLocation(invocation, ct);
-            if (location != null && semantic.GetSymbolInfo(invocation, ct).Symbol is IMethodSymbol method)
-                output.Add(new(composition.Namespace, composition.MarkerName, location.Version, location.Data, method.ReducedFrom != null) { ExternAliases = composition.ExternAliases });
+            if (current[index] is { } site) output.Add(site);
         }
         return new(new(output));
     }

@@ -22,7 +22,8 @@ public sealed partial class GeneratorTests
             public void Complete()=>core.SetResult(42);public void Fail(Exception error)=>core.SetException(error);
             public int GetResult(short token){Probe.Check(++Consumptions==1,"single source consumption");return core.GetResult(token);}
             void IValueTaskSource.GetResult(short token){_=GetResult(token);}
-            public ValueTaskSourceStatus GetStatus(short token)=>core.GetStatus(token);
+            // A source may report Faulted for an OperationCanceledException.
+            public ValueTaskSourceStatus GetStatus(short token){var status=core.GetStatus(token);return status==ValueTaskSourceStatus.Canceled?ValueTaskSourceStatus.Faulted:status;}
             public void OnCompleted(Action<object?> continuation,object? state,short token,ValueTaskSourceOnCompletedFlags flags)=>core.OnCompleted(continuation,state,token,flags);
         }
         public sealed class Probe {
@@ -86,36 +87,30 @@ public sealed partial class GeneratorTests
         var call = async ? $$"""
             {{result}} operation=default;var returned=false;var pending=false;var initialFaulted=false;var initialCanceled=false;
             try{operation=generated?Dispatch(sp,empty,request,token):Reference(sp,request,token);returned=true;pending=!operation.IsCompleted;initialFaulted=operation.IsFaulted;initialCanceled=operation.IsCanceled;}
-            catch(Exception error){caught=error;phase="call";}
-            Probe.Check(Probe.Ambient.Value=="caller","async call context isolation");
+            catch(Exception error){caught=error;phase="syncThrow";}
+            Probe.Check(Probe.Ambient.Value==(mode is "entry-cancel" or "null"?"caller":"handler"),"plain async prefix remains caller-visible");
             if(returned){
+                Probe.Check(p.Source!=null&&p.Source.Consumptions==0,"handler ValueTask returned without consumption");
                 if(mode.StartsWith("pending",StringComparison.Ordinal)){
-                    Probe.Check(pending&&p.Source!=null&&p.Source.Consumptions==0,"genuine pending single-use source");
+                    Probe.Check(pending,"genuine pending single-use source");
                     if(mode=="pending")p.Source!.Complete();else{if(mode=="pending-cancel")p.Cancellation.Cancel();p.Source!.Fail(p.Failure);}
                 }
                 try{ {{(isVoid ? "" : "value=")}}await operation.ConfigureAwait(false); }catch(Exception error){caught=error;phase="await";}
-                Probe.Check(operation.IsFaulted==(mode is "throw" or "pending-fault")&&operation.IsCanceled==(mode is "entry-cancel" or "pending-cancel"),"returned terminal status");
+                Probe.Check(operation.IsFaulted==(mode is "pending-fault" or "pending-cancel")&&!operation.IsCanceled,"original terminal status, including faulted OCE");
             }
-            Probe.Check(returned==(mode!="null")&&pending==mode.StartsWith("pending",StringComparison.Ordinal),"call completion boundary");
-            Probe.Check(initialFaulted==(mode=="throw")&&initialCanceled==(mode=="entry-cancel"),"initial returned status");
-            Probe.Check(Probe.Ambient.Value=="caller","async await context isolation");
+            Probe.Check(returned==(mode is not ("null" or "entry-cancel" or "throw"))&&pending==mode.StartsWith("pending",StringComparison.Ordinal),"plain call completion boundary");
+            Probe.Check(!initialFaulted&&!initialCanceled,"initial returned status");
+            Probe.Check(Probe.Ambient.Value==(mode is "entry-cancel" or "null"?"caller":"handler"),"plain async await preserves visible prefix context");
             Probe.Check((p.Source?.Consumptions??0)==(mode is "immediate" or "pending" or "pending-fault" or "pending-cancel"?1:0),"exact ValueTask source consumption");
             """ : $$"""
             var returned=false;var pending=false;var initialFaulted=false;var initialCanceled=false;
             try{ {{(isVoid ? "" : "value=")}} {{(isVoid ? "DispatchOrReference(generated,sp,empty,request,token)" : "(generated?Dispatch(sp,empty,request,token):Reference(sp,request,token))")}};returned=true;}
-            catch(Exception error){caught=error;phase="call";}
+            catch(Exception error){caught=error;phase="syncThrow";}
             Probe.Check(Probe.Ambient.Value==(mode is "entry-cancel" or "null"?"caller":"handler"),"native synchronous caller context");
             """;
-        var reference = async ? $$"""
+        var reference = $$"""
             private static {{result}} Reference<L,R>(IServiceProvider p,Query<L,R> r,CancellationToken token) where L:class,ILeft,new() where R:class,IRight,new(){
-                ArgumentNullException.ThrowIfNull(r);return Core(p,r,token);
-            }
-            private static async {{result}} Core<L,R>(IServiceProvider p,Query<L,R> r,CancellationToken token) where L:class,ILeft,new() where R:class,IRight,new(){
-                token.ThrowIfCancellationRequested();{{(isVoid ? "" : "return ")}}await {{invocation}}.ConfigureAwait(false);
-            }
-            """ : $$"""
-            private static {{result}} Reference<L,R>(IServiceProvider p,Query<L,R> r,CancellationToken token) where L:class,ILeft,new() where R:class,IRight,new(){
-                ArgumentNullException.ThrowIfNull(r);token.ThrowIfCancellationRequested();{{(isVoid ? "" : "return ")}}{{invocation}};
+                ArgumentNullException.ThrowIfNull(r);token.ThrowIfCancellationRequested();{{(isVoid && !async ? "" : "return ")}}{{invocation}};
             }
             """;
         return $$"""
@@ -136,14 +131,15 @@ public sealed partial class GeneratorTests
                     Probe.Check(services.Count==count&&services.Contains(existing),"TryAdd/repeat registration");
                     var facadeType=empty?typeof(Generated.Empty.IZendiator):typeof(Generated.Omitted.IZendiator);
                     var concreteType=empty?typeof(Generated.Empty.Zendiator):typeof(Generated.Omitted.Zendiator);
-                    foreach(var type in new[]{typeof(Handler<,>),facadeType,concreteType})Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"scoped services");
+                    foreach(var type in new[]{typeof(Handler<,>),facadeType})Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"explicit scoped receiver and facade");
+                    Probe.Check(!services.Any(d=>d.ServiceType==concreteType),"no separate concrete mediator registration");
                     var opposite=new ZendiatorConfiguration();opposite.Handlers(typeof(Query<,>),DispatchFamily.{{family}},typeof(Handler<,>));
                     if(!empty)opposite.Pipeline(typeof(Query<,>),DispatchFamily.{{family}});
                     IServiceCollection rejected=new ServiceCollection();var mismatchRejected=false;
                     try{if(empty)Generated.Empty.ZendiatorGeneratedRegistrar.Add(rejected,opposite.Snapshot());else Generated.Omitted.ZendiatorGeneratedRegistrar.Add(rejected,opposite.Snapshot());}catch(InvalidOperationException){mismatchRejected=true;}
                     Probe.Check(mismatchRejected&&rejected.Count==0,"omitted/empty snapshot before descriptor addition");
                     using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});using var scope=provider.CreateScope();var sp=scope.ServiceProvider;
-                    Probe.Check(ReferenceEquals(sp.GetRequiredService(facadeType),sp.GetRequiredService(concreteType)),"one facade");
+                    Probe.Check(ReferenceEquals(sp.GetRequiredService(facadeType),sp.GetRequiredService(facadeType)),"one facade");
                     var data=new Shared();var request=new Query<Left,Right>(7,data);p.Original=request;p.Data=data;
                     if(mode is "entry-cancel" or "null")cancellation.Cancel();if(mode=="null")request=null!;
                     var token=cancellation.Token;Probe.Ambient.Value="caller";Exception? caught=null;string? phase=null;int? value=null;
@@ -151,9 +147,9 @@ public sealed partial class GeneratorTests
                     var entered=mode is not ("entry-cancel" or "null");var failed=mode is "entry-cancel" or "null" or "throw" or "pending-fault" or "pending-cancel";
                     Probe.Check(p.Calls==(entered?1:0)&&data.Value==(entered?4:3),"entry guard/single call/shared effect");
                     Probe.Check(failed?caught!=null:caught==null,"completion outcome");
-                    if(mode=="null")Probe.Check(caught is ArgumentNullException&&phase=="call","public null guard precedes cancellation");
-                    else if(mode=="entry-cancel")Probe.Check(caught is OperationCanceledException canceled&&canceled.CancellationToken==token&&phase=="{{(async ? "await" : "call")}}","entry cancellation boundary/token");
-                    else if(failed)Probe.Check(ReferenceEquals(caught,p.Failure)&&phase=="{{(async ? "await" : "call")}}","handler failure identity/boundary");
+                    if(mode=="null")Probe.Check(caught is ArgumentNullException&&phase=="syncThrow","public null guard precedes cancellation");
+                    else if(mode=="entry-cancel")Probe.Check(caught is OperationCanceledException canceled&&canceled.CancellationToken==token&&phase=="syncThrow","entry cancellation boundary/token");
+                    else if(failed)Probe.Check(ReferenceEquals(caught,p.Failure)&&phase==(mode=="throw"?"syncThrow":"await"),"handler failure identity/boundary");
                     if(mode=="pending-cancel")Probe.Check(caught is OperationCanceledException canceled&&canceled.CancellationToken==token&&cancellation.IsCancellationRequested,"handler cancellation identity/token");
                     {{(isVoid ? "Probe.Check(value==null,\"native void has no response\");" : "if(!failed)Probe.Check(value==42,\"response value\");")}}
                     Probe.Check(p.Created.Count==(entered?1:0)&&p.Trace.SequenceEqual(entered?new[]{"resolve:caller","handle:resolve"}:Array.Empty<string>()),"receiver ordering/no entry resolution");

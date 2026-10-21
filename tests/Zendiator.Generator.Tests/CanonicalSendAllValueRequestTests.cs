@@ -189,9 +189,12 @@ public sealed partial class GeneratorTests
                 private static async Task<(string Snapshot,object? Interleave)> Observe(string profile,bool generated){
                     var p=new P{Profile=profile,Default=profile=="SV",Wait=profile=="AR"};var shared=new ValueCases.Shared();var single=new ManagedShapeProbe();var stream=new PublicValueRequestProbe();
                     try{
-                        IServiceCollection services=new ServiceCollection();services.AddSingleton(p);services.AddSingleton(single);services.AddSingleton(stream);Register(services);
+                        IServiceCollection defaults=new ServiceCollection();Register(defaults);
+                        IServiceCollection services=new ServiceCollection();services.AddSingleton(p);services.AddSingleton(single);services.AddSingleton(stream);
+                        foreach(var d in defaults.Where(d=>d.ServiceType.Namespace?.StartsWith("ValueCases.",StringComparison.Ordinal)==true)){P.Check(d.Lifetime==ServiceLifetime.Transient&&d.ImplementationType==d.ServiceType,"default callback/factory registration");services.AddScoped(d.ServiceType,d.ImplementationType!);}
+                        Register(services);
                         await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});await using var scope=provider.CreateAsyncScope();var sp=scope.ServiceProvider;
-                        var m=sp.GetRequiredService<global::AllValue.Generated.Many.IZendiator>();P.Check(ReferenceEquals(m,sp.GetRequiredService<global::AllValue.Generated.Many.Zendiator>()),"shared mediator identity");
+                        var m=sp.GetRequiredService<global::AllValue.Generated.Many.IZendiator>();P.Check(ReferenceEquals(m,sp.GetRequiredService<global::AllValue.Generated.Many.IZendiator>()),"shared mediator identity");
                         int[]? results=null;var destination=new[]{701,702,703,-9};var initial="Success";var final="Success";object? waiting=null;object? interleave=null;var callerValue=0;long callerA=0;
                         dispatches++;switch(profile){__CASES__}
                         P.Check(p.Branch==3,"all original branch values preserved");P.Check(p.Handlers.SequenceEqual(profile is "SR" or "AV"?new[]{2,1,1,3}:new[]{2,1,3}),"branch order and retry call count");

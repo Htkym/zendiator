@@ -1,8 +1,6 @@
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
-using Microsoft.CodeAnalysis;
 
 namespace Zendiator.SourceGenerator;
 
@@ -148,6 +146,7 @@ internal static class CanonicalWrapperEmissionNormalizer
         }
         return new(branches);
     }
-    internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalWrapperEmissionModel model, ImmutableArray<CompositionSelectionDiscovery.Binding> current, Compilation compilation, CancellationToken token) =>
-        CanonicalSyncEmissionNormalizer.BindCallSites(new(new(model.Compositions.Select(c => c.Registration))), current, compilation, token);
+    internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalWrapperEmissionModel model,
+        EquatableArray<CanonicalSyncCallSite?> current, CancellationToken token) =>
+        CanonicalSyncEmissionNormalizer.BindCallSites(model.Compositions.Select(c => c.Registration.Index), current, token);
 }

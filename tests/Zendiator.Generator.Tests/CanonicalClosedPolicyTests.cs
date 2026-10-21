@@ -7,7 +7,7 @@ namespace Zendiator.Generator.Tests;
 public sealed partial class GeneratorTests
 {
     [Fact]
-    public void Closed_policy_snapshot_preserves_alias_types_and_scoped_factory_bypass()
+    public void Closed_capture_preserves_alias_types_and_factory_DI_ownership()
     {
         var source = "using OuterAlias=App.Hook<App.Outer>;using InnerAlias=App.Hook<App.Inner>;using HandlerAlias=App.Handler<string>;\n" +
             NestedHookBackendSource(false)
@@ -44,7 +44,7 @@ public sealed partial class GeneratorTests
                     Assert.Equal(43, result.Result);
                 }
                 Assert.Equal(1, tracked.Lookups[types[0]]);
-                Assert.Equal(2, tracked.Lookups[types[1]]);
+                Assert.Equal(1, tracked.Lookups[types[1]]);
                 Assert.Equal(1, tracked.Lookups[types[2]]);
                 Assert.Empty(probe.Disposals);
             }

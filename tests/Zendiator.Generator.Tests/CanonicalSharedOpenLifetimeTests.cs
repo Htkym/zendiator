@@ -99,9 +99,10 @@ public sealed partial class GeneratorTests
             Assert.Empty(probe.Created);
             var failure = new InvalidOperationException("first native constructor failure");
             probe.BeforeConstruct = () => throw failure;
-            var failed = fixture.Dispatch(mediator, false, false, 10);
-            Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                failed.WaitAsync(TimeSpan.FromSeconds(10))));
+            Assert.Same(failure, Assert.Throws<InvalidOperationException>(() =>
+            {
+                _ = fixture.Dispatch(mediator, false, false, 10);
+            }));
             Assert.Empty(probe.Created);
             Assert.Empty(probe.Calls);
             probe.BeforeConstruct = null;

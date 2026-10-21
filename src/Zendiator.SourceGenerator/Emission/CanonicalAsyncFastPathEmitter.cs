@@ -19,7 +19,6 @@ internal static class CanonicalAsyncFastPathEmitter
         var generic = registration.Generic?.TypeParameters ?? "";
         var constraints = registration.Generic?.TypeConstraints ?? "";
         var result = "global::System.Threading.Tasks.ValueTask" + (h.ResultName == null ? "" : "<" + h.ResultName + ">");
-        var builder = "global::System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder" + (h.ResultName == null ? "" : "<" + h.ResultName + ">");
         b.AppendLine($$"""
             namespace {{registration.Namespace}}
             {
@@ -38,62 +37,22 @@ internal static class CanonicalAsyncFastPathEmitter
                     public {{result}} SendAsync{{generic}}({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken = default){{constraints}}
                     {
                         {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
-                        var invocation = new SendInvocation{{generic}}(_provider, request, cancellationToken);
-                        // Start preserves the native async prefix's ExecutionContext and SynchronizationContext boundary.
-                        var boundary = global::System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder.Create();
-                        boundary.Start(ref invocation);
-                        return invocation.Operation;
-                    }
-                    private struct SendInvocation{{generic}} : global::System.Runtime.CompilerServices.IAsyncStateMachine{{constraints}}
-                    {
-                        private readonly global::System.IServiceProvider _provider;
-                        private readonly {{h.RequestName}} _request;
-                        private readonly global::System.Threading.CancellationToken _cancellationToken;
-                        internal {{result}} Operation;
-                        internal SendInvocation(global::System.IServiceProvider provider, {{h.RequestName}} request,
-                            global::System.Threading.CancellationToken cancellationToken)
-                        {
-                            _provider = provider; _request = request; _cancellationToken = cancellationToken; Operation = default;
-                        }
-                        public void SetStateMachine(global::System.Runtime.CompilerServices.IAsyncStateMachine stateMachine) { }
-                        public void MoveNext()
-                        {
-                            try
-                            {
-                                var request = _request;
-                                var cancellationToken = _cancellationToken;
-                                cancellationToken.ThrowIfCancellationRequested();
+                        cancellationToken.ThrowIfCancellationRequested();
             """);
         for (var i = 0; i < hooks.Length; i++)
         {
             var hook = hooks[i];
             b.AppendLine($$"""
-                                var hook{{i}} = {{CanonicalServiceResolution.Emit(hook.HookName, hook.HookIsValueType)}};
-                                request = Before{{i}}(hook{{i}}, request, cancellationToken);
-                                {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
-                                cancellationToken.ThrowIfCancellationRequested();
+                        var hook{{i}} = {{CanonicalServiceResolution.Emit(hook.HookName, hook.HookIsValueType)}};
+                        request = Before{{i}}{{generic}}(hook{{i}}, request, cancellationToken);
+                        {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
+                        cancellationToken.ThrowIfCancellationRequested();
                 """);
         }
         b.AppendLine($$"""
-                                var handler = {{CanonicalServiceResolution.Emit(h.HandlerName, h.HandlerIsValueType)}};
-                                var operation = Handle(handler, request, cancellationToken);
-                                if (operation.IsCompletedSuccessfully)
-                                {
-                                    {{(h.ResultName == null ? "operation.GetAwaiter().GetResult(); Operation = default;" : "Operation = new(operation.GetAwaiter().GetResult());")}}
-                                }
-                                else Operation = Finish(operation);
-                            }
-                            catch (global::System.Exception error)
-                            {
-                                var failure = {{builder}}.Create();
-                                failure.SetException(error);
-                                Operation = failure.Task;
-                            }
-                        }
-                        private static async {{result}} Finish({{result}} operation)
-                        {
-                            {{(h.ResultName == null ? "" : "return ")}}await operation.ConfigureAwait(false);
-                        }
+                        var handler = {{CanonicalServiceResolution.Emit(h.HandlerName, h.HandlerIsValueType)}};
+                        return Handle{{generic}}(handler, request, cancellationToken);
+                    }
             """);
         const string token = "global::System.Threading.CancellationToken";
         for (var i = 0; i < hooks.Length; i++)
@@ -101,11 +60,11 @@ internal static class CanonicalAsyncFastPathEmitter
             var hook = hooks[i]; var callback = hook.Before!;
             CanonicalAsyncCallEmitter.EmitCall(b, "Before" + i, h.RequestName, hook.HookIsValueType ? "object" : hook.HookName,
                 callback.ContractName, callback.MethodName, callback.CallTarget,
-                new[] { h.RequestName, token }, new[] { "request", "cancellationToken" });
+                new[] { h.RequestName, token }, new[] { "request", "cancellationToken" }, generic, constraints);
         }
         CanonicalAsyncCallEmitter.EmitCall(b, "Handle", result, h.HandlerIsValueType ? "object" : h.HandlerName,
-            h.ContractName, h.MethodName, handlerTarget, new[] { h.RequestName, token }, new[] { "request", "cancellationToken" });
-        b.AppendLine("        }\n    }");
+            h.ContractName, h.MethodName, handlerTarget, new[] { h.RequestName, token }, new[] { "request", "cancellationToken" }, generic, constraints);
+        b.AppendLine("    }");
         CanonicalSyncSourceEmitter.EmitRegistrar(b, registration, BoundDispatchFamily.SendAsync);
         b.AppendLine("}");
     }

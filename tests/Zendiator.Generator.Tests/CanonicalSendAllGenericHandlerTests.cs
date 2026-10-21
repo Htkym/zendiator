@@ -117,9 +117,12 @@ public sealed partial class GeneratorTests
                 private static async Task<(string Snapshot,object? Interleave)> Observe(string profile,bool generated){
                     var p=new P{Wait=profile=="ARString",Fail=profile=="AVString"};var shared=new GenericCases.Shared();var single=new ManagedShapeProbe();var stream=new PublicValueRequestProbe();
                     try{
-                        IServiceCollection services=new ServiceCollection();services.AddSingleton(p);services.AddSingleton(single);services.AddSingleton(stream);Register(services);
+                        IServiceCollection defaults=new ServiceCollection();Register(defaults);
+                        IServiceCollection services=new ServiceCollection();services.AddSingleton(p);services.AddSingleton(single);services.AddSingleton(stream);
+                        foreach(var d in defaults.Where(d=>d.ServiceType.Namespace?.StartsWith("GenericCases.",StringComparison.Ordinal)==true)){P.Check(d.Lifetime==ServiceLifetime.Transient&&d.ImplementationType==d.ServiceType,"default callback/factory registration");services.AddScoped(d.ServiceType,d.ImplementationType!);}
+                        Register(services);
                         await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});await using var scope=provider.CreateAsyncScope();var sp=scope.ServiceProvider;
-                        var m=sp.GetRequiredService<global::AllGeneric.Generated.Many.IZendiator>();P.Check(ReferenceEquals(m,sp.GetRequiredService<global::AllGeneric.Generated.Many.Zendiator>()),"shared mediator identity");
+                        var m=sp.GetRequiredService<global::AllGeneric.Generated.Many.IZendiator>();P.Check(ReferenceEquals(m,sp.GetRequiredService<global::AllGeneric.Generated.Many.IZendiator>()),"shared mediator identity");
                         int[]? results=null;var destination=new[]{701,702,703,-9};var initial="Success";var final="Success";var error="none";object? waiting=null;object? interleave=null;var callerValue=0;var originalValue=0;string[] expectedTypes=Array.Empty<string>();
                         dispatches++;switch(profile){__CASES__}
                         P.Check(originalValue==1,"caller original request remains unchanged");P.Check(p.Branch==(p.Fail?2:3)&&p.Handlers.SequenceEqual(p.Fail?new[]{2,1}:new[]{2,1,3}),"ordered generic handler branches and failure stop");

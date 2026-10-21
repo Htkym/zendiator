@@ -185,7 +185,7 @@ public sealed partial class GeneratorTests
         Assert.Contains("expected.StreamPipeline(typeof(global::App.OpenRequest<>), typeof(global::App.OpenFinal<>),", registrar);
         Assert.Contains("Stage.Hook(typeof(global::App.OpenMap<,>), typeof(global::App.OpenMapFactory<,>))", registrar);
         foreach (var factory in new[] { "OpenHandlerFactory<>", "OpenMapFactory<,>" })
-            Assert.Contains("ServiceDescriptor.Scoped(typeof(global::App." + factory + "), typeof(global::App." + factory + "))", registrar);
+            Assert.Contains("ServiceDescriptor.Transient(typeof(global::App." + factory + "), typeof(global::App." + factory + "))", registrar);
         var backend = Assert.Single(generated, f => f.HintName.StartsWith("Zendiator.StreamCanonical.", StringComparison.Ordinal)).SourceText.ToString();
         Assert.Contains("IAsyncEnumerator<" + flow.Source.Name + ">? _source", backend);
         Assert.Contains("private " + flow.Final.Name + " _current", backend);
@@ -279,7 +279,7 @@ public sealed partial class GeneratorTests
         var probe = new CanonicalStreamTypedIntegrationProbe { Request = request }; var services = new ServiceCollection(); services.AddSingleton(probe); register(services);
         if (mixed) { var count = services.Count; register(services); Assert.Equal(count, services.Count); }
         var factoryDefinitions = new[] { assembly.GetType("App.OpenHandlerFactory`1")!, assembly.GetType("App.OpenMapFactory`2")! };
-        Assert.All(factoryDefinitions, t => Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == t).Lifetime));
+        Assert.All(factoryDefinitions, t => Assert.Equal(ServiceLifetime.Transient, Assert.Single(services, d => d.ServiceType == t).Lifetime));
         foreach (var name in new[] { "OpenHandler`1", "OpenMap`2" }) Assert.DoesNotContain(services, d => d.ServiceType == assembly.GetType("App." + name));
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
         var scope = provider.CreateAsyncScope(); Assert.Empty(probe.Events);
@@ -350,7 +350,6 @@ public sealed partial class GeneratorTests
         Assert.Equal(new[] { "M:1", "H:2" }, probe.Created.Select(c => c.Role + ":" + c.Id));
         Assert.Equal(2, probe.Instances.Distinct(ReferenceEqualityComparer.Instance).Count());
         var actualFactories = new[] { factoryDefinitions[0].MakeGenericType(payloadType), factoryDefinitions[1].MakeGenericType(requestType, payloadType) };
-        Assert.All(actualFactories, t => Assert.Equal(t, scope.ServiceProvider.GetRequiredService(t).GetType()));
         Assert.Equal(1, probe.Starts); Assert.Equal(1, probe.SourceEnumerations); Assert.Equal(2, probe.Moves); Assert.Equal(1, probe.Reads); Assert.Equal(1, probe.SourceDisposals);
         Assert.Equal(new[] { "Session.Dispose:H:2", "Session.Dispose:M:1" }, probe.Events.Where(e => e.StartsWith("Session.Dispose:", StringComparison.Ordinal)));
         Assert.True(probe.Events.IndexOf("H.Dispose") < probe.Events.IndexOf("Session.Dispose:H:2"));

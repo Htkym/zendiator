@@ -257,11 +257,14 @@ public sealed partial class GeneratorTests
             {
                 var suffix = id[(profile.Length + 1)..]; var type = a.GetType(ns + (suffix[0] == 'h' ? "H" + suffix[1..] : suffix[0] == 'k' ? "K" + suffix[1..] : "W0"))!;
                 var factory = a.GetType(ns + (suffix[0] == 'h' ? "F" + suffix[1..] : suffix[0] == 'k' ? "KF" + suffix[1..] : "WF0"));
-                var service = mode == "direct" ? type : factory!; var d = Assert.Single(services, d => d.ServiceType == service); Assert.Equal(ServiceLifetime.Scoped, d.Lifetime); Assert.Equal(service, d.ImplementationType);
+                var service = mode == "direct" ? type : factory!; var d = Assert.Single(services, d => d.ServiceType == service); Assert.Equal(ServiceLifetime.Transient, d.Lifetime); Assert.Equal(service, d.ImplementationType);
                 if (mode != "direct") Assert.DoesNotContain(services, d => d.ServiceType == type);
+                // The native reference resolves shared roles per branch; keep both engines on one DI-owned instance.
+                services.Remove(d); services.AddScoped(service, service);
             }
+            bridge.GetMethod("Register")!.Invoke(null, [services]);
             await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }); await using var scope = provider.CreateAsyncScope(); var sp = scope.ServiceProvider;
-            var mediator = sp.GetRequiredService(a.GetType("AllWrap.Generated.Many.IZendiator")!); Assert.Same(mediator, sp.GetRequiredService(a.GetType("AllWrap.Generated.Many.Zendiator")!));
+            var mediator = sp.GetRequiredService(a.GetType("AllWrap.Generated.Many.IZendiator")!); Assert.Same(mediator, sp.GetRequiredService(a.GetType("AllWrap.Generated.Many.IZendiator")!));
             object? Invoke()
             {
                 try { return generated ? bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, profile, request, p.Core.Token.Token, profile == "SR" && scenario is "retry" or "propagate"]) : a.GetType(ns + "ReferenceAll")!.GetMethod("Run")!.Invoke(null, [sp, request, p.Core.Token.Token]); }

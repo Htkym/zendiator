@@ -6,9 +6,10 @@ namespace Zendiator;
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
 public sealed class ZendiatorHandlerAttribute : Attribute
 {
-    /// <summary>Lets a zero-stage Stream route return this handler's enumerable directly through the Mediator.</summary>
-    /// <remarks>The handler owns token composition, independent enumerations, Current validity, concurrent-operation
+    /// <summary>Controls whether a zero-stage Stream route returns this handler's enumerable directly through the Mediator.</summary>
+    /// <remarks>Defaults to true. Set false to keep framework orchestration for zero-stage routes.
+    /// The handler owns token composition, independent enumerations, Current validity, concurrent-operation
     /// guards, and cursor cleanup. Handler resolution and HandleAsync run when StreamAsync is called.
     /// Staged or session-backed routes keep framework orchestration.</remarks>
-    public bool OwnsStream { get; set; }
+    public bool OwnsStream { get; set; } = true;
 }

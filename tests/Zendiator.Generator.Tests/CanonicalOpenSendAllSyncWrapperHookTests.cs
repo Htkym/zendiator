@@ -110,9 +110,10 @@ public sealed partial class GeneratorTests
             private static string Observe(bool generated,string mode){
                 var p=new Probe(mode);using var outer=p.Outer;using var inner=p.Inner;
                 p.Destination=mode=="short"?new[]{701}:new[]{701,702,703};p.Initial=p.Destination.ToArray();IServiceCollection services=new ServiceCollection();services.AddSingleton(p);
-                services.AddScoped(typeof(Hook<,>));var existing=services.Last();Register.Add(services);var count=services.Count;Register.Add(services);
-                Probe.Check(services.Count(d=>d.ServiceType.DeclaringType!=typeof(Generated.Composition.Zendiator))==7&&services.Count==count&&services.Contains(existing),"TryAdd/repeat registration");
-                foreach(var type in new[]{typeof(ZHandler<,>),typeof(AHandler<,>),typeof(Hook<,>),typeof(Logging<,>),typeof(Generated.Composition.IZendiator),typeof(Generated.Composition.Zendiator)})Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"scoped receivers/facade");
+                services.AddScoped(typeof(Logging<,>));services.AddScoped(typeof(ZHandler<,>));services.AddScoped(typeof(AHandler<,>));services.AddScoped(typeof(Hook<,>));var existing=services.Last();Register.Add(services);var count=services.Count;Register.Add(services);
+                Probe.Check(services.Count==count&&services.Contains(existing),"TryAdd/repeat registration");
+                foreach(var type in new[]{typeof(ZHandler<,>),typeof(AHandler<,>),typeof(Hook<,>),typeof(Logging<,>),typeof(Generated.Composition.IZendiator)})Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"explicit scoped comparison services and facade");
+                Probe.Check(!services.Any(d=>d.ServiceType==typeof(Generated.Composition.Zendiator))&&services.Single(d=>d.ServiceType==typeof(Generated.Composition.IZendiator)).ImplementationType==typeof(Generated.Composition.Zendiator),"single interface facade registration");
                 var mismatchRejected=0;foreach(var reverseHandlers in new[]{true,false}){
                     var c=new ZendiatorConfiguration();c.Handlers(typeof(Request<,>),DispatchFamily.SendAllSync,reverseHandlers?new[]{typeof(AHandler<,>),typeof(ZHandler<,>)}:new[]{typeof(ZHandler<,>),typeof(AHandler<,>)});
                     if(reverseHandlers)c.Pipeline(typeof(Request<,>),DispatchFamily.SendAllSync,Stage.Wrapper(typeof(Logging<,>)),Stage.Hook(typeof(Hook<,>)));
@@ -120,7 +121,7 @@ public sealed partial class GeneratorTests
                     IServiceCollection rejected=new ServiceCollection();try{Generated.Composition.ZendiatorGeneratedRegistrar.Add(rejected,c.Snapshot());}catch(InvalidOperationException){mismatchRejected++;}Probe.Check(rejected.Count==0,"snapshot before descriptor addition");
                 }Probe.Check(mismatchRejected==2,"both ordered snapshot lists");
                 using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});using var scope=provider.CreateScope();var sp=scope.ServiceProvider;
-                var mediator=sp.GetRequiredService<Generated.Composition.IZendiator>();Probe.Check(ReferenceEquals(mediator,sp.GetRequiredService<Generated.Composition.Zendiator>()),"one facade");
+                var mediator=sp.GetRequiredService<Generated.Composition.IZendiator>();Probe.Check(ReferenceEquals(mediator,sp.GetRequiredService<Generated.Composition.IZendiator>()),"one facade");
                 var data=new Shared();var request=new Request<Left,Right>(7,data);p.Original=request;p.Data=data;Probe.Ambient.Value="caller";Exception? caught=null;int[]? values=null;var copied=-1;
                 try{
                     if(mode is "repeat" or "skip")values=generated?mediator.SendAll(request,outer.Token):Reference(sp,request,outer.Token);
@@ -145,7 +146,6 @@ public sealed partial class GeneratorTests
                 Probe.Check(Probe.Ambient.Value==(shortSpan?"caller":"W.finally:"+(failed?1:2)),"native synchronous caller context");
                 var types=shortSpan?Array.Empty<Type>():mode=="skip"?new[]{typeof(Logging<Left,Right>),typeof(Hook<Right,Left>),typeof(AHandler<Left,Right>)}:failed?new[]{typeof(Logging<Left,Right>),typeof(Hook<Right,Left>),typeof(ZHandler<Right,Left>)}:new[]{typeof(Logging<Left,Right>),typeof(Hook<Right,Left>),typeof(ZHandler<Right,Left>),typeof(AHandler<Left,Right>)};
                 Probe.Check(p.Created.Select(r=>r.GetType()).SequenceEqual(types),"closed DI keys/no unstarted receiver resolution");
-                foreach(var receiver in p.Created)Probe.Check(ReferenceEquals(receiver,sp.GetRequiredService(receiver.GetType())),"borrowed scoped receiver");
                 Probe.Check(p.Disposed.Count==0,"no dispatch cleanup");scope.Dispose();Probe.Check(p.Disposed.SequenceEqual(p.Created.AsEnumerable().Reverse()),"one reverse scope cleanup");
                 return JsonSerializer.Serialize(new{mode,values,copied,destination=p.Destination,p.Branch,p.NextCalls,p.Handlers,p.Trace,p.AmbientSeen,shared=data.Value,callerContext=Probe.Ambient.Value,error=caught==null?null:shortSpan?"short":"sentinel",canceled=inner.IsCancellationRequested,created=p.Created.Select(r=>r.GetType().ToString()),disposed=p.Disposed.Select(r=>r.GetType().ToString()),registrations=count,mismatchRejected});
             }

@@ -342,16 +342,16 @@ public sealed partial class GeneratorTests
                                 InvokeCompiledHookSessionReference(fixture, scope.ServiceProvider, owned, isVoid, request, default);
                             Assert.Null(actual.Error); Assert.Equal(isVoid ? null : (object)42, actual.Result);
                             Assert.Equal(owned ? s * 2 + i + 1 : 0, core.HookDisposals);
-                            var previous = lifetime == ServiceLifetime.Singleton ? 0 : s * (lifetime == ServiceLifetime.Scoped ? 1 : 2);
+                            var previous = lifetime == ServiceLifetime.Singleton ? 0 : s * (lifetime == ServiceLifetime.Scoped || generated ? 1 : 2);
                             Assert.Equal(previous, core.HandlerDisposals); Assert.Equal(previous, probe.FactoryDisposals); Assert.Equal(previous, probe.DependencyDisposals);
                         }
                     }
-                    var captured = lifetime == ServiceLifetime.Singleton ? 0 : (s + 1) * (lifetime == ServiceLifetime.Scoped ? 1 : 2);
+                    var captured = lifetime == ServiceLifetime.Singleton ? 0 : (s + 1) * (lifetime == ServiceLifetime.Scoped || generated ? 1 : 2);
                     Assert.Equal(captured, core.HandlerDisposals); Assert.Equal(captured, probe.FactoryDisposals); Assert.Equal(captured, probe.DependencyDisposals);
                 }
                 Assert.Equal(4, probe.Created.Count); Assert.Equal(owned ? 4 : 0, probe.Released.Count);
             }
-            var services = lifetime == ServiceLifetime.Singleton ? 1 : lifetime == ServiceLifetime.Scoped ? 2 : 4;
+            var services = lifetime == ServiceLifetime.Singleton ? 1 : lifetime == ServiceLifetime.Scoped || generated ? 2 : 4;
             Assert.Equal(services, core.HandlerDisposals); Assert.Equal(services, probe.FactoryDisposals); Assert.Equal(services, probe.DependencyDisposals);
             Assert.Equal(services, probe.Dependencies); Assert.Equal(services, core.Phases.Count(p => p == "handler.ctor"));
             Assert.Equal(services, probe.Calls.Where(c => c.Phase == "factory").Select(c => c.Receiver).Distinct(ReferenceEqualityComparer.Instance).Count());

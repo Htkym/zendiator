@@ -67,7 +67,7 @@ public sealed partial class GeneratorTests
             try{
                 IServiceCollection services=new ServiceCollection();Register(services);
                 var allTypes=new[]{typeof(B.Hook),typeof(B.H2),typeof(B.H1),typeof(B.H3),typeof(C.Hook),typeof(C.H2),typeof(C.H1),typeof(C.H3)};
-                foreach(var type in allTypes){var d=services.Single(d=>d.ServiceType==type);Check(d.Lifetime==ServiceLifetime.Scoped&&d.ImplementationType==type,"all branches registered by generated registrar");}
+                foreach(var type in allTypes){var d=services.Single(d=>d.ServiceType==type);Check(d.Lifetime==ServiceLifetime.Transient&&d.ImplementationType==type,"all branches registered by generated registrar");}
                 services.Replace(ServiceDescriptor.Scoped<B.Hook>(_=>new B.Hook(responseProbe)));
                 services.Replace(ServiceDescriptor.Scoped<B.H2>(_=>new B.H2(responseProbe)));
                 services.Replace(ServiceDescriptor.Scoped<B.H1>(_=>new B.H1(responseProbe)));
@@ -88,7 +88,7 @@ public sealed partial class GeneratorTests
                 await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
                 await using var scope=provider.CreateAsyncScope();
                 var mediator=scope.ServiceProvider.GetRequiredService<global::AllMix.Generated.Many.IZendiator>();
-                Check(ReferenceEquals(mediator,scope.ServiceProvider.GetRequiredService<global::AllMix.Generated.Many.Zendiator>()),"shared mediator identity");
+                Check(ReferenceEquals(mediator,scope.ServiceProvider.GetRequiredService<global::AllMix.Generated.Many.IZendiator>()),"shared mediator identity");
                 var pending=mediator.SendAsync(new A.Ping(20),query.Token.Token);var gate=query.Gates.Single();
                 Check(!pending.IsCompleted&&gate.Consumptions==0&&query.Created.Count==1&&query.Released.Count==0,"one pending async response");
                 Check(responseProbe.Trace.Count==0&&voidProbe.Trace.Count==0&&sync.Trace.Count==0&&streamProbe.Resolved.Count==0,"pending activates only own route");

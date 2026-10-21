@@ -24,6 +24,7 @@ internal static class CanonicalMediatorCallSites
 
     internal static CanonicalMediatorApi Api(CanonicalSourceFile file)
     {
+        if (file.Api is { } cached) return cached;
         var root = CSharpSyntaxTree.ParseText(file.Source).GetCompilationUnitRoot();
         var ns = root.Members.OfType<NamespaceDeclarationSyntax>().Single();
         var api = ns.Members.OfType<InterfaceDeclarationSyntax>().Single();
@@ -47,7 +48,8 @@ internal static class CanonicalMediatorCallSites
             var methods = group.SelectMany(a => a.Methods).Distinct(StringComparer.Ordinal).Select(m => (MethodDeclarationSyntax)SyntaxFactory.ParseMemberDeclaration(m)!).ToArray();
             stub.Append("namespace ").Append(group.Key).AppendLine(" { public interface IZendiator {");
             foreach (var method in methods) stub.AppendLine(method.ToFullString());
-            stub.AppendLine("} public sealed class Zendiator : IZendiator { public Zendiator(global::System.IServiceProvider provider) {} ");
+            stub.AppendLine("} public sealed class Zendiator : IZendiator, global::System.IServiceProvider { public Zendiator(global::System.IServiceProvider provider) {} ");
+            stub.AppendLine("object? global::System.IServiceProvider.GetService(global::System.Type serviceType) => throw null!;");
             foreach (var method in methods) stub.AppendLine(method.WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
                 .WithSemicolonToken(default).WithBody(SyntaxFactory.Block(SyntaxFactory.ThrowStatement(SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression)))).NormalizeWhitespace().ToFullString());
             stub.AppendLine("} }");

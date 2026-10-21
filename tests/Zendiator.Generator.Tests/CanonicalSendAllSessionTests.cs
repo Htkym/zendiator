@@ -177,15 +177,18 @@ public sealed partial class GeneratorTests
             var oldContext=SynchronizationContext.Current;SynchronizationContext.SetSynchronizationContext(new EntryContext());
             var p=new P{Case=name,Profile=profile};var other=new ManagedShapeProbe();var streamProbe=new PublicValueRequestProbe();
             try{
-                IServiceCollection services=new ServiceCollection();services.AddSingleton(p);services.AddSingleton(other);services.AddSingleton(streamProbe);Register(services);
+                IServiceCollection defaults=new ServiceCollection();Register(defaults);
+                IServiceCollection services=new ServiceCollection();services.AddSingleton(p);services.AddSingleton(other);services.AddSingleton(streamProbe);
                 foreach(var ns in new[]{typeof(T.Ping).Namespace!,typeof(U.Ping).Namespace!,typeof(V.Ping).Namespace!,typeof(W.Ping).Namespace!}){
-                    var assembly=typeof(T.Ping).Assembly;var hook=assembly.GetType(ns+".Hook")!;P.Check(!services.Any(d=>d.ServiceType==hook),"hook session must come from factory");
-                    foreach(var id in new[]{2,1,3}){var h=assembly.GetType(ns+".H"+id)!;var f=assembly.GetType(ns+".F"+id);var d=services.Single(x=>x.ServiceType==(f??h));P.Check(d.Lifetime==ServiceLifetime.Scoped&&d.ImplementationType==(f??h),"all factory/direct registrations");if(f!=null)P.Check(!services.Any(x=>x.ServiceType==h),"session handler not registered as DI service");}
-                    var hf=assembly.GetType(ns+".HF")!;P.Check(services.Single(d=>d.ServiceType==hf).Lifetime==ServiceLifetime.Scoped,"borrowed hook factory scope");
+                    var assembly=typeof(T.Ping).Assembly;var hook=assembly.GetType(ns+".Hook")!;P.Check(!defaults.Any(d=>d.ServiceType==hook),"hook session must come from factory");
+                    foreach(var id in new[]{2,1,3}){var h=assembly.GetType(ns+".H"+id)!;var f=assembly.GetType(ns+".F"+id);var d=defaults.Single(x=>x.ServiceType==(f??h));P.Check(d.Lifetime==ServiceLifetime.Transient&&d.ImplementationType==(f??h),"all factory/direct registrations");if(f!=null)P.Check(!defaults.Any(x=>x.ServiceType==h),"session handler not registered as DI service");}
+                    var hf=assembly.GetType(ns+".HF")!;P.Check(defaults.Single(d=>d.ServiceType==hf).Lifetime==ServiceLifetime.Transient,"borrowed hook factory registration");
+                    foreach(var d in defaults.Where(d=>d.ServiceType.Namespace==ns))services.AddScoped(d.ServiceType,d.ImplementationType!);
                 }
+                Register(services);
                 P.Check(services.GroupBy(d=>d.ServiceType).All(g=>g.Count()==1),"unique service registrations");
                 await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});await using var scope=provider.CreateAsyncScope();var sp=scope.ServiceProvider;
-                var mediator=sp.GetRequiredService<global::AllMix.Generated.Many.IZendiator>();P.Check(ReferenceEquals(mediator,sp.GetRequiredService<global::AllMix.Generated.Many.Zendiator>()),"shared mediator identity");
+                var mediator=sp.GetRequiredService<global::AllMix.Generated.Many.IZendiator>();P.Check(ReferenceEquals(mediator,sp.GetRequiredService<global::AllMix.Generated.Many.IZendiator>()),"shared mediator identity");
                 object request=profile switch{"SR"=>new T.Ping(1),"SV"=>new U.Ping(1),"AR"=>new V.Ping(1),_=>new W.Ping(1)};p.Original=request;p.Requests.Add(request,"original");
                 P.Ambient.Value="caller";Exception? error=null;int[]? results=null;bool syncThrow=false;var returned=false;var initial="Success";var final="Success";
                 ValueTask<int[]> responseTask=default;ValueTask voidTask=default;object? waiting=null;object? interleave=null;

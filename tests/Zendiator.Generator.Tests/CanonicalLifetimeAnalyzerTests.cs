@@ -186,8 +186,7 @@ public sealed partial class GeneratorTests
         public sealed class Zendiator : IZendiator { public ValueTask<int> SendAsync(object request)=>new(0); }
         public static class ZendiatorGeneratedRegistrar {
             public static IServiceCollection Add(IServiceCollection services,global::Zendiator.DependencyInjection.ZendiatorConfigurationSnapshot snapshot){
-                Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services,ServiceDescriptor.Scoped(typeof(Zendiator),typeof(Zendiator)));
-                Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services,ServiceDescriptor.Scoped(typeof(IZendiator),p=>p.GetRequiredService<Zendiator>()));return services;
+                Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services,ServiceDescriptor.Scoped(typeof(IZendiator),typeof(Zendiator)));return services;
             }
         }
         public static class Usage {

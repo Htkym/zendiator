@@ -82,11 +82,11 @@ public sealed partial class GeneratorTests
     }
     [Theory]
     [MemberData(nameof(MixedSessionLifetimeCases))]
-    public void Candidate_mixed_sessions_match_reference_DI_and_resource_owners(bool hookOwned, bool handlerOwned, bool isVoid, ServiceLifetime lifetime)
+    public void Candidate_mixed_sessions_capture_DI_dependencies_and_preserve_resource_owners(bool hookOwned, bool handlerOwned, bool isVoid, ServiceLifetime lifetime)
     {
-        var f = MixedBackendFixture(hookOwned, handlerOwned, isVoid); var reference = RunMixedSessionLifetimes(hookOwned, handlerOwned, isVoid, lifetime, f); var generated = RunMixedSessionLifetimes(hookOwned, handlerOwned, isVoid, lifetime, f, generated: true);
-        Assert.Equal(reference, generated);
-        WriteNestedHookEvidence("mixed-session-differential-lifetimes", hookOwned + "-" + handlerOwned + "-" + isVoid + "-" + lifetime, new { hookOwned, handlerOwned, isVoid, lifetime = lifetime.ToString(), reference = JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
+        var f = MixedBackendFixture(hookOwned, handlerOwned, isVoid); var reference = lifetime == ServiceLifetime.Transient ? null : RunMixedSessionLifetimes(hookOwned, handlerOwned, isVoid, lifetime, f); var generated = RunMixedSessionLifetimes(hookOwned, handlerOwned, isVoid, lifetime, f, generated: true);
+        if (reference is not null) Assert.Equal(reference, generated);
+        WriteNestedHookEvidence("mixed-session-differential-lifetimes", hookOwned + "-" + handlerOwned + "-" + isVoid + "-" + lifetime, new { hookOwned, handlerOwned, isVoid, lifetime = lifetime.ToString(), reference = reference is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
     }
     public static IEnumerable<object[]> MixedBackendBoundaries()
     { foreach (var hookOwned in new[] { false, true }) foreach (var handlerOwned in new[] { false, true }) foreach (var isVoid in new[] { false, true }) foreach (var shape in new[] { "two-hooks", "missing-finally", "external-hook-factory", "external-handler-factory", "wrapper", "async" }) yield return [hookOwned, handlerOwned, isVoid, shape]; }

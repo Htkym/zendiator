@@ -144,7 +144,7 @@ public sealed partial class GeneratorTests
     {
         try
         {
-            if (generated) return f.Dispatch.Invoke(null, [p.GetRequiredService(f.Mediator), r, t]);
+            if (generated) return f.Dispatch.Invoke(null, [p.GetRequiredService(CanonicalEntryService(f.Mediator)), r, t]);
             Type lease = async ? MixedLeaseType(receiver, f.Request, f.Handler, f.Factory) : (receiver switch { "direct" => typeof(SyncDiLease<,>).MakeGenericType(f.Request, f.Handler), "owned" => typeof(SyncOwnedLease<,,>).MakeGenericType(f.Request, f.Handler, f.Factory), _ => typeof(SyncBorrowedLease<,,>).MakeGenericType(f.Request, f.Handler, f.Factory) });
             var types = new List<Type> { f.Request }; if (!isVoid) types.Add(typeof(int)); types.AddRange([f.Wrapper, f.Outer, f.Inner, f.Handler, lease]);
             return typeof(CanonicalWrapperReference).GetMethod("Send" + (async ? "Async" : "Sync") + (isVoid ? "Void" : "Response"), BindingFlags.Static | BindingFlags.NonPublic)!.MakeGenericMethod(types.ToArray()).Invoke(null, [p, r, t, hooks is "outer" or "both", hooks is "inner" or "both"]);
@@ -193,7 +193,7 @@ public sealed partial class GeneratorTests
         try
         {
             if (mode == "pre-cancel") p.Cancellation.Cancel(); if (mode is "replace-cancel" or "cancel-recover") p.Foreign.Cancel(); IServiceCollection services = new ServiceCollection(); services.AddSingleton(p); f.Register.Invoke(null, [services]);
-            Assert.Contains(services, d => d.ServiceType == f.Wrapper && d.Lifetime == ServiceLifetime.Scoped); if (receiver != "direct") Assert.DoesNotContain(services, d => d.ServiceType == f.Handler);
+            Assert.Contains(services, d => d.ServiceType == f.Wrapper && d.Lifetime == ServiceLifetime.Transient); if (receiver != "direct") Assert.DoesNotContain(services, d => d.ServiceType == f.Handler);
             await using var provider = services.BuildServiceProvider(); var request = Activator.CreateInstance(f.Request, [10])!; Exception? error = null; object? result = null;
             await using (var scope = provider.CreateAsyncScope())
             {

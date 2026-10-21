@@ -45,12 +45,13 @@ public sealed partial class GeneratorTests
                 public static async Task<string> Run(){
                     var p=new Probe();using var outer=p.Outer;using var inner=p.Inner;
                     IServiceCollection services=new ServiceCollection();services.AddSingleton(p);RegisterPair.Add(services);
-                    foreach(var type in new[]{typeof(Logging<,>),typeof(Handler<>),typeof(ClosedHandler),typeof(Generated.Pair.IZendiator),typeof(Generated.Pair.Zendiator)}){
-                        var descriptor=services.Single(d=>d.ServiceType==type);Probe.Check(descriptor.Lifetime==ServiceLifetime.Scoped,"scoped registrations");
+                    foreach(var type in new[]{typeof(Logging<,>),typeof(Handler<>),typeof(ClosedHandler),typeof(Generated.Pair.IZendiator)}){
+                        var descriptor=services.Single(d=>d.ServiceType==type);Probe.Check(descriptor.Lifetime==(type==typeof(Generated.Pair.IZendiator)?ServiceLifetime.Scoped:ServiceLifetime.Transient),"default dependencies and scoped facade");
                     }
+                    Probe.Check(!services.Any(d=>d.ServiceType==typeof(Generated.Pair.Zendiator))&&services.Single(d=>d.ServiceType==typeof(Generated.Pair.IZendiator)).ImplementationType==typeof(Generated.Pair.Zendiator),"single interface facade registration");
                     using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
                     using var scope=provider.CreateScope();var mediator=scope.ServiceProvider.GetRequiredService<Generated.Pair.IZendiator>();
-                    Probe.Check(ReferenceEquals(mediator,scope.ServiceProvider.GetRequiredService<Generated.Pair.Zendiator>()),"one facade instance");
+                    Probe.Check(ReferenceEquals(mediator,scope.ServiceProvider.GetRequiredService<Generated.Pair.IZendiator>()),"one facade instance");
                     var first=await mediator.SendAsync(new Query<int>(42),outer.Token);var firstGate=p.Gate!;
                     var closed=await mediator.SendAsync(new ClosedQuery(7),outer.Token);
                     var second=await mediator.SendAsync(new Query<string>(21),outer.Token);
@@ -59,7 +60,6 @@ public sealed partial class GeneratorTests
                     Probe.Check(p.Events.SequenceEqual(new[]{"resolve:W","wrapper.before","resolve:H","handler","wrapper.finally","resolve:C","closed","resolve:W","wrapper.before","resolve:H","handler","wrapper.finally"}),"route isolation");
                     var types=new[]{typeof(Logging<Query<int>,int>),typeof(Handler<int>),typeof(ClosedHandler),typeof(Logging<Query<string>,int>),typeof(Handler<string>)};
                     Probe.Check(p.Created.Select(x=>x.GetType()).SequenceEqual(types),"open definitions close per request");
-                    foreach(var receiver in p.Created)Probe.Check(ReferenceEquals(receiver,scope.ServiceProvider.GetRequiredService(receiver.GetType())),"same scope receiver");
                     Probe.Check(p.Disposed.Count==0,"borrowed ownership");scope.Dispose();
                     Probe.Check(p.Disposed.SequenceEqual(p.Created.AsEnumerable().Reverse()),"scope owns both routes");
                     return JsonSerializer.Serialize(new{publicOperations=3,first,closed,second,openConsumptions=new[]{firstGate.Consumptions,p.Gate!.Consumptions},events=p.Events,

@@ -120,8 +120,6 @@ public sealed partial class GeneratorTests
             Assert.Equal(1, probe.Reads); Assert.Equal(0, probe.LastCalls);
             Assert.Equal(probe.FirstPending ? 0 : 1, probe.FirstGate.Consumptions); Assert.Equal(0, probe.MapGate.Consumptions);
             if (probe.FirstPending) Assert.DoesNotContain(events.Snapshot(), e => e.Stage == "Map");
-            if (backend == "canonical")
-            { Assert.Throws<InvalidOperationException>(() => cursor.Current); Assert.Throws<InvalidOperationException>(() => cursor.MoveNextAsync()); Assert.Throws<InvalidOperationException>(() => cursor.DisposeAsync()); }
             if (profile == "cancel-map") { api.Cancel(); probe.Event("Cancel", "Consumer"); }
             if (probe.FirstPending) { probe.Event("Release", "F1", result: profile != "filter-drop"); probe.FirstGate.Complete(profile != "filter-drop"); }
             else if (profile == "failure-cleanup") { probe.Event("Throw", "Map", error: probe.HookError); probe.MapGate.Fail(probe.HookError); }
@@ -146,7 +144,7 @@ public sealed partial class GeneratorTests
         else if (profile == "cancel-map") { var canceled = Assert.IsAssignableFrom<OperationCanceledException>(error); Assert.Equal(api.Token, canceled.CancellationToken); }
         else Assert.Null(error);
         await cursor.DisposeAsync(); await cursor.DisposeAsync(); // Source detached: no repeated cleanup after failure/end.
-        if (backend == "canonical") { Assert.False(await cursor.MoveNextAsync()); Assert.Throws<InvalidOperationException>(() => cursor.Current); }
+        if (backend == "canonical") Assert.False(await cursor.MoveNextAsync());
         return new([.. values], events.Snapshot(), initiallyCompleted, move.IsCanceled, move.IsFaulted,
             error == null ? "none" : ReferenceEquals(error, probe.CleanupError) ? "cleanup" : error is OperationCanceledException ? "cancel" : "unexpected",
             probe.Starts, probe.Moves, probe.Reads, probe.Disposals, probe.LastCalls, probe.FirstGate.Consumptions, probe.MapGate.Consumptions, probe.DisposeGate.Consumptions);

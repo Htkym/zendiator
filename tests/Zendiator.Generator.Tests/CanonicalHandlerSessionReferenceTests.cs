@@ -280,16 +280,16 @@ public sealed partial class GeneratorTests
                                 InvokeCompiledHandlerSessionReference(fixture, scope.ServiceProvider, isVoid, owned, request, default);
                             Assert.Null(actual.Error); Assert.Equal(isVoid ? null : (object)73, actual.Result);
                             Assert.Equal(owned ? s * 2 + i + 1 : 0, core.Released.Count);
-                            Assert.Equal(lifetime == ServiceLifetime.Singleton ? 0 : s * (lifetime == ServiceLifetime.Scoped ? 1 : 2), core.FactoryDisposals);
+                            Assert.Equal(lifetime == ServiceLifetime.Singleton ? 0 : s * (lifetime == ServiceLifetime.Scoped || generated ? 1 : 2), core.FactoryDisposals);
                             Assert.Equal(core.FactoryDisposals, probe.DependencyDisposed);
                         }
                     }
-                    Assert.Equal(lifetime == ServiceLifetime.Singleton ? 0 : (s + 1) * (lifetime == ServiceLifetime.Scoped ? 1 : 2), core.FactoryDisposals);
+                    Assert.Equal(lifetime == ServiceLifetime.Singleton ? 0 : (s + 1) * (lifetime == ServiceLifetime.Scoped || generated ? 1 : 2), core.FactoryDisposals);
                     Assert.Equal(core.FactoryDisposals, probe.DependencyDisposed);
                 }
                 Assert.Equal(4, core.Created.Count); Assert.Equal(owned ? 4 : 0, core.Released.Count);
             }
-            var factories = lifetime == ServiceLifetime.Singleton ? 1 : lifetime == ServiceLifetime.Scoped ? 2 : 4;
+            var factories = lifetime == ServiceLifetime.Singleton ? 1 : lifetime == ServiceLifetime.Scoped || generated ? 2 : 4;
             Assert.Equal(factories, core.FactoryDisposals); Assert.Equal(factories, probe.DependencyCreated); Assert.Equal(factories, probe.DependencyDisposed);
             Assert.Equal(factories, core.Trace.Count(t => t == "factory.ctor")); Assert.Equal(4, core.Trace.Count(t => t == "factory"));
             Assert.Equal(4, core.Created.Distinct(ReferenceEqualityComparer.Instance).Count());

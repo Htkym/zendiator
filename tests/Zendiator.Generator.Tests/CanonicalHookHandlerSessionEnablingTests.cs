@@ -22,8 +22,8 @@ public sealed partial class GeneratorTests
             var hook = fixture.Assembly.GetType("App.Hook`1")!.MakeGenericType(typeof(string));
             var handler = fixture.Assembly.GetType("App.Handler`1")!.MakeGenericType(typeof(string));
             Assert.DoesNotContain(services, d => d.ServiceType == handler);
-            Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == hook).Lifetime);
-            Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == fixture.Service).Lifetime);
+            Assert.Equal(ServiceLifetime.Transient, Assert.Single(services, d => d.ServiceType == hook).Lifetime);
+            Assert.Equal(ServiceLifetime.Transient, Assert.Single(services, d => d.ServiceType == fixture.Service).Lifetime);
             var golden = new List<string>(); var snapshots = new List<object>();
             using (var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
             {

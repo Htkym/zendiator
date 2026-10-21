@@ -22,7 +22,7 @@ public sealed partial class GeneratorTests
             private ManualResetValueTaskSourceCore<int> core;private readonly Probe p;private readonly string step,role;private readonly int value;public int Consumptions;
             public Once(Probe p,int value){this.p=p;this.value=value;step=p.Step;role=p.Role;core.RunContinuationsAsynchronously=true;}
             public ValueTask<int> Task=>new(this,core.Version);public void Complete()=>core.SetResult(value);
-            public int GetResult(short token){Probe.Check(++Consumptions==1,"single ValueTask consumption");Probe.Check(Probe.Ambient.Value=="handler:"+role,"source consumed inside async boundary");p.Trace.Add("consume:"+step);return core.GetResult(token);}
+            public int GetResult(short token){Probe.Check(++Consumptions==1,"single ValueTask consumption");Probe.Check(Probe.Ambient.Value=="handler:"+role,"source consumed in caller-visible handler context");p.Trace.Add("consume:"+step);return core.GetResult(token);}
             public ValueTaskSourceStatus GetStatus(short token)=>core.GetStatus(token);
             public void OnCompleted(Action<object?> continuation,object? state,short token,ValueTaskSourceOnCompletedFlags flags)=>core.OnCompleted(continuation,state,token,flags);
         }
@@ -78,41 +78,39 @@ public sealed partial class GeneratorTests
     private const string OpenSendZeroPairConsumer = """
         namespace OpenZeroPair {
         public static class Entry {
-            private static ValueTask<int> Reference<L,R>(IServiceProvider p,Query<L,R> r,CancellationToken token) where L:class,ILeft,new() where R:class,IRight,new(){ArgumentNullException.ThrowIfNull(r);return Core(p,r,token);}
-            private static async ValueTask<int> Core<L,R>(IServiceProvider p,Query<L,R> r,CancellationToken token) where L:class,ILeft,new() where R:class,IRight,new(){token.ThrowIfCancellationRequested();return await p.GetRequiredService<Handler<R,L>>().HandleAsync(r,token).ConfigureAwait(false);}
-            private static ValueTask<int> Reference(IServiceProvider p,StatusQuery r,CancellationToken token){ArgumentNullException.ThrowIfNull(r);return Core(p,r,token);}
-            private static async ValueTask<int> Core(IServiceProvider p,StatusQuery r,CancellationToken token){token.ThrowIfCancellationRequested();return await p.GetRequiredService<StatusHandler>().HandleAsync(r,token).ConfigureAwait(false);}
+            private static ValueTask<int> Reference<L,R>(IServiceProvider p,Query<L,R> r,CancellationToken token) where L:class,ILeft,new() where R:class,IRight,new(){ArgumentNullException.ThrowIfNull(r);token.ThrowIfCancellationRequested();return p.GetRequiredService<Handler<R,L>>().HandleAsync(r,token);}
+            private static ValueTask<int> Reference(IServiceProvider p,StatusQuery r,CancellationToken token){ArgumentNullException.ThrowIfNull(r);token.ThrowIfCancellationRequested();return p.GetRequiredService<StatusHandler>().HandleAsync(r,token);}
             private static ValueTask<int> Dispatch<L,R>(object mediator,bool empty,Query<L,R> r,CancellationToken token) where L:class,ILeft,new() where R:class,IRight,new()=>empty?((Generated.Empty.IZendiator)mediator).SendAsync(r,token):((Generated.Omitted.IZendiator)mediator).SendAsync(r,token);
             private static ValueTask<int> Dispatch(object mediator,bool empty,StatusQuery r,CancellationToken token)=>empty?((Generated.Empty.IZendiator)mediator).SendAsync(r,token):((Generated.Omitted.IZendiator)mediator).SendAsync(r,token);
             private static async Task<string> Observe(bool generated,bool empty){
-                var p=new Probe();IServiceCollection services=new ServiceCollection();services.AddSingleton(p);services.AddScoped(typeof(Handler<,>));var existing=services.Last();
+                var p=new Probe();IServiceCollection services=new ServiceCollection();services.AddSingleton(p);services.AddScoped(typeof(Handler<,>));var existing=services.Last();services.AddScoped<StatusHandler>();
                 if(empty)RegisterEmpty.Add(services);else RegisterOmitted.Add(services);var count=services.Count;if(empty)RegisterEmpty.Add(services);else RegisterOmitted.Add(services);
                 var facade=empty?typeof(Generated.Empty.IZendiator):typeof(Generated.Omitted.IZendiator);var concrete=empty?typeof(Generated.Empty.Zendiator):typeof(Generated.Omitted.Zendiator);
-                Probe.Check(services.Count(d=>d.ServiceType.DeclaringType!=concrete)==5&&services.Count==count&&services.Contains(existing),"TryAdd/repeat registration");
-                foreach(var type in new[]{typeof(Handler<,>),typeof(StatusHandler),facade,concrete})Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"scoped keys");
+                Probe.Check(services.Count==count&&services.Contains(existing),"TryAdd/repeat registration");
+                foreach(var type in new[]{typeof(Handler<,>),typeof(StatusHandler),facade})Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"explicit scoped receivers and facade");
+                Probe.Check(!services.Any(d=>d.ServiceType==concrete),"no separate concrete mediator registration");
                 var mismatch=new ZendiatorConfiguration();mismatch.Handlers(typeof(Query<,>),DispatchFamily.SendAsync,typeof(Handler<,>));mismatch.Handlers<StatusQuery>(DispatchFamily.SendAsync,typeof(StatusHandler));
                 if(!empty){mismatch.Pipeline(typeof(Query<,>),DispatchFamily.SendAsync);mismatch.Pipeline<StatusQuery>(DispatchFamily.SendAsync);}
                 IServiceCollection rejected=new ServiceCollection();var mismatchRejected=false;
                 try{if(empty)Generated.Empty.ZendiatorGeneratedRegistrar.Add(rejected,mismatch.Snapshot());else Generated.Omitted.ZendiatorGeneratedRegistrar.Add(rejected,mismatch.Snapshot());}catch(InvalidOperationException){mismatchRejected=true;}
                 Probe.Check(mismatchRejected&&rejected.Count==0,"snapshot form before descriptor addition");
                 using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});using var scope=provider.CreateScope();var sp=scope.ServiceProvider;
-                var mediator=sp.GetRequiredService(facade);Probe.Check(ReferenceEquals(mediator,sp.GetRequiredService(concrete)),"same facade instance");
+                var mediator=sp.GetRequiredService(facade);Probe.Check(ReferenceEquals(mediator,sp.GetRequiredService(facade)),"same facade instance");
                 using var normal=new CancellationTokenSource();using var canceled=new CancellationTokenSource();canceled.Cancel();var data=new Shared();var attempts=0;var pendingCount=0;string? cancellationPhase=null;
                 async Task<int?> Invoke(string step,string role,object request,CancellationToken token,bool pending,bool cancel,Func<ValueTask<int>> invoke){
                     attempts++;p.Step=step;p.Role=role;p.Original=request;p.Data=data;p.Token=token;p.Pending=pending;Probe.Ambient.Value="caller";
                     var traceCount=p.Trace.Count;var sourceCount=p.Sources.Count;ValueTask<int> operation=default;var returned=false;
-                    try{operation=invoke();returned=true;}catch(Exception error){throw new InvalidOperationException("unexpected synchronous failure",error);}
-                    Probe.Check(returned&&Probe.Ambient.Value=="caller","non-async public boundary/caller context");
+                    try{operation=invoke();returned=true;}catch(OperationCanceledException error){Probe.Check(cancel&&error.CancellationToken==token,"synchronous cancellation token identity");cancellationPhase="syncThrow";}
+                    Probe.Check(returned==!cancel&&Probe.Ambient.Value==(cancel?"caller":"handler:"+role),"plain public boundary/caller-visible prefix context");
                     Probe.Check(p.Sources.Count==sourceCount+(cancel?0:1),"one callback source per entered route");
                     if(cancel){
-                        Probe.Check(operation.IsCanceled&&p.Trace.Count==traceCount,"entry guard before unresolved closed generic key");
-                        try{_=await operation.ConfigureAwait(false);throw new InvalidOperationException("expected cancellation");}catch(OperationCanceledException error){Probe.Check(error.CancellationToken==token,"cancellation token identity");cancellationPhase="await";}
+                        Probe.Check(!returned&&cancellationPhase=="syncThrow"&&p.Trace.Count==traceCount,"entry guard before unresolved closed generic key");
                         Probe.Check(Probe.Ambient.Value=="caller","canceled call context");return null;
                     }
                     var source=p.Sources.Last();
                     if(pending){Probe.Check(!operation.IsCompleted&&source.Consumptions==0,"genuine pending source before consumption");pendingCount++;source.Complete();}
-                    else Probe.Check(operation.IsCompletedSuccessfully&&source.Consumptions==1,"synchronous ValueTask completion consumed once");
-                    var value=await operation.ConfigureAwait(false);Probe.Check(source.Consumptions==1&&Probe.Ambient.Value=="caller","one consumption/context restoration");return value;
+                    else Probe.Check(operation.IsCompletedSuccessfully&&source.Consumptions==0,"synchronous handler ValueTask returned unconsumed");
+                    var value=await operation.ConfigureAwait(false);Probe.Check(source.Consumptions==1&&Probe.Ambient.Value=="handler:"+role,"one consumption/caller-visible prefix context");return value;
                 }
                 var a=new Query<Left,Right>(7,data);var status=new StatusQuery(5,data);var b=new Query<OtherLeft,Right>(8,data);var again=new Query<Left,Right>(9,data);var stopped=new Query<CanceledLeft,Right>(88,data);var after=new StatusQuery(6,data);
                 var results=new List<int?> {
@@ -124,7 +122,7 @@ public sealed partial class GeneratorTests
                     await Invoke("closed-after-cancel","closed",after,normal.Token,false,false,()=>generated?Dispatch(mediator,empty,after,normal.Token):Reference(sp,after,normal.Token))
                 };
                 Probe.Check(results.SequenceEqual(new int?[]{107,205,108,109,null,206})&&data.Value==26,"selected route results/shared effects");
-                Probe.Check(attempts==6&&pendingCount==1&&cancellationPhase=="await"&&p.Steps.SequenceEqual(new[]{"open-A","closed-1","open-B","open-A-repeat","closed-after-cancel"}),"route sequence/cancellation isolation");
+                Probe.Check(attempts==6&&pendingCount==1&&cancellationPhase=="syncThrow"&&p.Steps.SequenceEqual(new[]{"open-A","closed-1","open-B","open-A-repeat","closed-after-cancel"}),"route sequence/cancellation isolation");
                 Probe.Check(p.AmbientSeen.SequenceEqual(new[]{"resolve","resolve","resolve","caller","caller"}),"native async receiver/caller contexts");
                 Probe.Check(p.Created.Select(r=>r.GetType()).SequenceEqual(new[]{typeof(Handler<Right,Left>),typeof(StatusHandler),typeof(Handler<Right,OtherLeft>)}),"closed DI keys/no canceled receiver");
                 Probe.Check(p.Receivers.SequenceEqual(new[]{p.Created[0],p.Created[1],p.Created[2],p.Created[0],p.Created[1]}),"same scope receivers across routes/closed type reuse");

@@ -168,7 +168,7 @@ StreamAsync: 20, 40
 
 ## 登録と実行順序
 
-`[ZendiatorHandler]`はHandlerを明示する属性です。`Handlers<TRequest>`で使うHandlerを選び、`Pipeline<TRequest>`でHookの順序を指定します。Hookがない同期処理にも、空の`Pipeline`を宣言します。
+`[ZendiatorHandler]`はHandlerを明示する属性です。`Handlers<TRequest>`で使うHandlerを選び、`Pipeline<TRequest>`でHookの順序を指定します。この例ではHookがない同期処理にも、空の`Pipeline`を明示しています。対応するHandlerのみの`SendSync`と`SendAsync`では、`Pipeline`を省略できます。stageがないStreamには、空の`Pipeline`を`DispatchFamily.Stream`で宣言します。
 
 | 登録するfamily | 呼び出すメソッド | この例の処理 |
 |---|---|---|
@@ -182,19 +182,31 @@ Send系の`Before`はリストの先頭から、`After`は末尾から呼びま�
 
 ## 例外と取消
 
-`Send`の例外は呼出し元へ伝わります。`SendAsync`の処理中の例外は`await`で、StreamのHandlerやHookの例外は列挙時に受け取ります。`request`がnullの場合は呼出し時に例外が出るため、`try`には呼出しと待機・列挙を含めてください。
+`Send`の例外は呼出し元へ伝わります。Hookがないか同期Beforeだけを使い、factory・Wrapper・sessionを使わないplain `SendAsync`では、依存解決と同期callbackが呼出し中に動きます。その例外や取消は、`ValueTask`が返る前に同期throwとなることがあります。同期部分で行った`AsyncLocal`、`CultureInfo`、`SynchronizationContext`の変更も呼出し側に見えます。返された`ValueTask`の非同期の失敗は`await`で受け取ります。`try`には呼出しと待機を含めてください。
 
-取消tokenは各入口の`CancellationToken`引数で渡します。この例で取消が検出されると、`OperationCanceledException`が伝わります。Streamは列挙時のtokenも受け取り、呼出し時・列挙時のどちらの取消も反映します。既に取消済みの場合も、Streamでの通知は最初の項目を要求したときです。
+この例のStreamは生成された融合iteratorを使うため、HandlerやHookの例外を列挙時に受け取ります。Handler所有のStreamでは同期失敗の時点が異なります。どちらの経路でも`request`がnullの場合は呼出し時に例外が出るため、`try`には呼出しと列挙を含めてください。
+
+取消tokenは各入口の`CancellationToken`引数で渡します。この例で取消が検出されると、`OperationCanceledException`が伝わります。この例のStreamでは列挙時のtokenも受け取り、呼出し時・列挙時のどちらの取消も反映します。既に取消済みの場合も、取消の検出は最初の項目を要求したときです。
 
 ## Streamの開始と再列挙
 
-`StreamAsync`の呼出しや列挙子の取得だけでは、HandlerやHookは動きません。`await foreach`が最初の項目を要求したときに処理を始めます。
+この例では、classのHandlerとclassのFilter/Map Hookを一つのC# async iteratorへ融合します。対象は、factory・session・Wrapper・upstreamを持たない単一の借用segmentです。`StreamAsync`の呼出しや列挙子の取得だけではuser DI解決やHandler・Hookは動かず、最初の項目を要求したときに処理を始めます。
 
-同じ返り値をもう一度列挙すると、新しい列挙子でHandlerとHookの処理をやり直します。結果のキャッシュとしては使えません。
+列挙子を取得するたびに新しいiteratorを作り、HandlerとHookの処理をやり直します。結果のキャッシュとしては使えません。呼出し時と列挙時のtokenの合成では、最初の項目を要求する前の列挙子取得時点でlinked token sourceを作ることがあります。各列挙子がそれぞれの合成tokenを所有します。
+
+`Current`は`MoveNextAsync`がtrueを返してから使い、`MoveNextAsync`と`DisposeAsync`を重ねず、それぞれの完了を1回だけ待ちます。この融合経路はC# iteratorのCurrentとcontextの動作に従い、開始前や終端後のCurrent、不正な重複操作に対する旧独自例外は保証しません。
+
+sourceを動かす前と、到達したHookの前で取消を確認し、false filterの後もsource前の確認へ戻ります。source、callback、後始末の`ValueTask`は1回だけ消費します。正常終端・失敗・早期終了ではsourceを1回だけ解放し、項目処理と後始末がともに失敗した場合は後始末の例外を優先します。借用したHandlerとHookはDIが破棄します。融合対象外のframework経路は、既存のguard付きcursorと実行管理を保ちます。
+
+stageもsessionもないStreamは、生成に対応している構成であればHandler所有が既定です。`StreamAsync`の呼出し時にHandlerを解決し、`HandleAsync`を呼びます。Handlerの構築失敗や同期例外も、その時点で発生することがあります。返り値のenumerableがtokenの合成、独立した再列挙、列挙子の後始末を受け持ちます。
+
+zero-stageでframeworkによる遅延開始と列挙guardが必要な場合は、Handlerに`[ZendiatorHandler(OwnsStream = false)]`を指定します。この属性はstage付き経路の融合を無効にする指定ではありません。Wrapper・sessionを持つStreamは、既存の実行管理を保ちます。境界の詳細は[実行契約](design/0.5.0-route-and-stream-contract.md)を参照してください。
 
 ## DI scopeの所有
 
 標準DIが、この例のHandlerとHookの生成・破棄を受け持ちます。呼び出し側はscopeを作り、そのscopeから`IZendiator`を取得します。非同期処理の完了とStreamの列挙終了までscopeを保持し、その後に破棄します。HandlerやHookを呼び出し側で個別に破棄する必要はありません。
+
+生成登録の既定は、`IZendiator`がScoped、Handler・Hook・session factoryがTransientです。各Mediatorは依存ごとに最初に公開された成功結果を捕捉し、その後の呼出しでも使います。並行して解決に成功した呼出しは同じ捕捉instanceを使います。ある解決の例外は、ほかの成功結果で隠しません。
 
 Streamの返り値をscopeの外へ持ち出し、scopeを破棄してから列挙を始めないでください。途中で`break`した場合も、`await foreach`による列挙子の後始末が終わるまでscopeを保持します。
 
@@ -204,7 +216,7 @@ Streamの返り値をscopeの外へ持ち出し、scopeを破棄してから列�
 
 [GenericLookupサンプル](../samples/Zendiator.Sample.GenericLookup/)では`Lookup<T>`の結果を`T`、`StatusQuery`の結果を`InventoryStatus`で受け取ります。`RefreshInventory`の完了を`await`してからqueryを送り、更新後の状態を取得します。
 
-この例はclassのrequestと、DIが所有するclassのHandlerを使います。Hookがないため、空の`Pipeline`を追加する必要はありません。返された`ValueTask`はそれぞれ1回だけ`await`し、非同期処理が完了するまでscopeを保持してください。
+この例はclassのrequestと、DIが所有するclassのHandlerを使います。これらのHandlerのみの`SendAsync`経路では、空の`Pipeline`を追加する必要はありません。返された`ValueTask`はそれぞれ1回だけ`await`し、非同期処理が完了するまでscopeを保持してください。
 
 ## 複数の配送方法を一つのAppで使う
 
@@ -282,7 +294,7 @@ public sealed class Logging<TRequest, TResponse> : IAsyncSendWrapper<TRequest, T
 }
 ```
 
-両方のHandlerを選び、要求ごとに`Pipeline`を宣言します。非ジェネリック要求のPipelineは空で、Wrapperは`Query<>`だけに適用します。
+両方のHandlerを選びます。この例では非ジェネリック要求にも空の`Pipeline`を明示し、Wrapperは`Query<>`だけに適用します。
 
 ```csharp
 [ZendiatorComposition("openSendWrapperPair")]

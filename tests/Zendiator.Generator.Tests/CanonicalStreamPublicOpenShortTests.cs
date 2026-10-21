@@ -125,7 +125,7 @@ public sealed partial class GeneratorTests
                 var services=new ServiceCollection();services.AddSingleton(p);Startup.Configure(services);var count=services.Count;Startup.Configure(services);
                 Check(services.Count==count,"idempotent registration");
                 foreach(var type in new[]{typeof(GenericHandler<>),__TYPES__})
-                    Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"open borrowed descriptor");
+                    Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Transient,"open borrowed descriptor");
                 await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
                 var scope=provider.CreateAsyncScope();var mediator=scope.ServiceProvider.GetRequiredService<global::App.Generated.Reads.IZendiator>();
                 var request=new GenericItems<T>(value,project,allow);var stream=mediator.StreamAsync(request);

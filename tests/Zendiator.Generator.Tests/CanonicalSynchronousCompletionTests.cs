@@ -62,7 +62,7 @@ public sealed partial class GeneratorTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public async Task Synchronous_success_retains_context_consumption_and_async_failure_status(bool isVoid, bool withHooks)
+    public async Task Plain_SendAsync_forwards_unconsumed_operation_and_synchronous_prefix(bool isVoid, bool withHooks)
     {
         var source = CapabilitySource(true, isVoid, "s---", true).Replace("CapabilityProbe", "SynchronousCompletionProbe");
         if (!withHooks) source = source.Replace(",Stage.Hook<Hook0>(),Stage.Hook<Hook1>()", "");
@@ -93,30 +93,56 @@ public sealed partial class GeneratorTests
             };
             IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe); bridge.GetMethod("Register")!.Invoke(null, [services]);
             await using var provider = services.BuildServiceProvider(); await using var scope = provider.CreateAsyncScope();
-            var mediator = scope.ServiceProvider.GetRequiredService(mediatorType); var request = Activator.CreateInstance(requestType, [7]);
+            var mediator = scope.ServiceProvider.GetRequiredService(CanonicalEntryService(mediatorType)); var request = Activator.CreateInstance(requestType, [7]);
             var priorAmbient = SynchronousCompletionProbe.Ambient.Value; var priorCulture = CultureInfo.CurrentCulture; var priorContext = SynchronizationContext.Current;
-            Task operation;
             try
             {
                 SynchronousCompletionProbe.Ambient.Value = "caller";
                 if (mode == "pre-cancel") probe.Cancellation.Cancel();
+                if (mode is "throw" or "throw-oce" or "pre-cancel")
+                {
+                    var thrown = Assert.Throws<TargetInvocationException>(() =>
+                        bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, request, probe.Cancellation.Token]));
+                    if (mode == "pre-cancel")
+                    {
+                        var canceled = Assert.IsAssignableFrom<OperationCanceledException>(thrown.InnerException);
+                        Assert.Equal(probe.Cancellation.Token, canceled.CancellationToken);
+                        Assert.Empty(probe.Trace);
+                        Assert.Equal("caller", SynchronousCompletionProbe.Ambient.Value);
+                    }
+                    else
+                    {
+                        Assert.Same(probe.Failure, thrown.InnerException);
+                        Assert.Equal("handler", SynchronousCompletionProbe.Ambient.Value);
+                    }
+                    Assert.Equal(0, probe.Consumptions);
+                    continue;
+                }
                 var result = bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, request, probe.Cancellation.Token])!;
-                Assert.Equal("caller", SynchronousCompletionProbe.Ambient.Value);
-                Assert.Same(priorCulture, CultureInfo.CurrentCulture); Assert.Same(priorContext, SynchronizationContext.Current);
-                operation = AsyncTask(result, isVoid);
+                Assert.Equal("handler", SynchronousCompletionProbe.Ambient.Value);
+                Assert.Equal("fr-FR", CultureInfo.CurrentCulture.Name);
+                Assert.NotSame(priorContext, SynchronizationContext.Current);
+                Assert.Equal(0, probe.Consumptions);
+                if (mode == "fault-oce")
+                {
+                    Assert.True(isVoid ? ((ValueTask)result).IsFaulted : ((ValueTask<int>)result).IsFaulted);
+                    Assert.False(isVoid ? ((ValueTask)result).IsCanceled : ((ValueTask<int>)result).IsCanceled);
+                }
+                SynchronousCompletionProbe.Ambient.Value = "consumer";
+                CultureInfo.CurrentCulture = priorCulture;
+                SynchronizationContext.SetSynchronizationContext(priorContext);
+                var operation = AsyncTask(result, isVoid);
                 if (mode.StartsWith("pending", StringComparison.Ordinal))
                 { Assert.False(operation.IsCompleted); Assert.Equal(0, probe.Consumptions); probe.Complete(); }
                 var error = await Record.ExceptionAsync(() => operation.WaitAsync(TimeSpan.FromSeconds(10)));
                 if (mode is "success" or "pending")
                 { Assert.Null(error); if (!isVoid) Assert.Equal(withHooks ? 9 : 7, await (Task<int>)operation); }
-                else if (mode == "pre-cancel")
-                { var canceled = Assert.IsAssignableFrom<OperationCanceledException>(error); Assert.Equal(probe.Cancellation.Token, canceled.CancellationToken); Assert.Empty(probe.Trace); }
                 else Assert.Same(probe.Failure, error);
-                Assert.Equal(mode.Contains("oce", StringComparison.Ordinal) || mode == "pre-cancel", operation.IsCanceled);
-                Assert.Equal(mode == "throw", operation.IsFaulted);
+                Assert.Equal(mode is "source-oce" or "pending-oce", operation.IsCanceled);
+                Assert.Equal(mode == "fault-oce", operation.IsFaulted);
                 var consumesSource = mode is "success" or "pending" or "source-oce" or "pending-oce";
                 Assert.Equal(consumesSource ? 1 : 0, probe.Consumptions);
-                if (consumesSource) Assert.Equal("handler", probe.ConsumptionAmbient);
+                if (mode is "success" or "source-oce") Assert.Equal("consumer", probe.ConsumptionAmbient);
             }
             finally
             { SynchronousCompletionProbe.Ambient.Value = priorAmbient; CultureInfo.CurrentCulture = priorCulture; SynchronizationContext.SetSynchronizationContext(priorContext); probe.Cancellation.Dispose(); }

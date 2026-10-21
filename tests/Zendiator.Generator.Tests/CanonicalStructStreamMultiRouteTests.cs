@@ -81,7 +81,7 @@ public sealed partial class GeneratorTests
         long typedValue; int[] response; var plainValues = new List<int>();
         using (var scope = provider.CreateScope())
         {
-            Assert.Same(scope.ServiceProvider.GetRequiredService(Type("Generated.Reads.IZendiator")), scope.ServiceProvider.GetRequiredService(Type("Generated.Reads.Zendiator")));
+            Assert.Same(scope.ServiceProvider.GetRequiredService(Type("Generated.Reads.IZendiator")), scope.ServiceProvider.GetRequiredService(Type("Generated.Reads.IZendiator")));
             var typedSequence = typed(scope.ServiceProvider, typedRequest);
             var plainSequence = plain(scope.ServiceProvider, Activator.CreateInstance(Type("Plain.Items"))!);
             Assert.Empty(typedProbe.Trace); Assert.Empty(commandProbe.Trace); Assert.Empty(queryProbe.Trace);

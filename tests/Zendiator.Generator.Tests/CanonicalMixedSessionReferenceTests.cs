@@ -337,15 +337,15 @@ public sealed partial class GeneratorTests
                         var actual = fixture != null && generated ? InvokeSync(fixture, scope.ServiceProvider.GetRequiredService(fixture.Interface), request, default) : InvokeMixedSessionReference(scope.ServiceProvider, hookOwned, handlerOwned, isVoid, request, default, fixture);
                         Assert.Null(actual.Error); Assert.Equal(isVoid ? null : (object)42, actual.Result);
                         Assert.Equal(hookOwned ? s * 2 + i + 1 : 0, mixed.ReleasedHooks.Count); Assert.Equal(handlerOwned ? s * 2 + i + 1 : 0, probe.Released.Count);
-                        var disposed = lifetime == ServiceLifetime.Singleton ? 0 : s * (lifetime == ServiceLifetime.Scoped ? 1 : 2);
+                        var disposed = lifetime == ServiceLifetime.Singleton ? 0 : s * (lifetime == ServiceLifetime.Scoped || generated ? 1 : 2);
                         Assert.Equal(disposed, mixed.HookFactoryDisposals); Assert.Equal(disposed, probe.FactoryDisposals);
                     }
-                    var count = lifetime == ServiceLifetime.Singleton ? 0 : (s + 1) * (lifetime == ServiceLifetime.Scoped ? 1 : 2);
+                    var count = lifetime == ServiceLifetime.Singleton ? 0 : (s + 1) * (lifetime == ServiceLifetime.Scoped || generated ? 1 : 2);
                     Assert.Equal(count, mixed.HookFactoryDisposals); Assert.Equal(count, mixed.HookDependencyDisposals); Assert.Equal(count, probe.FactoryDisposals); Assert.Equal(count, probe.DependencyDisposals);
                 }
                 Assert.Equal(4, mixed.CreatedHooks.Count); Assert.Equal(4, probe.Created.Count);
             }
-            var owners = lifetime == ServiceLifetime.Singleton ? 1 : lifetime == ServiceLifetime.Scoped ? 2 : 4;
+            var owners = lifetime == ServiceLifetime.Singleton ? 1 : lifetime == ServiceLifetime.Scoped || generated ? 2 : 4;
             Assert.Equal(owners, mixed.HookFactoryDisposals); Assert.Equal(owners, mixed.HookDependencyDisposals); Assert.Equal(owners, probe.FactoryDisposals); Assert.Equal(owners, probe.DependencyDisposals);
             foreach (var session in probe.Borrowed) session.Dispose(); foreach (var hook in mixed.BorrowedHooks) hook.Dispose();
             Assert.Equal(4, probe.Released.Count); Assert.Equal(4, mixed.ReleasedHooks.Count);

@@ -178,7 +178,7 @@ public sealed partial class GeneratorTests
         var segment = Assert.Single(CSharpSyntaxTree.ParseText(fixture.GeneratedSource).GetRoot().DescendantNodes().OfType<MethodDeclarationSyntax>(), m => m.Identifier.ValueText == "RunSegment");
         Assert.Single(segment.DescendantNodes().OfType<WhileStatementSyntax>());
         Assert.Contains("await source.MoveNextAsync().ConfigureAwait(false)", segment.ToFullString());
-        Assert.Contains("await detached.DisposeAsync().ConfigureAwait(false)", segment.ToFullString());
+        Assert.Contains("await source.DisposeAsync().ConfigureAwait(false)", segment.ToFullString());
         var driver = BindLists(StreamGraphFixture("Stage.Hook<Positive>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Small>()"));
         Assert.NotNull(Graph(driver).StreamWrapperSchedule);
         Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.StreamPrototype.", StringComparison.Ordinal));
@@ -270,5 +270,35 @@ public sealed partial class GeneratorTests
             }
             Assert.Equal(1, gate.Consumptions); await cursor.DisposeAsync(); Assert.Equal(1, probe.Disposals);
         }
+    }
+
+    [Fact]
+    public async Task Stream_fused_stages_Current_failure_keeps_single_cleanup_and_cleanup_error_priority()
+    {
+        var currentError = new FormatException("source Current");
+        var cleanupError = new InvalidOperationException("source cleanup");
+        var currentCalls = 0;
+        var probe = new CanonicalStreamPrototypeProbe
+        {
+            Input = [1],
+            CleanupError = cleanupError,
+            Observe = (phase, _, _) =>
+            {
+                if (phase != "Current.enter") return;
+                currentCalls++;
+                throw currentError;
+            }
+        };
+        var (services, cursor) = PrototypeCursor(probe, generated: true);
+        using var provider = services;
+        var moving = cursor.MoveNextAsync().AsTask();
+        Assert.Same(cleanupError, await Assert.ThrowsAsync<InvalidOperationException>(() => moving));
+        Assert.Equal(1, currentCalls);
+        Assert.Equal(1, probe.Moves);
+        Assert.Equal(0, probe.Effects);
+        Assert.DoesNotContain(probe.Trace, phase => phase.StartsWith("resolve:F", StringComparison.Ordinal));
+        await cursor.DisposeAsync();
+        await cursor.DisposeAsync();
+        Assert.Equal(1, probe.Disposals);
     }
 }

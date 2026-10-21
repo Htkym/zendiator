@@ -133,7 +133,7 @@ public sealed partial class GeneratorTests
             private static async Task<object> Read<T>(T value,int mode) __WHERE__ {
                 var p=new global::Zendiator.Generator.Tests.StreamGenericScopeProbe();var services=new ServiceCollection();services.AddSingleton(p);
                 Startup.Configure(services);var count=services.Count;Startup.Configure(services);Check(count==services.Count,"idempotent registration");
-                foreach(var type in new[]{typeof(GenericHandler<>),typeof(GenericWrapper<>)})Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"open scoped descriptor");
+                foreach(var type in new[]{typeof(GenericHandler<>),typeof(GenericWrapper<>)})Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Transient,"open transient descriptor");
                 await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
                 var scope=provider.CreateAsyncScope();var mediator=scope.ServiceProvider.GetRequiredService<global::App.Generated.Reads.IZendiator>();
                 var request=new GenericItems<T>(value,mode);var stream=mediator.StreamAsync(request);Check(p.Created.Count==0,"lazy dispatch");

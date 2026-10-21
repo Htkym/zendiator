@@ -8,7 +8,8 @@ internal static class CanonicalAsyncCallEmitter
     internal const string PoolingBuilderAttribute = "[global::System.Runtime.CompilerServices.AsyncMethodBuilder(typeof(global::System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder<>))]";
 
     internal static void EmitCall(StringBuilder b, string name, string result, string receiver,
-        string contract, string method, BoundAsyncCallTargetEmission? target, string[] parameters, string[] names)
+        string contract, string method, BoundAsyncCallTargetEmission? target, string[] parameters, string[] names,
+        string generic = "", string constraints = "")
     {
         var fallback = "((" + contract + ")receiver)." + method + "(" + string.Join(", ", names) + ")";
         var call = fallback;
@@ -18,7 +19,7 @@ internal static class CanonicalAsyncCallEmitter
             var direct = "((" + target.ImplementationTypeName + ")receiver)." + target.MethodName + "(" + arguments + ")";
             call = target.RequiresExactReceiver ? "((global::System.Object)receiver).GetType() == typeof(" + target.ReceiverName + ") ? " + direct + " : " + fallback : direct;
         }
-        b.AppendLine("        private static " + result + " " + name + "(" + receiver + " receiver, " +
-            string.Join(", ", parameters.Select((p, i) => p + " " + names[i])) + ") => " + call + ";");
+        b.AppendLine("        private static " + result + " " + name + generic + "(" + receiver + " receiver, " +
+            string.Join(", ", parameters.Select((p, i) => p + " " + names[i])) + ")" + constraints + " => " + call + ";");
     }
 }

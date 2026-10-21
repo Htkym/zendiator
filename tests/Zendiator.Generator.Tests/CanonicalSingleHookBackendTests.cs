@@ -211,17 +211,17 @@ public sealed partial class GeneratorTests
                             var actual = generated ? InvokeSync(f, mediator!, Activator.CreateInstance(f.Request), default) :
                                 InvokeSingleHookReference(f, scope.ServiceProvider, Activator.CreateInstance(f.Request), default, isVoid);
                             Assert.Null(actual.Error); Assert.Equal(isVoid ? null : (object)42, actual.Result);
-                            Assert.Equal(s * (hookLifetime == ServiceLifetime.Transient ? 2 : hookLifetime == ServiceLifetime.Scoped ? 1 : 0), probe.HookDisposals);
-                            Assert.Equal(s * (handlerLifetime == ServiceLifetime.Transient ? 2 : handlerLifetime == ServiceLifetime.Scoped ? 1 : 0), probe.HandlerDisposals);
+                            Assert.Equal(hookLifetime == ServiceLifetime.Singleton ? 0 : s, probe.HookDisposals);
+                            Assert.Equal(handlerLifetime == ServiceLifetime.Singleton ? 0 : s, probe.HandlerDisposals);
                         }
                     }
                     cleanup.Add((probe.HookDisposals, probe.HandlerDisposals));
                 }
-                Assert.Equal(hookLifetime == ServiceLifetime.Singleton ? 1 : hookLifetime == ServiceLifetime.Scoped ? 2 : 4, probe.Phases.Count(p => p == "hook.ctor"));
-                Assert.Equal(handlerLifetime == ServiceLifetime.Singleton ? 1 : handlerLifetime == ServiceLifetime.Scoped ? 2 : 4, probe.Phases.Count(p => p == "handler.ctor"));
+                Assert.Equal(hookLifetime == ServiceLifetime.Singleton ? 1 : 2, probe.Phases.Count(p => p == "hook.ctor"));
+                Assert.Equal(handlerLifetime == ServiceLifetime.Singleton ? 1 : 2, probe.Phases.Count(p => p == "handler.ctor"));
             }
-            Assert.Equal(hookLifetime == ServiceLifetime.Singleton ? 1 : hookLifetime == ServiceLifetime.Scoped ? 2 : 4, probe.HookDisposals);
-            Assert.Equal(handlerLifetime == ServiceLifetime.Singleton ? 1 : handlerLifetime == ServiceLifetime.Scoped ? 2 : 4, probe.HandlerDisposals);
+            Assert.Equal(hookLifetime == ServiceLifetime.Singleton ? 1 : 2, probe.HookDisposals);
+            Assert.Equal(handlerLifetime == ServiceLifetime.Singleton ? 1 : 2, probe.HandlerDisposals);
             return JsonSerializer.Serialize(new { phases = probe.Phases.ToArray(), scopeCleanup = cleanup.Select(c => new { c.Hook, c.Handler }), probe.HookDisposals, probe.HandlerDisposals });
         }
         finally { probe.Cancellation.Dispose(); ReferenceSendProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; }
@@ -229,10 +229,13 @@ public sealed partial class GeneratorTests
 
     [Theory]
     [MemberData(nameof(SingleHookLifetimeCases))]
-    public void Enabled_single_Hook_SendSync_preserves_DI_lifetimes_against_reference(bool isVoid, ServiceLifetime hookLifetime, ServiceLifetime handlerLifetime)
+    public void Enabled_single_Hook_SendSync_captures_dependencies_and_preserves_DI_ownership(bool isVoid, ServiceLifetime hookLifetime, ServiceLifetime handlerLifetime)
     {
         var f = SingleHookBackendFixture(isVoid);
-        Assert.Equal(RunSingleHookLifetimes(f, isVoid, hookLifetime, handlerLifetime, false), RunSingleHookLifetimes(f, isVoid, hookLifetime, handlerLifetime, true));
+        var generated = RunSingleHookLifetimes(f, isVoid, hookLifetime, handlerLifetime, true);
+        // The reference resolves Transient stages per call instead of capturing them per Mediator.
+        if (hookLifetime != ServiceLifetime.Transient && handlerLifetime != ServiceLifetime.Transient)
+            Assert.Equal(RunSingleHookLifetimes(f, isVoid, hookLifetime, handlerLifetime, false), generated);
     }
 
     [Theory]

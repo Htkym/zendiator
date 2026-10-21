@@ -331,18 +331,18 @@ public sealed partial class GeneratorTests
                             else if (isVoid) CanonicalSendSyncReference.SendTwoHooksVoid<NestedVoidRequest, NestedVoidHook<OuterHookTag>, NestedVoidHook<InnerHookTag>, NestedVoidHandler>(scope.ServiceProvider, new("input"), default);
                             else Assert.Equal(43, CanonicalSendSyncReference.SendTwoHooksResponse<NestedResponseRequest, int, NestedResponseHook<OuterHookTag>, NestedResponseHook<InnerHookTag>, NestedResponseHandler>(scope.ServiceProvider, new("input"), default));
                             for (var t = 0; t < owners.Length; t++)
-                                Assert.Equal(s * (lifetimes[t] == ServiceLifetime.Singleton ? 0 : lifetimes[t] == ServiceLifetime.Scoped ? 1 : 2), probe.Disposals.GetValueOrDefault(owners[t]));
+                                Assert.Equal(s * (lifetimes[t] == ServiceLifetime.Singleton ? 0 : lifetimes[t] == ServiceLifetime.Scoped || generated ? 1 : 2), probe.Disposals.GetValueOrDefault(owners[t]));
                         }
                     }
                     for (var t = 0; t < owners.Length; t++)
-                        Assert.Equal((s + 1) * (lifetimes[t] == ServiceLifetime.Singleton ? 0 : lifetimes[t] == ServiceLifetime.Scoped ? 1 : 2), probe.Disposals.GetValueOrDefault(owners[t]));
+                        Assert.Equal((s + 1) * (lifetimes[t] == ServiceLifetime.Singleton ? 0 : lifetimes[t] == ServiceLifetime.Scoped || generated ? 1 : 2), probe.Disposals.GetValueOrDefault(owners[t]));
                     cleanup.Add(owners.Select(owner => probe.Disposals.GetValueOrDefault(owner)).ToArray());
                 }
                 for (var t = 0; t < owners.Length; t++)
-                    Assert.Equal(lifetimes[t] == ServiceLifetime.Singleton ? 1 : lifetimes[t] == ServiceLifetime.Scoped ? 2 : 4, probe.Phases.Count(p => p == owners[t] + ".ctor"));
+                    Assert.Equal(lifetimes[t] == ServiceLifetime.Singleton ? 1 : lifetimes[t] == ServiceLifetime.Scoped || generated ? 2 : 4, probe.Phases.Count(p => p == owners[t] + ".ctor"));
             }
             for (var t = 0; t < owners.Length; t++)
-                Assert.Equal(lifetimes[t] == ServiceLifetime.Singleton ? 1 : lifetimes[t] == ServiceLifetime.Scoped ? 2 : 4, probe.Disposals[owners[t]]);
+                Assert.Equal(lifetimes[t] == ServiceLifetime.Singleton ? 1 : lifetimes[t] == ServiceLifetime.Scoped || generated ? 2 : 4, probe.Disposals[owners[t]]);
             return JsonSerializer.Serialize(new
             {
                 phases = probe.Phases.ToArray(),

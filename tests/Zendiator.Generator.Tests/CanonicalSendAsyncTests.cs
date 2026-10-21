@@ -188,7 +188,7 @@ public sealed partial class GeneratorTests
     {
         try
         {
-            if (generated) return f.Dispatch.Invoke(null, [provider.GetRequiredService(f.Mediator), request, token])!;
+            if (generated) return f.Dispatch.Invoke(null, [provider.GetRequiredService(CanonicalEntryService(f.Mediator)), request, token])!;
             var name = "Send" + (receiver switch { "direct" => "Direct", "owned" => "Owned", "borrowed" => "Borrowed", "async-owned" => "AsyncOwned", _ => "AsyncBorrowed" }) + (isVoid ? "Void" : "Response");
             var types = new List<Type> { f.Request }; if (!isVoid) types.Add(typeof(int)); types.Add(f.Handler); if (receiver != "direct") types.Add(f.Service);
             return typeof(CanonicalSendAsyncReference).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)!.MakeGenericMethod(types.ToArray()).Invoke(null, [provider, request, token])!;
@@ -208,7 +208,7 @@ public sealed partial class GeneratorTests
     }
     [Theory]
     [MemberData(nameof(AsyncShapes))]
-    public async Task Canonical_SendAsync_standard_API_and_reference_preserve_entry_context_and_DI_ownership(string receiver, bool isVoid)
+    public async Task Canonical_SendAsync_keeps_DI_ownership_and_exposes_plain_prefix_context(string receiver, bool isVoid)
     {
         var f = AsyncRuntimeFixture(receiver, isVoid);
         foreach (var generated in new[] { false, true }) foreach (var native in new[] { false, true })
@@ -217,17 +217,29 @@ public sealed partial class GeneratorTests
             try
             {
                 IServiceCollection services = new ServiceCollection(); services.AddSingleton(p); f.Register.Invoke(null, [services]);
-                Assert.Contains(services, d => d.ServiceType == f.Service && d.Lifetime == ServiceLifetime.Scoped);
+                Assert.Contains(services, d => d.ServiceType == f.Service && d.Lifetime == ServiceLifetime.Transient);
                 if (receiver != "direct") Assert.DoesNotContain(services, d => d.ServiceType == f.Handler);
                 await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
                 await using (var scope = provider.CreateAsyncScope())
                 {
                     var request = Activator.CreateInstance(f.Request)!; CanonicalAsyncProbe.Ambient.Value = "caller";
                     Assert.Throws<ArgumentNullException>(() => AsyncInvoke(f, receiver, isVoid, generated, scope.ServiceProvider, null, default)); Assert.Empty(p.Trace);
-                    p.Cancellation.Cancel(); var canceled = AsyncTask(AsyncInvoke(f, receiver, isVoid, generated, scope.ServiceProvider, request, p.Cancellation.Token), isVoid);
-                    Assert.True(canceled.IsCanceled); var cancellation = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => canceled); Assert.Equal(p.Cancellation.Token, cancellation.CancellationToken); Assert.Empty(p.Trace);
+                    p.Cancellation.Cancel();
+                    if (generated && receiver == "direct")
+                    {
+                        var cancellation = Assert.ThrowsAny<OperationCanceledException>(() => AsyncInvoke(f, receiver, isVoid, true, scope.ServiceProvider, request, p.Cancellation.Token));
+                        Assert.Equal(p.Cancellation.Token, cancellation.CancellationToken);
+                    }
+                    else
+                    {
+                        var canceled = AsyncTask(AsyncInvoke(f, receiver, isVoid, generated, scope.ServiceProvider, request, p.Cancellation.Token), isVoid);
+                        Assert.True(canceled.IsCanceled); var cancellation = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => canceled);
+                        Assert.Equal(p.Cancellation.Token, cancellation.CancellationToken);
+                    }
+                    Assert.Empty(p.Trace);
                     var task = AsyncTask(AsyncInvoke(f, receiver, isVoid, generated, scope.ServiceProvider, request, default), isVoid);
-                    Assert.Equal("caller", CanonicalAsyncProbe.Ambient.Value); await task; if (!isVoid) Assert.Equal(73, await ((Task<int>)task));
+                    Assert.Equal(generated && receiver == "direct" && !native ? "handler" : "caller", CanonicalAsyncProbe.Ambient.Value);
+                    await task; if (!isVoid) Assert.Equal(73, await ((Task<int>)task));
                     Assert.Equal(receiver == "direct" ? new[] { "caller" } : new[] { "caller", "factory" }, p.AmbientSeen.Take(receiver == "direct" ? 1 : 2));
                     if (receiver.EndsWith("owned", StringComparison.Ordinal)) Assert.Equal(native ? "factory" : "handler", p.AmbientSeen.Last());
                     Assert.All(p.Calls, c => { Assert.Same(request, c.Request); Assert.Equal(default, c.Token); });
@@ -291,15 +303,26 @@ public sealed partial class GeneratorTests
             IServiceCollection services = new ServiceCollection(); services.AddSingleton(p); f.Register.Invoke(null, [services]); await using var provider = services.BuildServiceProvider();
             await using (var scope = provider.CreateAsyncScope())
             {
-                var request = Activator.CreateInstance(f.Request); var task = AsyncTask(AsyncInvoke(f, receiver, isVoid, generated, scope.ServiceProvider, request, p.Cancellation.Token), isVoid);
-                Exception? actual = null; try { await task; } catch (Exception e) { actual = e; }
+                var request = Activator.CreateInstance(f.Request); Task? task = null; Exception? actual = null;
+                try
+                {
+                    task = AsyncTask(AsyncInvoke(f, receiver, isVoid, generated, scope.ServiceProvider, request, p.Cancellation.Token), isVoid);
+                    await task;
+                }
+                catch (Exception e) { actual = e; }
                 var expected = p.CleanupError ?? p.ConstructorError ?? p.FactoryError ?? p.HandlerError;
                 if (p.NullSession) Assert.IsType<InvalidOperationException>(actual); else Assert.Same(expected, actual);
-                Assert.Equal(expected is OperationCanceledException, task.IsCanceled); Assert.Equal(expected != null && expected is not OperationCanceledException || p.NullSession, task.IsFaulted);
+                Assert.Equal(generated && receiver == "direct" && !p.FaultedOce, task == null);
+                if (task != null)
+                {
+                    var canceled = expected is OperationCanceledException && !(generated && receiver == "direct" && p.FaultedOce);
+                    Assert.Equal(canceled, task.IsCanceled);
+                    Assert.Equal(expected != null && !canceled || p.NullSession, task.IsFaulted);
+                }
                 if (actual is OperationCanceledException escaped) Assert.Equal(other.Token, escaped.CancellationToken);
                 var acquired = p.Created.Count != 0; Assert.Equal(receiver.EndsWith("owned", StringComparison.Ordinal) && acquired ? 1 : 0, p.Released.Count);
                 if (p.CancelFactory || p.CancelHandler) { Assert.True(p.Cancellation.IsCancellationRequested); Assert.Contains("handler", p.Trace); Assert.Contains("cleanup", p.Trace); }
-                WriteNestedHookEvidence("async-errors", receiver + "-" + isVoid + "-" + scenario + "-" + generated, new { receiver, isVoid, scenario, generated, p.Trace, task.IsCanceled, task.IsFaulted, identityPreserved = ReferenceEquals(expected, actual), created = p.Created.Count, released = p.Released.Count });
+                WriteNestedHookEvidence("async-errors", receiver + "-" + isVoid + "-" + scenario + "-" + generated, new { receiver, isVoid, scenario, generated, p.Trace, isCanceled = task?.IsCanceled, isFaulted = task?.IsFaulted, synchronousFailure = task == null, identityPreserved = ReferenceEquals(expected, actual), created = p.Created.Count, released = p.Released.Count });
                 p.HandlerError = null; p.CleanupError = null; if (receiver is "borrowed" or "async-borrowed") await ((IAsyncDisposable)p.Created.Single()).DisposeAsync();
             }
             p.Cancellation.Dispose();

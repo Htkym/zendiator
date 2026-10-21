@@ -116,6 +116,7 @@ public sealed partial class GeneratorTests
         if (reentrant) { second.InnerFinallyError = new Exception("inner Hook Finally identity"); if (variant) first.BodyError = second.InnerFinallyError; }
         else { first.Gate = second.Gate = barrier; if (variant) { first.BodyError = new OperationCanceledException(firstToken.Token); second.InnerFinallyError = new Exception("other Finally identity"); } else second.BodyError = new Exception("other body identity"); }
         IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe); services.AddSingleton(fixture.Service, fixture.Service);
+        services.AddScoped(fixture.Assembly.GetType("App.Handler`1")!.MakeGenericType(typeof(string)));
         Assert.Same(services, fixture.Register.Invoke(null, [services])); object[] snapshots;
         using (var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
         {

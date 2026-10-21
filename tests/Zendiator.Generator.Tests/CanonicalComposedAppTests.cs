@@ -116,10 +116,9 @@ public sealed partial class GeneratorTests
                 var p=new AppProbe();IServiceCollection services=new ServiceCollection();services.AddSingleton(p);services.AddScoped<IInventory,ObservedInventory>();services.AddScoped<IEntityStore<Product>,ObservedStore>();services.AddScoped(typeof(LookupHandler<>));var existing=services.Last();
                 void Register(){if(composed)AppServices.Add(services);else{Reference0Services.Add(services);Reference1Services.Add(services);Reference2Services.Add(services);Reference3Services.Add(services);Reference4Services.Add(services);Reference5Services.Add(services);Reference6Services.Add(services);}}
                 Register();var count=services.Count;Register();AppProbe.Check(services.Count==count&&services.Contains(existing),"TryAdd and repeat registration");
-                AppProbe.Check(services.Where(d=>d.ServiceType!=typeof(AppProbe)&&d.ServiceType.IsVisible).All(d=>d.Lifetime==ServiceLifetime.Scoped),"public scoped services and facades");
                 var descriptors=services.Where(d=>d.ServiceType.Namespace?.StartsWith("ComposedApp.Generated.",StringComparison.Ordinal)!=true).Select(d=>d.ServiceType+"|"+d.Lifetime+"|"+d.ImplementationType).ToArray();
                 using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});using var scope=provider.CreateScope();var sp=scope.ServiceProvider;
-                var app=composed?sp.GetRequiredService<Generated.App.IZendiator>():null;if(composed)AppProbe.Check(ReferenceEquals(app,sp.GetRequiredService<Generated.App.Zendiator>()),"one combined facade");
+                var app=composed?sp.GetRequiredService<Generated.App.IZendiator>():null;if(composed)AppProbe.Check(ReferenceEquals(app,sp.GetRequiredService<Generated.App.IZendiator>()),"one combined facade");
                 ValueTask<Product> Find(Lookup<Product> r,CancellationToken t)=>composed?app!.SendAsync(r,t):sp.GetRequiredService<Generated.Reference0.IZendiator>().SendAsync(r,t);
                 ValueTask Refresh(RefreshInventory r,CancellationToken t)=>composed?app!.SendAsync(r,t):sp.GetRequiredService<Generated.Reference1.IZendiator>().SendAsync(r,t);
                 int Sum(Sum<Product> r,CancellationToken t)=>composed?app!.Send(r,t):sp.GetRequiredService<Generated.Reference2.IZendiator>().Send(r,t);

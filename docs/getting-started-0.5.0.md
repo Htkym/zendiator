@@ -31,8 +31,51 @@ StreamAsync: 20, 40
 
 Resolve the generated `IZendiator` from a DI scope. Keep that scope alive until
 the operation or Stream enumeration, including cleanup, has finished. Let DI
-dispose its scoped handler and hook services. Await each returned `ValueTask`
-once.
+dispose its handler and hook services. Generated registration uses a Scoped
+`IZendiator` entry and Transient defaults for handlers, hooks and session
+factories. Each Mediator captures the first published successful resolution of
+each dependency and reuses it. Concurrent successful resolutions share that
+instance; a failed resolution still reports its own error. Await each returned
+`ValueTask` once.
+
+An eligible plain `SendAsync` route with no hooks, or only synchronous Before
+hooks, and no factories, wrappers or sessions returns the handler's original
+`ValueTask`. Dependency resolution and synchronous callbacks run during the
+call. Their failures, including cancellation, can throw before a `ValueTask` is
+returned. Synchronous changes to `AsyncLocal`, culture or `SynchronizationContext`
+are visible to the caller. Other asynchronous failures arrive when awaiting the
+result. Put both the call and the await inside your `try` block.
+
+## Stream execution
+
+The sample fuses its class Handler and class Filter/Map hooks into one generated C#
+async iterator. This path supports one borrowed segment without factories,
+sessions, wrappers or upstream segments. Calling `StreamAsync` or acquiring an
+enumerator does not run user DI resolution, the handler or hooks; the first item
+request does. Each acquisition creates a fresh iterator. API/enumeration token
+composition can create a linked token source at acquisition, earlier than the
+first item request, and each iterator owns its own link.
+
+Use `Current` only after `MoveNextAsync` succeeds, and await each `MoveNextAsync`
+or `DisposeAsync` before starting another operation. The fused path follows native
+C# iterator Current and context behavior; it does not promise the former custom
+errors for invalid Current or overlapping operations. Cancellation is checked
+before source moves and reached hooks, including a retry after a false filter.
+Source, callback and cleanup ValueTasks are consumed once. Completion, failure
+and early disposal release the source once, with cleanup failure taking priority
+over an item failure;
+DI owns the borrowed handler and hooks. Nonfused framework segments retain their
+existing guarded cursors and orchestration.
+
+An eligible zero-stage Stream without a session is handler-owned by default.
+`StreamAsync` resolves the handler and calls `HandleAsync` immediately, so handler
+construction and synchronous failures can occur at that call. The returned
+enumerable owns token composition, independent enumeration and cleanup. Mark
+the handler with `[ZendiatorHandler(OwnsStream = false)]` to select the framework's
+lazy guarded cursor for that zero-stage route. This flag does not disable fusion
+of staged routes. Wrapped and session routes retain their orchestration.
+See the [execution contract](design/0.5.0-route-and-stream-contract.md)
+for these boundaries.
 
 ## Use typed queries and an update command in one App
 
@@ -40,9 +83,9 @@ The [GenericLookup sample](../samples/Zendiator.Sample.GenericLookup/) returns
 `T` from `Lookup<T>` and `InventoryStatus` from `StatusQuery`. It awaits
 `RefreshInventory` before querying the updated state.
 
-This example uses class requests and DI-owned class handlers. With no hooks,
-it can omit empty `Pipeline` declarations. Await each returned `ValueTask` once
-and keep the scope alive until the asynchronous operation finishes.
+This example uses class requests and DI-owned class handlers. These handler-only
+`SendAsync` routes can omit empty `Pipeline` declarations. Await each returned
+`ValueTask` once and keep the scope alive until the asynchronous operation finishes.
 
 ## Use several dispatch families in one App
 
@@ -96,8 +139,10 @@ Do not convert an arbitrary wrapper body to hooks without checking its intent.
 - Mark selected handlers with `[ZendiatorHandler]` and select them explicitly
   with `Handlers` in the composition.
 - Declare each route's hooks and wrappers in an ordered `Pipeline` list. Use an
-  empty list for a route without hooks. Use dedicated hooks for their declared
-  operation and wrappers for retry, caching or custom continuation behavior.
+  empty list for a zero-stage Stream route. Eligible handler-only `SendSync` and
+  `SendAsync` routes may omit `Pipeline`; the samples can also declare it
+  explicitly. Use dedicated hooks for their declared operation and wrappers for
+  retry, caching or custom continuation behavior.
 - For a type-changing Stream, declare its final type with `StreamPipeline`.
   The handler's request interface continues to describe the source item type.
 
@@ -144,8 +189,9 @@ public sealed class Logging<TRequest, TResponse> : IAsyncSendWrapper<TRequest, T
 }
 ```
 
-Select both handlers and declare a pipeline for each route. The closed route has
-an empty pipeline; the wrapper is selected only for `Query<>`:
+Select both handlers. This example declares a pipeline for each route, including
+an explicit empty pipeline for the closed route; the wrapper is selected only
+for `Query<>`:
 
 ```csharp
 [ZendiatorComposition("openSendWrapperPair")]

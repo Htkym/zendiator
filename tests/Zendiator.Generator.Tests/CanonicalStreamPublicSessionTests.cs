@@ -69,7 +69,7 @@ public sealed partial class GeneratorTests
             var probe = new CanonicalStreamSessionProbe { Request = request, FailHandler = profile == "partial-startup" };
             var services = new ServiceCollection(); services.AddSingleton(probe); register(services);
             var registered = new[] { "HandlerFactory", "FirstFactory", "LastFactory", "BorrowedMiddle" }.Select(n => assembly.GetType("App." + n)!).ToArray();
-            Assert.All(registered, type => Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == type).Lifetime));
+            Assert.All(registered, type => Assert.Equal(ServiceLifetime.Transient, Assert.Single(services, d => d.ServiceType == type).Lifetime));
             foreach (var name in new[] { "SessionHandler", "FirstSession", "LastSession" })
                 Assert.DoesNotContain(services, d => d.ServiceType == assembly.GetType("App." + name));
             await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });

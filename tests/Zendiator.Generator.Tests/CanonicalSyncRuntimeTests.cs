@@ -240,7 +240,7 @@ public sealed partial class GeneratorTests
             try
             {
                 var mediator = scope.ServiceProvider.GetRequiredService(f.Interface);
-                Assert.Same(mediator, scope.ServiceProvider.GetRequiredService(f.Mediator));
+                Assert.Same(mediator, scope.ServiceProvider.GetRequiredService(f.Interface));
                 var request = scenario == "null-request" ? null : Activator.CreateInstance(f.Request)!;
                 var actual = InvokeSync(f, mediator, request, probe.Cancellation.Token);
                 // Expected traces are independent of generated text and execution graphs.
@@ -305,7 +305,7 @@ public sealed partial class GeneratorTests
     [InlineData("borrowed", ServiceLifetime.Scoped)]
     [InlineData("owned", ServiceLifetime.Transient)]
     [InlineData("owned", ServiceLifetime.Scoped)]
-    public void Generated_SendSync_resolves_each_operation_preserves_overrides_and_leaves_DI_cleanup_to_scope(string receiver, ServiceLifetime lifetime)
+    public void Generated_SendSync_captures_dependencies_preserves_overrides_and_leaves_DI_cleanup_to_scope(string receiver, ServiceLifetime lifetime)
     {
         var f = SyncRuntimeFixture(receiver, false); var probe = new CanonicalSyncRuntimeProbe();
         var ambient = CanonicalSyncRuntimeProbe.Ambient.Value;
@@ -316,14 +316,14 @@ public sealed partial class GeneratorTests
             {
                 var mediator = scope.ServiceProvider.GetRequiredService(f.Interface);
                 for (var i = 0; i < 2; i++) { var actual = InvokeSync(f, mediator, Activator.CreateInstance(f.Request), default); Assert.Null(actual.Error); Assert.Equal(73, actual.Result); }
-                Assert.Equal(receiver == "direct" && lifetime == ServiceLifetime.Scoped ? 1 : 2, probe.Created.Count);
+                Assert.Equal(receiver == "direct" ? 1 : 2, probe.Created.Count);
                 Assert.Equal(receiver == "owned" ? 2 : 0, probe.Released.Count); Assert.Equal(0, probe.FactoryDisposals);
-                if (receiver != "direct") Assert.Equal(lifetime == ServiceLifetime.Scoped ? 1 : 2, probe.Trace.Count(t => t == "factory.ctor"));
+                if (receiver != "direct") Assert.Single(probe.Trace, t => t == "factory.ctor");
                 var receivers = probe.Calls.Where(c => c.Phase == "handler").Select(c => c.Receiver).ToArray();
-                if (receiver == "direct" && lifetime == ServiceLifetime.Scoped) Assert.Same(receivers[0], receivers[1]); else Assert.NotSame(receivers[0], receivers[1]);
+                if (receiver == "direct") Assert.Same(receivers[0], receivers[1]); else Assert.NotSame(receivers[0], receivers[1]);
             }
             Assert.Equal(receiver == "borrowed" ? 0 : probe.Created.Count, probe.Released.Count);
-            Assert.Equal(receiver == "direct" ? 0 : lifetime == ServiceLifetime.Scoped ? 1 : 2, probe.FactoryDisposals);
+            Assert.Equal(receiver == "direct" ? 0 : 1, probe.FactoryDisposals);
         }
         finally { CanonicalSyncRuntimeProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; probe.Cancellation.Dispose(); }
     }

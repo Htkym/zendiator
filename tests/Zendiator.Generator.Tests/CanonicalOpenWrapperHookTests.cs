@@ -101,14 +101,15 @@ public sealed partial class GeneratorTests
             public static {{result}} OtherMarkerCompileSentinel(Generated.Mixed.IZendiator m)=>m.SendAsync(new Query<OtherMarker>(42));
             private static async Task<string> Observe(bool generated,string mode){
                 using var cancellation=new CancellationTokenSource();var p=new Probe{Mode=mode,Token=cancellation.Token};IServiceCollection services=new ServiceCollection();services.AddSingleton(p);
-                services.AddScoped(typeof(Hook<>));var existing=services.Last();Register.Add(services);var count=services.Count;Register.Add(services);
+                services.AddScoped(typeof(Handler<>));services.AddScoped(typeof(Hook<>));var existing=services.Last();Register.Add(services);var count=services.Count;Register.Add(services);
                 Probe.Check(services.Count==count&&services.Contains(existing),"TryAdd/lifetime");
-                foreach(var type in new[]{typeof(Logging<{{(isVoid ? "" : ",")}}>),typeof(Hook<>),typeof(Handler<>),typeof(Generated.Mixed.IZendiator),typeof(Generated.Mixed.Zendiator)})Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"scoped registrations");
+                foreach(var type in new[]{typeof(Logging<{{(isVoid ? "" : ",")}}>),typeof(Hook<>),typeof(Handler<>),typeof(Generated.Mixed.IZendiator)})Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==(type==typeof(Generated.Mixed.IZendiator)||type==typeof(Hook<>)||type==typeof(Handler<>)?ServiceLifetime.Scoped:ServiceLifetime.Transient),"default dependencies and overridden lifetime");
+                Probe.Check(!services.Any(d=>d.ServiceType==typeof(Generated.Mixed.Zendiator))&&services.Single(d=>d.ServiceType==typeof(Generated.Mixed.IZendiator)).ImplementationType==typeof(Generated.Mixed.Zendiator),"single interface facade registration");
                 var mismatch=new ZendiatorConfiguration();mismatch.Handlers(typeof(Query<>),DispatchFamily.SendAsync,typeof(Handler<>));mismatch.Pipeline(typeof(Query<>),DispatchFamily.SendAsync,Stage.Hook(typeof(Hook<>)),Stage.Wrapper(typeof(Logging<{{(isVoid ? "" : ",")}}>)));
                 IServiceCollection rejected=new ServiceCollection();var mismatchRejected=false;try{Generated.Mixed.ZendiatorGeneratedRegistrar.Add(rejected,mismatch.Snapshot());}catch(InvalidOperationException){mismatchRejected=true;}
                 Probe.Check(mismatchRejected&&rejected.Count==0,"snapshot order checked before registration");
                 using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});using var scope=provider.CreateScope();var sp=scope.ServiceProvider;
-                var mediator=sp.GetRequiredService<Generated.Mixed.IZendiator>();Probe.Check(ReferenceEquals(mediator,sp.GetRequiredService<Generated.Mixed.Zendiator>()),"one facade");
+                var mediator=sp.GetRequiredService<Generated.Mixed.IZendiator>();Probe.Check(ReferenceEquals(mediator,sp.GetRequiredService<Generated.Mixed.IZendiator>()),"one facade");
                 var request=new Query<Marker>(42);p.Original=request;Probe.Ambient.Value="caller";
                 var task=(generated?mediator.SendAsync(request,p.Token):Reference(sp,request,p.Token)).AsTask();
                 for(var i=0;i<(mode=="repeat"?2:1);i++){
@@ -124,7 +125,6 @@ public sealed partial class GeneratorTests
                 Probe.Check(p.Saved.All(r=>!ReferenceEquals(r,request))&&(p.Saved.Count==1||!ReferenceEquals(p.Saved[0],p.Saved[1])),"separate request slots");
                 Probe.Check(p.Gates.Count==p.HandlerCalls*4&&p.Gates.All(g=>g.Consumptions==1),"single consumption of every callback and handler");
                 Probe.Check(p.Created.Select(x=>x.GetType()).SequenceEqual(new[]{typeof(Logging<Query<Marker>{{response}}>),typeof(Hook<Marker>),typeof(Handler<Marker>)}),"inferred DI keys");
-                foreach(var receiver in p.Created)Probe.Check(ReferenceEquals(receiver,sp.GetRequiredService(receiver.GetType())),"borrowed scoped receiver");
                 Probe.Check(p.Disposed.Count==0,"no dispatch disposal");scope.Dispose();Probe.Check(p.Disposed.SequenceEqual(p.Created.AsEnumerable().Reverse()),"one reverse scope cleanup");
                 return JsonSerializer.Serialize(new{mode,value,status=task.Status.ToString(),error=caught==null?null:"sentinel",p.Trace,p.AmbientSeen,p.HandlerCalls,p.NextCalls,consumptions=p.Gates.Select(g=>g.Consumptions),created=p.Created.Select(x=>x.GetType().ToString()),disposed=p.Disposed.Select(x=>x.GetType().ToString()),registrations=count,mismatchRejected});
             }

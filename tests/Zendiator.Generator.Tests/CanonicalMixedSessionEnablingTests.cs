@@ -26,8 +26,8 @@ public sealed partial class GeneratorTests
             Assert.Same(services, fixture.Register.Invoke(null, [services]));
             var types = MixedSessionTypes(hookOwned, handlerOwned, isVoid, fixture);
             Assert.DoesNotContain(services, d => d.ServiceType == types.Hook || d.ServiceType == types.Handler);
-            Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == types.HookFactory).Lifetime);
-            Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == types.HandlerFactory).Lifetime);
+            Assert.Equal(ServiceLifetime.Transient, Assert.Single(services, d => d.ServiceType == types.HookFactory).Lifetime);
+            Assert.Equal(ServiceLifetime.Transient, Assert.Single(services, d => d.ServiceType == types.HandlerFactory).Lifetime);
             var golden = new List<string>(); var snapshots = new List<object>();
             using (var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
             {

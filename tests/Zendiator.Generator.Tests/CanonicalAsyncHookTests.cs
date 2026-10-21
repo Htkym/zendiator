@@ -149,7 +149,7 @@ public sealed partial class GeneratorTests
     {
         try
         {
-            if (generated) return f.Dispatch.Invoke(null, [provider.GetRequiredService(f.Mediator), request, token])!;
+            if (generated) return f.Dispatch.Invoke(null, [provider.GetRequiredService(CanonicalEntryService(f.Mediator)), request, token])!;
             var name = "SendHook" + (mode switch { "direct" => "Direct", "two" => "Two", "owned" => "Owned", "borrowed" => "Borrowed", "async-owned" => "AsyncOwned", _ => "AsyncBorrowed" }) + (isVoid ? "Void" : "Response");
             var types = new List<Type> { f.Request }; if (!isVoid) types.Add(typeof(int)); types.Add(f.Outer); if (mode == "two") types.Add(f.Inner); types.Add(f.Handler); if (mode is not ("direct" or "two")) types.Add(f.Factory);
             return typeof(CanonicalAsyncHookReference).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)!.MakeGenericMethod(types.ToArray()).Invoke(null, [provider, request, token])!;
@@ -276,8 +276,8 @@ public sealed partial class GeneratorTests
         try
         {
             IServiceCollection services = new ServiceCollection(); services.AddSingleton(p); f.Register.Invoke(null, [services]);
-            Assert.Contains(services, d => d.ServiceType == f.Handler && d.Lifetime == ServiceLifetime.Scoped);
-            var hasFactory = mode is not ("direct" or "two"); if (hasFactory) { Assert.Contains(services, d => d.ServiceType == f.Factory && d.Lifetime == ServiceLifetime.Scoped); Assert.DoesNotContain(services, d => d.ServiceType == f.Outer); }
+            Assert.Contains(services, d => d.ServiceType == f.Handler && d.Lifetime == ServiceLifetime.Transient);
+            var hasFactory = mode is not ("direct" or "two"); if (hasFactory) { Assert.Contains(services, d => d.ServiceType == f.Factory && d.Lifetime == ServiceLifetime.Transient); Assert.DoesNotContain(services, d => d.ServiceType == f.Outer); }
             await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
             object request = Activator.CreateInstance(f.Request, [10])!; Exception? actual = null;
             await using (var scope = provider.CreateAsyncScope())

@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace Zendiator.SourceGenerator;
 
 internal sealed record CanonicalStreamFallbackSegment(int Id, int? Upstream,
@@ -16,4 +18,9 @@ internal sealed record CanonicalStreamFallbackModel(string Namespace, string Cla
     public BoundAsyncFactoryEmission? HandlerFactory { get; init; }
     internal bool HandlerOwned => Handler.OwnsStream && HandlerFactory == null && ItemFlow == null && Segments.Count == 1 &&
         Segments[0].Wrapper == null && Segments[0].Hooks.Count == 0;
+    internal bool FusedIterator => !Handler.HandlerIsValueType && HandlerFactory == null && ConsumerSegment == 0 && Segments.Count == 1 &&
+        Segments[0].Upstream == null && Segments[0].Wrapper == null && Segments[0].WrapperFactory == null &&
+        Segments[0].Hooks.Count != 0 && Segments[0].Hooks.All(h => !h.HookIsValueType && h.Factory == null &&
+            h.Phase is BoundCallbackPhase.Filter or BoundCallbackPhase.Map &&
+            h.Completion is BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask);
 }

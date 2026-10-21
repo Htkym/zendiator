@@ -44,7 +44,7 @@ public sealed partial class GeneratorTests
                         var ambient = CrossCuttingProbe.Ambient.Value; var culture = CultureInfo.CurrentCulture; var context = SynchronizationContext.Current;
                         try
                         {
-                            IServiceCollection services = new ServiceCollection(); services.AddSingleton(p); f.Register.Invoke(null, [services]); await using var provider = services.BuildServiceProvider(); await using var scope = provider.CreateAsyncScope(); var mediator = scope.ServiceProvider.GetRequiredService(f.Mediator);
+                            IServiceCollection services = new ServiceCollection(); services.AddSingleton(p); f.Register.Invoke(null, [services]); await using var provider = services.BuildServiceProvider(); await using var scope = provider.CreateAsyncScope(); var mediator = scope.ServiceProvider.GetRequiredService(CanonicalEntryService(f.Mediator));
                             CrossCuttingProbe.Ambient.Value = "caller"; CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US"); SynchronizationContext.SetSynchronizationContext(p.CallerContext); var request = CrossRequest(f, "context"); Task<int>? operation = null; int value = 0;
                             if (mode == "sync") value = (int)CrossInvoke(f, p, scope.ServiceProvider, mediator, request, generated);
                             else if (mode == "suppressed") { using (ExecutionContext.SuppressFlow()) { operation = (Task<int>)AsyncTask(CrossInvoke(f, p, scope.ServiceProvider, mediator, request, generated), false); } }

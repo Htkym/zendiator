@@ -89,7 +89,7 @@ public sealed partial class GeneratorTests
         Assert.Same(collection, f.Register.Invoke(null, [collection])); Assert.All(types, t => Assert.Single(collection, d => d.ServiceType == t));
         using (var provider = new MultiContainer(collection))
         {
-            var mediator = provider.GetService(f.Mediator)!;
+            var mediator = provider.GetService(CanonicalEntryService(f.Mediator))!;
             for (var i = 0; i < 3; i++)
             {
                 p.Fail = i == 1; p.Trace.Clear(); var request = Activator.CreateInstance(f.Request, [10])!; var call = (Task<int>)f.Dispatch.Invoke(null, [mediator, request])!;
@@ -108,7 +108,7 @@ public sealed partial class GeneratorTests
                     Assert.Equal(10, await ((Task<int>)oracle.Invoke(null, [reference, Activator.CreateInstance(f.Request, [10])!])!).WaitAsync(TimeSpan.FromSeconds(10)));
                     expected = (int)pair.Key.GetField("State")!.GetValue(reference)!; Assert.Equal(0, expected); ((IDisposable)reference).Dispose();
                 }
-                Assert.Equal(expected, pair.Key.GetField("State")!.GetValue(pair.Value)); Assert.Equal(3, provider.Resolutions.Count(t => t == pair.Key)); Assert.Same(pair.Value, provider.GetService(pair.Key));
+                Assert.Equal(expected, pair.Key.GetField("State")!.GetValue(pair.Value)); Assert.Equal(1, provider.Resolutions.Count(t => t == pair.Key)); Assert.Same(pair.Value, provider.GetService(pair.Key));
             }
             Assert.DoesNotContain(typeof(IServiceScopeFactory), provider.Resolutions);
         }

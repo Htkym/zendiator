@@ -31,7 +31,7 @@ public sealed partial class GeneratorTests
                 public void End(string name) {Ended.Add(name);Events.Add("DI.Dispose."+name);}
                 public static void Check(bool value,string message) {if(!value)throw new InvalidOperationException(message);}
             }
-            [ZendiatorHandler] public sealed class H : IStreamRequestHandler<Request,int>,IDisposable {
+            [ZendiatorHandler(OwnsStream=false)] public sealed class H : IStreamRequestHandler<Request,int>,IDisposable {
                 private readonly Probe p;
                 public H(Probe probe){p=probe;p.Resolve("H");}
                 public IAsyncEnumerable<int> HandleAsync(Request r,CancellationToken c){p.Starts++;p.Observe("H.Start",r,c);return new Source(p,r);}
@@ -89,12 +89,13 @@ public sealed partial class GeneratorTests
                 services.AddScoped<F1>(_=>new F1(p){Existing=true});
                 Register(services);var count=services.Count;Register(services);
                 Probe.Check(count==services.Count,"TryAdd idempotence");
-                foreach(var type in new[]{typeof(H),typeof(F1),typeof(M),typeof(F2),typeof(global::App.Generated.Reads.IZendiator),typeof(global::App.Generated.Reads.Zendiator)})
-                    Probe.Check(services.Count(d=>d.ServiceType==type)==1 && services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"Scoped registrar");
+                foreach(var type in new[]{typeof(H),typeof(F1),typeof(M),typeof(F2),typeof(global::App.Generated.Reads.IZendiator)})
+                    Probe.Check(services.Count(d=>d.ServiceType==type)==1 && services.Single(d=>d.ServiceType==type).Lifetime==(type==typeof(F1)||type==typeof(global::App.Generated.Reads.IZendiator)?ServiceLifetime.Scoped:ServiceLifetime.Transient),"default transient services and existing scoped override");
+                Probe.Check(!services.Any(d=>d.ServiceType==typeof(global::App.Generated.Reads.Zendiator)),"interface-only mediator registration");
                 await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
                 var scope=provider.CreateAsyncScope();
                 var mediator=scope.ServiceProvider.GetRequiredService<global::App.Generated.Reads.IZendiator>();
-                Probe.Check(ReferenceEquals(mediator,scope.ServiceProvider.GetRequiredService<global::App.Generated.Reads.Zendiator>()),"mediator identity");
+                Probe.Check(ReferenceEquals(mediator,scope.ServiceProvider.GetRequiredService<global::App.Generated.Reads.IZendiator>()),"mediator identity");
                 try{mediator.StreamAsync(null!);throw new InvalidOperationException("missing null guard");}
                 catch(ArgumentNullException e){Probe.Check(e.ParamName=="request","dispatch null guard");}
                 var request=new Request();
@@ -153,8 +154,8 @@ public sealed partial class GeneratorTests
                 var results=new List<object>();
                 for(int mode=0;mode<3;mode++) {
                     var p=new Probe{InputCount=mode==0?0:16};var services=new ServiceCollection();services.AddSingleton(p);Register(services);
-                    foreach(var type in new[]{typeof(H),typeof(global::App.Generated.Reads.IZendiator),typeof(global::App.Generated.Reads.Zendiator)})
-                        Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"Scoped registrar");
+                    foreach(var type in new[]{typeof(H),typeof(global::App.Generated.Reads.IZendiator)})
+                        Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==(type==typeof(global::App.Generated.Reads.IZendiator)?ServiceLifetime.Scoped:ServiceLifetime.Transient),"transient handler and scoped mediator");
                     await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
                     var scope=provider.CreateAsyncScope();
                     var mediator=scope.ServiceProvider.GetRequiredService<global::App.Generated.Reads.IZendiator>();

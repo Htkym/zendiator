@@ -93,7 +93,7 @@ public sealed partial class GeneratorTests
                 consumer = Regex.Replace(consumer.Replace("Read<T>(", "Read("), @"\bT\b", "int");
             }
             if (mixed) consumer = consumer
-                .Replace("var request=new GenericItems", "Check(services.Single(d=>d.ServiceType==typeof(HookPingHandler)).Lifetime==ServiceLifetime.Scoped,\"closed Send registration\");Check(mediator.Send(new HookPing(41))==41,\"Send before Stream\");var request=new GenericItems")
+                .Replace("var request=new GenericItems", "Check(services.Single(d=>d.ServiceType==typeof(HookPingHandler)).Lifetime==ServiceLifetime.Transient,\"closed Send registration\");Check(mediator.Send(new HookPing(41))==41,\"Send before Stream\");var request=new GenericItems")
                 .Replace("await scope.DisposeAsync();", "Check(mediator.Send(new HookPing(9))==9,\"Send after Stream\");await scope.DisposeAsync();");
             source += consumer;
         }
@@ -158,7 +158,7 @@ public sealed partial class GeneratorTests
             private static void Check(bool value,string message){if(!value)throw new InvalidOperationException(message);}
             private static async Task<object> Read<T>(T value,int mode,Func<T,T> map,Func<T,T> selectedMap) __WHERE__ {
                 var p=new global::Zendiator.Generator.Tests.StreamGenericScopeProbe();var services=new ServiceCollection();services.AddSingleton(p);Startup.Configure(services);
-                foreach(var type in new[]{typeof(GenericHandler<>),typeof(GenericWrapper<>),typeof(__HOOK__<>)})Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"scoped descriptor");
+                foreach(var type in new[]{typeof(GenericHandler<>),typeof(GenericWrapper<>),typeof(__HOOK__<>)})Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Transient,"transient descriptor");
                 await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
                 var scope=provider.CreateAsyncScope();var mediator=scope.ServiceProvider.GetRequiredService<global::App.Generated.Reads.IZendiator>();
                 var request=new GenericItems<T>(value,mode,map,selectedMap,true,false);var stream=mediator.StreamAsync(request);Check(p.Created.Count==0,"lazy dispatch");

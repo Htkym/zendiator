@@ -51,8 +51,8 @@ public sealed partial class GeneratorTests
         bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var register = assembly.GetType("App.FixedFinalEntry")!.GetMethod("Register")!.CreateDelegate<Action<IServiceCollection>>();
         var services = new ServiceCollection(); register(services);
-        Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == assembly.GetType("App.OpenHandlerFactory`1")).Lifetime);
-        Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == assembly.GetType("App.OpenMapFactory`2")).Lifetime);
+        Assert.Equal(ServiceLifetime.Transient, Assert.Single(services, d => d.ServiceType == assembly.GetType("App.OpenHandlerFactory`1")).Lifetime);
+        Assert.Equal(ServiceLifetime.Transient, Assert.Single(services, d => d.ServiceType == assembly.GetType("App.OpenMapFactory`2")).Lifetime);
         if (!string.IsNullOrEmpty(root)) File.WriteAllText(Path.Combine(root, "snapshot.json"), System.Text.Json.JsonSerializer.Serialize(new
         {
             declaredFinal = registration.FinalDefinitionName,

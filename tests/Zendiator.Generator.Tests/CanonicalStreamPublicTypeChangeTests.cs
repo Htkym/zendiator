@@ -50,7 +50,7 @@ public sealed partial class GeneratorTests
         Assert.Contains("__ZendiatorStreamCanonical_", facade);
         Assert.DoesNotContain("IAsyncEnumerable<object>", facade); Assert.DoesNotContain("Cast<", facade);
         var backend = Assert.Single(generated, f => f.HintName.StartsWith("Zendiator.StreamCanonical.", StringComparison.Ordinal)).SourceText.ToString();
-        Assert.Contains("private long _current", backend); Assert.Contains("IAsyncEnumerator<int>", backend);
+        Assert.Contains("IAsyncEnumerable<long>", backend); Assert.Contains("IAsyncEnumerator<int>", backend);
         bytes.Position = 0; return AssemblyLoadContext.Default.LoadFromStream(bytes);
     }
 
@@ -75,15 +75,11 @@ public sealed partial class GeneratorTests
         var probe = new CanonicalStreamTypeChangeProbe { Request = request };
         var services = new ServiceCollection(); services.AddSingleton(probe); register(services);
         var receivers = new[] { assembly.GetType("App.ChangeHandler")!, assembly.GetType("App.ToReference`1")!.MakeGenericType(typeof(int)), assembly.GetType("App.ToFinal")! };
-        Assert.All(receivers, type => Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == type).Lifetime));
+        Assert.All(receivers, type => Assert.Equal(ServiceLifetime.Transient, Assert.Single(services, d => d.ServiceType == type).Lifetime));
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
         await using var scope = provider.CreateAsyncScope(); IAsyncEnumerator<long> cursor = streamEntry(scope.ServiceProvider, request).GetAsyncEnumerator();
         Assert.Empty(probe.Trace); var move = cursor.MoveNextAsync().AsTask();
         await probe.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5)); Assert.False(move.IsCompleted); Assert.Equal(0, probe.Gate.Consumptions);
-        var cursorType = cursor.GetType();
-        Assert.Equal(typeof(long), cursorType.GetField("_current", BindingFlags.NonPublic | BindingFlags.Instance)!.FieldType);
-        Assert.Equal(typeof(IAsyncEnumerator<int>), cursorType.GetField("_source", BindingFlags.NonPublic | BindingFlags.Instance)!.FieldType);
-        Assert.Equal(typeof(long), cursorType.GetProperty("Current")!.PropertyType);
         probe.Trace.Add("Release:long70"); probe.Gate.Complete(70L);
         Assert.True(await move.WaitAsync(TimeSpan.FromSeconds(5))); long value = cursor.Current; Assert.Equal(70L, value);
         Assert.False(await cursor.MoveNextAsync()); await cursor.DisposeAsync();

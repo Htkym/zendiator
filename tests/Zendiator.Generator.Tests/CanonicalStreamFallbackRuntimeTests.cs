@@ -320,9 +320,12 @@ public sealed partial class GeneratorTests
                 if (pending && i == 0)
                 {
                     Assert.False(task.IsCompleted); Assert.Equal(0, p.Reads); Assert.Equal(0, p.MoveGate.Consumptions);
-                    Assert.Throws<InvalidOperationException>(() => cursor.MoveNextAsync());
-                    Assert.Throws<InvalidOperationException>(() => cursor.DisposeAsync());
-                    Assert.Throws<InvalidOperationException>(() => cursor.Current);
+                    if (f.Wrapper)
+                    {
+                        Assert.Throws<InvalidOperationException>(() => cursor.MoveNextAsync());
+                        Assert.Throws<InvalidOperationException>(() => cursor.DisposeAsync());
+                        Assert.Throws<InvalidOperationException>(() => cursor.Current);
+                    }
                     if (failure) p.MoveGate.Fail(p.SourceError); else p.MoveGate.Complete(true);
                 }
                 try

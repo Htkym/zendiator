@@ -48,7 +48,7 @@ public sealed partial class GeneratorTests
                     using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
                     var scope=provider.CreateScope();
                     var mediator=scope.ServiceProvider.GetRequiredService<global::MultipleValues.Generated.Many.IZendiator>();
-                    Check(ReferenceEquals(mediator,scope.ServiceProvider.GetRequiredService<global::MultipleValues.Generated.Many.Zendiator>()),"shared composition identity");
+                    Check(ReferenceEquals(mediator,scope.ServiceProvider.GetRequiredService<global::MultipleValues.Generated.Many.IZendiator>()),"shared composition identity");
                     var firstShared=new A.SharedState{Version=11};var secondShared=new B.SharedState{Version=23};
                     var firstRequest=new A.Items(firstShared){Marker=17,Pad=101};var secondRequest=new B.Items(secondShared){Marker=29,Pad=202};
                     var firstStream=mediator.StreamAsync(firstRequest);var secondStream=mediator.StreamAsync(secondRequest);

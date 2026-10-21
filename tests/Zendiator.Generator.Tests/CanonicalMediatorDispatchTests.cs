@@ -60,4 +60,30 @@ public sealed partial class GeneratorTests
         Assert.Equal(17, cases.GetMethod("Unrelated")!.Invoke(null, null));
         await Assert.ThrowsAsync<NullReferenceException>(() => (Task<int>)cases.GetMethod("Null")!.Invoke(null, null)!);
     }
+
+    [Fact]
+    public void Mediator_call_site_projection_preserves_service_provider_overload_resolution()
+    {
+        var source = CapabilitySource(true, false, "s---", false) + """
+            namespace App {
+                public sealed class Other {
+                    public System.Threading.Tasks.ValueTask<int> SendAsync(Ping request,System.Threading.CancellationToken token=default)=>new(17);
+                }
+                public static class OverloadCases {
+                    private static global::App.Generated.Reads.IZendiator Choose(object provider)=>null!;
+                    private static Other Choose(System.IServiceProvider provider)=>new();
+                    public static int Unrelated() {
+                        using var provider=new ServiceCollection().BuildServiceProvider();
+                        var mediator=new global::App.Generated.Reads.Zendiator(provider);
+                        return Choose(mediator).SendAsync(new Ping(1)).GetAwaiter().GetResult();
+                    }
+                }
+            }
+            """;
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "MediatorProviderOverload_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        Assert.Equal(17, assembly.GetType("App.OverloadCases")!.GetMethod("Unrelated")!.Invoke(null, null));
+    }
 }

@@ -68,18 +68,28 @@ public sealed partial class GeneratorTests
                 .Replace("p.Released.Count==__CLOSED_TYPES__", "p.Released.Count==4*__CLOSED_TYPES__")
                 .Replace("__CALLS__", "results.Add(await Read(mediator,new GenericItems<int>(7),p));" + (closed ? "" : "results.Add(await Read(mediator,new GenericItems<string>(\"item\"),p));"))
                 .Replace("__REQUEST__", "new GenericItems<int>(7)").Replace("__CLOSED_TYPES__", closed ? "1" : "2");
-            if (placement != "split") consumer = consumer
-                .Replace("var dangling=mediator.StreamAsync", "Check(p.Called.Select(call=>p.Created.Single(created=>ReferenceEquals(created.Instance,call)).Role).SequenceEqual(Enumerable.Repeat(new[]{\"W\",\"H\",\"F1\",\"F2\"}," + (closed ? "2" : "4") + ").SelectMany(roles=>roles)),\"declared hook order\");var dangling=mediator.StreamAsync")
-                .Replace("released=p.Released.Count,p.SourceDisposals", "released=p.Released.Count,p.SourceDisposals,roles=p.Called.Select(call=>p.Created.Single(created=>ReferenceEquals(created.Instance,call)).Role).ToArray()");
+            if (placement != "split")
+            {
+                var beforeOrder = consumer;
+                consumer = consumer.Replace("await scope.DisposeAsync();", "Check(p.Called.Select(call=>p.Created.Single(created=>ReferenceEquals(created.Instance,call)).Role).SequenceEqual(Enumerable.Repeat(new[]{\"W\",\"H\",\"F1\",\"F2\"}," + (closed ? "2" : "4") + ").SelectMany(roles=>roles)),\"declared hook order\");await scope.DisposeAsync();");
+                Assert.NotEqual(beforeOrder, consumer);
+                consumer = consumer.Replace("released=p.Released.Count,p.SourceDisposals", "released=p.Released.Count,p.SourceDisposals,roles=p.Called.Select(call=>p.Created.Single(created=>ReferenceEquals(created.Instance,call)).Role).ToArray()");
+            }
             if (closed)
             {
                 foreach (var name in new[] { "GenericItems", "GenericHandler", "GenericFirst", "GenericLast", "GenericWrapper" }) consumer = consumer.Replace(name + "<T>", name).Replace(name + "<>", name).Replace(name + "<int>", name);
                 consumer = System.Text.RegularExpressions.Regex.Replace(consumer.Replace("Read<T>(", "Read("), @"\bT\b", "int")
                     .Replace("StreamAsync<int>(", "StreamAsync(");
             }
-            if (mixed) consumer = consumer
-                .Replace("var results=new List<object>();", "Check(mediator.Send(new TwoSidedPing(41))==42,\"mixed Send before Stream\");var results=new List<object>();")
-                .Replace("var dangling=mediator.StreamAsync", "Check(mediator.Send(new TwoSidedPing(9))==10,\"mixed Send after Stream\");var dangling=mediator.StreamAsync");
+            if (mixed)
+            {
+                var beforeMixedPrefix = consumer;
+                consumer = consumer.Replace("var results=new List<object>();", "Check(mediator.Send(new TwoSidedPing(41))==42,\"mixed Send before Stream\");var results=new List<object>();");
+                Assert.NotEqual(beforeMixedPrefix, consumer);
+                var beforeMixedSuffix = consumer;
+                consumer = consumer.Replace("await scope.DisposeAsync();", "Check(mediator.Send(new TwoSidedPing(9))==10,\"mixed Send after Stream\");await scope.DisposeAsync();");
+                Assert.NotEqual(beforeMixedSuffix, consumer);
+            }
             source += consumer;
         }
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "TwoSidedWrapper_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);

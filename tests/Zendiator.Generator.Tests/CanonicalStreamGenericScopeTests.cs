@@ -35,7 +35,7 @@ public sealed partial class GeneratorTests
 {
     private const string StreamGenericTypes = """
         public sealed record GenericItems<T>(T Value) : IStreamRequest<T>;
-        [ZendiatorHandler] public sealed class GenericHandler<T> : IStreamRequestHandler<GenericItems<T>,T>, IDisposable {
+        [ZendiatorHandler(OwnsStream=false)] public sealed class GenericHandler<T> : IStreamRequestHandler<GenericItems<T>,T>, IDisposable {
             private readonly global::Zendiator.Generator.Tests.StreamGenericScopeProbe p;
             public GenericHandler(global::Zendiator.Generator.Tests.StreamGenericScopeProbe p){this.p=p;p.Create(this,"H");}
             public System.Collections.Generic.IAsyncEnumerable<T> HandleAsync(GenericItems<T> r,CancellationToken c) { p.Call(this);return p.Source(r.Value); }

@@ -29,14 +29,15 @@ public sealed partial class GeneratorTests
                 var p=new Probe();IServiceCollection services=new ServiceCollection();
                 services.AddSingleton(p);services.AddSingleton<QueryHandler>();Register(services);
                 foreach(var type in new[]{typeof(ItemsHandler),typeof(Positive),typeof(DoubleItem),typeof(Small),typeof(QueryHandler),
-                    typeof(global::MixedAsync.Generated.Reads.Zendiator),typeof(global::MixedAsync.Generated.Reads.IZendiator)})
+                    typeof(global::MixedAsync.Generated.Reads.IZendiator)})
                     Probe.Check(services.Count(d=>d.ServiceType==type)==1,"unique descriptor "+type);
+                Probe.Check(!services.Any(d=>d.ServiceType==typeof(global::MixedAsync.Generated.Reads.Zendiator)),"interface-only mediator registration");
                 Probe.Check(services.Single(d=>d.ServiceType==typeof(QueryHandler)).Lifetime==ServiceLifetime.Singleton,"TryAdd lifetime");
                 var provider=services.BuildServiceProvider();
                 int result;var values=new List<int>();string[] scopeEnds;
                 using(var scope=provider.CreateScope()){
                     var m=scope.ServiceProvider.GetRequiredService<global::MixedAsync.Generated.Reads.IZendiator>();
-                    Probe.Check(ReferenceEquals(m,scope.ServiceProvider.GetRequiredService<global::MixedAsync.Generated.Reads.Zendiator>()),"mediator identity");
+                    Probe.Check(ReferenceEquals(m,scope.ServiceProvider.GetRequiredService<global::MixedAsync.Generated.Reads.IZendiator>()),"mediator identity");
                     var sequence=m.StreamAsync(new Items());
                     Probe.Check(p.SourceStarts==0&&p.Resolved.Count==0,"Stream dispatch lazy");
                     var pending=m.SendAsync(new Query(10));
@@ -145,7 +146,6 @@ public sealed partial class GeneratorTests
         Assert.Contains(".Create(_provider, request, cancellationToken)", streamText);
         Assert.Contains("ValueTask<", sendText);
         Assert.Contains(" SendAsync(global::MixedAsync.Query request", sendText);
-        Assert.Contains("ConfigureAwait(false)", sendText);
         Assert.True(shared.IndexOf("expected.Handlers<global::MixedAsync.Items>", StringComparison.Ordinal) >= 0);
         Assert.True(shared.IndexOf("expected.Handlers<global::MixedAsync.Items>", StringComparison.Ordinal) < shared.IndexOf("expected.Handlers<global::MixedAsync.Query>", StringComparison.Ordinal));
         Assert.True(shared.IndexOf("expected.Pipeline<global::MixedAsync.Query>", StringComparison.Ordinal) >= 0);

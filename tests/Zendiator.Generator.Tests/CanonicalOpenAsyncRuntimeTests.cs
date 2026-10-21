@@ -120,7 +120,7 @@ public sealed partial class GeneratorTests
         {
             fixture.Register(collection); var count = collection.Count; fixture.Register(collection);
             Assert.Equal(count, collection.Count);
-            Assert.All(fixture.Definitions, type => Assert.Equal(ServiceLifetime.Scoped, Assert.Single(collection, d => d.ServiceType == type).Lifetime));
+            Assert.All(fixture.Definitions, type => Assert.Equal(ServiceLifetime.Transient, Assert.Single(collection, d => d.ServiceType == type).Lifetime));
         }
         using var provider = collection.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true }); using var scope = provider.CreateScope();
         if (fixture.Send != null) Assert.Equal(42, fixture.Send(scope.ServiceProvider, 41));

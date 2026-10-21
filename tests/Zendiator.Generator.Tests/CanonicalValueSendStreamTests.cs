@@ -92,7 +92,7 @@ public sealed partial class GeneratorTests
                 await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
                 var scope=provider.CreateAsyncScope();
                 var mediator=scope.ServiceProvider.GetRequiredService<global::ValueSendMix.Generated.Many.IZendiator>();
-                Check(ReferenceEquals(mediator,scope.ServiceProvider.GetRequiredService<global::ValueSendMix.Generated.Many.Zendiator>()),"shared composition identity");
+                Check(ReferenceEquals(mediator,scope.ServiceProvider.GetRequiredService<global::ValueSendMix.Generated.Many.IZendiator>()),"shared composition identity");
                 var shared=new S.SharedState();var stream=mediator.StreamAsync(new S.Items(shared));var cursor=stream.GetAsyncEnumerator();
                 Check(streamProbe.Starts==0&&streamProbe.Resolved.Count==0,"Stream dispatch/cursor lazy");
                 var pending=mediator.SendAsync(new A.Ping(20),query.Token.Token);var gate=query.Gates.Single();
@@ -197,7 +197,7 @@ public sealed partial class GeneratorTests
         var results = new List<int>();
         foreach (var name in new[] { "GenericSingle", "GenericMix" })
         {
-            var api = scope.ServiceProvider.GetRequiredService(assembly.GetType("ValueSendMix.Generated." + name + ".Zendiator")!);
+            var api = scope.ServiceProvider.GetRequiredService(assembly.GetType("ValueSendMix.Generated." + name + ".IZendiator")!);
             results.Add((int)api.GetType().GetMethod("Send", [requestType, typeof(CancellationToken)])!.Invoke(api, [request, CancellationToken.None])!);
         }
         Assert.All(results, value => Assert.Equal(expected, value)); Assert.Equal(0, probe.Starts); Assert.Empty(probe.Resolved);

@@ -34,7 +34,7 @@ public sealed partial class GeneratorTests
             public Items(SharedState shared){Marker=7;Pad=11;Shared=shared;}
         }
         public sealed record Query(int Value):ISyncRequest<int>;
-        [ZendiatorHandler]public sealed class H: IStreamRequestHandler<Items,int>,IDisposable {
+        [ZendiatorHandler(OwnsStream=false)]public sealed class H: IStreamRequestHandler<Items,int>,IDisposable {
             private readonly PublicValueRequestProbe p;
             public H(PublicValueRequestProbe p){this.p=p;p.Resolved.Add("H");}
             public IAsyncEnumerable<int> HandleAsync(Items r,CancellationToken t){
@@ -118,7 +118,7 @@ public sealed partial class GeneratorTests
             using var singleProvider=singleServices.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
             var scope=singleProvider.CreateScope();
             var single=scope.ServiceProvider.GetRequiredService<global::ValuePublic.Generated.Single.IZendiator>();
-            Check(ReferenceEquals(single,scope.ServiceProvider.GetRequiredService<global::ValuePublic.Generated.Single.Zendiator>()),"single mediator identity");
+            Check(ReferenceEquals(single,scope.ServiceProvider.GetRequiredService<global::ValuePublic.Generated.Single.IZendiator>()),"single mediator identity");
             var request=new Items(singleShared);var stream=single.StreamAsync(request);
             request.Marker=999;request.Pad=777;
             var cursor=stream.GetAsyncEnumerator();

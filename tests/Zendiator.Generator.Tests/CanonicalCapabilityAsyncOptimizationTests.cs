@@ -111,7 +111,7 @@ public sealed partial class GeneratorTests
     {
         try
         {
-            if (generated) return f.Dispatch.Invoke(null, [provider.GetRequiredService(f.Mediator), request, token])!;
+            if (generated) return f.Dispatch.Invoke(null, [provider.GetRequiredService(CanonicalEntryService(f.Mediator)), request, token])!;
             return typeof(GeneratorTests).GetMethod(nameof(CapabilityThreeReference), BindingFlags.Static | BindingFlags.NonPublic)!
                 .MakeGenericMethod([f.Request, .. f.Hooks, f.Handler]).Invoke(null, [provider, request, token])!;
         }
@@ -240,7 +240,7 @@ public sealed partial class GeneratorTests
             using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
             using (var scope = provider.CreateScope())
             {
-                var mediator = generated ? scope.ServiceProvider.GetRequiredService(f.Mediator) : Activator.CreateInstance(f.Assembly.GetType("S07Pilot.Async.Reference")!, scope.ServiceProvider)!;
+                var mediator = generated ? scope.ServiceProvider.GetRequiredService(CanonicalEntryService(f.Mediator)) : Activator.CreateInstance(f.Assembly.GetType("S07Pilot.Async.Reference")!, scope.ServiceProvider)!;
                 using var cancellation = new CancellationTokenSource(); var request = Activator.CreateInstance(f.Request, [7])!;
                 var task = ((ValueTask<int>)mediator.GetType().GetMethod("SendAsync")!.Invoke(mediator, [request, cancellation.Token])!).AsTask();
                 await ((TaskCompletionSource)sourceType.GetField("Registered")!.GetValue(source)!).Task.WaitAsync(TimeSpan.FromSeconds(10)); Assert.False(task.IsCompleted);

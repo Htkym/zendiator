@@ -93,7 +93,7 @@ public sealed partial class GeneratorTests
             var probe = new CanonicalStreamWrapperSessionProbe { Request = request, NoOpen = profile == "no-open", OpenPerEnumeration = true };
             var services = new ServiceCollection(); services.AddSingleton(probe); register(services);
             var definitions = new[] { "HandlerFactory", "InnerFactory", "WrapperFactory", "OuterFactory" }.Select(name => assembly.GetType("App." + name)!).ToArray();
-            Assert.All(definitions, type => Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == type).Lifetime));
+            Assert.All(definitions, type => Assert.Equal(ServiceLifetime.Transient, Assert.Single(services, d => d.ServiceType == type).Lifetime));
             foreach (var name in new[] { "BoundaryHandler", "InnerSession", "SessionWrapper", "OuterSession" })
                 Assert.DoesNotContain(services, d => d.ServiceType == assembly.GetType("App." + name));
             await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });

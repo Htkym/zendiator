@@ -46,6 +46,7 @@ internal static class CanonicalMediatorIdentity
                         !Same(method.ReturnType, collection) || !Same(method.Parameters[0].Type, collection) || !Same(method.Parameters[1].Type, snapshot)) continue;
                     var registersImplementation = false;
                     var registersContract = false;
+                    var registersAlias = false;
                     foreach (var call in methodSyntax.DescendantNodes().OfType<InvocationExpressionSyntax>())
                     {
                         cancellationToken.ThrowIfCancellationRequested();
@@ -60,14 +61,17 @@ internal static class CanonicalMediatorIdentity
                         var value = scoped.ArgumentList.Arguments[1].Expression;
                         if (Same(serviceType, implementation) && value is TypeOfExpressionSyntax concrete &&
                             Same(model.GetTypeInfo(concrete.Type, cancellationToken).Type, implementation)) registersImplementation = true;
+                        if (Same(serviceType, contract) && value is TypeOfExpressionSyntax target &&
+                            Same(model.GetTypeInfo(target.Type, cancellationToken).Type, implementation)) registersContract = true;
                         if (Same(serviceType, contract) && value is SimpleLambdaExpressionSyntax { Body: InvocationExpressionSyntax resolution } lambda &&
                             model.GetSymbolInfo(resolution, cancellationToken).Symbol is IMethodSymbol { Name: "GetRequiredService", TypeArguments.Length: 1 } resolve &&
                             Same(resolve.ContainingType, providerExtensions) && Same(resolve.TypeArguments[0], implementation) &&
                             resolution.ArgumentList.Arguments.Count == 1 &&
                             Same(model.GetSymbolInfo(resolution.ArgumentList.Arguments[0].Expression, cancellationToken).Symbol,
-                                model.GetDeclaredSymbol(lambda.Parameter, cancellationToken))) registersContract = true;
+                                model.GetDeclaredSymbol(lambda.Parameter, cancellationToken))) registersAlias = true;
                     }
-                    if (registersImplementation && registersContract)
+                    // Earlier compositions used a concrete registration plus a contract alias.
+                    if (registersContract || registersImplementation && registersAlias)
                     {
                         result.Add(implementation);
                         result.Add(contract);

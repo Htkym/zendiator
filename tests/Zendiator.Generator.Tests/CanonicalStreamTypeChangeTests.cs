@@ -89,8 +89,8 @@ public sealed partial class GeneratorTests
             Assert.Equal(flow.Final.Identity, route.Result); Assert.Contains("ToReference<int>", route.Stages[0].Name);
             Assert.Equal(CanonicalStreamConnectionKind.CanonicalCandidate, Assert.Single(StreamConnections(driver).Routes).Kind);
             var text = Assert.Single(generated, s => s.HintName.StartsWith("Zendiator.StreamCanonical.", StringComparison.Ordinal)).SourceText.ToString();
-            Assert.Contains("IAsyncEnumerator<int>", text); Assert.Contains("IAsyncEnumerator<long>", text); Assert.Contains("private long _current", text);
-            Assert.Contains("var item1 = _hook0.Map(request, item0, _token)", text); Assert.Contains("var item2 = (await _hook1.MapAsync(request, item1, _token).ConfigureAwait(false))", text);
+            Assert.Contains("IAsyncEnumerator<int>", text); Assert.Contains("IAsyncEnumerator<long>", text);
+            Assert.Contains("var item1 = hook0.Map(request, item0, token)", text); Assert.Contains("var item2 = (await hook1.MapAsync(request, item1, token).ConfigureAwait(false))", text);
             bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var request = assembly.GetType("App.ChangeRequest")!;
             var bridge = assembly.GetType("App.ChangeBridge")!; var helper = Assert.Single(assembly.GetTypes(), t => t.Name.StartsWith("__ZendiatorStreamCanonical_", StringComparison.Ordinal));
             fixture = new(assembly, request, [assembly.GetType("App.ChangeHandler")!, assembly.GetType("App.ToReference`1")!.MakeGenericType(typeof(int)), assembly.GetType("App.ToFinal")!],
@@ -123,9 +123,8 @@ public sealed partial class GeneratorTests
     }
     private static void InspectTypeChangeIL(Type helper)
     {
-        var cursor = Assert.Single(helper.GetNestedTypes(BindingFlags.NonPublic), t => t.Name.StartsWith("Cursor", StringComparison.Ordinal));
-        Assert.Equal(typeof(long), cursor.GetField("_current", BindingFlags.NonPublic | BindingFlags.Instance)!.FieldType);
-        Assert.Equal(typeof(IAsyncEnumerator<int>), cursor.GetField("_source", BindingFlags.NonPublic | BindingFlags.Instance)!.FieldType);
+        var cursor = Assert.Single(helper.GetNestedTypes(BindingFlags.NonPublic), t => typeof(IAsyncEnumerator<long>).IsAssignableFrom(t));
+        Assert.Contains(cursor.GetFields(BindingFlags.NonPublic | BindingFlags.Instance), f => f.FieldType == typeof(IAsyncEnumerator<int>));
         var codes = typeof(OpCodes).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.FieldType == typeof(OpCode)).Select(f => (OpCode)f.GetValue(null)!).ToDictionary(c => unchecked((ushort)c.Value));
         var inspected = new List<string>(); var itemBoxing = new List<string>();
         foreach (var type in new[] { cursor }.Concat(cursor.GetNestedTypes(BindingFlags.NonPublic)))
@@ -152,7 +151,7 @@ public sealed partial class GeneratorTests
                     i += size; Assert.True(i <= body.Length);
                 }
                 Assert.DoesNotContain(type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly),
-                    f => (f.Name.StartsWith("<item", StringComparison.Ordinal) || f.Name == "_current") && f.FieldType == typeof(object));
+                    f => (f.Name.StartsWith("<item", StringComparison.Ordinal) || f.Name.Contains("current", StringComparison.OrdinalIgnoreCase)) && f.FieldType == typeof(object));
             }
         Assert.NotEmpty(inspected); Assert.Empty(itemBoxing); SaveTypeChange("il.json", new { inspected, itemBoxing, currentType = "System.Int64", currentBytes = sizeof(long), sourceItem = "System.Int32", scope = "selected generated cursor and its compiler state machines;DI receiver casts excluded" });
     }

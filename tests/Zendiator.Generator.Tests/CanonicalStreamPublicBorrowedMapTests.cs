@@ -50,7 +50,7 @@ public sealed partial class GeneratorTests
             using var api = new CancellationTokenSource(); var probe = new CanonicalStreamTypedIntegrationProbe { Request = request, ExpectedToken = api.Token };
             var services = new ServiceCollection(); services.AddSingleton(probe); register(services);
             foreach (var name in new[] { "BasicHandler", "BasicMap" })
-                Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == assembly.GetType("App." + name)).Lifetime);
+                Assert.Equal(ServiceLifetime.Transient, Assert.Single(services, d => d.ServiceType == assembly.GetType("App." + name)).Lifetime);
             await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
             await using var scope = provider.CreateAsyncScope(); if (send != null) Assert.Equal(42, send(scope.ServiceProvider, 41));
             var cursor = stream(scope.ServiceProvider, request, api.Token).GetAsyncEnumerator(); Assert.Empty(probe.Events);

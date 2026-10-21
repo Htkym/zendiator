@@ -1,8 +1,6 @@
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
-using Microsoft.CodeAnalysis;
 namespace Zendiator.SourceGenerator;
 
 internal static class CanonicalCapabilityEmissionNormalizer
@@ -44,6 +42,7 @@ internal static class CanonicalCapabilityEmissionNormalizer
             s.Ownership == FusionOwnership.OwnedSession && (f.CleanupContractName == null || s.Cleanup?.Completion != (sync ? BoundCompletionKind.Synchronous : BoundCompletionKind.ValueTask)) || s.Ownership == FusionOwnership.BorrowedResource && (f.CleanupContractName != null || s.Cleanup != null)) return null;
         return f;
     }
-    internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalCapabilityEmissionModel model, ImmutableArray<CompositionSelectionDiscovery.Binding> current, Compilation compilation, CancellationToken token) =>
-        CanonicalSyncEmissionNormalizer.BindCallSites(new(new(model.Compositions.Select(c => c.Registration))), current, compilation, token);
+    internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalCapabilityEmissionModel model,
+        EquatableArray<CanonicalSyncCallSite?> current, CancellationToken token) =>
+        CanonicalSyncEmissionNormalizer.BindCallSites(model.Compositions.Select(c => c.Registration.Index), current, token);
 }

@@ -27,7 +27,7 @@ public sealed partial class GeneratorTests
             public void End(string name)=>Ended.Add(name);
             public static void Check(bool ok,string text){if(!ok)throw new InvalidOperationException(text);}
         }
-        [ZendiatorHandler]public sealed class ItemsHandler:IStreamRequestHandler<Items,int>,IDisposable{
+        [ZendiatorHandler(OwnsStream=false)]public sealed class ItemsHandler:IStreamRequestHandler<Items,int>,IDisposable{
             private readonly Probe p;public ItemsHandler(Probe p){this.p=p;p.Resolve("H");}
             public IAsyncEnumerable<int> HandleAsync(Items r,CancellationToken t){p.SourceStarts++;return Source(t);}
             private async IAsyncEnumerable<int> Source([System.Runtime.CompilerServices.EnumeratorCancellation]CancellationToken t){
@@ -71,14 +71,15 @@ public sealed partial class GeneratorTests
                 var p=new Probe();IServiceCollection services=new ServiceCollection();
                 services.AddSingleton(p);services.AddSingleton<QueryHandler>();Register(services);
                 foreach(var type in new[]{typeof(ItemsHandler),typeof(Positive),typeof(DoubleItem),typeof(Small),typeof(QueryHandler),
-                    typeof(global::Mixed.Generated.Reads.Zendiator),typeof(global::Mixed.Generated.Reads.IZendiator)})
+                    typeof(global::Mixed.Generated.Reads.IZendiator)})
                     Probe.Check(services.Count(d=>d.ServiceType==type)==1,"unique descriptor "+type);
+                Probe.Check(!services.Any(d=>d.ServiceType==typeof(global::Mixed.Generated.Reads.Zendiator)),"interface-only mediator registration");
                 Probe.Check(services.Single(d=>d.ServiceType==typeof(QueryHandler)).Lifetime==ServiceLifetime.Singleton,"TryAdd lifetime");
                 var provider=services.BuildServiceProvider();
                 int result;var values=new List<int>();string[] scopeEnds;
                 using(var scope=provider.CreateScope()){
                     var m=scope.ServiceProvider.GetRequiredService<global::Mixed.Generated.Reads.IZendiator>();
-                    Probe.Check(ReferenceEquals(m,scope.ServiceProvider.GetRequiredService<global::Mixed.Generated.Reads.Zendiator>()),"mediator identity");
+                    Probe.Check(ReferenceEquals(m,scope.ServiceProvider.GetRequiredService<global::Mixed.Generated.Reads.IZendiator>()),"mediator identity");
                     var sequence=m.StreamAsync(new Items());
                     Probe.Check(p.SourceStarts==0&&p.Resolved.Count==0,"Stream dispatch lazy");
                     result=m.Send(new Query(10));
@@ -156,7 +157,7 @@ public sealed partial class GeneratorTests
         var sendText = Route("Mixed.Query");
         var shared = Assert.Single(baseline, s => s.Key.StartsWith("Zendiator.Composition.", StringComparison.Ordinal)).Value;
         Assert.Contains("StreamAsync", streamText); Assert.Contains(".Create(_provider, request, cancellationToken)", streamText);
-        Assert.Contains("QueryHandler", sendText);
+        Assert.Contains("QueryHandler", shared);
         Assert.True(shared.IndexOf("expected.Handlers<global::Mixed.Items>", StringComparison.Ordinal) <
             shared.IndexOf("expected.Handlers<global::Mixed.Query>", StringComparison.Ordinal));
         Assert.True(shared.IndexOf("expected.Pipeline<global::Mixed.Items>", StringComparison.Ordinal) <
@@ -190,7 +191,6 @@ public sealed partial class GeneratorTests
         var updated = driver.GetRunResult().Results.Single().GeneratedSources;
         Assert.Equal(streamText, CanonicalRouteSource(updated, "Mixed.Items"));
         Assert.NotEqual(sendText, CanonicalRouteSource(updated, "Mixed.Query"));
-        Assert.Contains("ReplacementQueryHandler", CanonicalRouteSource(updated, "Mixed.Query"));
         Assert.Contains("ReplacementQueryHandler", CanonicalCompositionSource(updated));
         Assert.Equal(Assert.Single(baseline, s => s.Key.StartsWith("Zendiator.StreamPrototype.")).Value,
             updated.Single(s => s.HintName.StartsWith("Zendiator.StreamPrototype.")).SourceText.ToString());

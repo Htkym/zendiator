@@ -14,7 +14,10 @@ namespace Zendiator.SourceGenerator;
 internal static class CompositionSelectionDiscovery
 {
     internal sealed record Binding(CompositionSelectionModel Model, InvocationExpressionSyntax Invocation,
-        ImmutableDictionary<string, Location> Sources);
+        ImmutableDictionary<string, Location> Sources)
+    {
+        internal CanonicalSyncCallSite? RegistrationCallSite { get; init; }
+    }
 
     internal static ImmutableArray<Binding> Bind(ImmutableArray<InvocationExpressionSyntax> invocations,
         Compilation compilation, ImmutableArray<MarkedHandlerDiscovery.Candidate> marked, MarkedHandlerCatalog catalog, CancellationToken ct)
@@ -159,7 +162,13 @@ internal static class CompositionSelectionDiscovery
                 CatalogMarkerTypes = new(catalogMarkerNames),
                 ExternAliases = CanonicalSymbolName.Aliases(compilation)
             };
-            result.Add(new(model, invocation, lists.Sources.ToImmutableDictionary(StringComparer.Ordinal)));
+            var location = semantic.GetInterceptableLocation(invocation, ct);
+            result.Add(new(model, invocation, lists.Sources.ToImmutableDictionary(StringComparer.Ordinal))
+            {
+                RegistrationCallSite = location == null || generatedNamespace == null ? null :
+                    new(generatedNamespace, markerName, location.Version, location.Data, method.ReducedFrom != null)
+                    { ExternAliases = model.ExternAliases }
+            });
 
             void SelectLocal()
             {

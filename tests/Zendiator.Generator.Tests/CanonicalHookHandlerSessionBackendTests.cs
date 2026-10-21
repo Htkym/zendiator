@@ -64,13 +64,13 @@ public sealed partial class GeneratorTests
     }
     [Theory]
     [MemberData(nameof(HookHandlerReferenceLifetimes))]
-    public void Candidate_DI_Hook_Handler_session_matches_reference_DI_and_operation_owners(bool owned, bool isVoid, ServiceLifetime lifetime)
+    public void Candidate_DI_Hook_Handler_session_captures_DI_dependencies_and_preserves_operation_owners(bool owned, bool isVoid, ServiceLifetime lifetime)
     {
         var fixture = HookHandlerBackendFixture(owned, isVoid);
-        var reference = RunHookHandlerLifetimes(owned, isVoid, lifetime, fixture);
+        var reference = lifetime == ServiceLifetime.Transient ? null : RunHookHandlerLifetimes(owned, isVoid, lifetime, fixture);
         var generated = RunHookHandlerLifetimes(owned, isVoid, lifetime, fixture, generated: true);
-        Assert.Equal(reference, generated);
-        WriteNestedHookEvidence("hook-handler-session-differential-lifetimes", owned + "-" + isVoid + "-" + lifetime, new { owned, isVoid, lifetime = lifetime.ToString(), reference = JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
+        if (reference is not null) Assert.Equal(reference, generated);
+        WriteNestedHookEvidence("hook-handler-session-differential-lifetimes", owned + "-" + isVoid + "-" + lifetime, new { owned, isVoid, lifetime = lifetime.ToString(), reference = reference is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
     }
     public static IEnumerable<object[]> HookHandlerBackendBoundaries()
     {

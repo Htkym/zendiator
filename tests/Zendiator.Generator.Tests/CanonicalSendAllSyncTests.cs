@@ -132,19 +132,19 @@ public sealed partial class GeneratorTests
             Probe.Check(services.GroupBy(d=>d.ServiceType).All(g=>g.Count()==1),"unique DI descriptors");
             var required=isVoid?new[]{typeof(Command.H1),typeof(Command.H2),typeof(Command.H3),typeof(Command.Hook)}
                 :new[]{typeof(Response.H1),typeof(Response.H2),typeof(Response.H3),typeof(Response.Hook)};
-            foreach(var type in required)Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Scoped,"all borrowed services registered");
+            foreach(var type in required)Probe.Check(services.Single(d=>d.ServiceType==type).Lifetime==ServiceLifetime.Transient,"all borrowed services registered");
             using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});var scope=provider.CreateScope();
             int[]? response=null;var copied=-1;Exception? error=null;
             try{
                 if(isVoid){
                     var request=new Command.Ping(1,shared);p.Original=request;
                     var mediator=scope.ServiceProvider.GetRequiredService<global::AllSync.Generated.Commands.IZendiator>();
-                    Probe.Check(ReferenceEquals(mediator,scope.ServiceProvider.GetRequiredService<global::AllSync.Generated.Commands.Zendiator>()),"void mediator identity");
+                    Probe.Check(ReferenceEquals(mediator,scope.ServiceProvider.GetRequiredService<global::AllSync.Generated.Commands.IZendiator>()),"void mediator identity");
                     try{if(generated)mediator.SendAll(request,p.Cancellation.Token);else Command.Reference.Run(scope.ServiceProvider,request,p.Cancellation.Token);}catch(Exception e){error=e;}
                 }else{
                     var request=new Response.Ping(1,shared);p.Original=request;
                     var mediator=scope.ServiceProvider.GetRequiredService<global::AllSync.Generated.Responses.IZendiator>();
-                    Probe.Check(ReferenceEquals(mediator,scope.ServiceProvider.GetRequiredService<global::AllSync.Generated.Responses.Zendiator>()),"response mediator identity");
+                    Probe.Check(ReferenceEquals(mediator,scope.ServiceProvider.GetRequiredService<global::AllSync.Generated.Responses.IZendiator>()),"response mediator identity");
                     try{
                         if(name=="array")response=generated?mediator.SendAll(request,p.Cancellation.Token):Response.Reference.Run(scope.ServiceProvider,request,p.Cancellation.Token);
                         else{
@@ -159,13 +159,14 @@ public sealed partial class GeneratorTests
                 Probe.Check(p.Branch==(name=="short"?0:success?3:2),"branch count and later stop");
                 var expectedHandlers=name=="short"?Array.Empty<int>():name=="cancel"?new[]{2}:success?new[]{2,1,3}:new[]{2,1};
                 Probe.Check(p.Handlers.SequenceEqual(expectedHandlers),"declared handler order and stop");
+                if(generated)Probe.Check(p.Resolved.SequenceEqual(name=="short"?Array.Empty<string>():new[]{"K"}.Concat(expectedHandlers.Select(id=>"H"+id))),"capture once and resolve only reached handlers");
                 Probe.Check(shared.Version==(name=="short"?0:success?3:name is "after" or "finally"?2:1),"shared changes preserved");
                 if(name=="array")Probe.Check(response!.SequenceEqual(new[]{115,114,116}),"ordered result array");
                 else if(name=="span")Probe.Check(copied==3&&shared.Values.SequenceEqual(new[]{115,114,116,-9}),"Span overlap commit and untouched tail");
                 else Probe.Check(shared.Values.SequenceEqual(new[]{3,4,5,-9}),"Span destination unchanged on body/After/Finally failure/cancellation/short input");
                 Probe.Check(p.Ended.Count==0,"dispatch does not dispose borrowed components");
                 scope.Dispose();Probe.Check(p.Ended.SequenceEqual(p.Resolved.AsEnumerable().Reverse()),"DI owns each resolved instance exactly once");
-                return new{name,response,copied,destination=shared.Values,shared.Version,p.Branch,handlers=p.Handlers.ToArray(),trace=p.Trace.ToArray(),resolved=p.Resolved.ToArray(),ended=p.Ended.ToArray(),error=p.Error(error)};
+                return new{name,response,copied,destination=shared.Values,shared.Version,p.Branch,handlers=p.Handlers.ToArray(),trace=p.Trace.ToArray(),error=p.Error(error)};
             }finally{scope.Dispose();p.Cancellation.Dispose();}
         }
         public static string GuardCompetition(){

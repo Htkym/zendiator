@@ -139,14 +139,15 @@ public sealed partial class GeneratorTests
             var p=new P{Case=name};var syncProbe=new AllSync.Probe();var streamProbe=new PublicValueRequestProbe();var unused=new ManagedShapeProbe();
             try{
                 IServiceCollection services=new ServiceCollection();services.AddSingleton(p);services.AddSingleton(syncProbe);services.AddSingleton(streamProbe);services.AddSingleton(unused);
+                services.AddScoped<D.Hook>(); services.AddScoped<E.Hook>();
                 Register(services);
                 var branches=new[]{typeof(D.Hook),typeof(D.H2),typeof(D.H1),typeof(D.H3),typeof(E.Hook),typeof(E.H2),typeof(E.H1),typeof(E.H3),typeof(B.Hook),typeof(B.H2),typeof(B.H1),typeof(B.H3),typeof(C.Hook),typeof(C.H2),typeof(C.H1),typeof(C.H3)};
-                foreach(var type in branches){var d=services.Single(d=>d.ServiceType==type);P.Check(d.Lifetime==ServiceLifetime.Scoped&&d.ImplementationType==type,"all borrowed branch registrations");}
+                foreach(var type in branches){var d=services.Single(d=>d.ServiceType==type);P.Check(d.Lifetime==(type==typeof(D.Hook)||type==typeof(E.Hook)?ServiceLifetime.Scoped:ServiceLifetime.Transient)&&d.ImplementationType==type,"default branch registrations and shared hook overrides");}
                 P.Check(services.GroupBy(d=>d.ServiceType).All(g=>g.Count()==1),"unique DI descriptors");
                 await using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});
                 await using var scope=provider.CreateAsyncScope();var sp=scope.ServiceProvider;
                 var mediator=sp.GetRequiredService<global::AllMix.Generated.Many.IZendiator>();
-                P.Check(ReferenceEquals(mediator,sp.GetRequiredService<global::AllMix.Generated.Many.Zendiator>()),"shared composition mediator identity");
+                P.Check(ReferenceEquals(mediator,sp.GetRequiredService<global::AllMix.Generated.Many.IZendiator>()),"shared composition mediator identity");
                 var isVoid=name=="pending-void";object? request=isVoid?new E.Ping(1,p.Shared):new D.Ping(1,p.Shared);if(name=="null")request=null;p.Original=request;
                 if(name=="pre-cancel")p.Cancellation.Cancel();
                 P.Ambient.Value="caller";var syncThrow=false;var returned=false;var initial="sync-throw";Exception? error=null;int[]? results=null;

@@ -122,9 +122,26 @@ public sealed partial class GeneratorTests
             IServiceCollection services = new ServiceCollection(); services.AddSingleton(p); f.Register.Invoke(null, [services]); using var provider = services.BuildServiceProvider(); object r = Activator.CreateInstance(f.Request, [10])!; Exception? error = null; object? result = null;
             using (var scope = provider.CreateScope())
             {
-                object? Invoke(object? request) { try { return generated ? f.Dispatch.Invoke(null, [scope.ServiceProvider.GetRequiredService(f.Mediator), request, p.Cancellation.Token]) : f.Reference.Invoke(null, [scope.ServiceProvider, request, p.Cancellation.Token]); } catch (TargetInvocationException e) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(e.InnerException!).Throw(); throw; } }
+                object? Invoke(object? request) { try { return generated ? f.Dispatch.Invoke(null, [scope.ServiceProvider.GetRequiredService(CanonicalEntryService(f.Mediator)), request, p.Cancellation.Token]) : f.Reference.Invoke(null, [scope.ServiceProvider, request, p.Cancellation.Token]); } catch (TargetInvocationException e) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(e.InnerException!).Throw(); throw; } }
                 Assert.Throws<ArgumentNullException>(() => Invoke(null)); Assert.Empty(p.Trace);
-                if (async) { var task = AsyncTask(Invoke(r)!, isVoid); if (pending != null) { Assert.False(task.IsCompleted); var g = Assert.Single(p.Gates); Assert.Equal(0, g.Consumptions); g.Complete(); } try { await task.WaitAsync(TimeSpan.FromSeconds(10)); if (!isVoid) result = await (Task<int>)task; } catch (Exception e) { error = e; } Assert.Equal(error is OperationCanceledException, task.IsCanceled); Assert.Equal(error != null && error is not OperationCanceledException, task.IsFaulted); } else { try { result = Invoke(r); } catch (Exception e) { error = e; } }
+                if (async)
+                {
+                    Task? task = null;
+                    try
+                    {
+                        task = AsyncTask(Invoke(r)!, isVoid);
+                        if (pending != null) { Assert.False(task.IsCompleted); var g = Assert.Single(p.Gates); Assert.Equal(0, g.Consumptions); g.Complete(); }
+                        await task.WaitAsync(TimeSpan.FromSeconds(10)); if (!isVoid) result = await (Task<int>)task;
+                    }
+                    catch (Exception e) { error = e; }
+                    Assert.Equal(generated && pattern == "s---" && scenario == "body", task == null);
+                    if (task != null)
+                    {
+                        Assert.Equal(error is OperationCanceledException, task.IsCanceled);
+                        Assert.Equal(error != null && error is not OperationCanceledException, task.IsFaulted);
+                    }
+                }
+                else { try { result = Invoke(r); } catch (Exception e) { error = e; } }
                 var expected = scenario == "before" ? oce : scenario is "observer" or "finally" ? boundary : scenario == "body" ? body : null;
                 if (scenario == "cancel") { Assert.IsAssignableFrom<OperationCanceledException>(error); Assert.Equal(p.Cancellation.Token, ((OperationCanceledException)error!).CancellationToken); } else if (scenario == "null") Assert.IsType<ArgumentNullException>(error); else Assert.Same(expected, error);
                 if (error == null && !isVoid) Assert.Equal(10 + (pattern[0] != '-' ? (two ? 2 : 1) : 0) + (pattern[1] != '-' ? (two ? 2 : 1) : 0), result);

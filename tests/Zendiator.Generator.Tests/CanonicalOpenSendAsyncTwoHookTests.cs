@@ -79,7 +79,7 @@ public sealed partial class GeneratorTests
                 using var cancellation=new CancellationTokenSource();var p=new Probe{Mode=mode,Token=cancellation.Token};IServiceCollection services=new ServiceCollection();services.AddSingleton(p);
                 services.AddScoped(typeof(Handler<,>));var existing=services.Last();Register(services);var count=services.Count;Register(services);
                 Probe.Check(services.Count==count&&services.Contains(existing),"TryAdd and repeated registration");
-                foreach(var definition in new[]{typeof(Handler<,>),typeof(First<,>),typeof(Second<,>)})Probe.Check(services.Count(d=>d.ServiceType==definition&&d.ImplementationType==definition&&d.Lifetime==ServiceLifetime.Scoped)==1,"open scoped definitions");
+                foreach(var definition in new[]{typeof(Handler<,>),typeof(First<,>),typeof(Second<,>)})Probe.Check(services.Count(d=>d.ServiceType==definition&&d.ImplementationType==definition&&d.Lifetime==(definition==typeof(Handler<,>)?ServiceLifetime.Scoped:ServiceLifetime.Transient))==1,"open transient definitions");
                 using var provider=services.BuildServiceProvider(new ServiceProviderOptions{ValidateScopes=true,ValidateOnBuild=true});using var scope=provider.CreateScope();var sp=scope.ServiceProvider;
                 var mediator=sp.GetRequiredService<OpenAsyncTwoHooks.Generated.Composition.IZendiator>();var request=new Request<L,R>(7);p.Original=request;Probe.Ambient.Value="caller";
                 var dispatch=generated?mediator.SendAsync(request,cancellation.Token):Reference(sp,request,cancellation.Token);var task=dispatch.AsTask();

@@ -95,7 +95,7 @@ public sealed partial class GeneratorTests
             using var api = new CancellationTokenSource(); var probe = new CanonicalStreamTypedIntegrationProbe { Request = request, ExpectedToken = api.Token };
             var services = new ServiceCollection(); services.AddSingleton(probe); register(services);
             foreach (var name in new[] { "OpenHandler`1", "OpenMap`2" })
-                Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == assembly.GetType("App." + name)).Lifetime);
+                Assert.Equal(ServiceLifetime.Transient, Assert.Single(services, d => d.ServiceType == assembly.GetType("App." + name)).Lifetime);
             foreach (var name in new[] { "OpenHandlerFactory`1", "OpenMapFactory`2" })
                 Assert.DoesNotContain(services, d => d.ServiceType == assembly.GetType("App." + name));
             await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });

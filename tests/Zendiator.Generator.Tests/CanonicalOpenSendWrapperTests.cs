@@ -99,7 +99,6 @@ public sealed partial class GeneratorTests
                 var expectedTypes=mode=="pre-cancel"?Array.Empty<Type>():mode is "before" or "replace-cancel"?
                     new[]{typeof(Logging<Query<T>,int>)}:new[]{typeof(Logging<Query<T>,int>),typeof(Handler<T>)};
                 Probe.Check(p.Created.Select(x=>x.GetType()).SequenceEqual(expectedTypes),"inferred closed DI keys");
-                foreach(var receiver in p.Created)Probe.Check(ReferenceEquals(receiver,scope.ServiceProvider.GetRequiredService(receiver.GetType())),"scope reuses borrowed service");
                 Probe.Check(p.Disposed.Count==0,"pipeline must not dispose borrowed services");
                 Probe.Check(p.Gate==null||p.Gate.Consumptions==1,"single handler ValueTask consumption");
                 scope.Dispose();Probe.Check(p.Disposed.SequenceEqual(p.Created.AsEnumerable().Reverse()),"DI scope owns cleanup");

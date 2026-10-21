@@ -29,15 +29,14 @@ internal static class CanonicalRegistrationSourceEmitter
                         if (snapshot.GetFingerprint() != expected.Snapshot().GetFingerprint())
                             throw new global::System.InvalidOperationException("AddZendiator configuration does not match this generated composition.");
             """);
-        foreach (var type in plan.Routes.SelectMany(r => r.ServiceTypes).Concat(new[] { "global::" + c.Namespace + ".Zendiator" }).Distinct(StringComparer.Ordinal))
+        foreach (var type in plan.Routes.SelectMany(r => r.ServiceTypes).Distinct(StringComparer.Ordinal))
             b.AppendLine($$"""
                         global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services,
-                            global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Scoped(typeof({{type}}), typeof({{type}})));
+                            global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Transient(typeof({{type}}), typeof({{type}})));
                 """);
         b.AppendLine($$"""
                         global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services,
-                            global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Scoped(typeof(global::{{c.Namespace}}.IZendiator),
-                                provider => global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<global::{{c.Namespace}}.Zendiator>(provider)));
+                            global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Scoped(typeof(global::{{c.Namespace}}.IZendiator), typeof(global::{{c.Namespace}}.Zendiator)));
                         return services;
                     }
                 }

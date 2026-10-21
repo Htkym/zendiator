@@ -10,7 +10,7 @@ public sealed partial class GeneratorTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Handler_owned_stream_metadata_capability_requires_the_actual_marker(bool actualMarker)
+    public async Task Handler_owned_stream_metadata_opt_out_requires_the_actual_marker(bool actualMarker)
     {
         var producer = """
             using System;using System.Collections.Generic;using System.Threading;using System.Threading.Tasks;
@@ -25,7 +25,7 @@ public sealed partial class GeneratorTests
             namespace MetadataOwned {
                 public sealed record Request:global::Zendiator.IStreamRequest<int>;
                 public sealed class Probe {public int Created,Calls;}
-                [global::Zendiator.ZendiatorHandlerAttribute(OwnsStream=true)]
+                [global::Zendiator.ZendiatorHandlerAttribute(OwnsStream=false)]
                 public sealed class Handler:global::Zendiator.IStreamRequestHandler<Request,int> {
                     private readonly Probe probe;
                     public Handler(Probe probe){this.probe=probe;probe.Created++;}
@@ -53,8 +53,8 @@ public sealed partial class GeneratorTests
                         await using var scope=provider.CreateAsyncScope();
                         var mediator=scope.ServiceProvider.GetRequiredService<global::MetadataOwnedConsumer.Generated.Reads.IZendiator>();
                         var enumerable=mediator.StreamAsync(new MetadataOwned.Request());
-                        var expected={{(actualMarker ? "1" : "0")}};
-                        Check(probe.Created==expected&&probe.Calls==expected,"metadata marker must control eager acquisition");
+                        var expected={{(actualMarker ? "0" : "1")}};
+                        Check(probe.Created==expected&&probe.Calls==expected,"only the actual metadata marker may opt out of handler ownership");
                         await using var cursor=enumerable.GetAsyncEnumerator();
                         Check(await cursor.MoveNextAsync()&&cursor.Current==7,"metadata handler must remain executable");
                         Check(probe.Created==1&&probe.Calls==1,"first enumeration resolves and calls the handler once");
@@ -68,7 +68,7 @@ public sealed partial class GeneratorTests
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         var connection = Assert.Single(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalStreamConnectionModel"]
             .SelectMany(step => step.Outputs).Select(result => result.Value).OfType<CanonicalStreamConnectionCatalog>()).Routes.Single();
-        Assert.Equal(actualMarker, connection.Kind == CanonicalStreamConnectionKind.HandlerOwned);
+        Assert.Equal(!actualMarker, connection.Kind == CanonicalStreamConnectionKind.HandlerOwned);
         using var bytes = new MemoryStream();
         var emitted = output.Emit(bytes);
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
@@ -100,7 +100,7 @@ public sealed partial class GeneratorTests
             namespace Owned {
                 public sealed record Request:IStreamRequest<int>;
                 public sealed class Probe { public int Created,Calls,Starts,SourceDisposals,HandlerDisposals; public object? Last; }
-                [ZendiatorHandler(OwnsStream={{(owns ? "true" : "false")}})]
+                [ZendiatorHandler{{(owns ? "" : "(OwnsStream=false)")}}]
                 public sealed class Handler(Probe p):IStreamRequestHandler<Request,int>,IDisposable {
                     private readonly Probe _p=Created(p);
                     private static Probe Created(Probe p){p.Created++;return p;}
@@ -133,12 +133,12 @@ public sealed partial class GeneratorTests
                             Check(probe.Created==(eager?1:0)&&probe.Calls==(eager?1:0)&&probe.Starts==0,"acquisition timing");
                             if(eager)Check(ReferenceEquals(source,probe.Last),"handler-owned route must return the handler enumerable");
                             var first=source.GetAsyncEnumerator(a.Token);var second=source.GetAsyncEnumerator(b.Token);
-                            Check(!ReferenceEquals(first,second)&&(eager||ReferenceEquals(source,first)),"first claim and independent second cursor");
+                            Check(!ReferenceEquals(first,second),"independent cursors");
                             a.Cancel();var canceled=first.MoveNextAsync().AsTask();
                             try{await canceled;throw new Exception("missing first cancellation");}catch(OperationCanceledException){}
                             Check(canceled.IsCanceled,"first task status");
                             Check(await second.MoveNextAsync()&&second.Current==1,"second enumeration independence");
-                            if(!eager)Check(!ReferenceEquals(source,probe.Last),"framework cursor remains for ordinary or staged handler");
+                            if(!eager)Check(!ReferenceEquals(source,probe.Last),"orchestrated route must not return the handler enumerable");
                             api.Cancel();canceled=second.MoveNextAsync().AsTask();
                             try{await canceled;throw new Exception("missing API cancellation");}catch(OperationCanceledException){}
                             Check(canceled.IsCanceled,"API task status");

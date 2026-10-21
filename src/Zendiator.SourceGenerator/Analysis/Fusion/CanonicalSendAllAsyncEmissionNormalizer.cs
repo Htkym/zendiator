@@ -1,8 +1,6 @@
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
-using Microsoft.CodeAnalysis;
 
 namespace Zendiator.SourceGenerator;
 
@@ -80,8 +78,8 @@ internal static class CanonicalSendAllAsyncEmissionNormalizer
     }
 
     internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalSendAllAsyncEmissionModel model,
-        ImmutableArray<CompositionSelectionDiscovery.Binding> current, Compilation compilation, CancellationToken ct) =>
-        CanonicalSyncEmissionNormalizer.BindCallSites(new(new(model.Compositions.Select(c => c.Registration))), current, compilation, ct);
+        EquatableArray<CanonicalSyncCallSite?> current, CancellationToken ct) =>
+        CanonicalSyncEmissionNormalizer.BindCallSites(model.Compositions.Select(c => c.Registration.Index), current, ct);
 
     internal static CanonicalSendAllAsyncEmissionModel Connected(CanonicalSendAllAsyncEmissionModel model, CanonicalSyncInterceptorModel sites) =>
         new(new(model.Compositions.Where(c => sites.CallSites.Count(s => s.Namespace == c.Branch.Namespace && s.MarkerName == c.Branch.MarkerName) == 1)));

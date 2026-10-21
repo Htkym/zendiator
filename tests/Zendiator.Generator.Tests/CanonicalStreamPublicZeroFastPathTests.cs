@@ -49,7 +49,7 @@ public sealed partial class GeneratorTests
             namespace App {
                 public sealed record Request : IStreamRequest<int>;
                 [ZendiatorComposition("reads")] public sealed class Reads;
-                [ZendiatorHandler] public sealed class H(global::Zendiator.Generator.Tests.GeneratorTests.ZeroFastPathProbe p)
+                [ZendiatorHandler(OwnsStream=false)] public sealed class H(global::Zendiator.Generator.Tests.GeneratorTests.ZeroFastPathProbe p)
                     : IStreamRequestHandler<Request,int> {
                     public IAsyncEnumerable<int> HandleAsync(Request request,CancellationToken token)=>p.Open();
                 }
