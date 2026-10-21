@@ -157,12 +157,12 @@ public static class StreamRegistration
 '@)
 foreach($b in 0,1,3,5) {
     $lines.Add("c.Handlers<Stream$b>(Z.DispatchFamily.Stream,typeof(ZStream$b));")
-    $stages=if($b){((1..$b | ForEach-Object {"Z.Stage.Wrapper<ZSBehavior$_<Stream$b,int>>()"}) -join ',')}else{''}
+    $stages=if($b){(($b..1 | ForEach-Object {"Z.Stage.Wrapper<ZSBehavior$_<Stream$b,int>>()"}) -join ',')}else{''}
     $lines.Add("c.Pipeline<Stream$b>(Z.DispatchFamily.Stream$(if($stages){','+$stages}));")
 }
 foreach($b in $RelayDepths) {
     $lines.Add("c.Handlers<Relay$b>(Z.DispatchFamily.Stream,typeof(ZRelay$b));")
-    $stages=((1..$b | ForEach-Object {"Z.Stage.Wrapper<ZRBehavior$_<Relay$b,int>>()"}) -join ',')
+    $stages=(($b..1 | ForEach-Object {"Z.Stage.Wrapper<ZRBehavior$_<Relay$b,int>>()"}) -join ',')
     $lines.Add("c.Pipeline<Relay$b>(Z.DispatchFamily.Stream,$stages);")
 }
 $lines.Add(@'

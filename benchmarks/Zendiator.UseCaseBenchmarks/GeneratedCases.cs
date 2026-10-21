@@ -533,13 +533,13 @@ c.Pipeline<Stream0>(Z.DispatchFamily.Stream);
 c.Handlers<Stream1>(Z.DispatchFamily.Stream,typeof(ZStream1));
 c.Pipeline<Stream1>(Z.DispatchFamily.Stream,Z.Stage.Wrapper<ZSBehavior1<Stream1,int>>());
 c.Handlers<Stream3>(Z.DispatchFamily.Stream,typeof(ZStream3));
-c.Pipeline<Stream3>(Z.DispatchFamily.Stream,Z.Stage.Wrapper<ZSBehavior1<Stream3,int>>(),Z.Stage.Wrapper<ZSBehavior2<Stream3,int>>(),Z.Stage.Wrapper<ZSBehavior3<Stream3,int>>());
+c.Pipeline<Stream3>(Z.DispatchFamily.Stream,Z.Stage.Wrapper<ZSBehavior3<Stream3,int>>(),Z.Stage.Wrapper<ZSBehavior2<Stream3,int>>(),Z.Stage.Wrapper<ZSBehavior1<Stream3,int>>());
 c.Handlers<Stream5>(Z.DispatchFamily.Stream,typeof(ZStream5));
-c.Pipeline<Stream5>(Z.DispatchFamily.Stream,Z.Stage.Wrapper<ZSBehavior1<Stream5,int>>(),Z.Stage.Wrapper<ZSBehavior2<Stream5,int>>(),Z.Stage.Wrapper<ZSBehavior3<Stream5,int>>(),Z.Stage.Wrapper<ZSBehavior4<Stream5,int>>(),Z.Stage.Wrapper<ZSBehavior5<Stream5,int>>());
+c.Pipeline<Stream5>(Z.DispatchFamily.Stream,Z.Stage.Wrapper<ZSBehavior5<Stream5,int>>(),Z.Stage.Wrapper<ZSBehavior4<Stream5,int>>(),Z.Stage.Wrapper<ZSBehavior3<Stream5,int>>(),Z.Stage.Wrapper<ZSBehavior2<Stream5,int>>(),Z.Stage.Wrapper<ZSBehavior1<Stream5,int>>());
 c.Handlers<Relay1>(Z.DispatchFamily.Stream,typeof(ZRelay1));
 c.Pipeline<Relay1>(Z.DispatchFamily.Stream,Z.Stage.Wrapper<ZRBehavior1<Relay1,int>>());
 c.Handlers<Relay5>(Z.DispatchFamily.Stream,typeof(ZRelay5));
-c.Pipeline<Relay5>(Z.DispatchFamily.Stream,Z.Stage.Wrapper<ZRBehavior1<Relay5,int>>(),Z.Stage.Wrapper<ZRBehavior2<Relay5,int>>(),Z.Stage.Wrapper<ZRBehavior3<Relay5,int>>(),Z.Stage.Wrapper<ZRBehavior4<Relay5,int>>(),Z.Stage.Wrapper<ZRBehavior5<Relay5,int>>());
+c.Pipeline<Relay5>(Z.DispatchFamily.Stream,Z.Stage.Wrapper<ZRBehavior5<Relay5,int>>(),Z.Stage.Wrapper<ZRBehavior4<Relay5,int>>(),Z.Stage.Wrapper<ZRBehavior3<Relay5,int>>(),Z.Stage.Wrapper<ZRBehavior2<Relay5,int>>(),Z.Stage.Wrapper<ZRBehavior1<Relay5,int>>());
         });
         return s.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
     }
