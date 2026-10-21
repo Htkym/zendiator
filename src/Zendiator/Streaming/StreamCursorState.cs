@@ -116,6 +116,17 @@ public abstract class StreamCursorState : IAsyncDisposable
         return CloseMove(null);
     }
 
+    /// <summary>Publishes a synchronous item directly from the outermost public Move.</summary>
+    /// <remarks>Use only after consuming a successful raw Move once, never inside an asynchronous operation.</remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    protected ValueTask<bool> CompleteSynchronousMove()
+    {
+        var result = new ValueTask<bool>(true);
+        _hasCurrent = true;
+        Volatile.Write(ref _busy, 0);
+        return result;
+    }
+
     /// <summary>Closes a failed Move; a cleanup failure takes precedence over the original error.</summary>
     protected ValueTask<bool> MoveFailed(Exception error)
     {

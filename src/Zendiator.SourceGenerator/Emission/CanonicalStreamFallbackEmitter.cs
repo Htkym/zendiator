@@ -17,6 +17,7 @@ internal static class CanonicalStreamFallbackEmitter
         var generic = model.Generic?.TypeParameters ?? "";
         var constraints = model.Generic?.TypeConstraints ?? "";
         var item = model.ItemFlow?.Final.Name ?? h.ItemName;
+        var standalone = IsStandalone(model);
         var sink = "TSink";
         while (model.Generic?.Parameters.Contains(sink) == true) sink = "_" + sink;
         var b = new StringBuilder();
@@ -40,7 +41,7 @@ internal static class CanonicalStreamFallbackEmitter
                     private Cursor{{model.ConsumerSegment}} CreateCursor(global::System.Threading.CancellationToken token)
                     {
                         if (_services is null) throw new global::System.InvalidOperationException("The Stream source is uninitialized.");
-                        return new Cursor{{model.ConsumerSegment}}(_services, _request, _api, token, null);
+                        return new Cursor{{model.ConsumerSegment}}(_services, _request, _api, token{{(standalone ? "" : ", null")}});
                     }
                     public global::System.Collections.Generic.IAsyncEnumerator<{{item}}> GetAsyncEnumerator(
                         global::System.Threading.CancellationToken cancellationToken = default) => CreateCursor(cancellationToken);
@@ -60,8 +61,8 @@ internal static class CanonicalStreamFallbackEmitter
                             while (true)
                             {
                                 cancellationToken.ThrowIfCancellationRequested();
-                                if (!await cursor.MoveNextAsync().ConfigureAwait(false)) return;
-                                if (!await sink.OnNextAsync(cursor.Current, cursor.CancellationToken).ConfigureAwait(false)) return;
+                                if (!await cursor.{{(standalone ? "MoveNextForTerminalAsync" : "MoveNextAsync")}}().ConfigureAwait(false)) return;
+                                if (!await sink.OnNextAsync({{(standalone ? "cursor.ReadCurrentForTerminal()" : "cursor.Current")}}, cursor.CancellationToken).ConfigureAwait(false)) return;
                             }
                         }
                         finally
@@ -89,21 +90,34 @@ internal static class CanonicalStreamFallbackEmitter
         var factory = segment.Wrapper == null ? model.HandlerFactory : segment.WrapperFactory;
         var receiver = segment.Wrapper == null ? Storage(h.HandlerName, h.HandlerIsValueType)
             : Storage(segment.Wrapper.WrapperName, segment.Wrapper.WrapperIsValueType);
+        var standalone = IsStandalone(model);
+        var rootCheck = standalone ? "" : """
+                            if (!global::System.Object.ReferenceEquals(_root, this) && _root.IsClosed)
+                                operation = MoveFailed(new global::System.ObjectDisposedException("Stream"));
+                            else
+            """;
+        var repeatedMove = standalone && segment.Hooks.Count == 0 ? """
+                            else
+                            {
+                                var pending = MoveCoreAsync();
+                                if (!pending.IsCompletedSuccessfully) operation = AwaitMoveAsync(pending);
+                                else if (pending.GetAwaiter().GetResult()) return CompleteSynchronousMove();
+                                else operation = EndAsync();
+                            }
+            """ : "else operation = ObserveMove(MoveCoreAsync());";
         b.AppendLine($$"""
                     private sealed class Cursor{{n}} : global::Zendiator.Streaming.StreamCursorState,
                         global::System.Collections.Generic.IAsyncEnumerator<{{output}}>
                     {
                         private readonly global::System.IServiceProvider _services;
                         private readonly {{h.RequestName}} _request;
-                        private readonly global::Zendiator.Streaming.StreamCursorState _root;
+                        {{(standalone ? "" : "private readonly global::Zendiator.Streaming.StreamCursorState _root;")}}
                         private {{source}} _source = default!;
                         private bool _acquired;
-                        private bool _normalEnd;
-                        internal bool CanReopen => _normalEnd && !HasPendingOperation;
+                        {{(standalone ? "" : "private bool _normalEnd;\ninternal bool CanReopen => _normalEnd && !HasPendingOperation;")}}
                         internal Cursor{{n}}(global::System.IServiceProvider services, {{h.RequestName}} request,
-                            global::System.Threading.CancellationToken api, global::System.Threading.CancellationToken enumeration,
-                            global::Zendiator.Streaming.StreamCursorState? root) : base(api, enumeration)
-                        { _services = services; _request = request; _root = root ?? this; }
+                            global::System.Threading.CancellationToken api, global::System.Threading.CancellationToken enumeration{{(standalone ? "" : ", global::Zendiator.Streaming.StreamCursorState? root")}}) : base(api, enumeration)
+                        { _services = services; _request = request; {{(standalone ? "" : "_root = root ?? this;")}} }
             """);
         if (segment.Hooks.Count != 0) b.AppendLine("private " + output + " _current = default!;");
         for (var i = 0; i < segment.Hooks.Count; i++)
@@ -121,10 +135,9 @@ internal static class CanonicalStreamFallbackEmitter
                             global::System.Threading.Tasks.ValueTask<bool> operation;
                             try
                             {
-                                if (!global::System.Object.ReferenceEquals(_root, this) && _root.IsClosed)
-                                    operation = MoveFailed(new global::System.ObjectDisposedException("Stream"));
-                                else if (TryStart()) operation = StartMoveAsync();
-                                else operation = ObserveMove(MoveCoreAsync());
+                                {{rootCheck}}
+                                if (TryStart()) operation = StartMoveAsync();
+                                {{repeatedMove}}
                             }
                             catch (global::System.Exception error) { operation = MoveFailed(error); }
                             return PublishMove(operation);
@@ -157,9 +170,31 @@ internal static class CanonicalStreamFallbackEmitter
                         private async global::System.Threading.Tasks.ValueTask<bool> EndAsync()
                         {
                             await MoveSucceeded(false).ConfigureAwait(false);
-                            _normalEnd = true;
+                            {{(standalone ? "" : "_normalEnd = true;")}}
                             return false;
                         }
+            """);
+        if (standalone)
+        {
+            b.AppendLine($$"""
+                        // This fresh owner is kept inside one Consume operation and is never passed to user code.
+                        internal global::System.Threading.Tasks.ValueTask<bool> MoveNextForTerminalAsync()
+                        {
+                            try
+                            {
+                                if (TryStart()) return StartMoveAsync();
+                                var pending = MoveCoreAsync();
+                                if (!pending.IsCompletedSuccessfully) return AwaitMoveAsync(pending);
+                                return pending.GetAwaiter().GetResult() ? new(true) : EndAsync();
+                            }
+                            catch (global::System.Exception error) { return MoveFailed(error); }
+                        }
+                        internal {{output}} ReadCurrentForTerminal() => {{(segment.Hooks.Count == 0 ? "ReadSource(ref _source)" : "_current")}};
+                """);
+        }
+        else
+        {
+            b.AppendLine("""
                         internal async global::System.Threading.Tasks.ValueTask OpenForMiddlewareAsync()
                         {
                             if (!TryBeginMove()) throw new global::System.ObjectDisposedException("Stream");
@@ -171,6 +206,9 @@ internal static class CanonicalStreamFallbackEmitter
                             catch (global::System.Exception error) { await PublishMove(MoveFailed(error)).ConfigureAwait(false); throw; }
                             InitializationSucceeded();
                         }
+                """);
+        }
+        b.AppendLine("""
                         private async global::System.Threading.Tasks.ValueTask InitializeAsync()
                         {
                             _services.GetService(typeof(global::System.IServiceProvider));
@@ -207,6 +245,9 @@ internal static class CanonicalStreamFallbackEmitter
         b.AppendLine("}");
         if (segment.Upstream is { } upstream) EmitUpstream(b, h, segment, upstream);
     }
+
+    private static bool IsStandalone(CanonicalStreamFallbackModel model) =>
+        model.Segments.Count == 1 && model.Segments[0].Wrapper == null;
 
     private static void EmitMove(StringBuilder b, CanonicalStreamFallbackSegment segment)
     {
