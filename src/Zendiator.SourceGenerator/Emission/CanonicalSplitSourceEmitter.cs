@@ -15,6 +15,7 @@ internal sealed record CanonicalSourceFile(string HintName, string Source)
     public CanonicalMediatorApi? Api { get; init; }
     public CanonicalCompositionFragment? Composition { get; init; }
     public EquatableArray<string> StreamHelpers { get; init; }
+    public EquatableArray<string> BoxedDependencies { get; init; }
 }
 internal sealed record CanonicalCompositionFragment(string Namespace, string Registrar, EquatableArray<string> Externs,
     EquatableArray<CanonicalServiceDependency> Dependencies);
@@ -51,9 +52,9 @@ internal static class CanonicalSplitSourceEmitter
             Composition = fragment,
             StreamHelpers = new(mediator.Members.OfType<MethodDeclarationSyntax>().Where(method => method.Modifiers.Any(SyntaxKind.PublicKeyword))
                 .SelectMany(method => method.DescendantNodes().OfType<InvocationExpressionSyntax>())
-                .Where(call => call.Expression is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax, Name.Identifier.ValueText: "Create" } &&
+                .Where(call => call.Expression is MemberAccessExpressionSyntax { Expression: SimpleNameSyntax, Name.Identifier.ValueText: "Create" } &&
                     call.ArgumentList.Arguments.FirstOrDefault()?.Expression is IdentifierNameSyntax { Identifier.ValueText: "_provider" })
-                .Select(call => ((IdentifierNameSyntax)((MemberAccessExpressionSyntax)call.Expression).Expression).Identifier.ValueText).Distinct(StringComparer.Ordinal))
+                .Select(call => ((SimpleNameSyntax)((MemberAccessExpressionSyntax)call.Expression).Expression).Identifier.ValueText).Distinct(StringComparer.Ordinal))
         };
     internal static CanonicalSourceFile Route(CanonicalRouteText route)
     {
@@ -62,7 +63,7 @@ internal static class CanonicalSplitSourceEmitter
         var api = ns.Members.OfType<InterfaceDeclarationSyntax>().Single(); var mediator = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "Zendiator");
         var registrar = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "ZendiatorGeneratedRegistrar");
         var id = Id(route.StableKey);
-        var fragment = CanonicalRouteServiceEmitter.Fragment(root, ns, mediator, registrar);
+        var fragment = CanonicalRouteServiceEmitter.Fragment(root, ns, mediator, registrar, route.BoxedDependencies);
         var b = Header(fragment.Externs);
         b.Append("namespace ").Append(fragment.Namespace).AppendLine(" {\npublic partial interface IZendiator {");
         foreach (var member in api.Members) b.AppendLine(member.ToFullString());

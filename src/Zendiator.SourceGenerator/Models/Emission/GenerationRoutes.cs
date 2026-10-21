@@ -3,5 +3,4 @@ namespace Zendiator.SourceGenerator;
 internal sealed record GenerationRoutes(
     RequestRoutes Requests,
     RequestRoutes Synchronous,
-    EquatableArray<EmissionNotificationRoute> Notifications,
-    EquatableArray<EmissionRoute> Streams);
+    EquatableArray<EmissionNotificationRoute> Notifications);

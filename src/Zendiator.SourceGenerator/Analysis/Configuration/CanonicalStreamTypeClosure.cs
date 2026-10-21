@@ -34,7 +34,7 @@ internal static class CanonicalStreamTypeClosure
     }
     internal static Result Stage(INamedTypeSymbol type, INamedTypeSymbol request, ITypeSymbol item,
         FusionStageKind kind, Compilation compilation, CanonicalStreamOpenBinding? open = null) => Close(type, request, item,
-        kind == FusionStageKind.Wrapper ? new[] { "Zendiator.IStreamWrapper`2" } :
+        kind == FusionStageKind.Wrapper ? new[] { ContractNames.StreamMiddleware } :
             new[] { "Zendiator.IStreamItemFilter`2", "Zendiator.IStreamItemMap`2",
                 "Zendiator.IAsyncStreamItemFilter`2", "Zendiator.IAsyncStreamItemMap`2",
                 "Zendiator.IStreamItemMap`3", "Zendiator.IAsyncStreamItemMap`3" }, compilation, open);

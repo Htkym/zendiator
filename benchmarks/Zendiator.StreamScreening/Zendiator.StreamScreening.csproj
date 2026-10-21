@@ -9,7 +9,5 @@
     <ProjectReference Include="../../src/Zendiator.SourceGenerator/Zendiator.SourceGenerator.csproj" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
-    <Content Include="../../tests/Zendiator.Tests/Contracts/CanonicalStreamAsyncItemReference.cs" Link="References/CanonicalStreamAsyncItemReference.cs" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../tests/Zendiator.Tests/Contracts/CanonicalStreamTypedOwnedReference.cs" Link="References/CanonicalStreamTypedOwnedReference.cs" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

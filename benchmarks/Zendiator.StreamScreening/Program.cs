@@ -5,7 +5,6 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.DependencyInjection;
 using Zendiator.SourceGenerator;
 
@@ -13,7 +12,8 @@ namespace Zendiator.StreamScreening;
 
 internal static class Program
 {
-    private static readonly CSharpParseOptions Parse = new(LanguageVersion.Preview);
+    private static readonly CSharpParseOptions Parse = new CSharpParseOptions(LanguageVersion.Preview)
+        .WithFeatures(new[] { new KeyValuePair<string, string>("InterceptorsNamespaces", "Zendiator.Generated.Interceptors") });
     private const string Imports = """
         global using System;
         global using System.Linq;
@@ -25,7 +25,6 @@ internal static class Program
         global using Zendiator;
         global using Zendiator.DependencyInjection;
         global using Zendiator.StreamScreening;
-        global using Zendiator.Tests.Contracts;
         """;
 
     public static async Task<int> Main(string[] args)
@@ -109,8 +108,6 @@ internal static class Program
             typeof(ServiceProvider).Assembly.Location
         }).Distinct(StringComparer.Ordinal).ToArray();
         var references = paths.Select(path => MetadataReference.CreateFromFile(path)).ToArray();
-        var independentReferences = new[] { "CanonicalStreamAsyncItemReference.cs", "CanonicalStreamTypedOwnedReference.cs" }
-            .Select(name => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "References", name))).ToArray();
         foreach (var shape in onlyShape is null ? FixtureSources.Shapes : new[] { onlyShape })
         {
             var folder = Path.Combine(directory, shape);
@@ -118,8 +115,7 @@ internal static class Program
             var source = FixtureSources.Create(shape);
             File.WriteAllText(Path.Combine(folder, "input.cs"), Imports + source);
             var compilation = CSharpCompilation.Create("Screening_" + shape.Replace('-', '_'),
-                new[] { CSharpSyntaxTree.ParseText(Imports + source, Parse) }
-                    .Concat(independentReferences.Select(text => CSharpSyntaxTree.ParseText(text, Parse))), references,
+                new[] { CSharpSyntaxTree.ParseText(Imports + source, Parse) }, references,
                 new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, optimizationLevel: OptimizationLevel.Release,
                     nullableContextOptions: NullableContextOptions.Enable, deterministic: true));
             GeneratorDriver driver = CSharpGeneratorDriver.Create([new ZendiatorGenerator().AsSourceGenerator()], parseOptions: Parse);
@@ -127,20 +123,9 @@ internal static class Program
             var generated = driver.GetRunResult().Results.Single().GeneratedSources;
             foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
             File.WriteAllText(Path.Combine(folder, "generator-diagnostics.json"), JsonSerializer.Serialize(diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), text = d.ToString() })));
-            var expected = shape == "zero-hook-sentinel" ? 0 : 2;
-            if (diagnostics.Length != expected || diagnostics.Any(d => d.Id != "ZEN0037"))
+            if (diagnostics.Any(d => d.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error))
                 throw new InvalidOperationException("Unexpected SG diagnostics: " + string.Join(";", diagnostics.Select(d => d.ToString())));
-            string Helper(string mode)
-            {
-                var generatedNamespace = "App." + mode + ".Generated.Composition";
-                var matches = generated.Where(file => file.HintName.StartsWith("Zendiator.StreamCanonical.", StringComparison.Ordinal))
-                    .Select(file => file.SyntaxTree.GetRoot()).SelectMany(root => root.DescendantNodes().OfType<ClassDeclarationSyntax>())
-                    .Where(type => type.Identifier.ValueText.StartsWith("__ZendiatorStreamCanonical_", StringComparison.Ordinal))
-                    .Where(type => type.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().First().Name.ToString() == generatedNamespace).ToArray();
-                if (matches.Length != 1) throw new InvalidOperationException("Missing/duplicate canonical helper.");
-                return "global::" + generatedNamespace + "." + matches[0].Identifier.ValueText;
-            }
-            var bridge = FixtureSources.Bridge(shape, expected == 0 ? "" : Helper("Preflight"), expected == 0 ? "" : Helper("Measure"));
+            var bridge = FixtureSources.Bridge(shape);
             var entry = FixtureSources.Entry(shape);
             File.WriteAllText(Path.Combine(folder, "bridge.cs"), bridge);
             File.WriteAllText(Path.Combine(folder, "entry.cs"), entry);
@@ -156,7 +141,7 @@ internal static class Program
             dll.Dispose();
             File.WriteAllText(Path.Combine(folder, "compile.json"), JsonSerializer.Serialize(new
             {
-                shape, emitCount = 1, preflightAndMeasurementCopies = 2, productionEnabled = false,
+                shape, emitCount = 1, preflightAndMeasurementCopies = 2, productionEnabled = false, streamProtocol = "native-typed-pull-v1",
                 sourceSha256 = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(source))),
                 dllSha256 = Hash(Path.Combine(folder, "consumer.dll")),
                 diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString() }),

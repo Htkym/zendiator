@@ -220,11 +220,14 @@ public sealed partial class GeneratorTests
     {
         var source = ListFixture("c.Handlers<Items>(DispatchFamily.Stream,typeof(ItemsHandler)); c.Pipeline<Items>(Stage.Hook<Map>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Filter>());") + """
             public sealed record Items : IStreamRequest<int>;
-            [ZendiatorHandler] public sealed class ItemsHandler : IStreamRequestHandler<Items,int> { public System.Collections.Generic.IAsyncEnumerable<int> HandleAsync(Items r,CancellationToken c)=>throw new NotImplementedException(); }
+            [ZendiatorHandler] public sealed class ItemsHandler : IStreamSourceHandler<Items,int,ItemsHandler.Cursor> {
+                public ValueTask<Cursor> OpenAsync(Items r,CancellationToken c)=>throw new NotImplementedException();
+                public sealed class Cursor:System.Collections.Generic.IAsyncEnumerator<int>{public int Current=>0;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}
+            }
             public sealed class Map : IStreamItemMap<Items,int> { public int Map(Items r,int item,CancellationToken c)=>item+1; }
             public sealed class Filter : IStreamItemFilter<Items,int> { public bool Accept(Items r,int item,CancellationToken c)=>true; }
-            public sealed class StreamOpaque : IStreamWrapper<Items,int> {
-                public System.Collections.Generic.IAsyncEnumerable<int> Wrap<N>(Items r,N n,CancellationToken c) where N:IStreamUpstream<Items,int> =>n.Open(r,c);
+            public sealed class StreamOpaque : IStreamMiddleware<Items,int> {
+                public ValueTask<System.Collections.Generic.IAsyncEnumerator<int>> OpenAsync(Items r,IStreamUpstream<Items,int> next,CancellationToken c)=>next.OpenAsync(r,c);
             }
             """;
         // A method cannot share its enclosing type name.
@@ -233,7 +236,7 @@ public sealed partial class GeneratorTests
         var route = Assert.Single(Selection(driver).Pipelines);
         Assert.Equal(FusionResultKind.Item, route.ResultKind);
         Assert.Equal(new[] { BoundCallbackPhase.Map, BoundCallbackPhase.Wrapper, BoundCallbackPhase.Filter }, route.Stages.Select(s => Assert.Single(s.Callbacks).Phase));
-        Assert.Equal(BoundCompletionKind.Enumerable, route.Stages[1].Callbacks[0].Completion);
+        Assert.Equal(BoundCompletionKind.ValueTask, route.Stages[1].Callbacks[0].Completion);
         var dual = source.Replace("class Mapper : IStreamItemMap<Items,int>", "class Mapper : IStreamItemMap<Items,int>, IStreamItemFilter<Items,int>")
             .Replace("public int Map(Items", "public bool Accept(Items r,int i,CancellationToken c)=>true; public int Map(Items");
         BindLists(dual, "ZEN0027");

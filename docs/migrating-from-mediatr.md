@@ -528,51 +528,24 @@ reused across retries and subsequent sends, including Transient registrations.
   Restate any ordering that relied on MediatR registration order with `Order`.
 - DI constructor injection keeps working.
 - Void requests use one-argument `IPipelineBehavior<T>`.
-  Sync requests use `ISyncPipelineBehavior`. Streams use `IStreamPipelineBehavior`.
+  Sync requests use `ISyncPipelineBehavior`. Streams use `IStreamMiddleware`.
 - With multiple handlers, the pipeline applies to each handler branch.
 
 ## Rewriting streams
 
-MediatR `IStreamRequest<T>` / `IStreamRequestHandler<T, R>` map to Zendiator streams with lazy semantics.
+Keep standard IAsyncEnumerable consumers. Replace yield handlers with a marked
+`IStreamSourceHandler<TRequest,TItem,TCursor>` opening a named IAsyncEnumerator cursor.
+Move state, real I/O, cancellation and finally/ownership cleanup into that cursor;
+a private compiler iterator type cannot serve as the named public declaration.
 
-```csharp
-// Before (MediatR)
-public sealed record GetNames(int Count) : IStreamRequest<string>;
-public sealed class GetNamesHandler : IStreamRequestHandler<GetNames, string>
-{
-    public async IEnumerable<string> Handle(GetNames request, CancellationToken ct)
-    {
-        for (var i = 0; i < request.Count; i++) yield return $"n-{i}";
-        await Task.CompletedTask;
-    }
-}
-await foreach (var name in mediator.CreateStream(new GetNames(3))) { }
-```
+StreamAsync returns a generated standard enumerable with instance ConsumeAsync.
+Use explicit Handlers/Pipeline declarations: IStreamMiddleware with Stage.Wrapper
+for opaque stages, dedicated Filter/Map contracts with Stage.Hook for typed stages.
+The old global Stream Behavior, Validator and OwnsStream APIs are not the new protocol.
 
-```csharp
-// After (Zendiator)
-public sealed record GetNames(int Count) : IStreamRequest<string>;
-public sealed class GetNamesHandler : IStreamRequestHandler<GetNames, string>
-{
-    public async IAsyncEnumerable<string> HandleAsync(GetNames request, CancellationToken ct)
-    {
-        for (var i = 0; i < request.Count; i++)
-        {
-            ct.ThrowIfCancellationRequested();
-            await Task.Yield();
-            yield return $"n-{i}";
-        }
-    }
-}
-await foreach (var name in zendiator.StreamAsync(new GetNames(3))) { }
-```
-
-Notes:
-
-- One stream request has exactly one handler. Fan-out streams are out of scope.
-- `StreamAsync` alone runs nothing. The handler starts on first `MoveNextAsync`.
-- Stream Behaviors implement `IStreamPipelineBehavior<TRequest, TItem>` and register with `AddOpenStreamBehavior`.
-- Either the API token or `WithCancellation` cancels. `ref struct` streams are diagnosed.
+See [named-cursor migration and execution contracts](streaming-0.5.0.ja.md), including
+HTTP and consumer-failure boundaries. Standard enumeration, typed terminal and HTTP
+performance are separate measurements; no improvement is claimed here.
 
 ## Unsupported features
 
@@ -601,8 +574,8 @@ Zendiator has no equivalents below. Decide replacements before migrating.
    `WithCancellation`, dispose with `await using`, and re-enumerate with a fresh call.
 8. Search for variables typed as `object` or `IRequest<T>`.
 9. Rewrite Behaviors for continuation calls and add `Order`
-   (sync: `ISyncPipelineBehavior`; streams: `IStreamPipelineBehavior` +
-   `AddOpenStreamBehavior`).
+   (sync: `ISyncPipelineBehavior`; streams: `IStreamMiddleware` +
+   `Stage.Wrapper`).
 10. Move notification subscribers to `INotificationHandler`, adding `HandlerOrder`
     where order matters.
 11. Mark fan-out requests with `IMultiRequest` and switch to `SendAllAsync`.

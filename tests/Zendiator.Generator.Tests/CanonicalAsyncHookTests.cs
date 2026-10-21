@@ -397,7 +397,6 @@ public sealed partial class GeneratorTests
     [InlineData("metadata-second-factory")]
     [InlineData("metadata")]
     [InlineData("metadata-wrapper-session")]
-    [InlineData("stream")]
     public void Async_hook_unsupported_routes_remain_diagnosed_without_execution(string shape)
     {
         var source = AsyncHookSource(shape is "metadata-second-factory" or "metadata-wrapper-session" ? "owned" : "direct", false);
@@ -410,13 +409,12 @@ public sealed partial class GeneratorTests
             "metadata-second-factory" => source.Replace("Stage.Hook<Hook<OuterTag>,Factory<OuterTag>>()", "Stage.Hook<Hook<OuterTag>,Factory<OuterTag>>(),Stage.Hook<Hook<InnerTag>,global::Zendiator.Generator.Tests.MetadataOwnedReceiverFactory<Ping,Hook<InnerTag>>>()"),
             "metadata" => source.Replace("Stage.Hook<Hook<OuterTag>>()", "Stage.Hook<global::Zendiator.Generator.Tests.MetadataAsyncHook<Ping>>()"),
             "metadata-wrapper-session" => source.Replace("Stage.Hook<Hook<OuterTag>,Factory<OuterTag>>()", "Stage.Wrapper<Wrap,global::Zendiator.Generator.Tests.MetadataOwnedReceiverFactory<Ping,Wrap>>()") + "namespace App {public sealed class Wrap:IAsyncSendWrapper<Ping,int>,IAsyncDisposable{public ValueTask<int> InvokeAsync<TNext>(Ping r,TNext next,CancellationToken t) where TNext:IAsyncSendContinuation<Ping,int> =>next.InvokeAsync(r,t);public ValueTask DisposeAsync()=>default;}}",
-            _ => "using System.Collections.Generic;using System.Threading;using System.Threading.Tasks;using System.Runtime.CompilerServices;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;namespace App {public sealed record Ping:IStreamRequest<int>;[ZendiatorHandler]public sealed class Handler:IStreamRequestHandler<Ping,int>{public async IAsyncEnumerable<int> HandleAsync(Ping r,[EnumeratorCancellation]CancellationToken t){await Task.CompletedTask;yield return 1;}}[ZendiatorComposition(\"stream\")]public sealed class Reads;public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<Reads>(c=>c.Handlers<Ping>(DispatchFamily.Stream,typeof(Handler)));}}"
+            _ => throw new ArgumentOutOfRangeException(nameof(shape))
         };
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "HookUnsupported" + shape), out var output, out var diagnostics);
-        if (shape != "stream") { Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources); return; }
-        Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
-        AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
-        WriteNestedHookEvidence("async-hook-boundaries", shape, new { shape, source, diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }), generatedExecution = false });
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
     }
     [Fact]
     public void Async_hook_body_edits_cache_emission_and_factory_ownership_changes_it()

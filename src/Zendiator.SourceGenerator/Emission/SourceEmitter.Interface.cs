@@ -69,14 +69,6 @@ internal sealed partial class SourceEmitter
                     """);
         }
 
-        foreach (var stream in _model.Routes.Streams)
-        {
-            b.AppendLine($$"""
-                    /// <summary>Streams items for the request through its configured pipeline. Enumeration is lazy and scope-safe.</summary>
-                    {{StreamSignature(stream)}};
-                """);
-        }
-
         b.AppendLine("""}""");
     }
 }

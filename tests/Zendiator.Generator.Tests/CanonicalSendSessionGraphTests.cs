@@ -261,16 +261,13 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
-    public void Session_contract_refuses_implicit_DI_ownership_async_cleanup_on_sync_and_unconnected_Stream()
+    public void Send_session_contract_refuses_implicit_DI_ownership_and_async_cleanup_on_sync()
     {
         var route = SessionRoute(sync: true); var owned = SessionBinding(true);
         Reject(owned with { Cleanup = null }, "OwnedSessionCleanupRequired");
         Reject(owned with { Ownership = FusionOwnership.BorrowedResource }, "BorrowedResourceHasCleanup");
         Reject(owned with { Cleanup = SessionBinding(false).Cleanup }, "SessionCleanupModeMismatch");
         Reject(owned with { Ownership = FusionOwnership.BorrowedService }, "ExplicitResourceOwnershipRequired");
-        var stream = Graph(BindLists(StreamGraphFixture())).Contract;
-        stream = stream with { Handlers = new(stream.Handlers.Select(h => h with { Sessions = new(new[] { SessionBinding(false) }) })) };
-        Assert.Contains(CanonicalStreamGraphValidator.CheckContract(stream), f => f.Reason == "StreamSessionAcquisitionAndCleanupUnavailable");
         void Reject(BoundSessionModel binding, string reason) =>
             Assert.Contains(CanonicalSendGraphValidator.CheckContract(route with
             {

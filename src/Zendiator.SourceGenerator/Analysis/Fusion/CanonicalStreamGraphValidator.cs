@@ -34,7 +34,7 @@ internal static class CanonicalStreamGraphValidator
         {
             CheckSessions(handler.Type, handler.ServiceOwnership, handler.Sessions, handler.Anchor, "Handler");
             if (handler.CompilerOwnsError || handler.Callback == null) { Reject("HandlerImplementationUnavailable", handler.Anchor); continue; }
-            if (handler.Callback.Phase != BoundCallbackPhase.Handler || handler.Callback.Completion != BoundCompletionKind.Enumerable || handler.Callback.RequiresSingleConsumption)
+            if (handler.Callback.Phase != BoundCallbackPhase.Handler || handler.Callback.Completion != BoundCompletionKind.ValueTask || !handler.Callback.RequiresSingleConsumption)
                 Reject("StreamHandlerCompletionMismatch", handler.Anchor);
             CheckParameters(handler.Callback, handler.Anchor);
         }
@@ -49,7 +49,7 @@ internal static class CanonicalStreamGraphValidator
                     callback.Completion is not (BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask) ||
                     callback.RequiresSingleConsumption != (callback.Completion == BoundCompletionKind.ValueTask))) Reject("SameItemHookCompletionMismatch", stage.Anchor);
                 if (stage.Kind == FusionStageKind.Wrapper && (callback.Phase != BoundCallbackPhase.Wrapper ||
-                    callback.Completion != BoundCompletionKind.Enumerable || callback.RequiresSingleConsumption)) Reject("StreamWrapperCompletionMismatch", stage.Anchor);
+                    callback.Completion != BoundCompletionKind.ValueTask || !callback.RequiresSingleConsumption)) Reject("StreamWrapperCompletionMismatch", stage.Anchor);
                 CheckParameters(callback, stage.Anchor);
             }
         }
@@ -83,49 +83,4 @@ internal static class CanonicalStreamGraphValidator
         }
     }
 
-    internal static EquatableArray<CanonicalExecutionGraphFact> Validate(BoundPipelineModel route, CanonicalStreamExecutionSchedule candidate)
-    {
-        var initial = CheckContract(route);
-        if (initial.Count != 0) return initial;
-        if (route.Stages.Any(s => s.Kind == FusionStageKind.Wrapper)) return new(new[] { new CanonicalExecutionGraphFact("WrapperRequiresSegmentGraph", route.Anchor) });
-        return ValidateSegment(new(route.Anchor, StreamSourceKind.Handler, route.Handlers[0].Callback!, route.Stages)
-        { SourceSessions = route.Handlers[0].Sessions }, candidate);
-    }
-
-    internal static EquatableArray<CanonicalExecutionGraphFact> ValidateSegment(StreamSegmentContract contract, CanonicalStreamExecutionSchedule candidate)
-    {
-        var facts = new List<CanonicalExecutionGraphFact>();
-        void Reject(string reason) => facts.Add(new(reason, contract.Anchor));
-        if (contract.SourceKind is not (StreamSourceKind.Handler or StreamSourceKind.Wrapper)) Reject("UnknownStreamSourceKind");
-        var required = RequiredStreamExecutionContract.Derive(contract);
-        Compare(required.Sites, candidate.Sites, "Site");
-        Compare(required.Owners, candidate.Owners, "Owner");
-        Compare(required.Tokens, candidate.Tokens, "TokenRule");
-        Compare(required.Awaits, candidate.Awaits, "Await");
-        Compare(required.Transfers, candidate.Transfers, "ValueTransfer");
-        Compare(required.Failures, candidate.Failures, "FailurePolicy");
-        Compare(required.ServiceResolutions, candidate.ServiceResolutions, "ServiceResolution");
-        Compare(required.SessionCalls, candidate.SessionCalls, "SessionCall");
-        Compare(required.CallbackReceivers, candidate.CallbackReceivers, "CallbackReceiver");
-        if (candidate.ContextModelId != "stream-call-caller-v1") Reject("FreshMoveDisposeCallerContextRequired");
-        if (!candidate.FreshCursorPerEnumeration || candidate.RequestSnapshot || candidate.ReLendPublicCursor) Reject("ReplayCursorOwnershipMismatch");
-        if (candidate.Owners.Any(o => o.Borrowed && o.Cleanup != StreamCleanup.None)) Reject("BorrowedOwnerHasCleanup");
-        if (candidate.Awaits.Any(a => !a.ConsumeOnce || !a.ConfigureAwaitFalse)) Reject("AwaitConsumptionMismatch");
-        if (candidate.Awaits.GroupBy(a => a.Producer).Any(g => g.Count() != 1)) Reject("DuplicateAwaitConsumer");
-        if (candidate.Failures.Any(f => !f.PreserveIdentityAndToken || !f.EscapingOceIsCanceled || !f.ReplacesPreviousError || f.Aggregate)) Reject("ExceptionReplacementMismatch");
-        facts.AddRange(CanonicalStreamControlValidator.Validate(contract, candidate));
-        facts.AddRange(CanonicalStreamSessionValidator.Inspect(contract, candidate).Facts);
-        return new(facts.Distinct());
-
-        void Compare<T>(IEnumerable<T> expected, IEnumerable<T> actual, string kind)
-        {
-            var remaining = expected.ToList();
-            foreach (var value in actual)
-            {
-                var i = remaining.FindIndex(r => EqualityComparer<T>.Default.Equals(r, value));
-                if (i < 0) Reject("Unexpected" + kind); else remaining.RemoveAt(i);
-            }
-            if (remaining.Count != 0) Reject("Missing" + kind);
-        }
-    }
 }

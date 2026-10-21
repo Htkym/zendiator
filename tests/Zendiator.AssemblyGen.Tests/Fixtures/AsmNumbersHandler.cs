@@ -2,14 +2,25 @@ using global::Zendiator;
 
 namespace Zendiator.AssemblyGen.Tests;
 
-public sealed class AsmNumbersHandler : IStreamRequestHandler<AsmNumbers, int>
+[ZendiatorHandler]
+public sealed class AsmNumbersHandler : IStreamSourceHandler<AsmNumbers, int, AsmNumbersCursor>
 {
-    public async IAsyncEnumerable<int> HandleAsync(AsmNumbers request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    public ValueTask<AsmNumbersCursor> OpenAsync(AsmNumbers request, CancellationToken cancellationToken) =>
+        new(new AsmNumbersCursor(request.Count, cancellationToken));
+}
+
+public sealed class AsmNumbersCursor(int count, CancellationToken token) : IAsyncEnumerator<int>
+{
+    private int _next;
+    public int Current { get; private set; }
+    public async ValueTask<bool> MoveNextAsync()
     {
-        for (var i = 0; i < request.Count; i++)
-        {
-            await Task.Yield();
-            yield return i;
-        }
+        token.ThrowIfCancellationRequested();
+        if (_next == count) return false;
+        await Task.Yield();
+        token.ThrowIfCancellationRequested();
+        Current = _next++;
+        return true;
     }
+    public ValueTask DisposeAsync() => default;
 }

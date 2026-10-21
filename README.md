@@ -142,97 +142,32 @@ registration does not change how `IZendiator` is created.
 
 ## Streaming
 
-Define a stream request and handler. One request maps to exactly one handler.
+0.5.0 uses a marked `IStreamSourceHandler<TRequest,TItem,TCursor>` opening a named
+IAsyncEnumerator cursor through OpenAsync. Register explicit Handlers/Pipeline stages.
+Opaque IStreamMiddleware uses Stage.Wrapper; dedicated Filter/Map hooks and session
+factories retain their typed flow.
 
-```csharp
-public sealed record GetHouseholdNames(int Count) : IStreamRequest<string>;
+Mediator.StreamAsync(request, token) returns a generated public source implementing
+standard IAsyncEnumerable. Use it with await foreach or return it from a Controller.
+Its instance `ConsumeAsync<TSink>`(sink, token) uses the same concrete cursor core.
 
-public sealed class GetHouseholdNamesHandler : IStreamRequestHandler<GetHouseholdNames, string>
-{
-    public async IAsyncEnumerable<string> HandleAsync(
-        GetHouseholdNames request,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
-    {
-        for (var i = 0; i < request.Count; i++)
-        {
-            ct.ThrowIfCancellationRequested();
-            await Task.Yield();
-            yield return $"Household-{i}";
-        }
-    }
-}
-```
-
-Register an open stream behavior alongside regular behaviors:
-
-```csharp
-configuration.AddOpenBehavior(typeof(LoggingBehavior<,>), order: 0);
-configuration.AddOpenStreamBehavior(typeof(StreamLoggingBehavior<,>), order: 2);
-```
-
-For lightweight synchronous input checks, implement a validator and register its closed concrete type explicitly:
-
-```csharp
-public sealed class HouseholdNameValidator : IStreamRequestValidator<GetHouseholdNames>
-{
-    public void Validate(GetHouseholdNames request) => ArgumentOutOfRangeException.ThrowIfNegative(request.Count);
-}
-
-configuration.AddStreamRequestValidator(typeof(HouseholdNameValidator), order: 0);
-```
-
-Validation is opt-in; assembly scanning does not register validators automatically.
-Each registered type must be an accessible, non-abstract closed class. All of its
-`IStreamRequestValidator<TRequest>` contracts must exactly match closed generated
-stream routes. Open-generic validators and base-request matching are unsupported.
-Types and validator orders must be unique within the composition; validator order
-is independent of behavior order.
-
-Validation runs synchronously once per `StreamAsync` call, in ascending order,
-before an enumerable is created. It does not run again when that sequence is
-enumerated. Registered reference requests reject null at entry; streams without
-validators retain their null check on first `MoveNextAsync`. Cancellation is
-checked during enumeration, so entry validation also runs with an already-canceled
-API token. A failure stops later validator and pipeline resolution.
-
-For attribute configuration, use
-`[StreamRequestValidator(typeof(HouseholdNameValidator), Order = 0)]` on the
-generated mediator or assembly. Do not mix attributes with a configuration lambda.
-Validators must be synchronous, input-only and safe for concurrent calls; keep
-asynchronous work and I/O in the handler or stream behavior. Keep the validated
-input stable and the DI scope valid until enumeration completes. Captured validator
-instances are reused within a mediator, including Transient registrations.
-A validator that is also a handler or behavior may be constructed at entry;
-its pipeline method still runs lazily. See [known limitations](docs/release/known-limitations.md).
-
-Consume lazily. The handler starts on first `MoveNextAsync`, not on `StreamAsync`.
-Either the API token or `WithCancellation` can cancel; different tokens are linked only when both are cancelable and different.
-
-If startup fails, that enumerator does not restart: subsequent `MoveNextAsync()` calls return `false`.
-Dispose it even after failure, for example with `await using`. Call `StreamAsync` again to retry with a fresh enumeration.
-
-```csharp
-await foreach (var name in zendiator.StreamAsync(new GetHouseholdNames(3), cancellationToken))
-{
+~~~csharp
+await foreach (var name in mediator.StreamAsync(new ReadNames(3), cancellationToken))
     Console.WriteLine(name);
-}
-```
+~~~
 
-Consume each `MoveNextAsync()` or `DisposeAsync()` result once, following the `ValueTask` contract.
-If the same operation must be awaited more than once, call `AsTask()` once before
-consuming it and reuse the returned `Task`, without also consuming the original
-`ValueTask`. Await the current move before starting the next; `await foreach`
-already does this. [CA2012](https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/quality-rules/ca2012)
-can help detect incorrect consumption.
+DI, opening and I/O start on the first move, with independent state per enumeration.
+Await a pending move before another move or disposal; overlap is rejected. Consume
+each ValueTask once and keep the DI scope alive through final cleanup. A sink's false
+stops normally; true checks cancellation before the next item. Struct sinks are passed
+by value and need shared result state. Consumer exceptions are not source-middleware
+input. Borrowed services/sinks are not disposed; owned cursors/sessions are cleaned up.
+No UI context return is guaranteed, and ExecutionContext is not suppressed.
 
-`await using` consumes the disposal result once. Pooled disposal may retain a
-reference to the enumerator until its returned `ValueTask` is consumed, even
-after disposal completes.
-
-`ref struct` requests use the sync contract (`ISyncRequest` + `SendSync`); async routes
-and stream items diagnose them (ZEN0012). Re-enumeration is not guaranteed; call `StreamAsync` again for a fresh stream.
-Open-generic handlers closed over a value type need runtime generic construction,
-which NativeAOT cannot provide (see [known limitations](docs/release/known-limitations.md)).
+See the [named cursor sample](samples/Zendiator.Sample.GettingStarted/Program.cs) and
+[Stream migration and execution contract](docs/streaming-0.5.0.ja.md), including HTTP,
+Current, pending disposal, retries and ownership. Standard enumeration, typed terminal
+and HTTP performance are separate evaluations; improvements remain unmeasured.
 
 ## Synchronous multiple results
 
@@ -369,7 +304,6 @@ Different spellings that resolve to the same assembly set share one generation u
 | ZEN0021 | Explicitly treating a generated mediator as `IDisposable` |
 | ZEN0022 | Returning a mediator resolved from a `using` scope |
 | ZEN0023 | Sending after explicitly disposing its scope in the same method |
-| ZEN0024 | Invalid closed Stream validator type or unmatched validator contract |
 
 The lifetime analyzer's ZEN0021–ZEN0023 are warnings for directly provable cases, not a complete proof of scope safety. See the [migration guide](docs/migrating-from-mediatr.md) for fixes.
 
@@ -385,7 +319,7 @@ The source generator creates a concrete overload for each configured route. Call
 |`IMultiRequest<T>`, `IMultiRequest`|`SendAllAsync(request, cancellationToken)`|
 |`ISyncMultiRequest<T>`, `ISyncMultiRequest`|`SendAllSync(request, cancellationToken)`|
 |`INotification`|Sequential `PublishAsync`; `Publish` is an alias returning `ValueTask`|
-|`IStreamRequest<T>`|`StreamAsync(request, cancellationToken)` returning `IAsyncEnumerable<T>`|
+|`IStreamRequest<T>`|StreamAsync returning a generated standard enumerable with ConsumeAsync|
 
 Request and stream dispatch do not accept arbitrary runtime objects or a request stored only as its contract interface. Notification erasure is a separate supported path. Configure assembly discovery, behavior order and lifetimes with `AddZendiator`; use attributes as an alternative, not in the same compilation. Keep the runtime and generator package versions aligned.
 
@@ -433,8 +367,7 @@ and the open-generic/value-type boundary.
 
 Parallel publish, fire-and-forget, persistence/outbox, `Send(object)` for requests,
 cycle detection, CodeFix, CodeLens, built-in `Result` pipeline mapping,
-built-in logging, and Send input validation are not provided. Stream input validation
-uses the explicitly registered synchronous validators described above.
+built-in logging, and Send input validation are not provided. Stream input checks belong in the source handler OpenAsync or explicit middleware.
 Sequential `PublishAsync`, streams via `StreamAsync`, and your own
 `Result` types as ordinary `TResponse` values are supported.
 

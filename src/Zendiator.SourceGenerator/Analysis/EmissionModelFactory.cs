@@ -44,8 +44,6 @@ internal sealed class EmissionModelFactory(GenerationContracts contracts, Func<I
         route.IsVoid ? family.VoidHandler : family.Handler,
         route.IsVoid ? family.VoidBehavior : family.Behavior);
 
-    internal EmissionRoute Stream(Route route) => Route(route, contracts.Streams.Handler, contracts.Streams.Behavior);
-
     private EmissionRoute Route(Route route, INamedTypeSymbol handler, INamedTypeSymbol behavior)
     {
         var method = route.IsSync ? "Handle" : "HandleAsync";
@@ -64,7 +62,6 @@ internal sealed class EmissionModelFactory(GenerationContracts contracts, Func<I
             HandlerDisplay = route.HandlerDisplay,
             HandlerContractDisplay = route.HandlerContractDisplay,
             Behaviors = new(route.Behaviors.Select(b => Service(b, behavior, method))),
-            Validators = new(route.Validators.Select(v => Service(v, contracts.StreamValidator, "Validate"))),
             BehaviorDisplays = new(route.BehaviorDisplays),
             BehaviorContractDisplays = new(route.BehaviorContractDisplays)
         };

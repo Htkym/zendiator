@@ -29,12 +29,10 @@ internal sealed partial class GenerationAnalysis(ImmutableArray<INamedTypeSymbol
         var discoveryError = DiscoverTypes();
         if (discoveryError != null) return discoveryError;
         BuildRequests();
-        BuildStreams();
         BuildMultiRequests();
         BuildSyncRequests();
         BuildNotifications();
         ApplyPipelines();
-        ApplyStreamValidators();
         return EmitResult();
     }
 }

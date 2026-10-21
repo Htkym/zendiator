@@ -68,17 +68,14 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         {
             if (text.Length != 0) ctx.AddSource("Zendiator.Canonical.Stream.Interceptors.g.cs", SourceText.From(text, Encoding.UTF8));
         });
-        var streamPrototypeModels = streamConnections.SelectMany(static (catalog, _) => catalog.Routes
-            .Where(c => c.Kind == CanonicalStreamConnectionKind.Candidate).Select(c => c.Candidate!))
-            .WithTrackingName("CanonicalStreamPrototypeProjection");
         var streamCanonicalModels = streamConnections.SelectMany(static (catalog, _) => catalog.Routes
-            .Where(c => c.Kind is CanonicalStreamConnectionKind.CanonicalCandidate or CanonicalStreamConnectionKind.HandlerOwned).Select(c => c.Canonical!))
+            .Where(c => c.Kind == CanonicalStreamConnectionKind.CanonicalCandidate).Select(c => c.Canonical!))
             .WithTrackingName("CanonicalStreamCanonicalProjection");
         var routeTextEntries = routeBackends.Select(static (route, _) => CanonicalRouteIncremental.Render(route)).WithTrackingName("CanonicalRouteSourceEntry");
         var routeTexts = routeTextEntries.Collect();
-        var streamPrototypeFiles = streamPrototypeModels.Collect().Combine(streamCanonicalModels.Collect()).Combine(routeTexts)
-            .SelectMany(static (input, _) => CanonicalStreamEmissionNormalizer.Files(input.Left.Left, input.Left.Right, input.Right))
-            .WithTrackingName("CanonicalStreamPrototypeSource");
+        var streamSourceFiles = streamCanonicalModels.Collect().Combine(routeTexts)
+            .SelectMany(static (input, _) => CanonicalStreamEmissionNormalizer.Files(input.Left, input.Right))
+            .WithTrackingName("CanonicalStreamSource");
         var splitRouteEntries = routeTextEntries.Select(static (route, _) => new CanonicalRouteFile(route, CanonicalSplitSourceEmitter.Route(route))).WithTrackingName("CanonicalRouteFileEntry");
         var routeCompositionFragments = splitRouteEntries.Select(static (entry, _) => entry.File.Composition)
             .Where(static (fragment) => fragment != null).Select(static (fragment, _) => fragment!).Collect();
@@ -163,7 +160,7 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(mixedStreamFiles, static (ctx, file) => ctx.AddSource(file.HintName, SourceText.From(file.Source, Encoding.UTF8)));
         var streamResolverConnections = streamPublicFiles.Collect().Combine(mixedStreamFiles.Collect()).Combine(streamCanonicalModels.Collect())
             .Select(static (input, _) => CanonicalRouteServiceEmitter.StreamConnections(input.Left.Left.Concat(input.Left.Right), input.Right));
-        var resolvedStreamFiles = streamPrototypeFiles.Combine(streamResolverConnections)
+        var resolvedStreamFiles = streamSourceFiles.Combine(streamResolverConnections)
             .Select(static (input, _) => CanonicalRouteServiceEmitter.Stream(input.Left, input.Right));
         context.RegisterSourceOutput(resolvedStreamFiles, static (ctx, file) => ctx.AddSource(file.HintName, SourceText.From(file.Source, Encoding.UTF8)));
         var multiCompositionFragments = routeCompositionFragments.Combine(mixedStreamFiles.Select(static (file, _) => file.Composition)

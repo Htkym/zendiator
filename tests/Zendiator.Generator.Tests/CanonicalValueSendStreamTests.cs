@@ -121,7 +121,7 @@ public sealed partial class GeneratorTests
                 Check(syncVoid.Calls.Count==3&&syncVoid.Calls.All(c=>c.Request is V.Ping{Value:30})&&asyncVoid.Calls.Count==3&&asyncVoid.Calls.All(c=>c.Request is W.Ping{Value:40}),"void request identity and state separated");
                 Check(streamProbe.Ended.Count==0&&syncVoid.HandlerFactoryDisposals==0&&asyncVoid.HandlerFactoryDisposals==0,"borrowed services remain until scope");
                 await scope.DisposeAsync();
-                Check(streamProbe.Ended.SequenceEqual(new[]{"F2","M","F1","H"})&&syncVoid.HandlerFactoryDisposals==1&&asyncVoid.HandlerFactoryDisposals==1,"scope owns borrowed components and factories");
+                Check(streamProbe.Ended.SequenceEqual(streamProbe.Resolved.AsEnumerable().Reverse())&&syncVoid.HandlerFactoryDisposals==1&&asyncVoid.HandlerFactoryDisposals==1,"scope owns borrowed components and factories");
                 return JsonSerializer.Serialize(new{generatorInputs=1,runtimeOperations=5,syncValue=syncReply.A,response,values,
                     pendingConsumptions=gate.Consumptions,streamProbe.Starts,streamProbe.SourceDisposals,streamEnds=streamProbe.Ended,
                     sync=Managed(sync),query=Managed(query),syncVoid=VoidResult(syncVoid,r=>((V.Ping)r).Value),asyncVoid=VoidResult(asyncVoid,r=>((W.Ping)r).Value)});

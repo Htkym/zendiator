@@ -1,11 +1,12 @@
 namespace Zendiator;
 
-/// <summary>Accepts or skips an item without invoking the upstream.</summary>
+/// <summary>Accepts or skips one source item before the next declared Stream stage.</summary>
+/// <remarks>A skipped item advances the same cursor; it does not end the enumeration.</remarks>
 public interface IStreamItemFilter<TRequest, TItem>
 {
     bool Accept(TRequest request, TItem item, CancellationToken token);
 }
-/// <summary>Maps an item to the same item type.</summary>
+/// <summary>Maps an item before the next declared Stream stage.</summary>
 public interface IStreamItemMap<TRequest, TItem>
 {
     TItem Map(TRequest request, TItem item, CancellationToken token);
@@ -15,7 +16,8 @@ public interface IStreamItemMap<TRequest, TIn, TOut>
 {
     TOut Map(TRequest request, TIn item, CancellationToken token);
 }
-/// <summary>Asynchronously accepts or skips an item without invoking the upstream.</summary>
+/// <summary>Asynchronously accepts or skips one source item before the next declared Stream stage.</summary>
+/// <remarks>A skipped item advances the same cursor; it does not end the enumeration.</remarks>
 public interface IAsyncStreamItemFilter<TRequest, TItem>
 {
     /// <summary>Returns one operation to consume once, before the next declared stage.</summary>
@@ -32,16 +34,4 @@ public interface IAsyncStreamItemMap<TRequest, TIn, TOut>
 {
     /// <summary>Returns one typed operation consumed once before the next stage.</summary>
     ValueTask<TOut> MapAsync(TRequest request, TIn item, CancellationToken token);
-}
-/// <summary>Opens an independent upstream execution with the supplied request and token.</summary>
-public interface IStreamUpstream<TRequest, TItem>
-{
-    IAsyncEnumerable<TItem> Open(TRequest request, CancellationToken token);
-}
-/// <summary>An opaque wrapper. It owns enumerators it acquires; directly returned enumerables delegate cursor ownership to the consumer.</summary>
-public interface IStreamWrapper<TRequest, TItem>
-{
-    /// <summary>Wraps the upstream and may open it zero or multiple times.</summary>
-    IAsyncEnumerable<TItem> Wrap<TUpstream>(TRequest request, TUpstream upstream, CancellationToken token)
-        where TUpstream : IStreamUpstream<TRequest, TItem>;
 }

@@ -33,7 +33,6 @@
 
 <!-- BEGIN program-source -->
 ```csharp
-using System.Runtime.CompilerServices;
 using GettingStarted.Generated.App;
 using Microsoft.Extensions.DependencyInjection;
 using Zendiator;
@@ -68,10 +67,7 @@ public static class Program
         var sum = mediator.Send(new AddNumbers(20, 22));
         var greeting = await mediator.SendAsync(new Greet(" Ada "));
         var numbers = new List<int>();
-        await foreach (var number in mediator.StreamAsync(new ReadNumbers(6)))
-        {
-            numbers.Add(number);
-        }
+        await mediator.StreamAsync(new ReadNumbers(6)).ConsumeAsync(new NumberSink(numbers));
 
         Console.WriteLine($"Send: {sum}");
         Console.WriteLine($"SendAsync: {greeting}");
@@ -119,17 +115,44 @@ public sealed class AddExclamation : ISendResponseTransform<Greet, string>
 public sealed record ReadNumbers(int Count) : IStreamRequest<int>;
 
 [ZendiatorHandler]
-public sealed class ReadNumbersHandler : IStreamRequestHandler<ReadNumbers, int>
+public sealed class ReadNumbersHandler : IStreamSourceHandler<ReadNumbers, int, NumberCursor>
 {
-    public async IAsyncEnumerable<int> HandleAsync(
-        ReadNumbers request, [EnumeratorCancellation] CancellationToken token)
+    public ValueTask<NumberCursor> OpenAsync(ReadNumbers request, CancellationToken token) =>
+        new(new NumberCursor(request.Count, token));
+}
+
+public sealed class NumberCursor(int count, CancellationToken token) : IAsyncEnumerator<int>
+{
+    private int _index;
+    private bool _started;
+    public int Current { get; private set; }
+    public ValueTask<bool> MoveNextAsync() => _started ? new(Move()) : StartAsync();
+
+    private async ValueTask<bool> StartAsync()
     {
+        _started = true;
         await Task.Yield();
-        for (var number = 1; number <= request.Count; number++)
-        {
-            token.ThrowIfCancellationRequested();
-            yield return number;
-        }
+        return Move();
+    }
+
+    private bool Move()
+    {
+        token.ThrowIfCancellationRequested();
+        if (_index >= count) return false;
+        Current = ++_index;
+        return true;
+    }
+
+    public ValueTask DisposeAsync() { _started = true; _index = count; return default; }
+}
+
+// Value-type sinks are copied; the list is the shared result owner.
+public readonly struct NumberSink(List<int> numbers) : IStreamSink<int>
+{
+    public ValueTask<bool> OnNextAsync(int item, CancellationToken token)
+    {
+        numbers.Add(item);
+        return new(true);
     }
 }
 
@@ -190,17 +213,11 @@ Send系の`Before`はリストの先頭から、`After`は末尾から呼びま�
 
 ## Streamの開始と再列挙
 
-この例では、classのHandlerとclassのFilter/Map Hookを一つのC# async iteratorへ融合します。対象は、factory・session・Wrapper・upstreamを持たない単一の借用segmentです。`StreamAsync`の呼出しや列挙子の取得だけではuser DI解決やHandler・Hookは動かず、最初の項目を要求したときに処理を始めます。
+名前付きNumberCursorをOpenAsyncで開きます。sourceは標準IAsyncEnumerableを実装し、同じcoreを使うConsumeAsyncも持ちます。この例はreadonly sinkと共有Listで結果を集めます。API呼出しやcursor取得だけではuser DIやI/Oを始めず、列挙ごとに独立した状態を最初のMoveで開始します。
 
-列挙子を取得するたびに新しいiteratorを作り、HandlerとHookの処理をやり直します。結果のキャッシュとしては使えません。呼出し時と列挙時のtokenの合成では、最初の項目を要求する前の列挙子取得時点でlinked token sourceを作ることがあります。各列挙子がそれぞれの合成tokenを所有します。
+pending Moveの完了前に別MoveやDisposeを始めると拒否します。Moveを一度awaitしてからDisposeし、scopeは後始末まで保持してください。false Filterは同じMove内で次itemへ進み、terminalのfalseは正常な全体停止です。sink/serializer例外はsource middlewareへ注入しません。
 
-`Current`は`MoveNextAsync`がtrueを返してから使い、`MoveNextAsync`と`DisposeAsync`を重ねず、それぞれの完了を1回だけ待ちます。この融合経路はC# iteratorのCurrentとcontextの動作に従い、開始前や終端後のCurrent、不正な重複操作に対する旧独自例外は保証しません。
-
-sourceを動かす前と、到達したHookの前で取消を確認し、false filterの後もsource前の確認へ戻ります。source、callback、後始末の`ValueTask`は1回だけ消費します。正常終端・失敗・早期終了ではsourceを1回だけ解放し、項目処理と後始末がともに失敗した場合は後始末の例外を優先します。借用したHandlerとHookはDIが破棄します。融合対象外のframework経路は、既存のguard付きcursorと実行管理を保ちます。
-
-stageもsessionもないStreamは、生成に対応している構成であればHandler所有が既定です。`StreamAsync`の呼出し時にHandlerを解決し、`HandleAsync`を呼びます。Handlerの構築失敗や同期例外も、その時点で発生することがあります。返り値のenumerableがtokenの合成、独立した再列挙、列挙子の後始末を受け持ちます。
-
-zero-stageでframeworkによる遅延開始と列挙guardが必要な場合は、Handlerに`[ZendiatorHandler(OwnsStream = false)]`を指定します。この属性はstage付き経路の融合を無効にする指定ではありません。Wrapper・sessionを持つStreamは、既存の実行管理を保ちます。境界の詳細は[実行契約](design/0.5.0-route-and-stream-contract.md)を参照してください。
+Current、pending Dispose、取消し、session所有権、context、HTTPと移行条件は[Streamの移行・実行契約](streaming-0.5.0.ja.md)を参照してください。性能改善は未測定です。
 
 ## DI scopeの所有
 

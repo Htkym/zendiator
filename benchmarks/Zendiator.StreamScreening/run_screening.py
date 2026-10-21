@@ -10,7 +10,7 @@ import subprocess
 import sys
 import time
 
-SHAPES = ('completed', 'suspended', 'open-session', 'large-wrapper-session', 'zero-hook-sentinel')
+SHAPES = ('completed', 'suspended', 'open-session', 'large-middleware-session', 'zero-hook-sentinel')
 ENV = {'DOTNET_TieredCompilation': '1', 'DOTNET_TieredPGO': '1', 'DOTNET_ReadyToRun': '0',
        'DOTNET_CLI_TELEMETRY_OPTOUT': '1', 'DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER': '1'}
 

@@ -35,8 +35,9 @@ internal sealed class CanonicalStreamOpenBinding
     {
         error = null;
         handler = handler.OriginalDefinition;
-        var contract = compilation.GetTypeByMetadataName(ContractNames.StreamHandler);
-        var matches = handler.AllInterfaces.Where(i => Same(i.OriginalDefinition, contract) &&
+        var contracts = new[] { ContractNames.StreamHandler }
+            .Select(compilation.GetTypeByMetadataName).ToArray();
+        var matches = handler.AllInterfaces.Where(i => contracts.Any(c => Same(i.OriginalDefinition, c)) &&
             i.TypeArguments[0] is INamedTypeSymbol request && Same(request.OriginalDefinition, definition.OriginalDefinition)).ToArray();
         if (matches.Length != 1 || !IsOpenDefinition(handler) || HasGenericContainer(handler) || HasGenericContainer(definition))
         { error = "An open Stream request requires one selected generic handler contract and no open containing type."; return null; }

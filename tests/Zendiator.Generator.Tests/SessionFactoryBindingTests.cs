@@ -13,18 +13,12 @@ public sealed partial class GeneratorTests
         var sync = family is "SendSync" or "SendAllSync";
         var all = family is "SendAllSync" or "SendAllAsync";
         var role = wrapper ? "Wrapper" : "Hook";
-        var request = family == "Stream" ? "Items" : "Ping";
-        var source = family == "Stream" ? StreamGraphFixture("Stage." + role + "<OperationSession,Factory<string>>()") :
-            FamilyFixture("c.Handlers<Ping>(DispatchFamily." + family + ",typeof(A)" + (all ? ",typeof(B)" : "") + ");" +
+        var request = "Ping";
+        var source = FamilyFixture("c.Handlers<Ping>(DispatchFamily." + family + ",typeof(A)" + (all ? ",typeof(B)" : "") + ");" +
                 "c.Pipeline<Ping>(Stage." + role + "<OperationSession,Factory<string>>());", sync, false);
         var contract = "I" + (asyncFactory ? "Async" : "") + (owned ? "Owned" : "Borrowed") + "SessionFactory<" + request + ",OperationSession>";
-        var callbacks = family == "Stream"
-            ? wrapper ? "IStreamWrapper<Items,int>" : "IStreamItemMap<Items,int>"
-            : wrapper ? sync ? "ISendWrapper<Ping,int>" : "IAsyncSendWrapper<Ping,int>" : "ISendRequestTransform<Ping>";
-        var body = family == "Stream"
-            ? wrapper ? "public System.Collections.Generic.IAsyncEnumerable<int> Wrap<N>(Items r,N n,CancellationToken c) where N:IStreamUpstream<Items,int> => n.Open(r,c);"
-                : "public int Map(Items r,int item,CancellationToken c)=>item;"
-            : wrapper ? sync ? "public int Invoke<N>(Ping r,N n,CancellationToken c) where N:ISendContinuation<Ping,int> => n.Invoke(r,c);"
+        var callbacks = wrapper ? sync ? "ISendWrapper<Ping,int>" : "IAsyncSendWrapper<Ping,int>" : "ISendRequestTransform<Ping>";
+        var body = wrapper ? sync ? "public int Invoke<N>(Ping r,N n,CancellationToken c) where N:ISendContinuation<Ping,int> => n.Invoke(r,c);"
                 : "public ValueTask<int> InvokeAsync<N>(Ping r,N n,CancellationToken c) where N:IAsyncSendContinuation<Ping,int> => n.InvokeAsync(r,c);"
                 : "public Ping Before(Ping r,CancellationToken c)=>r;";
         return source + "public sealed class OperationSession : " + callbacks + ",IDisposable,IAsyncDisposable {" + body +
@@ -41,8 +35,6 @@ public sealed partial class GeneratorTests
     [InlineData("SendSync", true, false, true)]
     [InlineData("SendAllAsync", false, true, false)]
     [InlineData("SendAllSync", false, false, false)]
-    [InlineData("Stream", true, false, false)]
-    [InlineData("Stream", false, true, true)]
     public void Public_session_factory_binds_inherited_explicit_contract_and_ownership_but_blocks_receiver_emission(
         string family, bool owned, bool asyncFactory, bool wrapper)
     {

@@ -66,7 +66,7 @@ internal static class CanonicalMultiEmissionNormalizer
         model.Compositions.SelectMany(c => c.Routes.Where(r => r.Stream != null).OrderBy(r => r.Key, StringComparer.Ordinal).Select(r =>
             new CanonicalRouteText(r.Key, c.Namespace, r.Registration.Handler.RequestName, BoundDispatchFamily.Stream,
                 CanonicalStreamPublicConnection.Source(r.Stream!))
-            { StableKey = r.StreamStableKey! }));
+            { StableKey = r.StreamStableKey!, BoxedDependencies = r.Stream!.BoxedDependencies }));
 
     internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalMultiEmissionModel model,
         EquatableArray<CanonicalSyncCallSite?> current, CancellationToken ct) =>

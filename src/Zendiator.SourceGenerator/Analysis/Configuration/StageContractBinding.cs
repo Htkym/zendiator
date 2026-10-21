@@ -39,7 +39,7 @@ internal static class StageContractBinding
         new("IAsyncStreamItemMap`2", BoundCallbackPhase.Map, BoundCompletionKind.ValueTask, Stream: true),
         new("IStreamItemMap`3", BoundCallbackPhase.Map, BoundCompletionKind.Synchronous, Stream: true),
         new("IAsyncStreamItemMap`3", BoundCallbackPhase.Map, BoundCompletionKind.ValueTask, Stream: true),
-        new("IStreamWrapper`2", BoundCallbackPhase.Wrapper, BoundCompletionKind.Enumerable, Wrapper: true, Stream: true)
+        new("IStreamMiddleware`2", BoundCallbackPhase.Wrapper, BoundCompletionKind.ValueTask, Wrapper: true, Stream: true)
     };
 
     internal static BoundStageModel Bind(INamedTypeSymbol type, FusionStageKind kind, string anchor,
@@ -122,6 +122,11 @@ internal static class StageContractBinding
             var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
             var implementation = members.Length == 1 ? type.FindImplementationForInterfaceMember(members[0]) as IMethodSymbol : null;
             if (implementation == null) { compilerOwned = true; continue; }
+            if (role.Stream && role.Wrapper && !CanonicalStreamContractBinding.Matches(contract, implementation, compilation))
+            {
+                Reject("StageContractMismatch", $"Middleware {Name(type)} requires OpenAsync(request, IStreamUpstream<TRequest,TItem>, token) returning ValueTask<IAsyncEnumerator<TItem>>.");
+                continue;
+            }
             if (role.ScopedObserver)
             {
                 if (!implementation.ReturnsVoid || implementation.Parameters.Length == 0 || implementation.Parameters[0].ScopedKind != ScopedKind.ScopedValue)
@@ -222,9 +227,10 @@ internal static class StageContractBinding
     private static bool ContinuationMatches(INamedTypeSymbol contract, bool stream, bool sync,
         IAssemblySymbol? assembly, Compilation compilation)
     {
+        if (stream) return CanonicalStreamContractBinding.IsMiddleware(contract, compilation);
         var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
         if (members.Length != 1 || members[0].TypeParameters.Length != 1) return false;
-        var name = stream ? "IStreamUpstream" : sync ? "ISendContinuation" : "IAsyncSendContinuation";
+        var name = sync ? "ISendContinuation" : "IAsyncSendContinuation";
         var definition = assembly?.GetTypeByMetadataName("Zendiator." + name + "`" + contract.TypeArguments.Length);
         var constraints = members[0].TypeParameters[0].ConstraintTypes.OfType<INamedTypeSymbol>()
             .Where(c => Same(c.OriginalDefinition, definition)).ToArray();

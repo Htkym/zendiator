@@ -43,7 +43,6 @@ public sealed partial class GeneratorTests
             ClosedModule(ManagedShapeSource(true, false, "array", true), "Query", "Ping", "Hook", "Handler", "Factory", "W");
         var pipelines = shape == "reordered" ? ClosedPipelines.Reverse() : ClosedPipelines.AsEnumerable();
         var config = ClosedHandlers + "\n" + string.Join("\n", pipelines);
-        if (shape == "unsupported") config = config.Replace("Stage.Hook<Plain.Positive>(),Stage.Hook<Plain.DoubleItem>(),Stage.Hook<Plain.Small>()", "Stage.Hook<Plain.Positive>(),Stage.Hook<Plain.Small>(),Stage.Hook<Plain.DoubleItem>()");
         var duplicate = shape == "duplicate" ? "public static IServiceCollection Duplicate(IServiceCollection s)=>s.AddZendiator<Reads>(c=>{" + config + "});" : "";
         return modules + "\nnamespace Closed{using System;using System.Collections.Generic;using System.Threading;using System.Threading.Tasks;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;" +
             "[ZendiatorComposition(\"closed-set\")]public sealed class Reads;public static class Bridge{" + duplicate +
@@ -85,8 +84,6 @@ public sealed partial class GeneratorTests
         Assert.Equal(4, files.Count(f => IsCanonicalRoute(f)));
         Assert.Single(files, f => f.HintName.StartsWith("Zendiator.Composition.", StringComparison.Ordinal));
         Assert.Single(files, f => f.HintName.EndsWith(".Interceptors.g.cs", StringComparison.Ordinal));
-        Assert.Single(files, f => f.HintName.StartsWith("Zendiator.StreamCanonical.", StringComparison.Ordinal));
-        Assert.Single(files, f => f.HintName.StartsWith("Zendiator.StreamPrototype.", StringComparison.Ordinal));
         var shared = CanonicalCompositionSource(files);
         Assert.Contains("expected.StreamPipeline<global::Closed.Typed.ChangeRequest, long>", shared);
         Assert.Contains("typeof(global::Closed.Typed.ToReference<>)", shared);
@@ -104,13 +101,13 @@ public sealed partial class GeneratorTests
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
         Save("accepted", source, driver, output, diagnostics, bytes.ToArray());
 
-        foreach (var shape in new[] { "unsupported", "duplicate" })
+        foreach (var shape in new[] { "duplicate" })
         {
             var rejected = ClosedCompositionSource(shape, false);
             var rd = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(rejected, "ClosedRejected_" + shape), out var ro, out var errors);
             Save(shape, rejected, rd, ro, errors);
-            Assert.Contains(errors, d => d.Id == (shape == "duplicate" ? "ZEN0035" : "ZEN0037") && d.Location.SourceTree != null &&
-                rejected.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length).Contains(shape == "duplicate" ? "AddZendiator" : "c.", StringComparison.Ordinal));
+            Assert.Contains(errors, d => d.Id == "ZEN0035" && d.Location.SourceTree != null &&
+                rejected.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length).Contains("AddZendiator", StringComparison.Ordinal));
             AssertNoCanonicalOutput(rd.GetRunResult().Results.Single().GeneratedSources);
             Assert.DoesNotContain(rd.GetRunResult().Results.Single().GeneratedSources, f => f.HintName.EndsWith(".Interceptors.g.cs", StringComparison.Ordinal));
             Assert.Empty(ro.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error && !d.Id.StartsWith("ZEN", StringComparison.Ordinal)));
@@ -121,8 +118,8 @@ public sealed partial class GeneratorTests
         Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error));
         var updated = driver.GetRunResult().Results.Single().GeneratedSources;
-        var stable = files.Where(f => IsCanonicalRoute(f) || f.HintName.StartsWith("Zendiator.Stream", StringComparison.Ordinal)).ToArray();
-        Assert.Equal(6, stable.Length);
+        var stable = files.Where(IsCanonicalRoute).ToArray();
+        Assert.Equal(4, stable.Length);
         foreach (var file in stable) Assert.Equal(file.SourceText.ToString(), Assert.Single(updated, f => f.HintName == file.HintName).SourceText.ToString());
         var reordered = CanonicalCompositionSource(updated);
         Assert.NotEqual(shared, reordered);
@@ -176,7 +173,9 @@ public sealed partial class GeneratorTests
             Assert.Equal(0, commandProbe.HandlerFactoryDisposals);
             Assert.Empty((List<string>)Type("Plain.Probe").GetField("Ended")!.GetValue(plainProbe)!);
         }
-        Assert.Equal(new[] { "F2", "M", "F1", "H" }, (List<string>)Type("Plain.Probe").GetField("Ended")!.GetValue(plainProbe)!);
+        var plainResolved = (List<string>)Type("Plain.Probe").GetField("Resolved")!.GetValue(plainProbe)!;
+        Assert.Equal(new[] { "F1", "F2", "H", "M" }, plainResolved.Order());
+        Assert.Equal(plainResolved.AsEnumerable().Reverse(), (List<string>)Type("Plain.Probe").GetField("Ended")!.GetValue(plainProbe)!);
         provider.Dispose(); Assert.Equal(1, commandProbe.HandlerFactoryDisposals);
         if (!string.IsNullOrEmpty(evidence)) File.WriteAllText(Path.Combine(evidence, "closed-composition", "accepted", "runtime.json"), JsonSerializer.Serialize(new
         {

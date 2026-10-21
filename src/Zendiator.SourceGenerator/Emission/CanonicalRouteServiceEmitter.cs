@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Zendiator.SourceGenerator;
 
-internal sealed record CanonicalStreamResolverConnection(string HintName, string Namespace, string ClassName, string HandlerName);
+internal sealed record CanonicalStreamResolverConnection(string HintName, string Namespace, string ClassName, EquatableArray<CanonicalServiceDependency> Dependencies);
 internal sealed record CanonicalServiceDependency(string TypeName, bool Open, bool Boxed);
 
 // Route files own execution; the Mediator borrows one captured instance of each dependency.
@@ -43,7 +43,7 @@ internal static class CanonicalRouteServiceEmitter
         var ns = root.Members.OfType<NamespaceDeclarationSyntax>().Single();
         var mediator = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "Zendiator");
         var registrar = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "ZendiatorGeneratedRegistrar");
-        var fragment = Fragment(root, ns, mediator, registrar);
+        var fragment = Fragment(root, ns, mediator, registrar, file.BoxedDependencies);
         var b = CanonicalSplitSourceEmitter.Header(fragment.Externs);
         b.Append("namespace ").Append(fragment.Namespace).AppendLine(" {");
         foreach (var member in ns.Members.Where(m => m != mediator && m != registrar)) b.AppendLine(member.ToFullString());
@@ -76,13 +76,16 @@ internal static class CanonicalRouteServiceEmitter
             {
                 var mediator = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "Zendiator");
                 foreach (var call in Entries(mediator).SelectMany(m => m.DescendantNodes().OfType<InvocationExpressionSyntax>()))
-                    if (call.Expression is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax helper, Name.Identifier.ValueText: "Create" } &&
+                    if (call.Expression is MemberAccessExpressionSyntax { Expression: SimpleNameSyntax helper, Name.Identifier.ValueText: "Create" } &&
                         call.ArgumentList.Arguments.FirstOrDefault()?.Expression is IdentifierNameSyntax { Identifier.ValueText: "_provider" })
                         connected.Add((ns.Name.ToString(), helper.Identifier.ValueText));
             }
         }
-        return new(candidates.Where(c => c.Generic == null && !c.HandlerOwned && CanonicalStreamPublicConnection.PlainZeroStageShape(c) &&
-            connected.Contains((c.Namespace, c.ClassName))).Select(c => new CanonicalStreamResolverConnection(c.HintName, c.Namespace, c.ClassName, c.Handler.HandlerName))
+        var fragments = facades.Where(file => file.Composition != null).Select(file => file.Composition!).ToArray();
+        return new(candidates.Where(c => connected.Contains((c.Namespace, c.ClassName)))
+            .Select(c => new CanonicalStreamResolverConnection(c.HintName, c.Namespace, c.ClassName,
+                new(fragments.Where(fragment => fragment.Namespace == c.Namespace).SelectMany(fragment => fragment.Dependencies)
+                    .GroupBy(type => type.TypeName, StringComparer.Ordinal).Select(group => group.First() with { Boxed = group.Any(type => type.Boxed) }))))
             .OrderBy(c => c.HintName, StringComparer.Ordinal));
     }
 
@@ -91,18 +94,35 @@ internal static class CanonicalRouteServiceEmitter
         var selected = connected.SingleOrDefault(c => c.HintName == file.HintName);
         if (selected == null) return file;
         var root = CSharpSyntaxTree.ParseText(file.Source).GetCompilationUnitRoot();
-        var ns = root.Members.OfType<NamespaceDeclarationSyntax>().Single(n => n.Name.ToString() == selected.Namespace);
-        var helper = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == selected.ClassName);
-        var typed = (ClassDeclarationSyntax)new ResolverCalls(new[] { SyntaxFactory.ParseTypeName(selected.HandlerName) }, "services").Visit(helper)!;
-        var parameters = typed.DescendantNodes().OfType<ParameterSyntax>().Where(p =>
-            p.Identifier.ValueText == "services" && p.Type?.ToString() == "global::System.IServiceProvider").ToArray();
-        typed = typed.ReplaceNodes(parameters, (parameter, _) => parameter.WithType(SyntaxFactory.ParseTypeName("Zendiator").WithTriviaFrom(parameter.Type!)))
-            .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PrivateKeyword), SyntaxFactory.Token(SyntaxKind.StaticKeyword)));
-        // The connected helper uses the Mediator's captured dependency without an adapter or a second cursor type.
-        var mediator = SyntaxFactory.ClassDeclaration("Zendiator").WithModifiers(SyntaxFactory.TokenList(
-            SyntaxFactory.Token(SyntaxKind.PublicKeyword), SyntaxFactory.Token(SyntaxKind.SealedKeyword), SyntaxFactory.Token(SyntaxKind.PartialKeyword)))
-            .WithMembers(SyntaxFactory.SingletonList<MemberDeclarationSyntax>(typed));
-        return file with { Source = root.ReplaceNode(helper, mediator).NormalizeWhitespace().ToFullString() };
+        var rewritten = new StreamServices(selected.Dependencies.Where(type => !type.Open).Select(type => SyntaxFactory.ParseTypeName(type.TypeName))).Visit(root)!;
+        return file with { Source = rewritten.NormalizeWhitespace().ToFullString() };
+    }
+
+    private sealed class StreamServices(IEnumerable<TypeSyntax> closed) : CSharpSyntaxRewriter
+    {
+        private readonly HashSet<string> _closed = new(closed.Select(TypeKey), StringComparer.Ordinal);
+        public override SyntaxNode? VisitParameter(ParameterSyntax node) =>
+            node.Identifier.ValueText == "services" && node.Type?.ToString() == "global::System.IServiceProvider"
+                ? node.WithType(SyntaxFactory.ParseTypeName("Zendiator").WithTriviaFrom(node.Type)) : base.VisitParameter(node);
+        public override SyntaxNode? VisitFieldDeclaration(FieldDeclarationSyntax node) =>
+            node.Declaration.Type.ToString() == "global::System.IServiceProvider" &&
+            node.Declaration.Variables.All(variable => variable.Identifier.ValueText == "_services")
+                ? node.WithDeclaration(node.Declaration.WithType(SyntaxFactory.ParseTypeName("Zendiator").WithTriviaFrom(node.Declaration.Type)))
+                : base.VisitFieldDeclaration(node);
+        public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node)
+        {
+            node = (InvocationExpressionSyntax)base.VisitInvocationExpression(node)!;
+            foreach (var receiver in new[] { "services", "_services" })
+            {
+                if (ServiceType(node, receiver) is { } type && _closed.Contains(TypeKey(type)))
+                    return SyntaxFactory.ParseExpression(receiver + ".Required_" + TypeId(type) + "()").WithTriviaFrom(node);
+                if (node.Expression is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "GetService" } access &&
+                    access.Expression.ToString() == receiver && node.ArgumentList.Arguments.Count == 1 &&
+                    node.ArgumentList.Arguments[0].Expression is TypeOfExpressionSyntax probe && probe.Type.ToString() == "global::System.IServiceProvider")
+                    return SyntaxFactory.ParseExpression(receiver + ".ProbeStreamScope()").WithTriviaFrom(node);
+            }
+            return node;
+        }
     }
 
     private static IEnumerable<TypeSyntax> Dependencies(NamespaceDeclarationSyntax ns)
@@ -119,10 +139,10 @@ internal static class CanonicalRouteServiceEmitter
     }
 
     internal static CanonicalCompositionFragment Fragment(CompilationUnitSyntax root, NamespaceDeclarationSyntax ns,
-        ClassDeclarationSyntax mediator, ClassDeclarationSyntax registrar)
+        ClassDeclarationSyntax mediator, ClassDeclarationSyntax registrar, EquatableArray<string> boxedDependencies = default)
     {
         var dependencies = Dependencies(ns).ToArray();
-        var boxed = new HashSet<string>(StringComparer.Ordinal);
+        var boxed = new HashSet<string>(boxedDependencies.Select(type => TypeKey(SyntaxFactory.ParseTypeName(type))), StringComparer.Ordinal);
         // CanonicalServiceResolution preserves the bound value-type flag in the nongeneric lookup shape.
         foreach (var call in mediator.DescendantNodes().OfType<InvocationExpressionSyntax>())
             if (call.Expression is MemberAccessExpressionSyntax { Name: IdentifierNameSyntax } && ServiceType(call, "_provider") is { } type)
@@ -139,6 +159,7 @@ internal static class CanonicalRouteServiceEmitter
         var b = new StringBuilder("""
             private readonly global::System.IServiceProvider _services;
             private Zendiator _provider => this;
+            internal object? ProbeStreamScope() => _services.GetService(typeof(global::System.IServiceProvider));
             public Zendiator(global::System.IServiceProvider provider) {
                 global::System.ArgumentNullException.ThrowIfNull(provider);
                 _services = provider;

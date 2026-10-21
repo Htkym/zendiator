@@ -5,6 +5,7 @@ namespace Competitive;
 
 public static class Correctness
 {
+    public const string StreamProtocol = "native-typed-pull-v1";
     public static void Lifetime(string library, string lifetime, Type handlerType)
     {
         string expected = library switch
@@ -81,7 +82,16 @@ public static class Correctness
                 Order(probe, behaviors);
                 Require(probe.Disposals == 1, $"{library}: full disposal");
 
-                Results.Add(new { library, suite = "Stream", behaviors, count, asynchronous, status = "Passed" });
+                Results.Add(new
+                {
+                    library,
+                    suite = "Stream",
+                    behaviors,
+                    count,
+                    asynchronous,
+                    streamProtocol = library.StartsWith("Zendiator", StringComparison.Ordinal) ? StreamProtocol : "historical-enumerable",
+                    status = "Passed"
+                });
             }
         foreach (bool asynchronous in new[] { false, true })
         {
@@ -128,6 +138,46 @@ public static class Correctness
         }
     }
 
+    public static async Task TypedStream(string library, int behaviors,
+        Func<int, bool, Probe, Zendiator.IStreamSink<int>, CancellationToken, ValueTask> consume)
+    {
+        foreach (var count in new[] { 0, 16 })
+            foreach (var asynchronous in new[] { false, true })
+            {
+                var probe = new Probe();
+                var sink = new CollectSink();
+                await consume(count, asynchronous, probe, sink, default);
+                Require(sink.Items.SequenceEqual(Enumerable.Range(0, count)), $"{library}: typed sequence");
+                Order(probe, behaviors);
+                Require(probe.Disposals == 1, $"{library}: typed disposal");
+            }
+        using var cts = new CancellationTokenSource();
+        var stopped = new Probe();
+        var stoppingSink = new CollectSink(cts);
+        await consume(16, true, stopped, stoppingSink, cts.Token);
+        Require(stoppingSink.Items.SequenceEqual(new[] { 0 }) && stopped.Items == 1 && stopped.Disposals == 1,
+            $"{library}: typed false must stop normally even when its callback also cancels");
+        var failing = new Probe { Fail = true };
+        try
+        {
+            await consume(16, true, failing, new CollectSink(), default);
+            throw new InvalidOperationException($"{library}: typed exception not propagated");
+        }
+        catch (ArithmeticException) { }
+        Require(failing.Disposals == 1, $"{library}: typed failed disposal");
+    }
+
+    private sealed class CollectSink(CancellationTokenSource? stop = null) : Zendiator.IStreamSink<int>
+    {
+        public List<int> Items { get; } = [];
+        public ValueTask<bool> OnNextAsync(int item, CancellationToken token)
+        {
+            Items.Add(item);
+            stop?.Cancel();
+            return new(stop is null);
+        }
+    }
+
     // Records when each library runs relay pre-processing and where a pre-processing failure surfaces.
     public static async Task RelayTiming(string library, int behaviors, Func<Probe, IAsyncEnumerable<int>> stream)
     {
@@ -163,7 +213,7 @@ public static class Correctness
         Require(stage != "none", $"{library}: relay failure not propagated");
         Require(failing.Handlers == 0, $"{library}: relay failure started the handler");
         if (library == "Zendiator")
-            Require(atCreation == 0 && atEnumerator == 0 && stage == "move-await", "Zendiator: relay pre-processing must start on the first move");
+            Require(atCreation == 0 && atEnumerator == 0 && stage is ("move-call" or "move-await"), "Zendiator: relay pre-processing must start on the first move");
         Results.Add(new { library, suite = "RelayTiming", behaviors, eventsAtCreation = atCreation, eventsAtEnumerator = atEnumerator, eventsAtFirstMove = atFirstMove, failureStage = stage, status = "Passed" });
     }
 

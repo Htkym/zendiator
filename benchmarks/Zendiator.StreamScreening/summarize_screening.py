@@ -4,7 +4,7 @@ from pathlib import Path
 import statistics
 import sys
 
-SHAPES = ('completed', 'suspended', 'open-session', 'large-wrapper-session', 'zero-hook-sentinel')
+SHAPES = ('completed', 'suspended', 'open-session', 'large-middleware-session', 'zero-hook-sentinel')
 
 
 def summarize(root):
@@ -18,6 +18,8 @@ def summarize(root):
                 raise ValueError('Incomplete ownership/exit proof.')
             boot_ids.add(data['environment']['vmBootId'])
             harness_pins.add(data['harnessSha256'])
+            if data['consumer'].get('streamProtocol') != 'native-typed-pull-v1':
+                raise ValueError('Do not combine old protocol evidence with this native-pull screening.')
             rows = data['consumer']['rows']
             if len(rows) != 24:
                 raise ValueError('Fixed raw batch count differs.')

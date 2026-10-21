@@ -1,7 +1,8 @@
-using Di.Generated;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
-using MiddleStreamValidator = Zendiator.DiConfiguration.Tests.EntryValidators<int>.Middle;
+using MiddleStreamValidator = global::Zendiator.DiConfiguration.Tests.EntryValidators<int>.Middle;
+using NativeMediator = global::Zendiator.DiConfiguration.Tests.Generated.NativeDiStreams.IZendiator;
+using NativeConcrete = global::Zendiator.DiConfiguration.Tests.Generated.NativeDiStreams.Zendiator;
 
 namespace Zendiator.DiConfiguration.Tests;
 
@@ -22,16 +23,6 @@ public sealed class StreamValidationTests
             }
             return new MiddleStreamValidator(trace);
         });
-        services.AddTransient<DiStreamBehavior<ValidatedStream, int>>(provider =>
-        {
-            provider.GetRequiredService<StreamValidationTrace>().PipelineFirstFactories++;
-            return new DiStreamBehavior<ValidatedStream, int>();
-        });
-        services.AddTransient<DiStreamBehavior<OtherValidatedStream, int>>(provider =>
-        {
-            provider.GetRequiredService<StreamValidationTrace>().OtherPipelineFactories++;
-            return new DiStreamBehavior<OtherValidatedStream, int>();
-        });
     });
 
     private static async Task<int[]> Read(IAsyncEnumerable<int> stream)
@@ -42,74 +33,59 @@ public sealed class StreamValidationTests
     }
 
     [Fact]
-    public async Task Entry_failure_does_not_acquire_later_services_and_activation_can_retry()
+    public async Task Validation_middleware_is_lazy_skips_later_services_on_failure_and_activation_can_retry()
     {
         await using var provider = Services().BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
         var trace = scope.ServiceProvider.GetRequiredService<StreamValidationTrace>();
-        var mediator = (global::Di.Generated.Zendiator)scope.ServiceProvider.GetRequiredService<IZendiator>();
+        var mediator = (NativeConcrete)scope.ServiceProvider.GetRequiredService<NativeMediator>();
         trace.FailFirst = true;
-        Assert.Same(trace.Failure, Assert.Throws<InvalidOperationException>(() => mediator.StreamAsync(new ValidatedStream(2))));
+        var firstStream = mediator.StreamAsync(new ValidatedStream(2));
+        Assert.Empty(trace.Events);
+        Assert.Same(trace.Failure, await Assert.ThrowsAsync<InvalidOperationException>(async () => await Read(firstStream)));
         Assert.Equal(0, trace.MiddleFactories);
-        Assert.Equal(0, trace.PipelineFirstFactories);
         Assert.Equal(0, trace.LastConstructions);
+        Assert.Equal(0, trace.BehaviorConstructions);
         var first = mediator.GetRequiredService<SharedStreamValidator>();
         trace.FailFirst = false;
         trace.FailMiddleActivation = true;
-        Assert.Same(trace.ActivationFailure, Assert.Throws<InvalidOperationException>(() => mediator.StreamAsync(new ValidatedStream(2))));
+        Assert.Same(trace.ActivationFailure, await Assert.ThrowsAsync<InvalidOperationException>(async () => await Read(mediator.StreamAsync(new ValidatedStream(2)))));
         trace.FailMiddle = true;
-        Assert.Same(trace.Failure, Assert.Throws<InvalidOperationException>(() => mediator.StreamAsync(new ValidatedStream(2))));
+        Assert.Same(trace.Failure, await Assert.ThrowsAsync<InvalidOperationException>(async () => await Read(mediator.StreamAsync(new ValidatedStream(2)))));
         Assert.Equal(0, trace.LastConstructions);
         trace.FailMiddle = false;
-        var stream = mediator.StreamAsync(new ValidatedStream(2));
+        var recovered = await Read(mediator.StreamAsync(new ValidatedStream(2)));
+        Assert.Equal([0, 1], recovered);
         Assert.Equal(["first:new", "first:validate", "first:validate", "middle:factory", "first:validate", "middle:factory",
             "middle:new", "middle:validate", "first:validate", "middle:validate", "last:new", "last:validate"], trace.Events);
         Assert.Equal(1, trace.FirstConstructions);
         Assert.Equal(1, trace.MiddleConstructions);
         Assert.Equal(2, trace.MiddleFactories);
         Assert.Same(first, mediator.GetRequiredService<SharedStreamValidator>());
-        Assert.Equal(0, trace.HandlerCalls);
-        Assert.Equal(0, trace.BehaviorConstructions);
-        Assert.Equal(0, trace.PipelineFirstFactories);
-        var items = await Read(stream);
-        Assert.Equal([0, 1], items);
         Assert.Equal(1, trace.HandlerCalls);
         Assert.Equal(1, trace.BehaviorCalls);
-        Assert.Equal(1, trace.PipelineFirstFactories);
+        Assert.Equal(1, trace.IteratorDisposals);
     }
 
     [Fact]
-    public async Task Null_cancel_and_reenumeration_preserve_the_validation_boundary()
+    public async Task Null_precancel_and_reenumeration_follow_the_lazy_native_cursor_boundary()
     {
         await using var provider = Services().BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
         var trace = scope.ServiceProvider.GetRequiredService<StreamValidationTrace>();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        var mediator = scope.ServiceProvider.GetRequiredService<NativeMediator>();
         using var canceled = new CancellationTokenSource();
         canceled.Cancel();
         Assert.Equal("request", Assert.Throws<ArgumentNullException>(() => mediator.StreamAsync((ValidatedStream)null!, canceled.Token)).ParamName);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await Read(mediator.StreamAsync(new ValidatedStream(2), canceled.Token)));
         Assert.Equal(0, trace.FirstConstructions);
-        await using (var enumerator = mediator.StreamAsync((DiNumbers)null!, canceled.Token).GetAsyncEnumerator())
-            Assert.Equal("_request", (await Assert.ThrowsAsync<ArgumentNullException>(async () => await enumerator.MoveNextAsync())).ParamName);
-        Assert.Same(trace.Failure, Assert.Throws<InvalidOperationException>(() => mediator.StreamAsync(new ValidatedStream(-1), canceled.Token)));
-        var canceledStream = mediator.StreamAsync(new ValidatedStream(2), canceled.Token);
-        Assert.Equal(2, trace.FirstValidations);
-        Assert.Equal(1, trace.LastValidations);
-        await using (var enumerator = canceledStream.GetAsyncEnumerator())
-        {
-            var pending = enumerator.MoveNextAsync().AsTask();
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
-            Assert.True(pending.IsCanceled);
-            Assert.False(await enumerator.MoveNextAsync());
-        }
         Assert.Equal(0, trace.HandlerCalls);
-        Assert.Equal(0, trace.BehaviorConstructions);
+        Assert.Same(trace.Failure, await Assert.ThrowsAsync<InvalidOperationException>(async () => await Read(mediator.StreamAsync(new ValidatedStream(-1)))));
         var stream = mediator.StreamAsync(new ValidatedStream(2));
-        Assert.Equal(3, trace.FirstValidations);
-        var firstItems = await Read(stream);
-        var otherThreadItems = await Task.Run(() => Read(stream));
-        Assert.Equal([0, 1], firstItems);
-        Assert.Equal([0, 1], otherThreadItems);
+        var firstRead = await Read(stream);
+        Assert.Equal([0, 1], firstRead);
+        var secondRead = await Task.Run(() => Read(stream));
+        Assert.Equal([0, 1], secondRead);
         Assert.Equal(3, trace.FirstValidations);
         Assert.Equal(2, trace.LastValidations);
         using var api = new CancellationTokenSource();
@@ -129,41 +105,41 @@ public sealed class StreamValidationTests
     }
 
     [Fact]
-    public async Task Validator_handler_public_lookup_and_other_routes_share_transient_captures()
+    public async Task Middleware_handler_public_lookup_and_Send_share_captures_but_DI_owns_their_lifetime()
     {
         await using var provider = Services().BuildServiceProvider();
         var scope = provider.CreateAsyncScope();
         var trace = scope.ServiceProvider.GetRequiredService<StreamValidationTrace>();
         try
         {
-            var mediator = (global::Di.Generated.Zendiator)scope.ServiceProvider.GetRequiredService<IZendiator>();
+            var mediator = (NativeConcrete)scope.ServiceProvider.GetRequiredService<NativeMediator>();
             var first = mediator.GetRequiredService<SharedStreamValidator>();
-            var stream = mediator.StreamAsync(new ValidatedStream(1));
             var handler = mediator.GetRequiredService<ValidatedStreamHandler>();
+            var stream = mediator.StreamAsync(new ValidatedStream(1));
             var other = mediator.StreamAsync(new OtherValidatedStream(1));
             Assert.Equal(0, trace.OtherHandlerConstructions);
-            Assert.Equal(0, trace.OtherPipelineFactories);
             Assert.Equal(0, trace.HandlerCalls);
-            Assert.Equal(0, trace.BehaviorConstructions);
             Assert.Same(first, mediator.GetRequiredService<SharedStreamValidator>());
             Assert.Equal(first.Id, await mediator.SendAsync(new ValidationLookup()));
             var otherItems = await Read(other);
-            var items = await Read(stream);
             Assert.Equal([0], otherItems);
-            Assert.Equal(1, trace.OtherPipelineFactories);
+            var items = await Read(stream);
             Assert.Equal([0], items);
             Assert.Same(handler, mediator.GetRequiredService<ValidatedStreamHandler>());
             Assert.Equal(1, trace.FirstConstructions);
             Assert.Equal(1, trace.LastConstructions);
             Assert.Equal(1, trace.OtherValidations);
-            var secondMediator = new global::Di.Generated.Zendiator(scope.ServiceProvider);
+            var secondMediator = new NativeConcrete(scope.ServiceProvider);
             var secondHandler = secondMediator.GetRequiredService<ValidatedStreamHandler>();
             Assert.NotSame(handler, secondHandler);
-            Assert.Equal(1, trace.MiddleConstructions); // Public Find only acquires the requested dependency.
+            Assert.Equal(1, trace.MiddleConstructions);
             var secondFirst = secondMediator.GetRequiredService<SharedStreamValidator>();
             Assert.NotSame(first, secondFirst);
-            _ = secondMediator.StreamAsync(new ValidatedStream(1));
+            var secondItems = await Read(secondMediator.StreamAsync(new ValidatedStream(1)));
+            Assert.Equal([0], secondItems);
             Assert.Same(secondHandler, secondMediator.GetRequiredService<ValidatedStreamHandler>());
+            Assert.Equal(0, trace.FirstDisposals);
+            Assert.Equal(0, trace.LastDisposals);
         }
         finally { await scope.DisposeAsync(); }
         Assert.Equal(2, trace.FirstDisposals);

@@ -120,7 +120,7 @@ public sealed partial class GeneratorTests
                 Check(streamProbe.Ended.Count==0,"borrowed Stream receivers live until scope");
                 await scope.DisposeAsync();
                 foreach(var p in new[]{responseProbe,voidProbe})Check(p.Ended.SequenceEqual(p.Resolved.AsEnumerable().Reverse()),"scope disposes every borrowed branch receiver once");
-                Check(streamProbe.Ended.SequenceEqual(new[]{"F2","M","F1","H"}),"scope owns Stream receivers");
+                Check(streamProbe.Ended.SequenceEqual(streamProbe.Resolved.AsEnumerable().Reverse()),"scope owns Stream receivers");
                 return JsonSerializer.Serialize(new{generatorInputs=1,runtimeOperations=5,registrationFingerprintMatched=true,
                     defaultScopedBranchServices=allTypes.Select(t=>t.FullName),copied,destination=responseState.Values,responseVersion=responseState.Version,voidVersion=voidState.Version,
                     allResponse=AllResult(responseProbe),allVoid=AllResult(voidProbe),syncValue=syncReply.A,sync=Managed(sync),query=Managed(query),response,values,

@@ -1,5 +1,8 @@
 # Known limitations (0.4.0)
 
+For the new 0.5.0 Stream protocol, see [migration and contracts](../streaming-0.5.0.ja.md).
+The Stream sections below describe historical 0.4.0 behavior.
+
 These boundaries apply to the 0.4.0 design. See the [release notes](0.4.0-release-notes.md)
 and [construction and dispatch lifetime](../optimized-dispatch.md) before upgrading.
 

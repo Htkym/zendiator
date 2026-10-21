@@ -304,7 +304,7 @@ internal sealed class CompositionListBinding
                     continue;
                 }
                 var contract = contracts[0];
-                var nextResult = contract.TypeArguments.Length == 2 ? contract.TypeArguments[1] : null;
+                var nextResult = contract.TypeArguments.Length >= 2 ? contract.TypeArguments[1] : null;
                 if (nextResult != null && (HasOpenShape(nextResult) && (open == null || !open.Contains(nextResult)) || nextResult.IsRefLikeType))
                 {
                     Reject(nextResult.IsRefLikeType ? "RefLikeCapture" : "UnsupportedGenerationShape", entry.Anchor,
@@ -323,17 +323,26 @@ internal sealed class CompositionListBinding
                 result ??= nextResult;
                 var member = contract.GetMembers().OfType<IMethodSymbol>().SingleOrDefault();
                 var implementation = member == null ? null : entry.Type.FindImplementationForInterfaceMember(member) as IMethodSymbol;
+                var streamSource = family == BoundDispatchFamily.Stream;
+                INamedTypeSymbol? cursor = null;
+                if (streamSource && (!CanonicalStreamContractBinding.Matches(contract, implementation, _compilation) ||
+                    !CanonicalStreamContractBinding.TryCursor(contract, _compilation, out cursor)))
+                {
+                    Reject("StageContractMismatch", entry.Anchor,
+                        $"Stream source {Name(entry.Type)} requires OpenAsync(request, token) returning ValueTask<TCursor>, with an accessible named cursor implementing IAsyncEnumerator<TItem>.");
+                    continue;
+                }
                 var requestReferenceResponse = nextResult is ITypeParameterSymbol && open?.IsRequestReferenceResponse(nextResult) == true;
                 var handlerModel = new BoundHandlerModel(entry.Anchor, Identity(entry.Type), BoundName(entry.Type), Identity(contract), nextResult == null ? null : Identity(nextResult),
                     implementation == null ? "<missing>" : implementation.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) +
                     "/return=" + Identity(implementation.ReturnType) + "/constraints=" + Constraints(implementation.TypeParameters),
                     FusionOwnership.BorrowedService, implementation == null, implementation == null ? null : new(
-                        BoundCallbackPhase.Handler, family == BoundDispatchFamily.Stream ? BoundCompletionKind.Enumerable :
+                        BoundCallbackPhase.Handler, streamSource ? BoundCompletionKind.ValueTask :
                             family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync ? BoundCompletionKind.ValueTask : BoundCompletionKind.Synchronous,
                         Identity(contract), implementation.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat),
                         new(implementation.Parameters.Select(p => new BoundParameterModel(Identity(p.Type), p.RefKind.ToString(), p.ScopedKind.ToString()))),
                         Identity(implementation.ReturnType), Constraints(implementation.TypeParameters),
-                        family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync))
+                        streamSource || family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync))
                 {
                     ReceiverIsGeneric = entry.Type.IsGenericType,
                     ReceiverIsPublic = open?.Public(entry.Type) ?? Public(entry.Type),
@@ -372,7 +381,11 @@ internal sealed class CompositionListBinding
                     {
                         StreamEmission = new(BoundName(request), BoundName(nextResult), BoundName(entry.Type),
                         BoundName(contract), member.Name, request.IsValueType, entry.Type.IsValueType)
-                        { OwnsStream = candidate.Model.OwnsStream }
+                        {
+                            CursorName = BoundName(cursor!),
+                            CursorIsValueType = cursor!.IsValueType,
+                            CallTarget = CanonicalAsyncCallBinding.BindStreamSource(entry.Type, member, implementation, _compilation, BoundName)
+                        }
                     };
                 if (entry.Factory != null && !handlerModel.CompilerOwnsError)
                 {

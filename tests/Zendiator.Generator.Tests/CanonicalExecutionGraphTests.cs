@@ -224,18 +224,8 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
-    public void Stream_graph_is_separate_from_send_and_owned_sessions_keep_execution_blocked()
+    public void Send_owned_stages_without_session_acquisition_remain_invalid()
     {
-        var source = ListFixture("c.Handlers<Items>(DispatchFamily.Stream,typeof(ItemsHandler));") + """
-            public sealed record Items : IStreamRequest<int>;
-            [ZendiatorHandler] public sealed class ItemsHandler : IStreamRequestHandler<Items,int> {
-                public System.Collections.Generic.IAsyncEnumerable<int> HandleAsync(Items r,CancellationToken c)=>throw new NotImplementedException();
-            }
-            """;
-        var stream = Graph(BindLists(source, "ZEN0037"));
-        Assert.True(stream.IsValid, string.Join(",", stream.Facts.Select(f => f.Reason)));
-        Assert.Null(stream.Schedule);
-        Assert.NotNull(stream.StreamSchedule);
         var valid = Graph(BindAcceptedSendLists(GraphFixture()));
         var owned = valid.Contract with { Stages = new(valid.Contract.Stages.Select((s, i) => i == 0 ? s with { ServiceOwnership = FusionOwnership.OwnedSession } : s)) };
         var rejected = CanonicalExecutionGraphNormalizer.Create(owned);

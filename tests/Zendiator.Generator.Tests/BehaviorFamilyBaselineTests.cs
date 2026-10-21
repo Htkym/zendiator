@@ -24,7 +24,6 @@ public sealed class BehaviorFamilyBaselineTests
         yield return ["send-all-async-void", Multiple("IMultiRequest", "IRequestHandler<Request>", "public ValueTask HandleAsync(Request r, CancellationToken c) => default;"), "SendAllAsync", "multi-async"];
         yield return ["send-all-sync-response", Multiple("ISyncMultiRequest<int>", "ISyncRequestHandler<Request,int>", "public int Handle(Request r, CancellationToken c) => 1;"), "SendAllSync", "multi-sync-span"];
         yield return ["send-all-sync-void", Multiple("ISyncMultiRequest", "ISyncRequestHandler<Request>", "public void Handle(Request r, CancellationToken c) {}"), "SendAllSync", "multi-sync"];
-        yield return ["stream", Single("IStreamRequest<int>", "IStreamRequestHandler<Request,int>", "public async IAsyncEnumerable<int> HandleAsync(Request r, CancellationToken c) { await Task.Yield(); yield return 1; }"), "StreamAsync", "stream"];
         yield return ["notification-empty", "public sealed record Request : INotification;", "PublishAsync", "notification-empty"];
         yield return ["notification-single", Single("INotification", "INotificationHandler<Request>", "public ValueTask HandleAsync(Request r, CancellationToken c) => default;"), "PublishAsync", "notification-single"];
         yield return ["notification-multiple", Multiple("INotification", "INotificationHandler<Request>", "public ValueTask HandleAsync(Request r, CancellationToken c) => default;"), "PublishAsync", "notification-multiple"];
@@ -100,7 +99,6 @@ public sealed class BehaviorFamilyBaselineTests
             .Where(node => node.Identifier.ValueText == methodName && node.ParameterList.Parameters[0].Type!.ToString().StartsWith("global::App.Request", StringComparison.Ordinal)).ToArray();
         Assert.NotEmpty(methods);
         Assert.DoesNotContain("IPipelineBehavior", text);
-        Assert.DoesNotContain("IStreamPipelineBehavior", text);
         Assert.DoesNotContain("ISyncPipelineBehavior", text);
         Assert.DoesNotContain("BehaviorFusion", text);
         if (shape == "direct")

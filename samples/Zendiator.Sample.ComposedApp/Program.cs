@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using ComposedApp.Generated.App;
@@ -203,14 +202,36 @@ public sealed class ReadHook<TMarker> : IAsyncSendRequestTransform<ReadCounts<TM
 
 public sealed record ReadNumbers(int Count) : IStreamRequest<int>;
 [ZendiatorHandler]
-public sealed class ReadNumbersHandler(IInventory inventory) : IStreamRequestHandler<ReadNumbers, int>
+public sealed class ReadNumbersHandler(IInventory inventory) : IStreamSourceHandler<ReadNumbers, int, NumberCursor>
 {
-    public async IAsyncEnumerable<int> HandleAsync(ReadNumbers request, [EnumeratorCancellation] CancellationToken token)
+    public ValueTask<NumberCursor> OpenAsync(ReadNumbers request, CancellationToken token) =>
+        new(new NumberCursor(inventory, request.Count, token));
+}
+
+public sealed class NumberCursor(IInventory inventory, int count, CancellationToken token) : IAsyncEnumerator<int>
+{
+    private int _index;
+    private bool _started;
+    public int Current { get; private set; }
+    public ValueTask<bool> MoveNextAsync() => _started ? new(Move()) : StartAsync();
+
+    private async ValueTask<bool> StartAsync()
     {
+        _started = true;
         _ = inventory.CachedCount;
         await Task.Yield();
-        for (var item = 1; item <= request.Count; item++) { token.ThrowIfCancellationRequested(); yield return item; }
+        return Move();
     }
+
+    private bool Move()
+    {
+        token.ThrowIfCancellationRequested();
+        if (_index >= count) return false;
+        Current = ++_index;
+        return true;
+    }
+
+    public ValueTask DisposeAsync() { _started = true; _index = count; return default; }
 }
 public sealed class KeepEven : IStreamItemFilter<ReadNumbers, int>
 {

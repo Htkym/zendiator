@@ -29,8 +29,12 @@ internal static class CatalogV1Reference
         foreach (var p in owners.SelectMany(t => t.TypeParameters.OrderBy(p => p.Ordinal)))
             rows.Add(JsonSerializer.Serialize(new object[] { Definition((INamedTypeSymbol)p.ContainingSymbol), p.Ordinal, p.Variance.ToString(), p.HasReferenceTypeConstraint, p.ReferenceTypeConstraintNullableAnnotation.ToString(), p.HasValueTypeConstraint, p.HasUnmanagedTypeConstraint, p.HasNotNullConstraint, p.HasConstructorConstraint, p.AllowsRefLikeType, p.ConstraintTypes.Select(t => TypeId(t)).OrderBy(t => t, StringComparer.Ordinal).ToArray() }));
         var assembly = compilation.GetTypeByMetadataName("Zendiator.IRequestHandler\u00602")!.ContainingAssembly;
-        var names = new[] { ("Zendiator.IRequestHandler\u00602", "SendAsync"), ("Zendiator.IRequestHandler\u00601", "SendAsync"), ("Zendiator.ISyncRequestHandler\u00602", "SendSync"), ("Zendiator.ISyncRequestHandler\u00601", "SendSync"), ("Zendiator.IStreamRequestHandler\u00602", "Stream"), ("Zendiator.INotificationHandler\u00601", "Notification") };
+        var names = new[] { ("Zendiator.IRequestHandler\u00602", "SendAsync"), ("Zendiator.IRequestHandler\u00601", "SendAsync"), ("Zendiator.ISyncRequestHandler\u00602", "SendSync"), ("Zendiator.ISyncRequestHandler\u00601", "SendSync"), ("Zendiator.IStreamSourceHandler\u00603", "Stream"), ("Zendiator.INotificationHandler\u00601", "Notification") };
         rows.AddRange(type.AllInterfaces.SelectMany(i => names.Where(n => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, assembly.GetTypeByMetadataName(n.Item1))).Select(n => JsonSerializer.Serialize(new[] { n.Item2, TypeId(i.TypeArguments[0]), i.TypeArguments.Length == 1 ? "void" : TypeId(i.TypeArguments[1]) }))).OrderBy(s => s, StringComparer.Ordinal));
+        var stream = assembly.GetTypeByMetadataName("Zendiator.IStreamSourceHandler\u00603");
+        rows.AddRange(type.AllInterfaces.Where(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, stream))
+            .Select(i => JsonSerializer.Serialize(new[] { "StreamCursor", TypeId(i.TypeArguments[0]), TypeId(i.TypeArguments[2]) }))
+            .OrderBy(s => s, StringComparer.Ordinal));
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(rows))));
     }
 }

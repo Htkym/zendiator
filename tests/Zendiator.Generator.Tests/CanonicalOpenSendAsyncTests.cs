@@ -113,7 +113,10 @@ public sealed partial class GeneratorTests
         }
         namespace AsyncStreamSentinel {
         public sealed record Request<T>(T Value):IStreamRequest<T>;
-        [ZendiatorHandler]public sealed class Handler<T>:IStreamRequestHandler<Request<T>,T> where T:class,new(){public IAsyncEnumerable<T> HandleAsync(Request<T> r,CancellationToken t)=>throw new NotImplementedException();}
+        [ZendiatorHandler]public sealed class Handler<T>:IStreamSourceHandler<Request<T>,T,Handler<T>.Cursor> where T:class,new(){
+            public ValueTask<Cursor> OpenAsync(Request<T> r,CancellationToken t)=>throw new NotImplementedException();
+            public sealed class Cursor:IAsyncEnumerator<T>{public T Current=>default!;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}
+        }
         public sealed class First<R,T>:IAsyncStreamItemFilter<R,T>{public ValueTask<bool> AcceptAsync(R r,T item,CancellationToken t)=>new(true);}
         public sealed class Map<R,T>:IAsyncStreamItemMap<R,T>{public ValueTask<T> MapAsync(R r,T item,CancellationToken t)=>new(item);}
         public sealed class Last<R,T>:IStreamItemFilter<R,T>{public bool Accept(R r,T item,CancellationToken t)=>true;}

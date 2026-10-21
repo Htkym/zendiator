@@ -53,7 +53,7 @@ internal static class MarkedHandlerDiscovery
                     "/virtual=" + implementation.IsVirtual + "/override=" + implementation.IsOverride + "/abstract=" + implementation.IsAbstract +
                     "/return=" + Identity(implementation.ReturnType) + "/constraints=" + Constraints(implementation.TypeParameters);
                 contracts.Add(new(metadataName, Identity(contract.TypeArguments[0]),
-                    contract.TypeArguments.Length == 2 ? Identity(contract.TypeArguments[1]) : null, method,
+                    contract.TypeArguments.Length >= 2 ? Identity(contract.TypeArguments[1]) : null, method,
                     Constraints(contract.OriginalDefinition.TypeParameters)));
             }
         }
@@ -68,8 +68,7 @@ internal static class MarkedHandlerDiscovery
         var model = new MarkedHandlerModel(Identity(type), Name(type), new(hierarchy),
             new(contracts.OrderBy(c => c.Contract, StringComparer.Ordinal).ThenBy(c => c.Request, StringComparer.Ordinal)
                 .ThenBy(c => c.Result, StringComparer.Ordinal)),
-            (markerRequired && attributes.Length != 1) || type.TypeKind is not (TypeKind.Class or TypeKind.Struct))
-        { OwnsStream = !attributes.Any(a => a.NamedArguments.Any(p => p.Key == "OwnsStream" && p.Value.Value is false)) };
+            (markerRequired && attributes.Length != 1) || type.TypeKind is not (TypeKind.Class or TypeKind.Struct));
         return new(model, type, attributes.FirstOrDefault()?.ApplicationSyntaxReference?.GetSyntax(ct).GetLocation() ?? Location.None);
     }
 

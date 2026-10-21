@@ -77,12 +77,20 @@ internal static class MissingHandlerAttribute
         {
             0 or 2 => new[] { "Zendiator.IRequestHandler`2", "Zendiator.IRequestHandler`1" },
             1 or 3 => new[] { "Zendiator.ISyncRequestHandler`2", "Zendiator.ISyncRequestHandler`1" },
-            _ => new[] { "Zendiator.IStreamRequestHandler`2" }
+            _ => new[] { "Zendiator.IStreamSourceHandler`3" }
         };
         var definitions = names.Select(n => contractAssembly!.GetTypeByMetadataName(n)).ToArray();
         var contracts = handler.AllInterfaces.Where(i => definitions.Any(d => Same(i.OriginalDefinition, d)) && Same(i.TypeArguments[0], request)).ToArray();
         if (contracts.Length != 1 || contracts[0].GetMembers().OfType<IMethodSymbol>().Any(m =>
             handler.FindImplementationForInterfaceMember(m) is not IMethodSymbol { IsAbstract: false })) return null;
+        if (family == 4)
+        {
+            var cursor = contracts[0].TypeArguments[2] as INamedTypeSymbol;
+            var enumerator = compilation.GetTypeByMetadataName("System.Collections.Generic.IAsyncEnumerator`1");
+            if (cursor is not { TypeKind: TypeKind.Class or TypeKind.Struct, IsRefLikeType: false, IsUnboundGenericType: false } ||
+                enumerator == null || !compilation.IsSymbolAccessibleWithin(cursor, compilation.Assembly) ||
+                !compilation.ClassifyCommonConversion(cursor, enumerator.Construct(contracts[0].TypeArguments[1])).IsImplicit) return null;
+        }
         if (call.ArgumentList.Arguments.Skip(1).Count(a => Same(model.GetTypeInfo(((TypeOfExpressionSyntax)a.Expression).Type, ct).Type, handler)) != 1) return null;
         if (!ExplicitCompositionsOnly(compilation, configuration, bootstrap, contractAssembly!, call, ct, out var requiresGenerationCheck)) return null;
         return new Target(handler, declaration, source, requiresGenerationCheck, ct);

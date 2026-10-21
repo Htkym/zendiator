@@ -48,34 +48,16 @@ result. Put both the call and the await inside your `try` block.
 
 ## Stream execution
 
-The sample fuses its class Handler and class Filter/Map hooks into one generated C#
-async iterator. This path supports one borrowed segment without factories,
-sessions, wrappers or upstream segments. Calling `StreamAsync` or acquiring an
-enumerator does not run user DI resolution, the handler or hooks; the first item
-request does. Each acquisition creates a fresh iterator. API/enumeration token
-composition can create a linked token source at acquisition, earlier than the
-first item request, and each iterator owns its own link.
+The sample opens a named NumberCursor through IStreamSourceHandler. Dedicated Filter/Map
+hooks use the typed pipeline. The generated source is a standard IAsyncEnumerable and
+also exposes ConsumeAsync; the example uses a readonly sink with a shared List result.
 
-Use `Current` only after `MoveNextAsync` succeeds, and await each `MoveNextAsync`
-or `DisposeAsync` before starting another operation. The fused path follows native
-C# iterator Current and context behavior; it does not promise the former custom
-errors for invalid Current or overlapping operations. Cancellation is checked
-before source moves and reached hooks, including a retry after a false filter.
-Source, callback and cleanup ValueTasks are consumed once. Completion, failure
-and early disposal release the source once, with cleanup failure taking priority
-over an item failure;
-DI owns the borrowed handler and hooks. Nonfused framework segments retain their
-existing guarded cursors and orchestration.
+DI/Open are deferred until the first move. Await it before another move or disposal,
+consume each ValueTask once and keep the scope alive through cleanup. A sink's false
+is a normal stop; sink exceptions are not source middleware input. No Channel bridge
+or independent producer task is added. These paths have not been benchmarked here.
 
-An eligible zero-stage Stream without a session is handler-owned by default.
-`StreamAsync` resolves the handler and calls `HandleAsync` immediately, so handler
-construction and synchronous failures can occur at that call. The returned
-enumerable owns token composition, independent enumeration and cleanup. Mark
-the handler with `[ZendiatorHandler(OwnsStream = false)]` to select the framework's
-lazy guarded cursor for that zero-stage route. This flag does not disable fusion
-of staged routes. Wrapped and session routes retain their orchestration.
-See the [execution contract](design/0.5.0-route-and-stream-contract.md)
-for these boundaries.
+See [migration, HTTP and the detailed contracts](streaming-0.5.0.ja.md).
 
 ## Use typed queries and an update command in one App
 

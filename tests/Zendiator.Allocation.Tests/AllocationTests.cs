@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Zendiator.DependencyInjection;
+using NativeMediator = global::Zendiator.Allocation.Tests.Generated.AllocationStreams.IZendiator;
 
 namespace Zendiator.Allocation.Tests;
 
@@ -73,24 +75,36 @@ public sealed class AllocationTests
     }
 
     [Fact]
-    public async Task Stream_creation_stays_below_256_bytes()
+    public async Task Native_stream_completion_stays_below_256_bytes_without_per_item_containers()
     {
-        var (mediator, scope) = CreateMediator();
-        await using (scope)
+        var services = new ServiceCollection();
+        services.AddZendiator<AllocationStreams>(configuration =>
         {
-            // Creation alone allocates only the lightweight enumerable (no handler execution).
-            var beforeCreate = GC.GetAllocatedBytesForCurrentThread();
-            for (var i = 0; i < 1024; i++)
-                _ = mediator.StreamAsync(new AllocStream(16));
-            var afterCreate = GC.GetAllocatedBytesForCurrentThread();
-            var perCreate = (afterCreate - beforeCreate) / 1024.0;
-            Assert.True(perCreate < 256, $"per-create {perCreate}B");
+            configuration.Handlers<AllocStream>(DispatchFamily.Stream, typeof(AllocStreamHandler));
+            configuration.Pipeline<AllocStream>(DispatchFamily.Stream);
+        });
+        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        await using var scope = provider.CreateAsyncScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<NativeMediator>();
+        var request = new AllocStream(16);
+        var sink = new SumSink();
+        var allocated = Measure(() => mediator.StreamAsync(request).ConsumeAsync(sink).GetAwaiter().GetResult());
+        Assert.True(allocated / 1024d < 256, $"per-operation {allocated / 1024d}B");
+        Assert.Equal(120 * 1025, sink.Sum);
+        Assert.Equal(16 * 1025, sink.Calls);
+    }
 
-            // Full enumeration: async-iterator machinery is expected, but no per-item service lookup.
-            var sum = 0;
-            await foreach (var item in mediator.StreamAsync(new AllocStream(16)))
-                sum += item;
-            Assert.Equal(120, sum);
+    private sealed class SumSink : IStreamSink<int>
+    {
+        public int Sum, Calls;
+        public ValueTask<bool> OnNextAsync(int item, CancellationToken cancellationToken)
+        {
+            if (item != Calls++ % 16) throw new InvalidOperationException("The mutable cursor lost its iteration state.");
+            Sum += item;
+            return new(true);
         }
     }
 }
+
+[ZendiatorComposition("AllocationStreams")]
+public sealed class AllocationStreams;

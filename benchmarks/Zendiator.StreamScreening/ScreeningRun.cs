@@ -85,12 +85,10 @@ public static class ScreeningRun
         drainA(); drainB();
         return JsonSerializer.Serialize(new
         {
-            shape, launch, inputLength = 1, productionEnabled = false, preflight, rows,
+            shape, launch, inputLength = 1, productionEnabled = false, streamProtocol = "native-typed-pull-v1", preflight, rows,
             stopwatchFrequency = Stopwatch.Frequency,
             measurementHelpersInitialized = true,
-            comparisonScope = shape is "completed" or "suspended"
-                ? "concrete independent reference including per-enumeration handler-start bridge delegate;whole difference is not attributed solely to generated loop/body"
-                : "concrete independent reference;whole enumeration including scope and ownership work",
+            comparisonScope = "new native-pull protocol: handwritten enumerable reference versus generated public Mediator source;whole operation including reference plumbing;not old-protocol or isolated native instruction timing",
             interBatchSaveEffects = "synchronous saving outside endpoints can affect later block JIT/GC/cache state;fixed variance gates apply;no automatic remeasurement",
             allocationScope = "entire process managed allocation including both callback work and completion worker;not generated-code-only;native excluded",
             workerWorkDrained = true

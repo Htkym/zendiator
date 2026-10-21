@@ -5,8 +5,7 @@ internal sealed record MarkedHandlerContract(
     string Contract, string Request, string? Result, string Implementation, string DefinitionConstraints);
 internal sealed record MarkedHandlerModel(
     string Identity, string Name, EquatableArray<string> Hierarchy,
-    EquatableArray<MarkedHandlerContract> Contracts, bool CompilerOwnsMarkerError)
-{ public bool OwnsStream { get; init; } }
+    EquatableArray<MarkedHandlerContract> Contracts, bool CompilerOwnsMarkerError);
 internal sealed record MarkedHandlerCatalog(
     EquatableArray<MarkedHandlerModel> Handlers);
 

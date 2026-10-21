@@ -143,39 +143,70 @@ public sealed class YearBoxHandler : ISyncRequestHandler<YearBox, int>
 }
 
 public sealed record GetNames(int Count) : IStreamRequest<string>;
-public sealed class GetNamesHandler : IStreamRequestHandler<GetNames, string>
+public sealed record GNames<T>(int Count) : IStreamRequest<string>;
+
+public sealed class NamesCursor : IAsyncEnumerator<string>
 {
-    public async IAsyncEnumerable<string> HandleAsync(GetNames request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    public static int Opened;
+    public static int Closed;
+    private readonly int count;
+    private readonly string prefix;
+    private readonly CancellationToken token;
+    private int next;
+    private bool disposed;
+    public string Current { get; private set; } = default!;
+
+    public NamesCursor(int count, string prefix, CancellationToken token)
     {
-        for (var i = 0; i < request.Count; i++)
-            yield return "n-" + i;
-        await Task.CompletedTask;
+        this.count = count;
+        this.prefix = prefix;
+        this.token = token;
+        Opened++;
+    }
+
+    public ValueTask<bool> MoveNextAsync()
+    {
+        token.ThrowIfCancellationRequested();
+        if (disposed || next >= count) return new(false);
+        Current = prefix + next++;
+        return new(true);
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Closed++;
+        disposed = true;
+        return default;
     }
 }
 
-public sealed class StreamLogBehavior<TRequest, TItem> : IStreamPipelineBehavior<TRequest, TItem>
-    where TRequest : IStreamRequest<TItem>
+[ZendiatorHandler]
+public sealed class GetNamesHandler : IStreamSourceHandler<GetNames, string, NamesCursor>
+{
+    public ValueTask<NamesCursor> OpenAsync(GetNames request, CancellationToken cancellationToken) =>
+        new(new NamesCursor(request.Count, "n-", cancellationToken));
+}
+
+[ZendiatorHandler]
+public sealed class GNamesHandler<T> : IStreamSourceHandler<GNames<T>, string, NamesCursor>
+{
+    public ValueTask<NamesCursor> OpenAsync(GNames<T> request, CancellationToken cancellationToken) =>
+        new(new NamesCursor(request.Count, "g-", cancellationToken));
+}
+
+public sealed class StreamLogMiddleware<TRequest, TItem> : IStreamMiddleware<TRequest, TItem>
 {
     public static int Calls;
-    public async IAsyncEnumerable<TItem> HandleAsync<TNext>(TRequest request, TNext next, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
-        where TNext : struct, IStreamContinuation<TRequest, TItem>
+    public ValueTask<IAsyncEnumerator<TItem>> OpenAsync(TRequest request, IStreamUpstream<TRequest, TItem> next,
+        CancellationToken cancellationToken)
     {
         Calls++;
-        await foreach (var item in next.InvokeAsync(request, cancellationToken))
-            yield return item;
+        return next.OpenAsync(request, cancellationToken);
     }
 }
 
-public sealed record GNames<T>(int Count) : IStreamRequest<string>;
-public sealed class GNamesHandler<T> : IStreamRequestHandler<GNames<T>, string>
-{
-    public async IAsyncEnumerable<string> HandleAsync(GNames<T> request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
-    {
-        for (var i = 0; i < request.Count; i++)
-            yield return "g-" + i;
-        await Task.CompletedTask;
-    }
-}
+[ZendiatorComposition("aot-native-stream")]
+public sealed class Streams;
 
 public static class Program
 {
@@ -187,11 +218,18 @@ public static class Program
             configuration.Namespace = "AotDi.Generated";
             configuration.RegisterServicesFromAssemblyContaining<PingHandler>();
             configuration.AddOpenBehavior(typeof(LogBehavior<,>), order: 0);
-            configuration.AddOpenStreamBehavior(typeof(StreamLogBehavior<,>), order: 1);
+        });
+        services.AddZendiator<Streams>(static configuration =>
+        {
+            configuration.Handlers<GetNames>(DispatchFamily.Stream, typeof(GetNamesHandler));
+            configuration.Pipeline<GetNames>(DispatchFamily.Stream, Stage.Wrapper<StreamLogMiddleware<GetNames, string>>());
+            configuration.Handlers(typeof(GNames<>), DispatchFamily.Stream, typeof(GNamesHandler<>));
+            configuration.Pipeline(typeof(GNames<>), DispatchFamily.Stream, Stage.Wrapper(typeof(StreamLogMiddleware<,>)));
         });
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        var streams = scope.ServiceProvider.GetRequiredService<global::AotDi.Generated.Streams.IZendiator>();
         var failures = new List<string>();
         void Check(string id, bool ok, string detail)
         {
@@ -224,17 +262,16 @@ public static class Program
         Check("AOT07S", written == 2 && pairResults[0] == 5 && pairResults[1] == 6 && pairResults[2] == -1, $"span-count={written}");
 
         var names = new List<string>();
-        await foreach (var n in mediator.StreamAsync(new GetNames(3))) names.Add(n);
+        await foreach (var n in streams.StreamAsync(new GetNames(3))) names.Add(n);
         Check("AOT08", names.Count == 3 && names[0] == "n-0", $"stream={string.Join(",", names)}");
-        Check("AOT09", StreamLogBehavior<GetNames, string>.Calls == 1, $"stream-pipe={StreamLogBehavior<GetNames, string>.Calls}");
+        Check("AOT09", StreamLogMiddleware<GetNames, string>.Calls == 1, $"stream-pipe={StreamLogMiddleware<GetNames, string>.Calls}");
 
         var gnames = new List<string>();
-        await foreach (var n in mediator.StreamAsync(new GNames<string>(2))) gnames.Add(n);
+        await foreach (var n in streams.StreamAsync(new GNames<string>(2))) gnames.Add(n);
         Check("AOT10", gnames.Count == 2 && gnames[1] == "g-1", $"generic-stream={string.Join(",", gnames)}");
 
-        // Boundary probe: open-generic handlers closed over a value type need
-        // runtime generic construction, unavailable under NativeAOT (MEDI).
-        // Reported, never failed: proves the boundary for request AND stream.
+        // The legacy Send probe records its MEDI boundary. Native Stream uses its
+        // new source contract below and validates any supported value-type closure.
         try
         {
             _ = await mediator.SendAsync(new GetById<int>("v"));
@@ -246,12 +283,27 @@ public static class Program
         }
         try
         {
-            await foreach (var _ in mediator.StreamAsync(new GNames<int>(1))) { }
-            Check("AOT10V-stream", false, "valuetype-generic-stream unexpectedly worked");
+            var openedBefore = NamesCursor.Opened;
+            var closedBefore = NamesCursor.Closed;
+            var valueNames = new List<string>();
+            await foreach (var value in streams.StreamAsync(new GNames<int>(1))) valueNames.Add(value);
+            Check("AOT10V-stream", valueNames.Count == 1 && valueNames[0] == "g-0" &&
+                NamesCursor.Opened == openedBefore + 1 && NamesCursor.Closed == closedBefore + 1,
+                $"valuetype-generic-stream={string.Join(",", valueNames)} opened={NamesCursor.Opened - openedBefore} closed={NamesCursor.Closed - closedBefore}");
         }
-        catch (InvalidOperationException ex)
+        // Only the pinned MEDI 10.0.0 open-generic/value-type limitation is optional.
+        // NativeAOT reports Source as "<unknown>"; use the exact diagnostic and original DI frame.
+        // Other resolution, source, middleware, and cleanup errors must fail the app.
+        // https://github.com/dotnet/runtime/blob/v10.0.0/src/libraries/Microsoft.Extensions.DependencyInjection/src/ServiceLookup/CallSiteFactory.cs
+        catch (InvalidOperationException ex) when (
+            string.Equals(ex.Message,
+                $"Unable to create a generic service for type '{typeof(GNamesHandler<int>)}' because '{typeof(int)}' is a ValueType. Native code to support creating generic services might not be available with native AOT.",
+                StringComparison.Ordinal) &&
+            ex.StackTrace?.Contains(
+                "Microsoft.Extensions.DependencyInjection.ServiceLookup.CallSiteFactory.VerifyOpenGenericAotCompatibility(",
+                StringComparison.Ordinal) == true)
         {
-            Console.WriteLine($"AOT10V-stream LIMIT {ex.Message.Split('.')[0]}");
+            Console.WriteLine($"AOT10V-stream LIMIT {ex.Message}");
         }
 
         Check("AOT11", scope.ServiceProvider.GetRequiredService<IZendiator>() is not null, "di-first");

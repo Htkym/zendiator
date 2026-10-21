@@ -6,6 +6,11 @@ namespace Zendiator.SourceGenerator;
 
 internal static class CanonicalAsyncCallBinding
 {
+    internal static BoundAsyncCallTargetEmission? BindStreamSource(INamedTypeSymbol receiver, IMethodSymbol contract,
+        IMethodSymbol implementation, Compilation compilation, Func<ITypeSymbol, string> name) =>
+        CanonicalStreamContractBinding.Matches(contract.ContainingType, implementation, compilation)
+            ? Bind(receiver, contract, implementation, compilation, name) : null;
+
     internal static BoundAsyncCallTargetEmission? Bind(INamedTypeSymbol receiver, IMethodSymbol contract,
         IMethodSymbol implementation, Compilation compilation, Func<ITypeSymbol, string> name)
     {

@@ -1,0 +1,115 @@
+# 0.5.0 Streamの移行と実行契約
+
+0.5.0では、名前付きcursorを開くHandlerと生成sourceを使います。入口はMediatorの要求別StreamAsync(request, token)です。返り値はValueTaskではなく、標準IAsyncEnumerableを実装する公開sourceです。同じsourceのConsumeAsync(sink, token)は、具体cursorを使うterminalです。既定のChannelや別producer taskは置きません。速度やallocationの改善は未測定です。
+
+## yield Handlerから名前付きcursorへ
+
+HandlerはIStreamSourceHandler<TRequest, TItem, TCursor>を実装し、OpenAsyncで名前付きIAsyncEnumeratorを返します。privateなcompiler iterator型を公開signatureへ書くことはできません。生成コードからアクセスできるclass cursorも使え、structを必須にはしません。
+
+~~~csharp
+public sealed record ReadNames(int Count) : IStreamRequest<string>;
+
+[ZendiatorHandler]
+public sealed class ReadNamesHandler : IStreamSourceHandler<ReadNames, string, NameCursor>
+{
+    public ValueTask<NameCursor> OpenAsync(ReadNames request, CancellationToken token) =>
+        new(new NameCursor(request.Count, token));
+}
+
+public sealed class NameCursor(int count, CancellationToken token) : IAsyncEnumerator<string>
+{
+    private int index;
+    public string Current { get; private set; } = null!;
+    public async ValueTask<bool> MoveNextAsync()
+    {
+        if (index >= count) return false;
+        token.ThrowIfCancellationRequested();
+        await Task.Yield();
+        token.ThrowIfCancellationRequested();
+        Current = $"name-{index++}";
+        return true;
+    }
+    public ValueTask DisposeAsync() { index = count; return default; }
+}
+~~~
+
+Task.Yieldはデモ用の非同期境界です。実アプリのread、write、DB、network等のI/Oとfinallyの後始末は、OpenAsyncやcursorへ移してください。Task.Yieldや全件bufferで代用しません。既存IAsyncEnumerableをtyped外装に包むだけでは、内側のinterface呼出しやiterator処理は消えません。
+
+~~~csharp
+[ZendiatorComposition("names")]
+public sealed class App;
+
+services.AddZendiator<App>(configuration =>
+{
+    configuration.Handlers<ReadNames>(DispatchFamily.Stream, typeof(ReadNamesHandler));
+    configuration.Pipeline<ReadNames>(DispatchFamily.Stream);
+});
+~~~
+
+要求と順序はHandlers/Pipelineで明示します。Filter/Mapは専用hookとStage.Hook、所有sessionはHandlerEntry.Sessionやfactory付きstageを使います。任意middlewareはIStreamMiddleware.OpenAsyncとStage.Wrapperで登録し、nextはIStreamUpstreamです。この箇所はIAsyncEnumeratorへの明示的な型消去境界であり、typed hookと同じ費用とは扱いません。旧AddOpenStreamBehavior、Validator、OwnsStreamによるbackend選択は使用しません。
+
+## 標準列挙とtyped terminal
+
+~~~csharp
+var source = mediator.StreamAsync(new ReadNames(3), token);
+await foreach (var name in source.WithCancellation(enumerationToken))
+    Console.WriteLine(name);
+~~~
+
+同じsourceをterminalで消費するときは、IStreamSinkのOnNextAsync(item, token)を実装します。trueは継続、falseは正常停止です。
+
+~~~csharp
+var names = new List<string>();
+await mediator.StreamAsync(new ReadNames(3), token).ConsumeAsync(new NameSink(names));
+
+public readonly struct NameSink(List<string> names) : IStreamSink<string>
+{
+    public ValueTask<bool> OnNextAsync(string item, CancellationToken token)
+    {
+        names.Add(item);
+        return new(true);
+    }
+}
+~~~
+
+sinkは値渡しなので、struct sinkの結果はList等の共有ownerへ保存します。class sinkの状態も共有されます。同じsinkを複数の列挙で共有する場合、状態の分離や同期は利用者の責任です。生成コードは借用sinkをDisposeしません。
+
+## 開始・取消し・操作の重複
+
+StreamAsyncとGetAsyncEnumeratorだけでは、user DI、HandlerのOpenAsync、owned session、I/Oを開始しません。最初のMoveで開始します。列挙ごとに独立したcursorと停止状態を作ります。API tokenと列挙tokenは、両方が取消可能で異なる場合だけ初回Moveで連結します。terminalのtokenも列挙tokenと同様です。開始前のDisposeはuser DIやlinked CTSを作りません。
+
+pending Move中の別MoveとDisposeは、同期的にInvalidOperationExceptionとなります。停止を予約したり、自動joinしたりしません。先のMoveを一度awaitしてからDisposeしてください。Disposeがpendingの間は新しいMoveを開始できません。その間の重複Disposeは同じTask-backed完了を共有します。返された各ValueTaskは一度だけ消費します。
+
+Currentは成功したMoveの後から、次の受理されたMove/Disposeまで有効です。EOF、失敗、Disposeの後は無効です。Current getter自体の例外にもfinally/await usingで対処してください。false Filterは公開itemを返さず、同じMoveの中で取消しを再確認して次のsource itemへ進みます。公開したitemより先を先読みしません。
+
+terminalはcallbackを逐次完了までawaitします。falseを受理すると全体の正常停止が確定し、後からtokenが取り消されても遡って取消し例外にしません。trueの後は次itemの取得前にtokenを検査します。callbackにはAPI tokenを含む実効tokenを渡します。
+
+## middleware・失敗・所有権
+
+middlewareは同時に一つのupstream cursorだけを持ち、各cursorを破棄します。内側の正常EOFとcleanupが完了した場合だけnextを再度開けます。early Dispose、失敗、外側の終了、terminalのfalseで全体が閉じた後は再開できません。失敗した同じupstreamを再度開くretryはできません。正常完了した内側のcursorを明示的に再度開く場合、既に返したitemが重複し得ます。自動retryは行いません。
+
+sourceの読取例外はsource-side middlewareが扱えます。sink、await foreach本体、serializerの例外はsourceのMoveへ注入せず、middlewareで回復する契約にはしません。pending callbackを残してcleanupしません。callbackの終了後にcursorとowned sessionを一度、所有順の逆に破棄します。cleanup自体の失敗は、通常のtry/finallyと同様に先の失敗へ優先します。
+
+DIから借用したHandler、hook、factory、providerとsinkは生成cursorの所有物ではありません。DI scopeは利用者/hostが、列挙とcleanupの完了まで保持します。action内のusing scopeを抜けてからsourceをserializerへ返してはいけません。
+
+内部awaitはConfigureAwait(false)を使い、UI SynchronizationContextへの復帰を保証しません。ExecutionContextは抑制しません。以前のbackendと同期AsyncLocal変更の見え方が同じとは約束しません。
+
+## HTTPから自然に返す
+
+Controllerは生成sourceを標準interfaceとして返せます。
+
+~~~csharp
+[HttpGet]
+public IAsyncEnumerable<string> GetNames(CancellationToken cancellationToken) =>
+    mediator.StreamAsync(new ReadNames(3), cancellationToken);
+~~~
+
+ASP.NET Coreの標準System.Text.Json formatterを使う場合、JSON配列のframing、options/metadata、列挙とDisposeは標準serializerへ任せます。request scopeはserializationとcursor cleanupまで保持し、RequestAbortedを読取へ伝えます。最初や途中のpending、client切断、source/serializer失敗は独立したHTTP検証対象です。書込み開始後の失敗は正常な未送信配列へ差し替えられるとは限らず、成功を装う閉じ括弧を追加しません。直接HTTP writer sinkは別のintegrationで、ここでは実装していません。
+
+標準IAsyncEnumerable、typed terminal、HTTP serializationは別の評価経路です。一つだけの改善を他の改善と呼びません。外部MoveNext制御やpull zipは標準列挙境界を使います。旧API互換backendや既定Channel bridgeは追加しません。
+
+## sampleと測定資料
+
+[GettingStarted](../samples/Zendiator.Sample.GettingStarted/Program.cs)はreadonly sink、[ComposedApp](../samples/Zendiator.Sample.ComposedApp/Program.cs)は標準列挙を示します。Application/Hostは既存Sendの登録を変えず、Stream専用named compositionを追加します。入口はいずれもMediatorです。
+
+ベンチのpeer側Work.Streamと登録条件は保持し、Z側は名前付きcursorとcanonical Stream compositionを使います。このDI/configとprotocolの違いを記録し、保存済み0.4.0/w64等のrawを上書き・再解釈しません。Full/EarlyBreakは標準列挙、FullTyped/EarlyBreakTypedはtyped terminalです。後者のsinkはfixture内のclass状態を逐次再利用します。HTTPを含む測定ではありません。効果の確認には、このprotocolでの別の測定が必要です。

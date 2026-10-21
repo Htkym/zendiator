@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using GettingStarted.Generated.App;
 using Microsoft.Extensions.DependencyInjection;
 using Zendiator;
@@ -33,10 +32,7 @@ public static class Program
         var sum = mediator.Send(new AddNumbers(20, 22));
         var greeting = await mediator.SendAsync(new Greet(" Ada "));
         var numbers = new List<int>();
-        await foreach (var number in mediator.StreamAsync(new ReadNumbers(6)))
-        {
-            numbers.Add(number);
-        }
+        await mediator.StreamAsync(new ReadNumbers(6)).ConsumeAsync(new NumberSink(numbers));
 
         Console.WriteLine($"Send: {sum}");
         Console.WriteLine($"SendAsync: {greeting}");
@@ -84,17 +80,44 @@ public sealed class AddExclamation : ISendResponseTransform<Greet, string>
 public sealed record ReadNumbers(int Count) : IStreamRequest<int>;
 
 [ZendiatorHandler]
-public sealed class ReadNumbersHandler : IStreamRequestHandler<ReadNumbers, int>
+public sealed class ReadNumbersHandler : IStreamSourceHandler<ReadNumbers, int, NumberCursor>
 {
-    public async IAsyncEnumerable<int> HandleAsync(
-        ReadNumbers request, [EnumeratorCancellation] CancellationToken token)
+    public ValueTask<NumberCursor> OpenAsync(ReadNumbers request, CancellationToken token) =>
+        new(new NumberCursor(request.Count, token));
+}
+
+public sealed class NumberCursor(int count, CancellationToken token) : IAsyncEnumerator<int>
+{
+    private int _index;
+    private bool _started;
+    public int Current { get; private set; }
+    public ValueTask<bool> MoveNextAsync() => _started ? new(Move()) : StartAsync();
+
+    private async ValueTask<bool> StartAsync()
     {
+        _started = true;
         await Task.Yield();
-        for (var number = 1; number <= request.Count; number++)
-        {
-            token.ThrowIfCancellationRequested();
-            yield return number;
-        }
+        return Move();
+    }
+
+    private bool Move()
+    {
+        token.ThrowIfCancellationRequested();
+        if (_index >= count) return false;
+        Current = ++_index;
+        return true;
+    }
+
+    public ValueTask DisposeAsync() { _started = true; _index = count; return default; }
+}
+
+// Value-type sinks are copied; the list is the shared result owner.
+public readonly struct NumberSink(List<int> numbers) : IStreamSink<int>
+{
+    public ValueTask<bool> OnNextAsync(int item, CancellationToken token)
+    {
+        numbers.Add(item);
+        return new(true);
     }
 }
 

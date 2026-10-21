@@ -43,8 +43,9 @@ Console.WriteLine("Reset cache");
 await zendiator.SendAsync(new LegacyPing());
 Console.WriteLine("Legacy ping");
 
-// Lazy, cancelable, disposable stream: handler starts on first MoveNext, not on StreamAsync.
-await foreach (var name in zendiator.StreamAsync(new GetHouseholdNames(3)))
+// Stream has its own named composition; the existing Send composition is unchanged.
+var streams = scope.ServiceProvider.GetRequiredService<global::Zendiator.Sample.Application.Generated.ApplicationStreams.IZendiator>();
+await foreach (var name in streams.StreamAsync(new GetHouseholdNames(3)))
     Console.WriteLine($"Streamed {name}");
 
 return 0;

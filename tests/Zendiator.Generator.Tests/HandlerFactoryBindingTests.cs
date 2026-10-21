@@ -10,11 +10,10 @@ public sealed partial class GeneratorTests
     {
         var sync = family is "SendSync" or "SendAllSync";
         var all = family is "SendAllSync" or "SendAllAsync";
-        var handler = family == "Stream" ? "ItemsHandler" : "A";
-        var request = family == "Stream" ? "Items" : "Ping";
+        var handler = "A";
+        var request = "Ping";
         var entry = "HandlerEntry.Session<" + handler + ",HandlerFactory<string>>()";
-        var source = family == "Stream" ? StreamGraphFixture("").Replace("typeof(ItemsHandler)", entry) :
-            FamilyFixture("c.Handlers<Ping>(DispatchFamily." + family + "," + entry + (all ? ",typeof(B)" : "") + ");", sync, isVoid);
+        var source = FamilyFixture("c.Handlers<Ping>(DispatchFamily." + family + "," + entry + (all ? ",typeof(B)" : "") + ");", sync, isVoid);
         var contract = "I" + (asyncFactory ? "Async" : "") + (owned ? "Owned" : "Borrowed") + "SessionFactory<" + request + "," + handler + ">";
         source = source.Replace("public sealed class " + handler, "public sealed partial class " + handler);
         return source + "public sealed partial class " + handler + " : IDisposable,IAsyncDisposable { public void Dispose(){} public ValueTask DisposeAsync()=>default; }" +
@@ -33,9 +32,7 @@ public sealed partial class GeneratorTests
     [InlineData("SendAllSync", false, false, true)]
     [InlineData("SendAllAsync", true, false, false)]
     [InlineData("SendAllAsync", false, true, true)]
-    [InlineData("Stream", true, false, false)]
-    [InlineData("Stream", false, true, false)]
-    public void Public_marked_Handler_factory_binds_explicit_contract_and_existing_Send_or_Stream_receiver_graph(
+    public void Public_marked_Handler_factory_binds_explicit_contract_and_existing_Send_receiver_graph(
         string family, bool owned, bool asyncFactory, bool isVoid)
     {
         var source = HandlerFactoryFixture(family, owned, asyncFactory, isVoid);
@@ -52,15 +49,6 @@ public sealed partial class GeneratorTests
         Assert.Equal(owned, session.Cleanup != null);
         var graph = Graph(driver);
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
-        if (family == "Stream")
-        {
-            var schedule = graph.StreamSchedule!;
-            Assert.Equal(session.FactoryServiceType, Assert.Single(schedule.ServiceResolutions).ServiceType);
-            Assert.Equal(StreamExecutionNames.Session(-1) + "/live", Assert.Single(schedule.CallbackReceivers).Receiver);
-            var contract = new StreamSegmentContract(route.Anchor, StreamSourceKind.Handler, handler.Callback!, route.Stages) { SourceSessions = handler.Sessions };
-            Assert.Empty(CanonicalStreamSessionValidator.Inspect(contract, schedule).Facts);
-        }
-        else
         {
             var schedule = graph.Schedule!;
             Assert.Equal(session.FactoryServiceType, Assert.Single(schedule.ServiceResolutions).ServiceType);
