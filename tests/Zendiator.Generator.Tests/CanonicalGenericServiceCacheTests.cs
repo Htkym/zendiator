@@ -123,8 +123,12 @@ public sealed partial class GeneratorTests
             processArchitecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
             processorCount = Environment.ProcessorCount,
             serverGC = System.Runtime.GCSettings.IsServerGC,
-            warmupOperations, measuredOperations, sampleCount,
-            providerAndNativeValuesPrebuilt = true, timingMeasured = false, samples
+            warmupOperations,
+            measuredOperations,
+            sampleCount,
+            providerAndNativeValuesPrebuilt = true,
+            timingMeasured = false,
+            samples
         });
 
         void Exercise(int keys, int operations)
@@ -239,9 +243,12 @@ public sealed partial class GeneratorTests
         Assert.All(probe.Created, receiver => Assert.Contains(probe.Released, released => ReferenceEquals(receiver, released)));
         MultiEvidence("generic-service-cache", "promotion-race", new
         {
-            created = probe.Created.Count, released = probe.Released.Count,
-            nativeFailureBeforePromotionRetried = true, publishedWinnerSurvivedPromotion = true,
-            allClosedKeysRetained = true, losingActivationDisposedByNativeDI = true
+            created = probe.Created.Count,
+            released = probe.Released.Count,
+            nativeFailureBeforePromotionRetried = true,
+            publishedWinnerSurvivedPromotion = true,
+            allClosedKeysRetained = true,
+            losingActivationDisposedByNativeDI = true
         });
     }
 
@@ -295,8 +302,10 @@ public sealed partial class GeneratorTests
         Assert.All(probe.Created, receiver => Assert.Contains(probe.Released, released => ReferenceEquals(receiver, released)));
         MultiEvidence("generic-service-cache", "null-reentrant-and-scopes", new
         {
-            created = probe.Created.Count, released = probe.Released.Count,
-            nullResolutionRetried = true, reentrantPublishedWinnerRetained = true,
+            created = probe.Created.Count,
+            released = probe.Released.Count,
+            nullResolutionRetried = true,
+            reentrantPublishedWinnerRetained = true,
             nativeScopeOwnershipPreserved = true
         });
         WriteGenericCacheAllocationEvidence(fixture);

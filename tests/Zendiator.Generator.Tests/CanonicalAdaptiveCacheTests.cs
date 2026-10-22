@@ -95,7 +95,10 @@ public sealed partial class GeneratorTests
             if (emitted.Success) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
             File.WriteAllText(Path.Combine(folder, "compile.json"), JsonSerializer.Serialize(new
             {
-                output.AssemblyName, dependencies = count, routes, emitted.Success,
+                output.AssemblyName,
+                dependencies = count,
+                routes,
+                emitted.Success,
                 diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
                 compiler = compilerDiagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
                 emit = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() })
@@ -330,9 +333,14 @@ public sealed partial class GeneratorTests
             Directory.CreateDirectory(evidence);
             File.WriteAllText(Path.Combine(evidence, "adaptive-closed-allocations.json"), JsonSerializer.Serialize(new
             {
-                small, large, constructionWarmup = 32, dispatchWarmup = 256, denseWarmup = 1,
+                small,
+                large,
+                constructionWarmup = 32,
+                dispatchWarmup = 256,
+                denseWarmup = 1,
                 metric = "whole per-thread managed construction and capture allocation; no timing or per-type ownership attribution",
-                reflectionPerOperation = false, timing = false,
+                reflectionPerOperation = false,
+                timing = false,
                 runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
                 runtimeVersion = Environment.Version.ToString(),
                 processArchitecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
