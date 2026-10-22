@@ -169,40 +169,15 @@ internal static class CanonicalRouteServiceEmitter
             """);
         if (open.Length != 0)
         {
-            b.AppendLine("private global::System.Collections.Concurrent.ConcurrentDictionary<global::System.Type, object>? _genericServices;");
+            b.AppendLine(CanonicalGenericServiceCacheEmitter.Members());
         }
-        foreach (var type in closed)
-            b.AppendLine("private " + (type.Boxed ? "object" : type.TypeName) + "? _service_" + CanonicalSplitSourceEmitter.Id(type.TypeName) + ";");
-        foreach (var type in closed)
-        {
-            var id = CanonicalSplitSourceEmitter.Id(type.TypeName);
-            var storage = type.Boxed ? "object" : type.TypeName;
-            b.AppendLine($$"""
-                internal {{storage}} Required_{{id}}() => Service_{{id}}()
-                    ?? throw new global::System.InvalidOperationException("No service for type '" + typeof({{type.TypeName}}) + "' has been registered.");
-                private {{storage}}? Service_{{id}}() {
-                    var cached = global::System.Threading.Volatile.Read(ref _service_{{id}});
-                    if (cached is not null) return cached;
-                    // Native DI owns every activation and disposal; concurrent first calls share the published winner.
-                    var resolved = ({{storage}}?)_services.GetService(typeof({{type.TypeName}}));
-                    return resolved is null ? null : global::System.Threading.Interlocked.CompareExchange(ref _service_{{id}}, resolved, null) ?? resolved;
-                }
-                """);
-        }
+        CanonicalClosedServiceCacheEmitter.AppendMembers(b, closed);
         b.AppendLine("object? global::System.IServiceProvider.GetService(global::System.Type serviceType) {");
         foreach (var type in closed)
             b.AppendLine("if (serviceType == typeof(" + type.TypeName + ")) return Service_" + CanonicalSplitSourceEmitter.Id(type.TypeName) + "();");
         if (open.Length != 0) b.AppendLine($$"""
             if (serviceType.IsConstructedGenericType && ({{string.Join(" || ", open.Select(t => "serviceType.GetGenericTypeDefinition() == typeof(" + t.TypeName + ")"))}})) {
-                var slots = global::System.Threading.Volatile.Read(ref _genericServices);
-                if (slots is not null && slots.TryGetValue(serviceType, out var cached)) return cached;
-                var resolved = _services.GetService(serviceType);
-                if (resolved is null) return null;
-                if (slots is null) {
-                    var created = new global::System.Collections.Concurrent.ConcurrentDictionary<global::System.Type, object>();
-                    slots = global::System.Threading.Interlocked.CompareExchange(ref _genericServices, created, null) ?? created;
-                }
-                return slots.GetOrAdd(serviceType, resolved);
+                return GenericService(serviceType);
             }
             """);
         b.AppendLine("return _services.GetService(serviceType); }");
