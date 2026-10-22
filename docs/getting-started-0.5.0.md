@@ -58,7 +58,9 @@ The standard source object is allocated at the StreamAsync call; DI/Open are def
 until the first move. Await it before another move or disposal,
 consume each ValueTask once and keep the scope alive through cleanup. A sink's false
 is a normal stop; sink exceptions are not source middleware input. No Channel bridge
-or independent producer task is added. These paths have not been benchmarked here.
+or independent producer task is added. This example does not guarantee lower time or
+allocation. Evaluate standard enumeration, typed terminals and HTTP separately using
+the measured revision, conditions and results.
 
 See [migration, HTTP and the detailed contracts](streaming-0.5.0.ja.md).
 

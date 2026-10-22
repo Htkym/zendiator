@@ -169,8 +169,10 @@ No UI context return is guaranteed, and ExecutionContext is not suppressed.
 
 See the [named cursor sample](samples/Zendiator.Sample.GettingStarted/Program.cs) and
 [Stream migration and execution contract](docs/streaming-0.5.0.ja.md), including HTTP,
-Current, pending disposal, retries and ownership. Standard enumeration, typed terminal
-and HTTP performance are separate evaluations; improvements remain unmeasured.
+Current, pending disposal, retries and ownership. Evaluate standard enumeration, typed
+terminals and HTTP separately using the measured revision, conditions and results.
+Typed consumption does not guarantee lower time or allocation. API migration or source
+changes alone do not establish an improvement.
 
 ## Synchronous multiple results
 

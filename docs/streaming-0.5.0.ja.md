@@ -1,6 +1,6 @@
 # 0.5.0 Streamの移行と実行契約
 
-0.5.0では、名前付きcursorを開くHandlerを使います。MediatorのStreamAsync(request, apiToken)は、標準IAsyncEnumerableとしてsource objectを返します。typed terminalにはStreamSource(request, apiToken).ConsumeAsync(sink, enumerationToken)を使います。StreamSourceの返り値はreadonlyの計画値で、IAsyncEnumerableではありません。既定のChannelや別producer taskは置きません。この入口の分離による速度やallocationの改善は未測定です。
+0.5.0では名前付きcursorを開くHandlerを使います。MediatorのStreamAsync(request, apiToken)は標準IAsyncEnumerableとしてsource objectを返します。typed terminalにはStreamSource(request, apiToken).ConsumeAsync(sink, enumerationToken)を使います。StreamSourceの返り値はreadonlyの計画値で、IAsyncEnumerableではありません。既定のChannelや別producer taskは置きません。入口の形だけで時間や割当の優位は保証しません。標準列挙、typed terminal、HTTPは対象の版・条件・実測結果を分けて評価します。
 
 ## yield Handlerから名前付きcursorへ
 
@@ -84,7 +84,7 @@ opaque middlewareを挟まない単一segmentの経路（standalone）では、S
 
 opaque middlewareを含む経路は、immutableな計画を保持するclassのenumerable adapterを返し、GetAsyncEnumeratorごとに新しいguarded cursorを作ります。standaloneでは列挙しない場合も最初のownerを入口で割り当てる一方、この経路ではsource adapterと列挙ownerが別です。
 
-従来の値型sourceだけを作って列挙せずに捨てる使い方と比べ、standaloneの入口でowner objectを割り当てる費用が増えます。typed処理ではStreamSourceの値型計画を使い、標準source objectを作らずに消費できます。割当量や時間の改善は、実測で確認するまで成果とは扱いません。
+従来の値型sourceだけを作って列挙せずに捨てる使い方と比べ、standaloneの入口でowner objectを割り当てる費用が増えます。typed処理ではStreamSourceの値型計画を使い、標準source objectを作らずに消費できます。列挙しないsourceの生成・保持と、標準列挙やtyped terminalでの消費は別のworkloadです。割当量と時間をそれぞれ実測して評価します。
 
 StreamAsync、StreamSource、GetAsyncEnumeratorだけでは、user DI、HandlerのOpenAsync、owned session、I/Oを開始しません。各ownerの最初のMoveで開始します。API tokenと列挙tokenは、両方が取消可能で異なる場合だけ初回Moveで連結します。ConsumeAsyncのtokenも列挙tokenと同様です。開始前のDisposeはuser DIやlinked CTSを作りません。
 
@@ -122,4 +122,4 @@ ASP.NET Coreの標準System.Text.Json formatterを使う場合、JSON配列のfr
 
 [GettingStarted](../samples/Zendiator.Sample.GettingStarted/Program.cs)はreadonly sink、[ComposedApp](../samples/Zendiator.Sample.ComposedApp/Program.cs)は標準列挙を示します。Application/Hostは既存Sendの登録を変えず、Stream専用named compositionを追加します。入口はいずれもMediatorです。
 
-ベンチのpeer側Work.Streamと登録条件は保持し、Z側は名前付きcursorとcanonical Stream compositionを使います。このDI/configとprotocolの違いを記録し、保存済み0.4.0/w64等のrawを上書き・再解釈しません。Full/EarlyBreakは標準列挙、FullTyped/EarlyBreakTypedはtyped terminalです。後者のsinkはfixture内のclass状態を逐次再利用します。HTTPを含む測定ではありません。効果の確認には、このprotocolでの別の測定が必要です。
+ベンチのpeer側Work.Streamと登録条件は保持し、Z側は名前付きcursorとcanonical Stream compositionを使います。このDI/configとprotocolの違いを記録し、保存済み0.4.0/w64等のrawを上書き・再解釈しません。Full/EarlyBreakは標準列挙、FullTyped/EarlyBreakTypedはtyped terminalです。後者のsinkはfixture内のclass状態を逐次再利用します。HTTPを含む測定ではありません。protocolやDI/configを含む製品経路全体の比較として、標準列挙とtyped terminalの実測結果を分けて評価します。dispatcher単独の改善や、測定していないstage・実I/O・HTTPの性能へは一般化しません。API移行やsource変更だけでは改善の根拠になりません。

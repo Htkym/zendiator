@@ -152,7 +152,7 @@ await foreach (var name in mediator.StreamAsync(new ReadNames(3), cancellationTo
 
 sinkのfalseは正常な全体停止、trueの後は次itemの前に取消しを確認します。struct sinkは値渡しなので、外部から観測する結果は共有ownerへ保存します。sink/serializer例外をsource middlewareへ注入しません。owned cursor/sessionを一度だけ後始末し、借用したDI serviceやsinkは破棄しません。UI contextへの復帰は保証せず、ExecutionContextは抑制しません。
 
-[名前付きcursorのsample](samples/Zendiator.Sample.GettingStarted/Program.cs)と[Streamの移行・実行契約](docs/streaming-0.5.0.ja.md)に、Current、pending Dispose、Filter、HTTP、取消し、部分retryを記載しています。標準列挙、typed terminal、HTTPの評価は分け、測定前に速度やallocationの改善を断言しません。
+[名前付きcursorのsample](samples/Zendiator.Sample.GettingStarted/Program.cs)と[Streamの移行・実行契約](docs/streaming-0.5.0.ja.md)に、Current、pending Dispose、Filter、HTTP、取消し、部分retryを記載しています。標準列挙、typed terminal、HTTPは対象の版・条件・実測結果で別々に評価します。typed消費による時間・割当の優位は保証しません。API移行やsource変更だけでは改善の根拠になりません。
 
 ## 同期の複数結果
 

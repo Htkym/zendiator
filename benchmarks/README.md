@@ -54,5 +54,7 @@ plan is not IAsyncEnumerable and creates a private owner per consumption. These
 DI/config and protocol differences distinguish this work from
 saved historical/w64 evidence. Screening uses public Mediator routes and handwritten
 enumerable references; large-middleware-session replaces the old wrapper fixture.
-Do not combine old protocol artifacts or infer speedup from source changes. HTTP is a
-separate, unmeasured workload. The migration itself establishes no performance result.
+Keep old protocol artifacts separate. Evaluate standard enumeration, typed terminals
+and HTTP separately using the measured revision, conditions and results. API migration
+or source changes alone do not establish a speedup, and typed consumption does not
+guarantee lower time or allocation.

@@ -202,6 +202,68 @@ public sealed class StreamCursorProtocolTests
     }
 
     [Fact]
+    public async Task Disposal_waiter_joining_during_cleanup_observes_the_same_synchronous_failure()
+    {
+        var failure = new ArithmeticException("cleanup failed after waiter joined");
+        Task? joined = null;
+        ProtocolCursor cursor = null!;
+        cursor = new ProtocolCursor(default)
+        {
+            Cleanup = () =>
+            {
+                joined = cursor.DisposeAsync().AsTask();
+                Assert.False(joined.IsCompleted);
+                throw failure;
+            },
+        };
+        Assert.True(await cursor.MoveNextAsync());
+        var disposal = cursor.DisposeAsync().AsTask();
+        Assert.Same(joined, disposal);
+        Assert.Same(failure, await Assert.ThrowsAsync<ArithmeticException>(() => disposal));
+        var repeated = cursor.DisposeAsync().AsTask();
+        Assert.Same(disposal, repeated);
+        Assert.Same(failure, await Assert.ThrowsAsync<ArithmeticException>(() => repeated));
+        Assert.Equal(1, cursor.Disposals);
+        Assert.False(await cursor.MoveNextAsync());
+        Assert.Throws<InvalidOperationException>(() => cursor.Current);
+    }
+
+    [Fact]
+    public async Task Concurrent_disposal_finish_and_join_complete_and_consume_cleanup_once()
+    {
+        using var race = new Barrier(2);
+        var timeout = TimeSpan.FromSeconds(10);
+        var cleanup = new CleanupSource();
+        cleanup.Complete();
+        var cursor = new ProtocolCursor(default)
+        {
+            Cleanup = () =>
+            {
+                Assert.True(race.SignalAndWait(timeout));
+                return cleanup.Operation;
+            },
+        };
+        Assert.True(await cursor.MoveNextAsync());
+        var closer = Task.Factory.StartNew(() => cursor.DisposeAsync().AsTask(),
+            CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        var joiner = Task.Factory.StartNew(async () =>
+        {
+            Assert.True(race.SignalAndWait(timeout));
+            await cursor.DisposeAsync();
+            Assert.False(cursor.HasPending);
+            Assert.False(await cursor.MoveNextAsync());
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+        var disposals = await Task.WhenAll(closer, joiner).WaitAsync(timeout);
+        await Task.WhenAll(disposals).WaitAsync(timeout);
+        await cursor.DisposeAsync();
+        Assert.Equal(1, cleanup.Consumptions);
+        Assert.Equal(1, cursor.Disposals);
+        Assert.False(await cursor.MoveNextAsync());
+        Assert.Throws<InvalidOperationException>(() => cursor.Current);
+    }
+
+    [Fact]
     public async Task Pending_cleanup_owns_linked_cancellation_until_consumed_and_shares_disposal_completion()
     {
         using var api = new CancellationTokenSource();
@@ -213,10 +275,12 @@ public sealed class StreamCursorProtocolTests
         var disposal = cursor.DisposeAsync().AsTask();
         Assert.False(disposal.IsCompleted);
         Assert.Same(disposal, cursor.DisposeAsync().AsTask());
+        Assert.True(cursor.HasPending);
         api.Cancel();
         Assert.True(linkedToken.IsCancellationRequested);
         cleanup.Complete();
         await disposal;
+        Assert.False(cursor.HasPending);
         await cursor.DisposeAsync();
         Assert.Equal(1, cleanup.Consumptions);
         Assert.Equal(1, cursor.Disposals);
@@ -372,6 +436,7 @@ public sealed class StreamCursorProtocolTests
         public Exception? MoveError { get; set; }
         public int Disposals { get; private set; }
         public CancellationToken ApiToken => OriginalApiToken;
+        public bool HasPending => HasPendingOperation;
         public bool Claim(CancellationToken token) => TryClaimFirstEnumeration(token);
         public int Current { get { ValidateCurrent(); return 7; } }
 

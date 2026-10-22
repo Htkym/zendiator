@@ -21,9 +21,7 @@ public abstract class StreamCursorState : IAsyncDisposable
     private bool _hasCurrent;
     private bool _closed;
     private bool _cleanupComplete;
-    private Exception? _disposeError;
-    private DisposeCompletion? _disposeCompletion;
-    private Task<bool>? _pendingMove;
+    private CompletionState? _completionState;
 
     /// <summary>Creates a cursor owner without acquiring dependencies or combining tokens.</summary>
     protected StreamCursorState(CancellationToken apiToken = default, CancellationToken enumerationToken = default,
@@ -58,29 +56,51 @@ public abstract class StreamCursorState : IAsyncDisposable
     public bool IsClosed => Volatile.Read(ref _closed);
 
     /// <summary>Whether an operation or its returned completion is still pending.</summary>
-    protected bool HasPendingOperation => Volatile.Read(ref _busy) != 0 || HasPendingCompletion;
+    protected bool HasPendingOperation
+    {
+        get
+        {
+            var busy = Volatile.Read(ref _busy);
+            return busy != 0 && (busy != 2 || !HasCompletedDisposal) || HasPendingCompletion;
+        }
+    }
 
-    private bool HasPendingCompletion => Volatile.Read(ref _pendingMove) is { IsCompleted: false }
-        || Volatile.Read(ref _disposeCompletion) is { Task.IsCompleted: false };
+    private bool HasCompletedDisposal => IsClosed
+        && Volatile.Read(ref _completionState) is { } state
+        && Volatile.Read(ref state.Disposal) is { Task.IsCompleted: true }
+        && Volatile.Read(ref state.PendingMove) is not { IsCompleted: false };
+
+    private bool HasPendingMove => Volatile.Read(ref _completionState) is { } state
+        && Volatile.Read(ref state.PendingMove) is { IsCompleted: false };
+
+    private bool HasPendingCompletion => Volatile.Read(ref _completionState) is { } state
+        && (Volatile.Read(ref state.PendingMove) is { IsCompleted: false }
+            || Volatile.Read(ref state.Disposal) is { Task.IsCompleted: false });
 
     /// <summary>Claims one Move, invalidates Current, and returns false for an already closed owner.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     protected bool TryBeginMove()
     {
-        if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0)
+        var busy = Interlocked.CompareExchange(ref _busy, 1, 0);
+        if (busy != 0)
+        {
+            if (busy == 2 && HasCompletedDisposal)
+                return false;
             throw new InvalidOperationException("Await the preceding cursor operation before starting another.");
+        }
 
         // Check after claiming the gate: publication may finish between an earlier check and the CAS.
-        var pendingMove = Volatile.Read(ref _pendingMove);
+        var state = Volatile.Read(ref _completionState);
+        var pendingMove = state is null ? null : Volatile.Read(ref state.PendingMove);
         if (pendingMove is { IsCompleted: false }
-            || Volatile.Read(ref _disposeCompletion) is { Task.IsCompleted: false })
+            || state is not null && Volatile.Read(ref state.Disposal) is { Task.IsCompleted: false })
         {
             Volatile.Write(ref _busy, 0);
             throw new InvalidOperationException("Await the preceding cursor operation before starting another.");
         }
 
         if (pendingMove is not null)
-            Volatile.Write(ref _pendingMove, null);
+            Volatile.Write(ref state!.PendingMove, null);
         _hasCurrent = false;
         if (!_closed)
             return true;
@@ -172,8 +192,9 @@ public abstract class StreamCursorState : IAsyncDisposable
     {
         try
         {
+            var state = GetCompletionState();
             var pending = operation.AsTask();
-            Volatile.Write(ref _pendingMove, pending);
+            Volatile.Write(ref state.PendingMove, pending);
             return new(pending);
         }
         finally
@@ -193,7 +214,7 @@ public abstract class StreamCursorState : IAsyncDisposable
     /// <summary>Closes this owner; repeated pending disposal shares one Task-backed completion.</summary>
     public ValueTask DisposeAsync()
     {
-        if (Volatile.Read(ref _pendingMove) is { IsCompleted: false })
+        if (HasPendingMove)
             throw new InvalidOperationException("Await the pending Move before disposing the cursor.");
 
         int busy;
@@ -216,12 +237,12 @@ public abstract class StreamCursorState : IAsyncDisposable
             throw new InvalidOperationException("Await the pending Move before disposing the cursor.");
         if (busy == 2)
         {
-            if (Volatile.Read(ref _pendingMove) is { IsCompleted: false })
+            if (HasPendingMove)
                 throw new InvalidOperationException("Await the pending Move before disposing the cursor.");
             return new(GetDisposeCompletion().Task);
         }
 
-        if (Volatile.Read(ref _pendingMove) is { IsCompleted: false })
+        if (HasPendingMove)
         {
             Volatile.Write(ref _busy, 0);
             throw new InvalidOperationException("Await the pending Move before disposing the cursor.");
@@ -231,7 +252,7 @@ public abstract class StreamCursorState : IAsyncDisposable
         if (_closed)
         {
             Volatile.Write(ref _busy, 0);
-            var completed = Volatile.Read(ref _disposeCompletion);
+            var completed = ReadDisposeCompletion();
             return completed is null ? default : new(completed.Task);
         }
 
@@ -258,13 +279,13 @@ public abstract class StreamCursorState : IAsyncDisposable
             }
 
             FinishClose(null, disposing: true);
-            var shared = Volatile.Read(ref _disposeCompletion);
+            var shared = ReadDisposeCompletion();
             return shared is null ? default : new(shared.Task);
         }
         catch (Exception error)
         {
             FinishClose(error, disposing: true);
-            var shared = Volatile.Read(ref _disposeCompletion);
+            var shared = ReadDisposeCompletion();
             return shared is null ? ThrowDisposeAsync(error) : new(shared.Task);
         }
     }
@@ -360,25 +381,49 @@ public abstract class StreamCursorState : IAsyncDisposable
     private void FinishClose(Exception? error, bool disposing)
     {
         if (disposing)
-            _disposeError = error;
+        {
+            var state = error is null ? Volatile.Read(ref _completionState) : GetCompletionState();
+            if (state is not null)
+                state.DisposeError = error;
+        }
         Volatile.Write(ref _cleanupComplete, true);
         if (disposing)
-            Volatile.Write(ref _busy, 0);
-        Volatile.Read(ref _disposeCompletion)?.Complete(_disposeError);
+        {
+            // Store-load ordering prevents the closer and a Dispose joiner from missing each other.
+            Interlocked.Exchange(ref _busy, 0);
+        }
+        var completed = Volatile.Read(ref _completionState);
+        if (completed is not null)
+            Volatile.Read(ref completed.Disposal)?.Complete(completed.DisposeError);
     }
 
     private DisposeCompletion GetDisposeCompletion()
     {
-        var completion = Volatile.Read(ref _disposeCompletion);
+        var state = GetCompletionState();
+        var completion = Volatile.Read(ref state.Disposal);
         if (completion is null)
         {
             var created = new DisposeCompletion();
-            completion = Interlocked.CompareExchange(ref _disposeCompletion, created, null) ?? created;
+            completion = Interlocked.CompareExchange(ref state.Disposal, created, null) ?? created;
         }
 
         if (Volatile.Read(ref _cleanupComplete))
-            completion.Complete(_disposeError);
+            completion.Complete(state.DisposeError);
         return completion;
+    }
+
+    private DisposeCompletion? ReadDisposeCompletion() => Volatile.Read(ref _completionState) is { } state
+        ? Volatile.Read(ref state.Disposal) : null;
+
+    private CompletionState GetCompletionState()
+    {
+        var state = Volatile.Read(ref _completionState);
+        if (state is null)
+        {
+            var created = new CompletionState();
+            state = Interlocked.CompareExchange(ref _completionState, created, null) ?? created;
+        }
+        return state;
     }
 
     private void DisposeLinkedToken()
@@ -398,6 +443,13 @@ public abstract class StreamCursorState : IAsyncDisposable
     {
         await ValueTask.CompletedTask.ConfigureAwait(false);
         ExceptionDispatchInfo.Capture(error).Throw();
+    }
+
+    private sealed class CompletionState
+    {
+        internal Task<bool>? PendingMove;
+        internal DisposeCompletion? Disposal;
+        internal Exception? DisposeError;
     }
 
     private sealed class DisposeCompletion

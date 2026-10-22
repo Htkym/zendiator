@@ -217,7 +217,7 @@ Send系の`Before`はリストの先頭から、`After`は末尾から呼びま�
 
 pending Moveの完了前に別MoveやDisposeを始めると拒否します。Moveを一度awaitしてからDisposeし、scopeは後始末まで保持してください。false Filterは同じMove内で次itemへ進み、terminalのfalseは正常な全体停止です。sink/serializer例外はsource middlewareへ注入しません。
 
-Current、pending Dispose、取消し、session所有権、context、HTTPと移行条件は[Streamの移行・実行契約](streaming-0.5.0.ja.md)を参照してください。性能改善は未測定です。
+Current、pending Dispose、取消し、session所有権、context、HTTPと移行条件は[Streamの移行・実行契約](streaming-0.5.0.ja.md)を参照してください。この例は時間や割当の優位を保証しません。標準列挙、typed terminal、HTTPは対象の版・条件・実測結果で別々に評価してください。
 
 ## DI scopeの所有
 
