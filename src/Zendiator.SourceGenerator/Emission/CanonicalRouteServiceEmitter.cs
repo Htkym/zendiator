@@ -44,11 +44,11 @@ internal static class CanonicalRouteServiceEmitter
         var ns = root.Members.OfType<NamespaceDeclarationSyntax>().Single();
         var mediator = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "Zendiator");
         var registrar = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "ZendiatorGeneratedRegistrar");
-        var fragment = Fragment(root, ns, mediator, registrar, file.BoxedDependencies);
+        var fragment = Fragment(root, ns, mediator, registrar, file.BoxedDependencies, file.LazyClosedServiceCache);
         var b = CanonicalSplitSourceEmitter.Header(fragment.Externs);
         b.Append("namespace ").Append(fragment.Namespace).AppendLine(" {");
         foreach (var member in ns.Members.Where(m => m != mediator && m != registrar)) b.AppendLine(member.ToFullString());
-        CanonicalSplitSourceEmitter.Mediator(b, fragment.Dependencies, Route(ns, mediator));
+        CanonicalSplitSourceEmitter.Mediator(b, fragment.Dependencies, fragment.LazyClosedServiceCache, Route(ns, mediator));
         b.AppendLine(fragment.Registrar).AppendLine("}");
         return CanonicalSplitSourceEmitter.File(file.HintName, b.ToString(), root, ns, mediator, fragment);
     }
@@ -140,7 +140,7 @@ internal static class CanonicalRouteServiceEmitter
     }
 
     internal static CanonicalCompositionFragment Fragment(CompilationUnitSyntax root, NamespaceDeclarationSyntax ns,
-        ClassDeclarationSyntax mediator, ClassDeclarationSyntax registrar, EquatableArray<string> boxedDependencies = default)
+        ClassDeclarationSyntax mediator, ClassDeclarationSyntax registrar, EquatableArray<string> boxedDependencies, bool lazyClosedServiceCache)
     {
         var dependencies = Dependencies(ns).ToArray();
         var boxed = new HashSet<string>(boxedDependencies.Select(type => TypeKey(SyntaxFactory.ParseTypeName(type))), StringComparer.Ordinal);
@@ -149,10 +149,10 @@ internal static class CanonicalRouteServiceEmitter
             if (call.Expression is MemberAccessExpressionSyntax { Name: IdentifierNameSyntax } && ServiceType(call, "_provider") is { } type)
                 boxed.Add(TypeKey(type));
         return new(ns.Name.ToString(), registrar.ToFullString(), new(root.Externs.Select(e => e.WithLeadingTrivia().WithTrailingTrivia().ToString())),
-            new(dependencies.Select(type => new CanonicalServiceDependency(TypeKey(type), !Closed(type), boxed.Contains(TypeKey(type))))));
+            new(dependencies.Select(type => new CanonicalServiceDependency(TypeKey(type), !Closed(type), boxed.Contains(TypeKey(type))))), lazyClosedServiceCache);
     }
 
-    internal static string Services(IEnumerable<CanonicalServiceDependency> dependencies)
+    internal static string Services(IEnumerable<CanonicalServiceDependency> dependencies, bool lazyClosedServiceCache)
     {
         var values = dependencies.ToArray();
         var closed = values.Where(type => !type.Open).ToArray();
@@ -171,7 +171,7 @@ internal static class CanonicalRouteServiceEmitter
         {
             b.AppendLine(CanonicalGenericServiceCacheEmitter.Members());
         }
-        CanonicalClosedServiceCacheEmitter.AppendMembers(b, closed);
+        CanonicalClosedServiceCacheEmitter.AppendMembers(b, closed, lazyClosedServiceCache);
         b.AppendLine("object? global::System.IServiceProvider.GetService(global::System.Type serviceType) {");
         foreach (var type in closed)
             b.AppendLine("if (serviceType == typeof(" + type.TypeName + ")) return Service_" + CanonicalSplitSourceEmitter.Id(type.TypeName) + "();");

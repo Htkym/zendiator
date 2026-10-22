@@ -75,6 +75,91 @@ public sealed partial class GeneratorTests
         => Assert.Single(sources, IsCanonicalComposition).SourceText.ToString();
     private static string CanonicalDispatchSource(IEnumerable<GeneratedSourceResult> sources)
         => CanonicalRouteSource(sources) + CanonicalCompositionSource(sources);
+
+    [Fact]
+    public void Closed_cache_policy_edit_changes_composition_storage_without_changing_route_bodies()
+    {
+        var source = IncrementalRouteSource
+            .Replace("[ZendiatorComposition(\"fine\")]public sealed class Reads;", "[ZendiatorComposition(\"fine\")]public sealed class Reads;[ZendiatorComposition(\"other\")]public sealed class Other;")
+            .Replace("c.Handlers<B>(DispatchFamily.SendSync,typeof(HB));", "")
+            .Replace("});}", "});public static IServiceCollection RegisterOther(IServiceCollection s)=>s.AddZendiator<Other>(c=>c.Handlers<B>(DispatchFamily.SendSync,typeof(HB)));}");
+        var driver = IncrementalRouteRun(SyncDriver(), source, "cache-policy-before");
+        var before = SplitFiles(driver);
+        var composition = Assert.Single(before, file => IsComposition(file.Key) && file.Value.Contains("namespace Fine.Generated.Reads", StringComparison.Ordinal)).Key;
+        var changed = source.Replace("ZendiatorComposition(\"fine\")", "ZendiatorComposition(\"fine\",ClosedServiceCache=ClosedServiceCacheMode.LazyBlocks)");
+        driver = IncrementalRouteRun(driver, changed, "cache-policy-after");
+        var after = SplitFiles(driver);
+        Assert.DoesNotContain("ServiceBlock_", before[composition]);
+        Assert.Contains("ServiceBlock_", after[composition]);
+        foreach (var file in before.Where(file => (IsComposition(file.Key) || file.Key.StartsWith("Zendiator.Route.", StringComparison.Ordinal)) && file.Key != composition))
+            Assert.Equal(file.Value, after[file.Key]);
+
+        static bool IsComposition(string hint) => hint.StartsWith("Zendiator.Composition.", StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Undefined_closed_cache_mode_is_diagnosed_without_generating_the_composition()
+    {
+        var source = IncrementalRouteSource.Replace("ZendiatorComposition(\"fine\")", "ZendiatorComposition(\"fine\",ClosedServiceCache=(ClosedServiceCacheMode)99)");
+        var driver = IncrementalRouteRun(SyncDriver(), source, "cache-policy-invalid", errors: true);
+        var diagnostic = Assert.Single(driver.GetRunResult().Diagnostics);
+        Assert.Equal("ZEN0035", diagnostic.Id);
+        Assert.Contains("ClosedServiceCacheMode.Inline or ClosedServiceCacheMode.LazyBlocks", diagnostic.GetMessage());
+        AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
+        CatalogEvidence("cache-policy-observations", "invalid", new { diagnostic.Id, message = diagnostic.GetMessage(), noCanonicalOutput = true });
+    }
+
+    [Theory]
+    [InlineData("MissingCacheMode", "CS0103", "unresolved")]
+    [InlineData("CacheSettings.Mode", "CS0182", "nonconstant")]
+    public void Compiler_owned_closed_cache_values_preserve_primary_diagnostics(string value, string expectedCompilerDiagnostic, string scenario)
+    {
+        var source = IncrementalRouteSource.Replace("ZendiatorComposition(\"fine\")", "ZendiatorComposition(\"fine\",ClosedServiceCache=" + value + ")") +
+            "namespace Fine{public static class CacheSettings{public static ClosedServiceCacheMode Mode=>ClosedServiceCacheMode.Inline;}}";
+        var driver = IncrementalRouteRun(SyncDriver(), source, "cache-policy-compiler-" + scenario, out var output, errors: true);
+        var run = driver.GetRunResult().Results.Single();
+        var catalog = (CompositionSelectionCatalog)Assert.Single(run.TrackedSteps["CompositionSelectionModel"].SelectMany(step => step.Outputs)).Value;
+        var composition = Assert.Single(catalog.Compositions);
+        Assert.True(composition.CompilerOwnsHandlerError);
+        Assert.Empty(composition.Errors);
+        Assert.Contains(composition.Facts, fact => fact.Key == "IncompleteExecutionContract");
+        var primary = SyncCompilation(source, "FineIncremental").GetDiagnostics().First(diagnostic => diagnostic.Id == expectedCompilerDiagnostic);
+        var compilerErrors = output.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error).ToArray();
+        Assert.Contains(compilerErrors, diagnostic => diagnostic.Id == primary.Id && diagnostic.Location.SourceSpan == primary.Location.SourceSpan);
+        Assert.Empty(driver.GetRunResult().Diagnostics);
+        AssertNoCanonicalOutput(run.GeneratedSources);
+        CatalogEvidence("cache-policy-observations", "compiler-" + scenario, new
+        {
+            composition.CompilerOwnsHandlerError,
+            facts = composition.Facts.Select(fact => fact.Key),
+            compiler = compilerErrors.Select(diagnostic => new { diagnostic.Id, message = diagnostic.GetMessage() }),
+            generator = driver.GetRunResult().Diagnostics.Select(diagnostic => new { diagnostic.Id, message = diagnostic.GetMessage() }),
+            noCanonicalOutput = true
+        });
+    }
+
+    [Fact]
+    public void Compiler_owned_closed_cache_value_keeps_unrelated_stage_diagnostics()
+    {
+        var source = IncrementalRouteSource.Replace("ZendiatorComposition(\"fine\")", "ZendiatorComposition(\"fine\",ClosedServiceCache=MissingCacheMode)")
+            .Replace("c.Handlers<A>(DispatchFamily.SendSync,typeof(HA));", "c.Handlers<A>(DispatchFamily.SendSync,typeof(HA));c.Pipeline<A>(DispatchFamily.SendSync,Stage.Hook<Wrong>());") +
+            "namespace Fine{public sealed class Wrong:ISendRequestTransform<B>{public B Before(B r,CancellationToken t)=>r;}}";
+        var driver = IncrementalRouteRun(SyncDriver(), source, "cache-policy-compiler-stage", out var output, errors: true);
+        Assert.Contains(output.GetDiagnostics(), diagnostic => diagnostic.Id == "CS0103");
+        var diagnostic = Assert.Single(driver.GetRunResult().Diagnostics);
+        Assert.Equal("ZEN0026", diagnostic.Id);
+        Assert.True(diagnostic.Location.IsInSource);
+        AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
+        CatalogEvidence("cache-policy-observations", "compiler-stage", new
+        {
+            diagnostic.Id,
+            message = diagnostic.GetMessage(),
+            span = diagnostic.Location.SourceSpan.ToString(),
+            compiler = output.GetDiagnostics().Where(error => error.Severity == DiagnosticSeverity.Error).Select(error => new { error.Id, message = error.GetMessage() }),
+            noCanonicalOutput = true
+        });
+    }
+
     private static void AssertCanonicalOutputRoles(IEnumerable<GeneratedSourceResult> sources, int routes = 1, int compositions = 1, int interceptors = 1, bool legacy = false)
     {
         var files = sources.ToArray(); var execution = files.Where(IsCanonicalRoute).ToArray(); var shared = files.Where(IsCanonicalComposition).ToArray();

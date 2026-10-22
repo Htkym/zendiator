@@ -13,6 +13,7 @@ internal sealed record CanonicalStreamPublicComposition(CanonicalSyncComposition
     public string? FinalItemName { get; init; }
     public EquatableArray<RegistrationStageEmission> DeclaredStages { get; init; }
     public EquatableArray<string> BoxedDependencies { get; init; }
+    public bool LazyClosedServiceCache { get; init; }
 }
 internal sealed record CanonicalStreamPublicModel(EquatableArray<CanonicalStreamPublicComposition> Compositions);
 
@@ -64,6 +65,7 @@ internal static class CanonicalStreamPublicConnection
                 Generic = generic,
                 OpenRegistration = open,
                 FinalItemName = canonical.ItemFlow?.Final.Name,
+                LazyClosedServiceCache = c.LazyClosedServiceCache,
                 DeclaredStages = route.StreamDeclaredStages,
                 BoxedDependencies = new(Boxed(canonical).Distinct())
             });
@@ -121,7 +123,7 @@ internal static class CanonicalStreamPublicConnection
     {
         foreach (var c in model.Compositions.Where(c => IsConnected(c, sites)))
             yield return new("Zendiator.Canonical.Stream.Public." + CanonicalSplitSourceEmitter.Id(c.Registration.Namespace) + ".g.cs", Source(c))
-            { BoxedDependencies = c.BoxedDependencies };
+            { BoxedDependencies = c.BoxedDependencies, LazyClosedServiceCache = c.LazyClosedServiceCache };
     }
     internal static string Source(CanonicalStreamPublicComposition c)
     {

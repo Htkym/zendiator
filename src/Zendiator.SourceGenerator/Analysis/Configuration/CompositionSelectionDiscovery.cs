@@ -50,6 +50,7 @@ internal static class CompositionSelectionDiscovery
             var useLocalHandlers = false;
             var hasExplicitSelection = false;
             var compilerOwned = false;
+            var lazyClosedServiceCache = false;
             if (method.Arity == 1 && method.TypeArguments[0] is INamedTypeSymbol composition)
             {
                 identity = MarkedHandlerDiscovery.Identity(composition);
@@ -73,6 +74,12 @@ internal static class CompositionSelectionDiscovery
                         value.Trim() != value || value.Any(char.IsControl) || value == "default")
                         errors.Add("The composition key must be nonempty, trimmed, free of control characters and different from default.");
                     else key = value;
+                    foreach (var argument in attributes[0].NamedArguments.Where(a => a.Key == "ClosedServiceCache"))
+                    {
+                        if (argument.Value.Kind == TypedConstantKind.Error) compilerOwned = true;
+                        else if (argument.Value.Value is int mode && mode is 0 or 1) lazyClosedServiceCache = mode == 1;
+                        else errors.Add("ClosedServiceCache must be ClosedServiceCacheMode.Inline or ClosedServiceCacheMode.LazyBlocks.");
+                    }
                 }
             }
             else if (method.Arity != 0) errors.Add("The composition marker could not be bound.");
@@ -160,6 +167,7 @@ internal static class CompositionSelectionDiscovery
                 HasExplicitSelection = hasExplicitSelection,
                 ExplicitHandlerTypes = new(explicitHandlerNames),
                 CatalogMarkerTypes = new(catalogMarkerNames),
+                LazyClosedServiceCache = lazyClosedServiceCache,
                 ExternAliases = CanonicalSymbolName.Aliases(compilation)
             };
             var location = semantic.GetInterceptableLocation(invocation, ct);
@@ -239,6 +247,7 @@ internal static class CompositionSelectionDiscovery
                     var message = fact.Message;
                     if (fact.Key == "IncompleteExecutionContract")
                     {
+                        if (composition.Errors.Count != 0 || composition.CompilerOwnsHandlerError) continue;
                         if (sendAllSync.Compositions.Any(c => c.Registration.Index == index) && sendAllSyncSites.CallSites.Any(s => s.Namespace == composition.GeneratedNamespace && s.MarkerName == composition.MarkerName)) continue;
                         if (sendAllAsync.Compositions.Any(c => c.Branch.Index == index) && sendAllAsyncSites.CallSites.Any(s => s.Namespace == composition.GeneratedNamespace && s.MarkerName == composition.MarkerName)) continue;
                         var streamEnabled = streamPublic.Compositions.FirstOrDefault(c => c.Registration.Index == index);

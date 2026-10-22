@@ -17,6 +17,7 @@ internal sealed record CanonicalRouteText(string Key, string Namespace, string R
 {
     public string StableKey { get; init; } = "";
     public EquatableArray<string> BoxedDependencies { get; init; }
+    public bool LazyClosedServiceCache { get; init; }
     // Candidate text must never enter the public registration/partial-route emitter.
     public CanonicalSourceFile? StreamCanonicalFile { get; init; }
 }
@@ -85,6 +86,7 @@ internal static class CanonicalRouteIncremental
             row.Route.Input.Route.Family, source)
         {
             StableKey = row.Route.Input.Composition.Identity + "|" + row.Route.Input.Route.Family + "|" + row.Route.Input.Route.Request,
+            LazyClosedServiceCache = row.Route.Input.Composition.LazyClosedServiceCache,
             StreamCanonicalFile = row.StreamCanonical is { } canonical ? CanonicalStreamFallbackEmitter.Emit(canonical) : null
         };
     }

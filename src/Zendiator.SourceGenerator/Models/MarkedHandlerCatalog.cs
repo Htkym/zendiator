@@ -22,5 +22,6 @@ internal sealed record CompositionSelectionModel(string Identity, string Key,
     public EquatableArray<string> ExplicitHandlerTypes { get; init; }
     public EquatableArray<string> CatalogMarkerTypes { get; init; }
     public string? MicrosoftDiProviderName { get; init; }
+    public bool LazyClosedServiceCache { get; init; }
 }
 internal sealed record CompositionSelectionCatalog(EquatableArray<CompositionSelectionModel> Compositions);

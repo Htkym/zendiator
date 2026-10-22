@@ -48,12 +48,13 @@ public sealed partial class GeneratorTests
     private sealed record AdaptiveCacheFixture(Type Mediator, Type Hook, Type[] Handlers,
         Func<IServiceCollection, IServiceCollection> Register, Func<IServiceProvider, object> Create,
         Func<AdaptiveCacheProbe, int, object> NewService, Func<object, int, int, int> Send, Action<object, int> Dense);
-    private static readonly ConcurrentDictionary<int, Lazy<AdaptiveCacheFixture>> AdaptiveCacheFixtures = new();
+    private static readonly ConcurrentDictionary<(int Dependencies, ClosedServiceCacheMode? Mode), Lazy<AdaptiveCacheFixture>> AdaptiveCacheFixtures = new();
 
     // Each composition has N unique dependencies: N-1 handlers and one hook shared by every route.
     // The last handler is a mutable struct. Requests stay typed structs in the bridge, including allocation runs.
-    private static AdaptiveCacheFixture AdaptiveCacheRuntimeFixture(int dependencies) => AdaptiveCacheFixtures.GetOrAdd(dependencies, count => new(() =>
+    private static AdaptiveCacheFixture AdaptiveCacheRuntimeFixture(int dependencies, ClosedServiceCacheMode? mode = ClosedServiceCacheMode.LazyBlocks) => AdaptiveCacheFixtures.GetOrAdd((dependencies, mode), selection => new(() =>
     {
+        var (count, cacheMode) = selection;
         var routes = count - 1;
         var source = new StringBuilder("using System;using System.Threading;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;using Probe=global::Zendiator.Generator.Tests.AdaptiveCacheProbe;namespace Adaptive{");
         for (var i = 0; i < routes; i++)
@@ -69,7 +70,9 @@ public sealed partial class GeneratorTests
         source.Append(",IDisposable{private readonly Probe _p;public Shared(Probe p){_p=p;p.Construct(this,-1);}");
         for (var i = 0; i < routes; i++)
             source.Append("public R").Append(i).Append(" Before(R").Append(i).Append(" r,CancellationToken t){_p.Before(this,").Append(i).Append(");return r;}");
-        source.Append("public void Dispose()=>_p.Release(this);}[ZendiatorComposition(\"adaptive\")]public sealed class Reads;public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<Reads>(c=>{");
+        source.Append("public void Dispose()=>_p.Release(this);}[ZendiatorComposition(\"adaptive\"");
+        if (cacheMode is { } selectedMode) source.Append(",ClosedServiceCache=ClosedServiceCacheMode.").Append(selectedMode);
+        source.Append(")]public sealed class Reads;public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<Reads>(c=>{");
         for (var i = 0; i < routes; i++)
             source.Append("c.Handlers<R").Append(i).Append(">(DispatchFamily.SendSync,typeof(H").Append(i).Append("));c.Pipeline<R").Append(i).Append(">(DispatchFamily.SendSync,Stage.Hook<Shared>());");
         source.Append("});public static object Create(IServiceProvider p)=>new global::Adaptive.Generated.Reads.Zendiator(p);public static object NewService(Probe p,int index)=>index switch{-1=>new Shared(p),");
@@ -80,7 +83,8 @@ public sealed partial class GeneratorTests
         for (var i = 0; i < routes; i++) source.Append("Send(m,").Append(i).Append(",value);");
         source.Append("}}}");
         var input = source.ToString();
-        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(input, "AdaptiveCache_" + count + "_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        var policy = cacheMode?.ToString() ?? "Default";
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(input, "AdaptiveCache_" + count + "_" + policy + "_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
         var generated = driver.GetRunResult().Results.Single().GeneratedSources;
         var compilerDiagnostics = output.GetDiagnostics();
         using var bytes = new MemoryStream();
@@ -88,7 +92,7 @@ public sealed partial class GeneratorTests
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence))
         {
-            var folder = Path.Combine(evidence, "generated-artifacts", "adaptive-closed-" + count);
+            var folder = Path.Combine(evidence, "generated-artifacts", "adaptive-closed-" + count + "-" + policy);
             Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, "input.cs"), input);
             foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
@@ -97,6 +101,7 @@ public sealed partial class GeneratorTests
             {
                 output.AssemblyName,
                 dependencies = count,
+                policy,
                 routes,
                 emitted.Success,
                 diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), message = d.GetMessage() }),
@@ -123,6 +128,83 @@ public sealed partial class GeneratorTests
     private static FieldInfo[] AdaptiveCacheBlocks(AdaptiveCacheFixture fixture) => fixture.Mediator
         .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
         .Where(field => field.FieldType.DeclaringType == fixture.Mediator && field.FieldType.IsClass).ToArray();
+
+    [Theory]
+    [InlineData(3, null)]
+    [InlineData(3, ClosedServiceCacheMode.Inline)]
+    [InlineData(3, ClosedServiceCacheMode.LazyBlocks)]
+    [InlineData(64, null)]
+    [InlineData(64, ClosedServiceCacheMode.Inline)]
+    [InlineData(64, ClosedServiceCacheMode.LazyBlocks)]
+    public void Closed_cache_layout_is_selected_explicitly_without_changing_lazy_capture(int dependencies, ClosedServiceCacheMode? mode)
+    {
+        var fixture = AdaptiveCacheRuntimeFixture(dependencies, mode);
+        var blocks = AdaptiveCacheBlocks(fixture);
+        var blocked = mode == ClosedServiceCacheMode.LazyBlocks;
+        Assert.Equal(blocked ? (dependencies + 15) / 16 : 0, blocks.Length);
+        var slots = blocked
+            ? blocks.SelectMany(block => block.FieldType.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)).ToArray()
+            : fixture.Mediator.GetFields(BindingFlags.Instance | BindingFlags.NonPublic).Where(field => field.Name.StartsWith("_service_", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(dependencies, slots.Length);
+        Assert.Contains(slots, slot => slot.FieldType == fixture.Hook);
+        Assert.Contains(slots, slot => slot.FieldType == fixture.Handlers[0]);
+        Assert.Single(slots, slot => slot.FieldType == typeof(object));
+        var probe = new AdaptiveCacheProbe();
+        IServiceCollection services = new ServiceCollection();
+        services.AddSingleton(probe);
+        fixture.Register(services);
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+        using var scope = provider.CreateScope();
+        var mediator = scope.ServiceProvider.GetRequiredService(CanonicalEntryService(fixture.Mediator));
+        Assert.Empty(probe.Created);
+        Assert.Equal(42, fixture.Send(mediator, 0, 42));
+        Assert.Equal(43, fixture.Send(mediator, 0, 43));
+        Assert.Equal(new[] { -1, 0 }, probe.Created.Select(call => call.Index));
+        Assert.Same(probe.BeforeCalls[0].Receiver, probe.BeforeCalls[1].Receiver);
+        Assert.Same(probe.Calls[0].Receiver, probe.Calls[1].Receiver);
+        Assert.Empty(probe.Released);
+    }
+
+    [Fact]
+    public void Closed_cache_choice_reaches_standalone_and_mixed_Stream_compositions()
+    {
+        const string source = """
+            using System.Collections.Generic;using System.Threading;using System.Threading.Tasks;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;
+            namespace CacheLayout{
+            public sealed record Items:IStreamRequest<int>;
+            public sealed class Cursor:IAsyncEnumerator<int>{public int Current=>42;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}
+            [ZendiatorHandler]public sealed class StreamHandler:IStreamSourceHandler<Items,int,Cursor>{public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t)=>new(new Cursor());}
+            public sealed record Ping:ISyncRequest<int>;
+            [ZendiatorHandler]public sealed class SendHandler:ISyncRequestHandler<Ping,int>{public int Handle(Ping r,CancellationToken t)=>42;}
+            [ZendiatorComposition("standalone",ClosedServiceCache=ClosedServiceCacheMode.LazyBlocks)]public sealed class Standalone;
+            [ZendiatorComposition("mixed",ClosedServiceCache=ClosedServiceCacheMode.LazyBlocks)]public sealed class Mixed;
+            [ZendiatorComposition("inline")]public sealed class Inline;
+            public static class Bridge{
+            public static IServiceCollection RegisterStream(IServiceCollection s)=>s.AddZendiator<Standalone>(c=>{c.Handlers<Items>(DispatchFamily.Stream,typeof(StreamHandler));c.Pipeline<Items>(DispatchFamily.Stream);});
+            public static IServiceCollection RegisterMixed(IServiceCollection s)=>s.AddZendiator<Mixed>(c=>{c.Handlers<Items>(DispatchFamily.Stream,typeof(StreamHandler));c.Pipeline<Items>(DispatchFamily.Stream);c.Handlers<Ping>(DispatchFamily.SendSync,typeof(SendHandler));});
+            public static IServiceCollection RegisterInline(IServiceCollection s)=>s.AddZendiator<Inline>(c=>{c.Handlers<Items>(DispatchFamily.Stream,typeof(StreamHandler));c.Pipeline<Items>(DispatchFamily.Stream);c.Handlers<Ping>(DispatchFamily.SendSync,typeof(SendHandler));});
+            }}
+            """;
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "CacheLayout_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error));
+        foreach (var (marker, dependencies, lazy) in new[] { ("Standalone", 1, true), ("Mixed", 2, true), ("Inline", 2, false) })
+        {
+            var mediator = output.GetTypeByMetadataName("CacheLayout.Generated." + marker + ".Zendiator")!;
+            var block = mediator.GetTypeMembers().Where(type => type.Name.StartsWith("ServiceBlock_", StringComparison.Ordinal)).ToArray();
+            Assert.Equal(lazy ? 1 : 0, block.Length);
+            var slots = lazy ? Assert.Single(block).GetMembers().OfType<IFieldSymbol>() : mediator.GetMembers().OfType<IFieldSymbol>();
+            Assert.Equal(dependencies, slots.Count(field => field.Name.StartsWith("_service_", StringComparison.Ordinal)));
+        }
+        var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
+        if (!string.IsNullOrEmpty(evidence))
+        {
+            var folder = Path.Combine(evidence, "generated-artifacts", "closed-cache-stream-layout");
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(Path.Combine(folder, "input.cs"), source);
+            foreach (var file in driver.GetRunResult().Results.Single().GeneratedSources) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
+        }
+    }
 
     [Fact]
     public async Task Adaptive_closed_cache_shares_cross_block_transient_winners_and_preserves_DI_ownership()
@@ -287,9 +369,9 @@ public sealed partial class GeneratorTests
         public double WarmDispatchBytesPerOperation => WarmDispatchBytesTotal / (double)Repetitions;
     }
 
-    private static AdaptiveCacheAllocation AdaptiveCacheAllocations(int dependencies)
+    private static AdaptiveCacheAllocation AdaptiveCacheAllocations(int dependencies, ClosedServiceCacheMode mode)
     {
-        var fixture = AdaptiveCacheRuntimeFixture(dependencies);
+        var fixture = AdaptiveCacheRuntimeFixture(dependencies, mode);
         var probe = new AdaptiveCacheProbe { Record = false };
         var values = fixture.Handlers.Select((type, i) => (type, value: fixture.NewService(probe, i))).ToDictionary(pair => pair.type, pair => pair.value);
         values.Add(fixture.Hook, fixture.NewService(probe, -1));
@@ -325,8 +407,8 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Adaptive_closed_cache_construction_and_retained_capture_cost_follow_touched_blocks()
     {
-        var small = AdaptiveCacheAllocations(32);
-        var large = AdaptiveCacheAllocations(64);
+        var small = AdaptiveCacheAllocations(32, ClosedServiceCacheMode.Inline);
+        var large = AdaptiveCacheAllocations(64, ClosedServiceCacheMode.LazyBlocks);
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence))
         {

@@ -5,12 +5,10 @@ namespace Zendiator.SourceGenerator;
 
 internal static class CanonicalClosedServiceCacheEmitter
 {
-    private const int InlineLimit = 32;
     private const int BlockSize = 16;
 
-    internal static void AppendMembers(StringBuilder b, CanonicalServiceDependency[] closed)
+    internal static void AppendMembers(StringBuilder b, CanonicalServiceDependency[] closed, bool blocked)
     {
-        var blocked = closed.Length > InlineLimit;
         if (blocked)
         {
             for (var start = 0; start < closed.Length; start += BlockSize)

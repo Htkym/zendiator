@@ -46,6 +46,44 @@ returned. Synchronous changes to `AsyncLocal`, culture or `SynchronizationContex
 are visible to the caller. Other asynchronous failures arrive when awaiting the
 result. Put both the call and the await inside your `try` block.
 
+## Closed dependency storage
+
+Closed dependency slots are inline by default, at every composition size. This
+controls storage only: native DI activation stays lazy, and the Mediator reuses
+the first published successful instance without owning its disposal.
+
+For a composition known to touch few dependencies in short-lived scopes, select
+lazy blocks on its marker:
+
+```csharp
+[ZendiatorComposition("reads", ClosedServiceCache = ClosedServiceCacheMode.LazyBlocks)]
+public sealed class Reads;
+```
+
+`ClosedServiceCacheMode.Inline` explicitly selects the default. `LazyBlocks`
+groups at most 16 closed dependencies per block and allocates a block after its
+first successful native resolution. It applies to small compositions too; a
+composition with 1–16 closed dependencies uses one block, and one with no closed
+dependencies creates none. The choice is fixed during generation, with no
+layout branch added to Send. Undefined enum values produce ZEN0035.
+
+Compositions that previously selected blocks solely from their dependency count
+now use inline slots. Choose `LazyBlocks` explicitly when its tradeoff fits your
+workload. A prior Windows x64 comparison of lazy-block against inline storage,
+before this explicit option existed, used 64 dependencies. Sparse cold use
+touching one block allocated 336 B less per operation. A dense 63-send batch
+allocated 96 B more, and warm sparse dispatch had a 29.2% higher mean
+(+0.258 ns). These observations do not guarantee gains for sparse dependencies
+spread across blocks or frequent warm reuse. The block size is not an optimized
+boundary for every workload.
+
+Open generic captures use a separate cache, independent of this setting. It keeps
+up to four closed types before dictionary promotion. In a prior comparison
+against dictionary storage, a one-type cold scope allocated 488 B less;
+five-type cold promotion allocated 160 B more with an 8.35% higher mean.
+Four is not a universally optimal capacity,
+and these results do not establish a gain for all scopes.
+
 ## Stream execution
 
 The sample opens a named NumberCursor through IStreamSourceHandler. Dedicated Filter/Map
