@@ -79,7 +79,7 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
-    public async Task Native_stream_terminal_keeps_public_pull_context_boundaries_for_source_and_completed_async_hooks()
+    public async Task Native_stream_terminal_matches_public_pull_with_ordinary_source_and_completed_hook_context_flow()
     {
         var source = NativeStreamFixture("""
             c.Handlers<Plain>(DispatchFamily.Stream,typeof(Handler));c.Pipeline<Plain>(DispatchFamily.Stream);
@@ -139,7 +139,7 @@ public sealed partial class GeneratorTests
                 p.Trace.Clear();var terminalSink=new Sink(p,route);await consume(terminalSink).ConfigureAwait(false);
                 Check.That(Probe.Ambient.Value=="request","terminal source and cleanup changes do not escape into its caller");
                 Check.That(p.Trace.SequenceEqual(expected)&&terminalSink.Values.SequenceEqual(publicSink.Values),"terminal and public pull preserve the same callback context and results");
-                Check.That(p.Trace.Contains(route+"/open=request")&&p.Trace.Contains(route+"/move1=request"),"synchronous Open changes stay inside initialization");
+                Check.That(p.Trace.Contains(route+"/open=request")&&p.Trace.Contains(route+"/move1="+route+":open-change"),"synchronous Open changes reach the first Move within the same activation flow");
                 Check.That(p.Trace.Contains(route+"/sink1=request")&&p.Trace.Contains(route+"/move2=request"),"first Move changes stay inside the first-Move async boundary");
                 Check.That(p.Trace.Contains(route+"/sink2="+route+":move2")&&p.Trace.Contains(route+"/dispose="+route+":move3"),"later synchronous Move context flows to its sink and cleanup");
                 if(route=="mapped"){

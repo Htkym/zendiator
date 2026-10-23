@@ -106,6 +106,9 @@ internal static class CanonicalStreamFallbackEmitter
         var receiver = segment.Wrapper == null ? Storage(h.HandlerName, h.HandlerIsValueType)
             : Storage(segment.Wrapper.WrapperName, segment.Wrapper.WrapperIsValueType);
         var standalone = IsStandalone(model);
+        var parent = model.Segments.SingleOrDefault(s => s.Upstream == n);
+        var initialization = new StringBuilder();
+        EmitInitialization(initialization, model, segment, factory, receiver, referenceSource);
         var rootCheck = standalone ? "" : """
                             if (!global::System.Object.ReferenceEquals(_root, this) && _root.IsClosed)
                                 operation = MoveFailed(new global::System.ObjectDisposedException("Stream"));
@@ -159,7 +162,10 @@ internal static class CanonicalStreamFallbackEmitter
                         }
                         private async global::System.Threading.Tasks.ValueTask<bool> StartMoveAsync()
                         {
-                            try { await InitializeAsync().ConfigureAwait(false); }
+                            try
+                            {
+                                {{initialization}}
+                            }
                             catch (global::System.Exception error) { return await MoveFailed(error).ConfigureAwait(false); }
                             bool moved;
                             try { moved = await MoveCoreAsync().ConfigureAwait(false); }
@@ -213,27 +219,48 @@ internal static class CanonicalStreamFallbackEmitter
                         internal {{output}} ReadCurrentForTerminal() => {{(segment.Hooks.Count == 0 ? "ReadSource(ref _source)" : "_current")}};
                 """);
         }
-        else
+        else if (parent is { } openingParent)
         {
-            b.AppendLine("""
-                        internal async global::System.Threading.Tasks.ValueTask OpenForMiddlewareAsync()
+            var port = "opening";
+            while (model.Generic?.Parameters.Contains(port) == true) port = "_" + port;
+            b.AppendLine($$"""
+                        internal async global::System.Threading.Tasks.ValueTask<global::System.Collections.Generic.IAsyncEnumerator<{{output}}>> OpenForMiddlewareAsync(Upstream{{openingParent.Id}} {{port}})
                         {
-                            if (!TryBeginMove()) throw new global::System.ObjectDisposedException("Stream");
                             try
                             {
-                                if (_root.IsClosed) throw new global::System.ObjectDisposedException("Stream");
-                                if (TryStart()) await InitializeAsync().ConfigureAwait(false);
+                                if (!TryBeginMove()) throw new global::System.ObjectDisposedException("Stream");
+                                try
+                                {
+                                    if (_root.IsClosed) throw new global::System.ObjectDisposedException("Stream");
+                                    if (TryStart())
+                                    {
+                                        {{initialization}}
+                                    }
+                                }
+                                catch (global::System.Exception error) { await PublishMove(MoveFailed(error)).ConfigureAwait(false); throw; }
+                                InitializationSucceeded();
+                                return this;
                             }
-                            catch (global::System.Exception error) { await PublishMove(MoveFailed(error)).ConfigureAwait(false); throw; }
-                            InitializationSucceeded();
+                            finally { {{port}}.ReleaseOpening(); }
                         }
                 """);
         }
-        b.AppendLine("""
-                        private async global::System.Threading.Tasks.ValueTask InitializeAsync()
-                        {
-                            _services.GetService(typeof(global::System.IServiceProvider));
-            """);
+        var cursorType = "TSourceCursor";
+        while (model.Generic?.Parameters.Contains(cursorType) == true) cursorType = "_" + cursorType;
+        b.AppendLine("private static global::System.Threading.Tasks.ValueTask<bool> MoveSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.MoveNextAsync();");
+        b.AppendLine("private static " + input + " ReadSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.Current;");
+        b.AppendLine("private static global::System.Threading.Tasks.ValueTask DisposeSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.DisposeAsync();");
+        EmitMove(b, segment);
+        EmitCleanup(b, segment, factory, referenceSource);
+        b.AppendLine("}");
+        if (segment.Upstream is { } upstream) EmitUpstream(b, h, segment, upstream);
+    }
+
+    private static void EmitInitialization(StringBuilder b, CanonicalStreamFallbackModel model,
+        CanonicalStreamFallbackSegment segment, BoundAsyncFactoryEmission? factory, string receiver, bool referenceSource)
+    {
+        var h = model.Handler;
+        b.AppendLine("_services.GetService(typeof(global::System.IServiceProvider));");
         for (var i = segment.Hooks.Count - 1; i >= 0; i--)
             if (segment.Hooks[i].Factory is { } hookFactory)
                 Acquire(b, hookFactory, Storage(segment.Hooks[i].HookName, segment.Hooks[i].HookIsValueType), "_hook" + i);
@@ -243,7 +270,7 @@ internal static class CanonicalStreamFallbackEmitter
             var wrapperValue = factory == null ? Resolve("_services", wrapper.WrapperName, wrapper.ContractName)
                 : "(" + wrapper.ContractName + ")_receiver!";
             b.AppendLine("var wrapper = " + wrapperValue + ";");
-            b.AppendLine("_upstream = new Upstream" + n + "(_services, this, _root);");
+            b.AppendLine("_upstream = new Upstream" + segment.Id + "(_services, this, _root);");
             b.AppendLine("_source = await wrapper." + wrapper.MethodName + "(_request, _upstream, Token).ConfigureAwait(false)");
             b.AppendLine("""    ?? throw new global::System.InvalidOperationException("A Stream middleware returned a null cursor.");""");
         }
@@ -255,16 +282,6 @@ internal static class CanonicalStreamFallbackEmitter
             if (!h.CursorIsValueType) b.AppendLine("""if (_source is null) throw new global::System.InvalidOperationException("A Stream handler returned a null cursor.");""");
         }
         if (!referenceSource) b.AppendLine("_acquired = true;");
-        b.AppendLine("}");
-        var cursorType = "TSourceCursor";
-        while (model.Generic?.Parameters.Contains(cursorType) == true) cursorType = "_" + cursorType;
-        b.AppendLine("private static global::System.Threading.Tasks.ValueTask<bool> MoveSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.MoveNextAsync();");
-        b.AppendLine("private static " + input + " ReadSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.Current;");
-        b.AppendLine("private static global::System.Threading.Tasks.ValueTask DisposeSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.DisposeAsync();");
-        EmitMove(b, segment);
-        EmitCleanup(b, segment, factory, referenceSource);
-        b.AppendLine("}");
-        if (segment.Upstream is { } upstream) EmitUpstream(b, h, segment, upstream);
     }
 
     private static bool IsStandalone(CanonicalStreamFallbackModel model) =>
@@ -362,15 +379,11 @@ internal static class CanonicalStreamFallbackEmitter
                                 {{(handler.RequestIsValueType ? "" : "global::System.ArgumentNullException.ThrowIfNull(request);")}}
                                 var cursor = new Cursor{{upstream}}(services, request, token, default, root);
                                 _active = cursor;
-                                return OpenCursorAsync(cursor);
+                                return cursor.OpenForMiddlewareAsync(this);
                             }
                             catch { global::System.Threading.Volatile.Write(ref _opening, 0); throw; }
                         }
-                        private async global::System.Threading.Tasks.ValueTask<global::System.Collections.Generic.IAsyncEnumerator<{{item}}>> OpenCursorAsync(Cursor{{upstream}} cursor)
-                        {
-                            try { await cursor.OpenForMiddlewareAsync().ConfigureAwait(false); return cursor; }
-                            finally { global::System.Threading.Volatile.Write(ref _opening, 0); }
-                        }
+                        internal void ReleaseOpening() => global::System.Threading.Volatile.Write(ref _opening, 0);
                         internal async global::System.Threading.Tasks.ValueTask DisposeActiveAsync()
                         {
                             var active = _active; _active = null;
