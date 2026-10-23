@@ -41,9 +41,9 @@ internal static class ContractNames
 
     internal const string StreamRequest = "Zendiator.IStreamRequest`1";
 
-    internal const string StreamHandler = "Zendiator.IStreamRequestHandler`2";
+    internal const string StreamMiddleware = "Zendiator.IStreamMiddleware`2";
 
-    internal const string StreamBehavior = "Zendiator.IStreamPipelineBehavior`2";
+    internal const string StreamSink = "Zendiator.IStreamSink`1";
 
-    internal const string StreamValidator = "Zendiator.IStreamRequestValidator`1";
+    internal const string StreamHandler = "Zendiator.IStreamSourceHandler`3";
 }

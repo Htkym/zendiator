@@ -19,12 +19,14 @@ on:
 
 env:
   RELEASE_TAG: ${{ github.ref_name }}
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
 
 jobs:
   build-and-pack:
     runs-on: windows-latest
     permissions:
       contents: read
+      actions: read
     outputs:
       source-commit: ${{ steps.source.outputs.commit }}
     steps:
@@ -35,9 +37,15 @@ jobs:
             throw "tag must look like v<version>, e.g. v0.1.0-preview.1"
           }
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.ref }}
+          fetch-depth: 0
+      - name: Verify release tag equals current reviewed main
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/Test-MainRelease.ps1 -CiWorkflow ci.yml -ReleaseTag $env:RELEASE_TAG -RequireTag
 
       - name: Version matches tag
         id: source
@@ -50,7 +58,7 @@ jobs:
           "commit=$(git rev-parse HEAD)" >> $env:GITHUB_OUTPUT
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
@@ -166,7 +174,7 @@ jobs:
           $manifest | ConvertTo-Json -Depth 6 | Set-Content artifacts/packages/manifest.json
 
       - name: Upload verified artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: nuget-packages
           path: |
@@ -180,10 +188,19 @@ jobs:
     needs: build-and-pack
     permissions:
       contents: read
+      actions: read
       id-token: write # Required for the GitHub OIDC token used by NuGet/login.
     steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Verify release tag equals current reviewed main
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/Test-MainRelease.ps1 -CiWorkflow ci.yml -ReleaseTag $env:RELEASE_TAG -RequireTag
       - name: Download verified artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: nuget-packages
           path: artifacts/packages

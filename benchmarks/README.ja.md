@@ -43,3 +43,9 @@ python benchmarks/Zendiator.UseCaseBenchmarks/run_interleaved.py --group all --o
 計画を確認した後、`--dry-run` を外すと測定します。`--max-cases 2` なら2ケースだけの途中結果を作れます。同じ出力先に `--resume` を指定し、`--max-cases` を外すと続行します。同じcheckout、commit、SDK、matrixと、保存した実行物の有効な証明が必要です。ビルドや別の測定と同時に実行しません。checkout内に別のcheckoutがあるとBDNが複数のprojectを見つけるため、独立したcheckoutを使います。
 
 fixtureとmatrixは [Zendiator.UseCaseBenchmarks](Zendiator.UseCaseBenchmarks) にあります。ケースを意図して変える場合だけ `Generate.ps1` / `build_case_lists.py` で再生成し、差分と正しさのgateを確認します。`Run-Jit.ps1` や `--breakdown` はコード・割り当ての別診断で、競合ライブラリとの時間比較には混ぜません。
+
+## 新Stream protocolの準備
+
+現在のZ側fixtureは名前付きtyped cursorとStream専用canonical compositionを使います。peer/Directのclass本体とWork.Streamは保持します。Full/EarlyBreakはStreamAsyncの標準列挙、FullTyped/EarlyBreakTypedはStreamSource(...).ConsumeAsync(...)で、fixture内のclass sinkを逐次再利用します。typedの計画値はIAsyncEnumerableではなく、消費ごとに専用ownerを作ります。このDI/configとprotocolの違いをhistorical/w64の証拠と区別してください。
+
+Screeningは新protocolの公開Mediatorと手書き列挙referenceを使い、旧wrapper fixtureをlarge-middleware-sessionへ移します。旧protocolのartifactとは分け、標準列挙、typed terminal、HTTPをそれぞれ対象の版・条件・実測結果で評価してください。API移行やsource変更だけでは高速化の根拠にならず、typed消費による時間・割当の優位を保証しません。

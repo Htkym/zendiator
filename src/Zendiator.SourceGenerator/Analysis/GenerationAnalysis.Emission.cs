@@ -36,13 +36,11 @@ internal sealed partial class GenerationAnalysis
         return new GenerationRoutes(
             new RequestRoutes(new(routes.Select(factory.Request)), new(multiRoutes.Select(factory.Multiple))),
             new RequestRoutes(new(syncRoutes.Select(factory.Request)), new(syncMultiRoutes.Select(factory.Multiple))),
-            new(notifications.Select(factory.Notification)),
-            new(streamRoutes.Select(factory.Stream)));
+            new(notifications.Select(factory.Notification)));
     }
 
     private GenerationContracts CreateGenerationContracts() => new(
         new RequestContracts(handlerDefinition, behaviorDefinition, voidHandlerDefinition, voidBehaviorDefinition),
         new RequestContracts(syncHandlerDefinition, syncBehaviorDefinition, syncVoidHandlerDefinition, syncVoidBehaviorDefinition),
-        new PipelineContracts(streamHandlerDefinition, streamBehaviorDefinition),
-        notificationHandlerDefinition, streamValidatorDefinition);
+        notificationHandlerDefinition);
 }

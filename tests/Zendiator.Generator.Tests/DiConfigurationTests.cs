@@ -8,6 +8,52 @@ namespace Zendiator.Generator.Tests;
 
 public sealed class DiConfigurationTests
 {
+    [Fact]
+    public void Interception_connection_guard_fixes_message_and_location_for_unsupported_call_target()
+    {
+        const string member = "ZendiatorServiceCollectionExtensions.AddZendiator";
+        const string message = "AddZendiator call cannot be connected to generated registration. Keep the call inside an ordinary method body.";
+        foreach (var parenthesized in new[] { true, false })
+        {
+            var call = (parenthesized ? "((" + member + "))" : member) + "(services)";
+            var source = Head + "public static class Startup { public static IServiceCollection Register(IServiceCollection services)=>" + call + "; }";
+            var input = Compilation(source, "ConnectionGuard"); var tree = input.SyntaxTrees.Single();
+            Assert.Empty(input.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+            var invocation = Assert.Single(tree.GetRoot().DescendantNodes().OfType<InvocationExpressionSyntax>());
+            var target = invocation.Expression;
+            if (parenthesized)
+            {
+                target = Assert.IsType<ParenthesizedExpressionSyntax>(target).Expression;
+                target = Assert.IsType<ParenthesizedExpressionSyntax>(target).Expression;
+            }
+            Assert.Equal(member, Assert.IsType<MemberAccessExpressionSyntax>(target).ToString());
+            var semantic = input.GetSemanticModel(tree); var method = Assert.IsAssignableFrom<IMethodSymbol>(semantic.GetSymbolInfo(invocation).Symbol);
+            Assert.Equal("AddZendiator", method.Name); Assert.Equal(MethodKind.Ordinary, method.MethodKind);
+            Assert.Equal("ZendiatorServiceCollectionExtensions", method.ContainingType.Name);
+            Assert.Equal("Zendiator.DependencyInjection", method.ContainingNamespace.ToDisplayString());
+            Assert.True(SymbolEqualityComparer.Default.Equals(method.ContainingAssembly,
+                input.GetTypeByMetadataName("Zendiator.DependencyInjection.ZendiatorConfiguration")!.ContainingAssembly));
+            var location = semantic.GetInterceptableLocation(invocation);
+            var result = new GenerationAnalysis(System.Collections.Immutable.ImmutableArray<INamedTypeSymbol>.Empty,
+                System.Collections.Immutable.ImmutableArray.Create(invocation), input, CancellationToken.None).Generate();
+            if (parenthesized)
+            {
+                Assert.Null(location); var diagnostic = Assert.Single(result.Diagnostics);
+                Assert.Equal("ZEN0020", diagnostic.Id); Assert.Equal(message, diagnostic.GetMessage());
+                Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+                Assert.Same(tree, diagnostic.Location.SourceTree);
+                Assert.Equal(source.IndexOf(call, StringComparison.Ordinal), diagnostic.Location.SourceSpan.Start);
+                Assert.Equal(call.Length, diagnostic.Location.SourceSpan.Length);
+                Assert.Equal(call, tree.GetText().ToString(diagnostic.Location.SourceSpan));
+                Assert.Null(result.Model); Assert.Null(result.Target);
+            }
+            else
+            {
+                Assert.NotNull(location); Assert.Empty(result.Diagnostics); Assert.NotNull(result.Model); Assert.NotNull(result.Target);
+            }
+        }
+    }
+
     private const string Services = "global::Microsoft.Extensions.DependencyInjection.IServiceCollection";
     private const string Head = "using Zendiator; using Zendiator.DependencyInjection; using Microsoft.Extensions.DependencyInjection; using System; using System.Threading; using System.Threading.Tasks; namespace App; ";
     private const string Fixtures = """
@@ -64,59 +110,54 @@ public sealed class DiConfigurationTests
         return driver.GetRunResult();
     }
 
-
-    private const string ValidatorFixtures = """
-        public sealed record Items : IStreamRequest<int>;
-        public sealed class ItemsHandler : IStreamRequestHandler<Items,int>
-        {
-            public async System.Collections.Generic.IAsyncEnumerable<int> HandleAsync(Items r, CancellationToken c)
-            { await Task.Yield(); yield return 1; }
-        }
-        public sealed class V1 : IStreamRequestValidator<Items> { public void Validate(Items r) {} }
-        public sealed class V2 : IStreamRequestValidator<Items> { public void Validate(Items r) {} }
-        """;
-
     [Theory]
-    [InlineData("V2", 0)]
-    [InlineData("V1", 1)]
-    public void Validator_type_or_order_conflicts_are_structural(string secondType, int secondOrder)
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Legacy_di_keeps_its_routes_beside_unselected_or_separately_selected_marked_handlers(bool selected)
     {
-        var source = Head + ValidatorFixtures + $$"""
-            public static class App
-            {
-                public static void First(IServiceCollection services) => services.AddZendiator(c => c.AddStreamRequestValidator(typeof(V1), 0));
-                public static void Second(IServiceCollection services) => services.AddZendiator(c => c.AddStreamRequestValidator(typeof({{secondType}}), {{secondOrder}}));
+        var source = Head + Fixtures + """
+            public sealed record Ping : IRequest<int>;
+            public sealed class PingHandler : IRequestHandler<Ping,int> {
+                public ValueTask<int> HandleAsync(Ping request, CancellationToken ct) => new(1);
+            }
+            public sealed record NewPing : IRequest<int>;
+            public sealed record NewVoid : IRequest;
+            public sealed record NewSync : ISyncRequest<int>;
+            public sealed record NewSyncVoid : ISyncRequest;
+            public sealed record NewStream : IStreamRequest<int>;
+            [ZendiatorHandler] public sealed class Marked : IRequestHandler<NewPing,int>, IRequestHandler<NewVoid>,
+                ISyncRequestHandler<NewSync,int>, ISyncRequestHandler<NewSyncVoid>, IStreamSourceHandler<NewStream,int,Marked.Cursor>, INotificationHandler<UserCreated> {
+                public ValueTask<int> HandleAsync(NewPing request, CancellationToken ct) => new(2);
+                public ValueTask HandleAsync(NewVoid request, CancellationToken ct) => default;
+                public int Handle(NewSync request, CancellationToken ct) => 3;
+                public void Handle(NewSyncVoid request, CancellationToken ct) {}
+                public ValueTask<Cursor> OpenAsync(NewStream request, CancellationToken ct) => throw new NotImplementedException();
+                public sealed class Cursor:System.Collections.Generic.IAsyncEnumerator<int>{public int Current=>0;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}
+                public ValueTask HandleAsync(UserCreated request, CancellationToken ct) => default;
+            }
+            [ZendiatorComposition("reads")] public sealed class Reads;
+            public static class Startup {
+                public static void Legacy(IServiceCollection services) => services.AddZendiator(c => {
+                    c.Namespace = "Legacy.Generated";
+                    c.AddNotification<UserCreated>();
+                });
             }
             """;
-        var result = Run(source, false);
-        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "ZEN0016");
-        Assert.Empty(result.GeneratedTrees);
+        if (selected) source += "public static class NewStartup { public static void Register(IServiceCollection services) => services.AddZendiator<Reads>(c => c.UseLocalHandlers()); }";
+        var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source), out var output, out var diagnostics);
+        if (selected) Assert.Equal("ZEN0035", Assert.Single(diagnostics).Id);
+        else Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error && d.Id != "ZEN0035"));
+        var generated = driver.GetRunResult().GeneratedTrees.Single(t => t.ToString().Contains("namespace Legacy.Generated;")).ToString();
+        Assert.Contains("global::App.PingHandler", generated);
+        Assert.Contains("global::App.AuditHandler", generated);
+        Assert.Contains("global::App.EmailHandler", generated);
+        Assert.DoesNotContain("global::App.Marked", generated);
+        Assert.DoesNotContain("global::App.NewPing", generated);
+        Assert.DoesNotContain("global::App.NewSync", generated);
+        Assert.DoesNotContain("global::App.NewStream", generated);
     }
 
-    [Fact]
-    public void Changed_validator_registration_refreshes_the_incremental_model_and_rejects_mixed_sources()
-    {
-        var source = Head + ValidatorFixtures + """
-            public static class App
-            {
-                public static void Register(IServiceCollection services) => services.AddZendiator(c => c.AddStreamRequestValidator(typeof(V1), 0));
-            }
-            """;
-        var driver = Driver().RunGenerators(Compilation(source));
-        var first = driver.GetRunResult().GeneratedTrees.Single(tree => tree.ToString().Contains("interface IZendiator")).ToString();
-        driver = driver.RunGeneratorsAndUpdateCompilation(Compilation(source.Replace("typeof(V1), 0", "typeof(V2), 1")), out var output, out var diagnostics);
-        Assert.Empty(diagnostics.Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
-        Assert.Empty(output.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
-        var second = driver.GetRunResult().GeneratedTrees.Single(tree => tree.ToString().Contains("interface IZendiator")).ToString();
-        Assert.NotEqual(first, second);
-        Assert.Contains("typeof(global::App.V2)", second);
-        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["SourceEmission"].SelectMany(step => step.Outputs),
-            item => Assert.Equal(IncrementalStepRunReason.Modified, item.Reason));
-        var mixed = source.Replace("namespace App;", "[assembly: StreamRequestValidator(typeof(App.V1))] namespace App;");
-        Assert.Contains(Run(mixed, false).Diagnostics, diagnostic => diagnostic.Id == "ZEN0015");
-        var duplicate = source.Replace("c => c.AddStreamRequestValidator(typeof(V1), 0)", "c => { c.AddStreamRequestValidator(typeof(V1), 0); c.AddStreamRequestValidator(typeof(V2), 0); }");
-        Assert.Contains(Run(duplicate, false).Diagnostics, diagnostic => diagnostic.Id == "ZEN0024");
-    }
 
     [Fact]
     public void Moving_registration_refreshes_interceptors_but_reuses_mediator_emission()
@@ -292,6 +333,71 @@ public sealed class DiConfigurationTests
         Assert.Empty(result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error));
         var mediator = result.GeneratedTrees.Single(t => t.ToString().Contains("namespace Foo.Generated;")).ToString();
         Assert.Contains("interface IZendiator", mediator);
+    }
+
+    [Fact]
+    public void Ordered_list_recording_copies_inputs_preserves_order_and_freezes_with_its_snapshot()
+    {
+        var configuration = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+        var stages = new[] { Stage.Hook<object>(), Stage.Wrapper<string>() };
+        var handlers = new[] { typeof(int), typeof(Guid) };
+        configuration.Pipeline<object>(DispatchFamily.SendAllAsync, stages);
+        configuration.Handlers<object>(DispatchFamily.SendAllAsync, handlers);
+        stages[0] = Stage.Hook<DateTime>();
+        handlers[0] = typeof(DateTime);
+        var snapshot = configuration.Snapshot();
+        Assert.Equal(new[] { typeof(object), typeof(string) }, snapshot.Pipelines[0].Stages.Select(s => s.Type));
+        Assert.Equal(new[] { typeof(int), typeof(Guid) }, snapshot.RouteHandlers[0].Handlers.Select(e => e.Type));
+        Assert.Throws<NotSupportedException>(() => ((IList<Stage>)snapshot.Pipelines[0].Stages)[0] = default);
+        Assert.Throws<NotSupportedException>(() => ((IList<HandlerEntry>)snapshot.RouteHandlers[0].Handlers)[0] = typeof(DateTime));
+        Assert.Throws<InvalidOperationException>(() => configuration.Pipeline<object>());
+        Assert.Throws<InvalidOperationException>(() => configuration.Handlers<object>(DispatchFamily.Notification));
+        var other = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+        other.Pipeline<object>(DispatchFamily.SendAllAsync, Stage.Wrapper<string>(), Stage.Hook<object>());
+        other.Handlers<object>(DispatchFamily.SendAllAsync, typeof(Guid), typeof(int));
+        Assert.NotEqual(snapshot.GetFingerprint(), other.Snapshot().GetFingerprint());
+        var invalid = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+        Assert.Throws<ArgumentException>(() => invalid.Pipeline<object>(default(Stage)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => invalid.Handlers<object>((DispatchFamily)999));
+    }
+
+    [Fact]
+    public void Handler_factory_entry_recording_copies_factory_identity_and_freezes_authoritative_entries()
+    {
+        var configuration = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+        var rest = new[] { HandlerEntry.Session<string, Uri>(), HandlerEntry.Service<Guid>() };
+        configuration.Handlers<object>(DispatchFamily.SendAllAsync, typeof(int), rest);
+        rest[0] = HandlerEntry.Service<DateTime>();
+        var snapshot = configuration.Snapshot(); var entries = snapshot.RouteHandlers[0].Handlers;
+        Assert.Equal(new[] { typeof(int), typeof(string), typeof(Guid) }, entries.Select(e => e.Type));
+        Assert.Equal(new Type?[] { null, typeof(Uri), null }, entries.Select(e => e.FactoryType));
+        Assert.Throws<NotSupportedException>(() => ((IList<HandlerEntry>)entries)[1] = default);
+        Assert.Throws<InvalidOperationException>(() => configuration.Handlers<object>(DispatchFamily.SendAsync, HandlerEntry.Service<object>()));
+        var invalid = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+        Assert.Throws<ArgumentException>(() => invalid.Handlers<object>(DispatchFamily.SendAsync, default(HandlerEntry)));
+        Assert.Throws<ArgumentNullException>(() => HandlerEntry.Service(null!));
+    }
+
+    [Fact]
+    public void Handler_and_Stage_factory_identity_changes_fingerprint_while_plain_service_spelling_is_equivalent()
+    {
+        string HandlerFingerprint(HandlerEntry entry)
+        {
+            var c = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+            c.Handlers<object>(DispatchFamily.SendAsync, entry); return c.Snapshot().GetFingerprint();
+        }
+        string StageFingerprint(Stage stage)
+        {
+            var c = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+            c.Pipeline<object>(DispatchFamily.SendAsync, stage); return c.Snapshot().GetFingerprint();
+        }
+        var plain = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+        plain.Handlers<object>(DispatchFamily.SendAsync, typeof(object));
+        Assert.Equal(plain.Snapshot().GetFingerprint(), HandlerFingerprint(HandlerEntry.Service<object>()));
+        Assert.NotEqual(HandlerFingerprint(HandlerEntry.Session<object, string>()), HandlerFingerprint(HandlerEntry.Session<object, Uri>()));
+        Assert.NotEqual(HandlerFingerprint(HandlerEntry.Service<object>()), HandlerFingerprint(HandlerEntry.Session<object, string>()));
+        Assert.NotEqual(StageFingerprint(Stage.Hook<object, string>()), StageFingerprint(Stage.Hook<object, Uri>()));
+        Assert.NotEqual(StageFingerprint(Stage.Hook<object>()), StageFingerprint(Stage.Hook<object, string>()));
     }
 
     [Fact]

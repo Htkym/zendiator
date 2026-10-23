@@ -115,6 +115,30 @@ class ArtifactContracts(unittest.TestCase):
             self.assertEqual((row["Lifetime"], row["Count"], row["Asynchronous"]), ("", "", ""))
 
 
+class SendDiagnosticContracts(unittest.TestCase):
+    def test_diagnostic_rejects_other_workloads_and_resumable_partial_runs(self):
+        case = {"Type": "ZendiatorSend0", "Method": "Typed", "Lifetime": "Scoped"}
+        for group, cases, resume, partial in (("send", [case], False, None), ("custom", [dict(case, Method="ScopeK1")], False, None),
+                                             ("custom", [case], True, None), ("custom", [case], False, 1)):
+            with self.subTest(group=group, cases=cases), self.assertRaisesRegex(ValueError, "Send diagnostic"):
+                driver.send_diagnostic_profile("fixed", group, cases, resume, partial)
+
+    def test_fixed_cli_misconfiguration_or_short_report_cannot_pass_diagnostic_gate(self):
+        count = driver.SEND_DIAGNOSTIC_INVOCATIONS
+        display = f"Comparison(Affinity=00000001, InvocationCount={count}, IterationCount=12, IterationTime=500ms, LaunchCount=1, WarmupCount=20)"
+        points = [{"IterationMode": "Workload", "IterationStage": stage, "Operations": count, "Nanoseconds": 500000000}
+                  for stage, rows in (("Warmup", 20), ("Actual", 12)) for _ in range(rows)]
+        points.insert(0, {"IterationMode": "Overhead", "IterationStage": "Actual", "Operations": count, "Nanoseconds": 250000000})
+        result = {"DisplayInfo": display, "Measurements": points}
+        self.assertEqual(driver.check_send_diagnostic(result, "fixed")["actualRows"], 12)
+        for bad in ({"DisplayInfo": display.replace("InvocationCount=" + str(count), "InvocationCount=16"), "Measurements": points},
+                    {"DisplayInfo": display, "Measurements": points[:-1]},
+                    {"DisplayInfo": display, "Measurements": points + [dict(points[1], IterationStage="Pilot")]},
+                    {"DisplayInfo": display, "Measurements": [dict(x, Operations=16) for x in points]}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                driver.check_send_diagnostic(bad, "fixed")
+
+
 class ProcessIdentityContracts(unittest.TestCase):
     def test_current_process_identity_is_read_without_signals(self):
         identity = owned_process.process_identity(os.getpid())

@@ -3,7 +3,6 @@ using Zendiator.Sample.Contracts;
 
 namespace Zendiator.Sample.Application;
 
-/// <summary>Logging behavior for commands without a response.</summary>
 public sealed class CommandLoggingBehavior<TRequest>(ILogger<CommandLoggingBehavior<TRequest>> logger)
     : IPipelineBehavior<TRequest>
     where TRequest : IRequest

@@ -27,11 +27,6 @@ internal sealed partial class GenerationAnalysis
     private INamedTypeSymbol syncVoidBehaviorDefinition = null!;
     private INamedTypeSymbol syncMultiResponseDefinition = null!;
     private INamedTypeSymbol syncMultiVoidDefinition = null!;
-    private INamedTypeSymbol streamRequestDefinition = null!;
-    private INamedTypeSymbol streamHandlerDefinition = null!;
-    private INamedTypeSymbol streamBehaviorDefinition = null!;
-    private INamedTypeSymbol streamValidatorDefinition = null!;
-    private readonly List<(INamedTypeSymbol Type, int Order, Location Location)> streamValidators = new();
     private readonly List<(INamedTypeSymbol Type, int Order, bool IsOpenBehavior)> pipelines = new List<(INamedTypeSymbol Type, int Order, bool IsOpenBehavior)>();
     private ISymbol accessContext = null!;
     private readonly Dictionary<INamedTypeSymbol, ITypeSymbol> requests = new Dictionary<INamedTypeSymbol, ITypeSymbol>(SymbolEqualityComparer.Default);
@@ -47,10 +42,6 @@ internal sealed partial class GenerationAnalysis
     private readonly Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>> syncHandlers = new Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>>(SymbolEqualityComparer.Default);
     private readonly Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>> syncVoidHandlers = new Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>>(SymbolEqualityComparer.Default);
     private readonly HashSet<INamedTypeSymbol> syncVoidRequests = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-    private readonly Dictionary<INamedTypeSymbol, ITypeSymbol> streamRequests = new Dictionary<INamedTypeSymbol, ITypeSymbol>(SymbolEqualityComparer.Default);
-    private readonly Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>> streamHandlers = new Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>>(SymbolEqualityComparer.Default);
-    private readonly Dictionary<INamedTypeSymbol, ITypeSymbol> openStreamRequests = new Dictionary<INamedTypeSymbol, ITypeSymbol>(SymbolEqualityComparer.Default);
-    private readonly List<OpenBinding> openStreamHandlers = new List<OpenBinding>();
     private readonly HashSet<INamedTypeSymbol> knownNotifications = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
     private readonly HashSet<INamedTypeSymbol> openNotifications = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
     private readonly Dictionary<INamedTypeSymbol, List<Subscriber>> subscribers = new Dictionary<INamedTypeSymbol, List<Subscriber>>(SymbolEqualityComparer.Default);
@@ -76,10 +67,6 @@ internal sealed partial class GenerationAnalysis
         syncVoidBehaviorDefinition = compilation.GetTypeByMetadataName(SyncVoidBehavior)!;
         syncMultiResponseDefinition = compilation.GetTypeByMetadataName(SyncMultiResponse)!;
         syncMultiVoidDefinition = compilation.GetTypeByMetadataName(SyncMultiVoid)!;
-        streamRequestDefinition = compilation.GetTypeByMetadataName(StreamRequest)!;
-        streamHandlerDefinition = compilation.GetTypeByMetadataName(StreamHandler)!;
-        streamBehaviorDefinition = compilation.GetTypeByMetadataName(StreamBehavior)!;
-        streamValidatorDefinition = compilation.GetTypeByMetadataName(StreamValidator)!;
         if (requestDefinition == null || handlerDefinition == null || behaviorDefinition == null ||
             voidRequestDefinition == null || voidHandlerDefinition == null || voidBehaviorDefinition == null ||
             notificationDefinition == null || notificationHandlerDefinition == null ||
@@ -87,8 +74,7 @@ internal sealed partial class GenerationAnalysis
             syncRequestDefinition == null || syncVoidRequestDefinition == null ||
             syncHandlerDefinition == null || syncVoidHandlerDefinition == null ||
             syncBehaviorDefinition == null || syncVoidBehaviorDefinition == null ||
-            syncMultiResponseDefinition == null || syncMultiVoidDefinition == null ||
-            streamRequestDefinition == null || streamHandlerDefinition == null || streamBehaviorDefinition == null || streamValidatorDefinition == null)
+            syncMultiResponseDefinition == null || syncMultiVoidDefinition == null)
         {
             Error(3, "Reference Zendiator.Abstractions.");
             return new GenerationResult(null, null, errors);
@@ -98,7 +84,6 @@ internal sealed partial class GenerationAnalysis
         {
             foreach (var assembly in diAssemblies) assemblies.Add(assembly);
             foreach (var pipeline in diPipelines) pipelines.Add(pipeline);
-            streamValidators.AddRange(diStreamValidators);
         }
         accessContext = assemblyMode || diMode ? compilation.Assembly : mediator!;
 
@@ -115,20 +100,6 @@ internal sealed partial class GenerationAnalysis
                     assemblies.Add(marker.ContainingAssembly);
                 else Error(5, "IncludeAssembly requires a marker type.", mediator);
             }
-            if (name == "Zendiator.StreamRequestValidatorAttribute")
-            {
-                var location = attribute.ApplicationSyntaxReference?.GetSyntax(ct).GetLocation() ?? Location.None;
-                if (attribute.ConstructorArguments.FirstOrDefault().Value is not INamedTypeSymbol validator)
-                {
-                    ErrorAt(GeneratorDiagnostics.StreamValidator, "StreamRequestValidator requires an implementation type.", location);
-                    continue;
-                }
-                var validatorOrder = attribute.NamedArguments.FirstOrDefault(p => p.Key == "Order").Value.Value as int? ?? 0;
-                if (streamValidators.Any(entry => Same(entry.Type, validator) || entry.Order == validatorOrder))
-                    ErrorAt(GeneratorDiagnostics.StreamValidator, "Validator types and Order values must be unique.", location);
-                else streamValidators.Add((validator, validatorOrder, location));
-                continue;
-            }
             if (name != "Zendiator.PipelineBehaviorAttribute") continue;
             if (attribute.ConstructorArguments.FirstOrDefault().Value is not INamedTypeSymbol type)
             {
@@ -143,13 +114,31 @@ internal sealed partial class GenerationAnalysis
             }
             pipelines.Add((type, order, type.IsUnboundGenericType));
         }
-        var allTypes = assemblies.SelectMany(a => Types(a.GlobalNamespace, ct))
-            .Where(static type => type.TypeKind is TypeKind.Class or TypeKind.Struct && !type.IsAbstract && !type.AllInterfaces.IsEmpty)
+        var discoveryTypes = assemblies.SelectMany(a => Types(a.GlobalNamespace, ct))
+            .Where(static type => type.TypeKind is TypeKind.Class or TypeKind.Struct && !type.AllInterfaces.IsEmpty).ToArray();
+        var handlerMarker = handlerDefinition.ContainingAssembly.GetTypeByMetadataName(MarkedHandlerDiscovery.MarkerName);
+        var markedTypes = new HashSet<INamedTypeSymbol>(discoveryTypes.Where(type => type.GetAttributes().Any(a => Same(a.AttributeClass, handlerMarker))), SymbolEqualityComparer.Default);
+        var allTypes = discoveryTypes.Where(type => !type.IsAbstract && !markedTypes.Contains(type))
             .OrderBy(Name, StringComparer.Ordinal).ToArray();
+        // A marked handler never becomes a legacy service. Its request role also stays
+        // out of legacy auto-discovery unless an unmarked handler owns that family.
+        // Unrelated missing-handler diagnostics and shared legacy routes remain intact.
+        var asyncOnly = MarkedOnlyRequests(handlerDefinition, voidHandlerDefinition);
+        var syncOnly = MarkedOnlyRequests(syncHandlerDefinition, syncVoidHandlerDefinition);
+        var notificationOnly = MarkedOnlyRequests(notificationHandlerDefinition);
+        HashSet<INamedTypeSymbol> MarkedOnlyRequests(params INamedTypeSymbol[] definitions)
+        {
+            var markedTargets = Targets(markedTypes);
+            markedTargets.ExceptWith(Targets(allTypes));
+            return markedTargets;
+            HashSet<INamedTypeSymbol> Targets(IEnumerable<INamedTypeSymbol> types) => new(types.SelectMany(type =>
+                type.AllInterfaces.Where(i => definitions.Any(d => Same(i.OriginalDefinition, d))))
+                .Select(i => i.TypeArguments[0]).OfType<INamedTypeSymbol>().Select(t => t.OriginalDefinition), SymbolEqualityComparer.Default);
+        }
         foreach (var type in allTypes)
         {
             ct.ThrowIfCancellationRequested();
-            var contracts = GetContracts(type, requestDefinition);
+            var contracts = asyncOnly.Contains(type.OriginalDefinition) ? System.Array.Empty<INamedTypeSymbol>() : GetContracts(type, requestDefinition);
             if (contracts.Length > 0)
             {
                 if (IsOpenDefinition(type))
@@ -251,7 +240,7 @@ internal sealed partial class GenerationAnalysis
                 }
                 else requests[request] = voidContracts[0].TypeArguments[0];
             }
-            var syncContracts = GetContracts(type, syncRequestDefinition);
+            var syncContracts = syncOnly.Contains(type.OriginalDefinition) ? System.Array.Empty<INamedTypeSymbol>() : GetContracts(type, syncRequestDefinition);
             if (syncContracts.Length > 0)
             {
                 if (IsOpenDefinition(type))
@@ -272,7 +261,7 @@ internal sealed partial class GenerationAnalysis
                 }
                 else syncRequests[type] = syncContracts[0].TypeArguments[0];
             }
-            if ((GetContracts(type, syncVoidRequestDefinition).Length != 0))
+            if (!syncOnly.Contains(type.OriginalDefinition) && GetContracts(type, syncVoidRequestDefinition).Length != 0)
             {
                 if (IsOpenDefinition(type))
                 {
@@ -362,72 +351,7 @@ internal sealed partial class GenerationAnalysis
                 if (!vlist.Any(h => Same(h, type))) vlist.Add(type);
                 syncVoidRequests.Add(request);
             }
-            var streamContracts = GetContracts(type, streamRequestDefinition);
-            if (streamContracts.Length > 0)
-            {
-                if (IsOpenDefinition(type))
-                {
-                    if (type.IsRefLikeType)
-                        Error(12, $"Stream request {Name(type)} is a ref struct. Ref struct stream requests are not supported.", type);
-                    else if (streamContracts.Length != 1 || !IsPublicDefinition(type) || !LeavesPublicOrParam(streamContracts[0].TypeArguments[0], type))
-                        Error(3, $"Stream request {Name(type)} must be a public generic definition with exactly one item contract over public or type-parameter types.", type);
-                    else if (type.TypeParameters.Any(static p => p.AllowsRefLikeType))
-                        Error(12, $"Stream request {Name(type)} has ref-like type parameters. Async streams cannot accept ref-like arguments.", type);
-                    else if (MayBeRefLike(streamContracts[0].TypeArguments[0], type))
-                        Error(12, $"Stream request {Name(type)} has a ref-like item. Ref struct stream items are not supported; use an ownable item type.", type);
-                    else openStreamRequests[type] = streamContracts[0].TypeArguments[0];
-                }
-                else if (type.IsRefLikeType)
-                    Error(12, $"Stream request {Name(type)} is a ref struct. Ref struct stream requests are not supported.", type);
-                else if (streamContracts.Length != 1 || HasParameters(type) || !Public(type) || !Public(streamContracts[0].TypeArguments[0]))
-                    Error(3, $"Stream request {Name(type)} must be public, non-generic and have exactly one public item contract.", type);
-                else if (streamContracts[0].TypeArguments[0] is INamedTypeSymbol streamItem && streamItem.IsRefLikeType)
-                    Error(12, $"Stream request {Name(type)} has a ref-like item. Ref struct stream items are not supported; use an ownable item type.", type);
-                else streamRequests[type] = streamContracts[0].TypeArguments[0];
-            }
-            foreach (var contract in GetContracts(type, streamHandlerDefinition))
-            {
-                if (IsOpenDefinition(type))
-                {
-                    CollectOpenStreamHandler(type, contract);
-                    continue;
-                }
-                if (type.TypeKind != TypeKind.Class || HasParameters(type) ||
-                    !compilation.IsSymbolAccessibleWithin(type, accessContext) ||
-                    contract.TypeArguments[0] is not INamedTypeSymbol streamReq ||
-                    streamReq.IsAbstract || streamReq.TypeKind == TypeKind.Interface || IsOpenDefinition(streamReq) || HasOpenArguments(streamReq))
-                {
-                    Error(3, $"Stream handler {Name(type)} must be an accessible non-generic class for a concrete stream request.", type);
-                    continue;
-                }
-                if (streamReq.IsRefLikeType)
-                {
-                    Error(12, $"Stream handler {Name(type)} targets ref struct request {Name(streamReq)}. Ref struct stream requests are not supported.", type);
-                    continue;
-                }
-                if (contract.TypeArguments[1] is INamedTypeSymbol streamItemType && streamItemType.IsRefLikeType)
-                {
-                    Error(12, $"Stream handler {Name(type)} has a ref-like item. Ref struct stream items are not supported; use an ownable item type.", type);
-                    continue;
-                }
-                if (!streamHandlers.TryGetValue(streamReq, out var slist)) streamHandlers[streamReq] = slist = new();
-                if (!slist.Any(h => Same(h, type))) slist.Add(type);
-                var streamResponseContracts = GetContracts(streamReq, streamRequestDefinition);
-                if (streamResponseContracts.Length != 1 || !Public(streamReq) || !Public(contract.TypeArguments[1]))
-                {
-                    Error(3, $"Invalid stream request contract on {Name(type)}.", type);
-                }
-                else if (!Same(streamResponseContracts[0].TypeArguments[0], contract.TypeArguments[1]))
-                {
-                    Error(3, $"Stream handler {Name(type)} item {Name(contract.TypeArguments[1])} does not match request {Name(streamReq)} item {Name(streamResponseContracts[0].TypeArguments[0])}.", type);
-                }
-                else if (streamRequests.TryGetValue(streamReq, out var existingStream) && !Same(existingStream, contract.TypeArguments[1]))
-                {
-                    Error(3, $"Conflicting item contracts for {Name(streamReq)}.", type);
-                }
-                else streamRequests[streamReq] = contract.TypeArguments[1];
-            }
-            var notificationContracts = GetContracts(type, notificationDefinition);
+            var notificationContracts = notificationOnly.Contains(type.OriginalDefinition) ? System.Array.Empty<INamedTypeSymbol>() : GetContracts(type, notificationDefinition);
             if (notificationContracts.Length > 0 && !type.IsRefLikeType)
             {
                 if (IsOpenDefinition(type))

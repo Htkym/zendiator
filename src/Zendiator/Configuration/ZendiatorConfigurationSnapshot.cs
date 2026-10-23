@@ -18,22 +18,32 @@ public sealed class ZendiatorConfigurationSnapshot
         List<(string BehaviorType, int Order)> behaviors,
         List<string> notifications,
         List<(string HandlerType, int Order)> handlerOrders,
-        List<(string ValidatorType, int Order)>? streamValidators = null)
+        bool useLocalHandlers = false,
+        List<string>? handlers = null,
+        List<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)>? pipelines = null,
+        List<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)>? routeHandlers = null,
+        List<Type>? catalogMarkers = null,
+        List<(Type Request, Type Item)>? streamOutputs = null)
     {
         Namespace = @namespace;
         ServiceLifetime = serviceLifetime;
         DependencyLifetime = dependencyLifetime;
-        AssemblyMarkers = assemblyMarkers;
-        Assemblies = assemblies;
-        Behaviors = streamValidators == null ? behaviors : new StreamValidatorRegistrations(behaviors, streamValidators);
-        Notifications = notifications;
-        HandlerOrders = handlerOrders;
+        AssemblyMarkers = assemblyMarkers.AsReadOnly();
+        Assemblies = assemblies.AsReadOnly();
+        Behaviors = behaviors.AsReadOnly();
+        Notifications = notifications.AsReadOnly();
+        HandlerOrders = handlerOrders.AsReadOnly();
+        UseLocalHandlers = useLocalHandlers;
+        CatalogMarkers = (catalogMarkers ?? new()).AsReadOnly();
+        Handlers = (handlers ?? new()).AsReadOnly();
+        Pipelines = (pipelines ?? new()).AsReadOnly();
+        RouteHandlers = (routeHandlers ?? new()).AsReadOnly();
+        StreamOutputs = (streamOutputs ?? new()).AsReadOnly();
     }
 
     /// <summary>Gets the generation namespace, or null for the default.</summary>
     public string? Namespace { get; }
 
-    /// <summary>Gets the mediator lifetime.</summary>
     public ServiceLifetime ServiceLifetime { get; }
 
     /// <summary>Gets the optional Handler, Behavior and Validator registration lifetime override.</summary>
@@ -48,16 +58,27 @@ public sealed class ZendiatorConfigurationSnapshot
     /// <summary>Gets behaviors ordered by order, then type.</summary>
     public IReadOnlyList<(string BehaviorType, int Order)> Behaviors { get; }
 
-    /// <summary>Gets synchronous stream validators ordered by order, then type.</summary>
-    public IReadOnlyList<(string ValidatorType, int Order)> StreamRequestValidators =>
-        Behaviors is StreamValidatorRegistrations registrations
-            ? registrations.Validators : Array.Empty<(string ValidatorType, int Order)>();
-
     /// <summary>Gets the sorted notification type names.</summary>
     public IReadOnlyList<string> Notifications { get; }
 
     /// <summary>Gets handler orders sorted by handler type.</summary>
     public IReadOnlyList<(string HandlerType, int Order)> HandlerOrders { get; }
+
+    /// <summary>Gets whether marked local handlers were selected for a 0.5 composition.</summary>
+    public bool UseLocalHandlers { get; }
+
+    /// <summary>Gets marker types selecting generated catalogs. Runtime records assembly identity without reading attributes.</summary>
+    public IReadOnlyList<Type> CatalogMarkers { get; }
+
+    /// <summary>Gets explicitly selected handler identities, sorted by identity.</summary>
+    public IReadOnlyList<string> Handlers { get; }
+
+    /// <summary>Gets declared pipelines with their original stage order.</summary>
+    public IReadOnlyList<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)> Pipelines { get; }
+    /// <summary>Gets authoritative route handler lists with their original order.</summary>
+    public IReadOnlyList<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)> RouteHandlers { get; }
+    /// <summary>Gets explicit final item types for type-changing Stream pipelines.</summary>
+    public IReadOnlyList<(Type Request, Type Item)> StreamOutputs { get; }
 
     /// <summary>Returns the normalized structural fingerprint. Equal configurations share one generated unit.</summary>
     public string GetFingerprint()
@@ -74,9 +95,19 @@ public sealed class ZendiatorConfigurationSnapshot
             "notifications=" + string.Join(",", Notifications),
             "orders=" + string.Join(",", HandlerOrders.Select(static entry => entry.HandlerType + ":" + entry.Order)),
         };
-        if (Behaviors is StreamValidatorRegistrations validators)
-            parts.Add("streamValidators=" + string.Join(",", validators.Validators.Select(static entry =>
-                entry.Order.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + entry.ValidatorType)));
+        if (CatalogMarkers.Count != 0) parts.Add("catalogs=" + string.Join(",", CatalogMarkers.Select(static type => type.Assembly.FullName).OrderBy(static identity => identity, StringComparer.Ordinal)));
+        if (UseLocalHandlers || Handlers.Count != 0)
+            parts.Add("localHandlers=" + UseLocalHandlers + ";handlers=" + string.Join(",", Handlers));
+        if (Pipelines.Count != 0)
+            parts.Add("pipelines=" + string.Join("|", Pipelines.Select(static p => p.Request.AssemblyQualifiedName + ":" + p.Family + ":" +
+                string.Join(",", p.Stages.Select(static s => s.Kind + ":" + s.Type!.AssemblyQualifiedName +
+                    (s.FactoryType == null ? "" : ":factory=" + s.FactoryType.AssemblyQualifiedName))))));
+        if (RouteHandlers.Count != 0)
+            parts.Add("routeHandlers=" + string.Join("|", RouteHandlers.Select(static p => p.Request.AssemblyQualifiedName + ":" + p.Family + ":" +
+                string.Join(",", p.Handlers.Select(static entry => entry.Type!.AssemblyQualifiedName +
+                    (entry.FactoryType == null ? "" : ":factory=" + entry.FactoryType.AssemblyQualifiedName))))));
+        if (StreamOutputs.Count != 0)
+            parts.Add("streamOutputs=" + string.Join("|", StreamOutputs.Select(static p => p.Request.AssemblyQualifiedName + ":" + p.Item.AssemblyQualifiedName)));
         return string.Join(";", parts);
     }
 }

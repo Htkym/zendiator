@@ -35,6 +35,12 @@ if (skipGate)
     if (proof.RootElement.ValueKind != JsonValueKind.Array || proof.RootElement.GetArrayLength() != 394 ||
         proof.RootElement.EnumerateArray().Any(row => !row.TryGetProperty("status", out var status) || status.GetString() != "Passed"))
         throw new InvalidOperationException("Correctness gate evidence is incomplete.");
+    var streamProofRows = proof.RootElement.EnumerateArray().Where(row =>
+        row.TryGetProperty("suite", out var suite) && suite.GetString() == "Stream" &&
+        row.TryGetProperty("library", out var library) && library.GetString()!.StartsWith("Zendiator", StringComparison.Ordinal)).ToArray();
+    if (streamProofRows.Length == 0 || streamProofRows.Any(row =>
+        !row.TryGetProperty("streamProtocol", out var protocol) || protocol.GetString() != Correctness.StreamProtocol))
+        throw new InvalidOperationException("Old correctness evidence cannot validate the native-pull Stream protocol.");
     Console.WriteLine("Correctness gate verified from parent run.");
 }
 else
@@ -54,6 +60,8 @@ File.WriteAllText(Path.Combine(output, "manifest.json"), JsonSerializer.Serializ
 {
     startedUtc = DateTimeOffset.UtcNow,
     mediatorLifetime = Registration.MediatorLifetime,
+    streamProtocol = Correctness.StreamProtocol,
+    streamConditions = "Zendiator uses a dedicated canonical composition; peers retain historical enumerable handlers and registrations; standard enumeration and typed terminals are separate methods",
     source = "current checked-out Zendiator workspace; see source and runtime hashes",
     processId = Environment.ProcessId,
     runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,

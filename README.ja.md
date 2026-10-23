@@ -26,6 +26,8 @@ dotnet add package Zendiator --version 0.4.0
 このREADMEは0.4.0の利用方法を説明しています。更新時のAPIと移行上の変更は、
 [リリースノート](docs/release/0.4.0-release-notes.ja.md)を参照してください。
 
+開発中の0.5.0候補は、[候補packageを使う実行例](docs/getting-started-0.5.0.ja.md)を参照してください。
+
 役割分担の目安です。
 
 | プロジェクト | 参照 |
@@ -137,67 +139,20 @@ services.AddZendiator();
 
 ## ストリーミング
 
-ストリーム要求とハンドラーを定義します。1 つの要求には 1 つのハンドラーが対応します。
+0.5.0では、`IStreamSourceHandler<TRequest,TItem,TCursor>`を実装したHandlerにZendiatorHandler属性を付け、OpenAsyncで名前付きcursorを開きます。Handlers/Pipelineで要求と順序を明示します。任意middlewareはIStreamMiddlewareとStage.Wrapper、Filter/Mapは専用hook、所有sessionはfactory付き登録を使います。
 
-```csharp
-public sealed record GetHouseholdNames(int Count) : IStreamRequest<string>;
+mediator.StreamAsync(request, token)は、標準IAsyncEnumerableとしてsource objectを返します。typed terminalにはmediator.StreamSource(request, apiToken).ConsumeAsync(sink, enumerationToken)を使います。StreamSourceはIAsyncEnumerableではないreadonlyの計画値を返し、消費ごとに専用ownerを作ります。
 
-public sealed class GetHouseholdNamesHandler : IStreamRequestHandler<GetHouseholdNames, string>
-{
-    public async IAsyncEnumerable<string> HandleAsync(
-        GetHouseholdNames request,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
-    {
-        for (var i = 0; i < request.Count; i++)
-        {
-            ct.ThrowIfCancellationRequested();
-            await Task.Yield();
-            yield return $"Household-{i}";
-        }
-    }
-}
-```
-
-通常の Behavior と並べてストリーム用の Behavior を登録します。
-
-```csharp
-configuration.AddOpenBehavior(typeof(LoggingBehavior<,>), order: 0);
-configuration.AddOpenStreamBehavior(typeof(StreamLoggingBehavior<,>), order: 2);
-```
-
-軽い同期の入力検証には、Validator の閉じた具象型を明示的に登録します。
-
-```csharp
-public sealed class HouseholdNameValidator : IStreamRequestValidator<GetHouseholdNames>
-{
-    public void Validate(GetHouseholdNames request) => ArgumentOutOfRangeException.ThrowIfNegative(request.Count);
-}
-
-configuration.AddStreamRequestValidator(typeof(HouseholdNameValidator), order: 0);
-```
-
-Validator はアセンブリ走査では自動登録されません。型はアクセス可能で抽象でない、閉じたクラスに限ります。実装するすべての `IStreamRequestValidator<TRequest>` が、生成対象の閉じた Stream 経路と要求型まで完全に一致する必要があります。オープンジェネリックの Validator や基底要求型への一致には対応していません。登録型と Validator の order は構成内で重複できず、Behavior の order とは独立しています。
-
-検証は `StreamAsync` を呼び出すたびに order の昇順で一度だけ同期実行され、成功してから列挙用オブジェクトを返します。同じ列挙用オブジェクトの列挙では再検証しません。Validator がある参照型要求の null は呼び出し時に拒否し、Validator がない経路の null 検査は従来どおり最初の `MoveNextAsync` で行います。キャンセルの検査は列挙時に行うため、取り消し済みの API トークンでも入口の検証は実行されます。検証が失敗すると、後続の Validator とパイプラインの依存解決を止めます。
-
-属性方式では、生成 Mediator またはアセンブリに `[StreamRequestValidator(typeof(HouseholdNameValidator), Order = 0)]` を付けます。構成ラムダとの併用はできません。Validator は入力だけを検証し、並行呼び出しに対応させてください。非同期処理や I/O はハンドラーまたは Stream Behavior に置いてください。検証した入力を列挙終了まで変更せず、DI スコープも維持してください。
-
-取得した Validator は Transient 登録でも Mediator 内で再利用されます。同じ型がハンドラーや Behavior でもある場合は、入口でそのインスタンスを構築することがあります。パイプラインのメソッドは列挙時に実行されます。[既知の制限](docs/release/known-limitations.md)も参照してください。
-
-列挙は遅延実行です。ハンドラーは `StreamAsync` 呼び出し時ではなく、最初の `MoveNextAsync` で開始します。API トークンと `WithCancellation` のどちらでも取り消しできます。両方が取り消し可能かつ異なるトークンである場合のみ連結します。
-
-初回の初期化に失敗した列挙器は再開せず、それ以降の `MoveNextAsync()` は `false` を返します。失敗した場合も `await using` などで破棄してください。再試行するときは `StreamAsync` から新しい列挙を作ります。
-
-```csharp
-await foreach (var name in zendiator.StreamAsync(new GetHouseholdNames(3), cancellationToken))
-{
+~~~csharp
+await foreach (var name in mediator.StreamAsync(new ReadNames(3), cancellationToken))
     Console.WriteLine(name);
-}
-```
+~~~
 
-`DisposeAsync()` が返す `ValueTask` は一度だけ消費してください。通常の `await using` はこの条件を満たします。プール化された終了処理では、完了後も返値を消費するまで列挙器への参照が保持されることがあります。
+標準source objectはStreamAsyncの呼出し時に割り当てます。user DI、Handler、session、I/Oは最初のMoveで開始し、列挙ごとに状態を分けます。pending Moveを一度awaitしてから次のMoveやDisposeを行い、各ValueTaskは一度だけ消費します。DI scopeは後始末まで保持してください。
 
-`ref struct` の要求は同期契約（`ISyncRequest` ＋ `SendSync`）を使います。非同期経路とストリーム要素は診断します（ZEN0012）。再列挙は保証しないため、新しい列挙には `StreamAsync` を呼び直します。値型で閉じたオープンジェネリックは Native AOT では動作しません（[既知の制限](docs/release/known-limitations.md)）。
+sinkのfalseは正常な全体停止、trueの後は次itemの前に取消しを確認します。struct sinkは値渡しなので、外部から観測する結果は共有ownerへ保存します。sink/serializer例外をsource middlewareへ注入しません。owned cursor/sessionを一度だけ後始末し、借用したDI serviceやsinkは破棄しません。UI contextへの復帰は保証せず、ExecutionContextは抑制しません。
+
+[名前付きcursorのsample](samples/Zendiator.Sample.GettingStarted/Program.cs)と[Streamの移行・実行契約](docs/streaming-0.5.0.ja.md)に、Current、pending Dispose、Filter、HTTP、取消し、部分retryを記載しています。標準列挙、typed terminal、HTTPは対象の版・条件・実測結果で別々に評価します。typed消費による時間・割当の優位は保証しません。API移行やsource変更だけでは改善の根拠になりません。
 
 ## 同期の複数結果
 
@@ -332,7 +287,6 @@ dotnet run --project samples/Zendiator.Sample.Host -c Release
 | ZEN0021 | 生成 Mediator を明示的に `IDisposable` として扱う |
 | ZEN0022 | `using` スコープから取得した Mediator をそのメソッドから返す |
 | ZEN0023 | 同じメソッド内でスコープを明示的に破棄した後に送信する |
-| ZEN0024 | 閉じた Stream Validator の型が不正、または契約に一致する経路がない |
 
 有効期間を調べる解析器の ZEN0021～ZEN0023 は警告です。静的に確定できる形だけを検出し、スコープの安全性を網羅的に証明するものではありません。修正方法は[移行ガイド](docs/migrating-from-mediatr.ja.md)を参照してください。
 
@@ -348,7 +302,7 @@ Source Generatorが、設定した経路ごとの具体的なオーバーロー�
 |`IMultiRequest<T>`、`IMultiRequest`|`SendAllAsync(request, cancellationToken)`|
 |`ISyncMultiRequest<T>`、`ISyncMultiRequest`|`SendAllSync(request, cancellationToken)`|
 |`INotification`|逐次の `PublishAsync`。`Publish` も `ValueTask` を返す別名|
-|`IStreamRequest<T>`|`IAsyncEnumerable<T>` を返す `StreamAsync`|
+|`IStreamRequest<T>`|標準列挙はStreamAsync、typed terminalはStreamSource|
 
 要求とStreamは、任意のruntime objectや契約インターフェース型だけの変数から送信できません。Notificationの型消去は別の対応経路です。アセンブリ、Behaviorの順序、有効期間は `AddZendiator` で設定します。属性による宣言も使えますが、同じコンパイル単位で設定lambdaと併用しません。本体とGeneratorのパッケージ版は揃えてください。
 
@@ -394,6 +348,6 @@ CI はパッケージを参照する consumer で smoke test と Native AOT の�
 
 ## 対応しない操作
 
-並列配信、fire-and-forget、永続化や outbox、要求の `Send(object)`、循環検出、CodeFix、CodeLens、組み込みの `Result` パイプライン変換、組み込みログ、Send の入力検証は提供しません。Stream の同期入力検証は、上記の明示登録した Validator で行います。逐次 `PublishAsync` による通知、`StreamAsync` によるストリーム、通常の `TResponse` 値としての利用者独自 `Result` 型は対応しています。
+並列配信、fire-and-forget、永続化や outbox、要求の `Send(object)`、循環検出、CodeFix、CodeLens、組み込みの `Result` パイプライン変換、組み込みログ、Send の入力検証は提供しません。Streamの入力検証はOpenAsyncや明示middlewareで行います。逐次 `PublishAsync` による通知、`StreamAsync` によるストリーム、通常の `TResponse` 値としての利用者独自 `Result` 型は対応しています。
 
 MediatR からの移行は [移行ガイド](docs/migrating-from-mediatr.ja.md) を参照してください。

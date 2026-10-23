@@ -17,9 +17,116 @@ public sealed class ZendiatorConfiguration
     private readonly List<string> _assemblyMarkers = new();
     private readonly List<string> _assemblyMarkerAssemblies = new();
     private readonly List<string> _assemblies = new();
-    private List<(string BehaviorType, int Order)> _behaviors = new();
+    private readonly List<(string BehaviorType, int Order)> _behaviors = new();
     private readonly List<string> _notifications = new();
     private readonly List<(string HandlerType, int Order)> _handlerOrders = new();
+    private bool _useLocalHandlers;
+    private readonly List<Type> _handlers = new();
+    private readonly List<Type> _catalogMarkers = new();
+    private readonly List<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)> _pipelines = new();
+    private readonly List<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)> _routeHandlers = new();
+    private readonly List<(Type Request, Type Item)> _streamOutputs = new();
+
+    /// <summary>Declares an ordered Stream pipeline and its final item type. The request/handler contract retains the source item type.</summary>
+    public void StreamPipeline<TRequest, TFinal>(params Stage[] stages)
+    {
+        RecordPipeline(typeof(TRequest), DispatchFamily.Stream, stages);
+        _streamOutputs.Add((typeof(TRequest), typeof(TFinal)));
+    }
+    /// <summary>Declares request and final type patterns. An open final definition is closed only from the fully bound last item port.</summary>
+    /// <remarks>Final arguments are determined by dedicated map contracts, never inferred by parameter names or ordinal pairing with the request.</remarks>
+    public void StreamPipeline(Type request, Type final, params Stage[] stages)
+    {
+        ArgumentNullException.ThrowIfNull(request); ArgumentNullException.ThrowIfNull(final);
+        RecordPipeline(request, DispatchFamily.Stream, stages); _streamOutputs.Add((request, final));
+    }
+
+    /// <summary>Declares stages in order, inferring an unambiguous dispatch family from selected handlers.</summary>
+    public void Pipeline<TRequest>(params Stage[] stages) => RecordPipeline(typeof(TRequest), null, stages);
+    /// <summary>Declares stages in order for one explicit dispatch family.</summary>
+    public void Pipeline<TRequest>(DispatchFamily family, params Stage[] stages) => RecordPipeline(typeof(TRequest), family, stages);
+    /// <summary>Declares ordered stages for a known closed request or an open request definition.</summary>
+    public void Pipeline(Type request, DispatchFamily family, params Stage[] stages)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        RecordPipeline(request, family, stages);
+    }
+    /// <summary>Declares the handler list for a known closed request or an open request definition.</summary>
+    public void Handlers(Type request, DispatchFamily family, params Type[] handlers)
+    {
+        ThrowIfFrozen();
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(handlers);
+        if (handlers.Any(static type => type == null)) throw new ArgumentException("Every handler entry must name a type.", nameof(handlers));
+        RecordHandlers(request, family, handlers.Select(static type => HandlerEntry.Service(type)).ToArray());
+    }
+    /// <summary>Declares the authoritative handler order for one route.</summary>
+    public void Handlers<TRequest>(DispatchFamily family, params Type[] handlers)
+    {
+        ThrowIfFrozen();
+        ArgumentNullException.ThrowIfNull(handlers);
+        if (handlers.Any(static type => type == null)) throw new ArgumentException("Every handler entry must name a type.", nameof(handlers));
+        RecordHandlers(typeof(TRequest), family, handlers.Select(static type => HandlerEntry.Service(type)).ToArray());
+    }
+
+    /// <summary>Declares an authoritative list containing explicit handler sessions and borrowed service entries.</summary>
+    public void Handlers<TRequest>(DispatchFamily family, HandlerEntry first, params HandlerEntry[] rest)
+    {
+        ThrowIfFrozen();
+        ArgumentNullException.ThrowIfNull(rest);
+        RecordHandlers(typeof(TRequest), family, new[] { first }.Concat(rest).ToArray());
+    }
+    /// <summary>Declares explicit receiver/factory entries for a closed request or handler-derived open request pattern.</summary>
+    public void Handlers(Type request, DispatchFamily family, HandlerEntry first, params HandlerEntry[] rest)
+    {
+        ThrowIfFrozen(); ArgumentNullException.ThrowIfNull(request); ArgumentNullException.ThrowIfNull(rest);
+        RecordHandlers(request, family, new[] { first }.Concat(rest).ToArray());
+    }
+
+    private void RecordHandlers(Type request, DispatchFamily family, HandlerEntry[] handlers)
+    {
+        if (!Enum.IsDefined(family)) throw new ArgumentOutOfRangeException(nameof(family));
+        if (handlers.Any(static entry => entry.Type == null)) throw new ArgumentException("Every handler entry must name a type.", nameof(handlers));
+        _routeHandlers.Add((request, family, Array.AsReadOnly(handlers.ToArray())));
+    }
+
+    private void RecordPipeline(Type request, DispatchFamily? family, Stage[] stages)
+    {
+        ThrowIfFrozen();
+        ArgumentNullException.ThrowIfNull(stages);
+        if (family is { } value && !Enum.IsDefined(value)) throw new ArgumentOutOfRangeException(nameof(family));
+        if (stages.Any(static stage => stage.Type == null)) throw new ArgumentException("Every stage entry must name a type.", nameof(stages));
+        _pipelines.Add((request, family, Array.AsReadOnly(stages.ToArray())));
+    }
+
+    /// <summary>Selects marked handlers from the calling compilation for a 0.5 composition.</summary>
+    public void UseLocalHandlers()
+    {
+        ThrowIfFrozen();
+        _useLocalHandlers = true;
+    }
+
+    /// <summary>Selects the generated compile-time Handler catalog of the marker type\'s assembly.</summary>
+    public void UseCatalogFrom<TMarker>()
+    {
+        ThrowIfFrozen();
+        var marker = typeof(TMarker);
+        if (_catalogMarkers.Any(type => type.Assembly == marker.Assembly)) throw new InvalidOperationException("The same catalog is selected more than once.");
+        _catalogMarkers.Add(marker);
+    }
+
+    /// <summary>Selects a known handler type for a 0.5 composition.</summary>
+    public void AddHandler<THandler>() => AddHandler(typeof(THandler));
+
+    /// <summary>Selects a known closed handler or an open generic handler definition for a 0.5 composition.</summary>
+    public void AddHandler(Type handlerType)
+    {
+        ThrowIfFrozen();
+        ArgumentNullException.ThrowIfNull(handlerType);
+        if (_handlers.Contains(handlerType))
+            throw new InvalidOperationException($"Handler {TypeName(handlerType)} is selected more than once.");
+        _handlers.Add(handlerType);
+    }
 
     /// <summary>Gets or sets the generation namespace. Null selects the default.</summary>
     public string? Namespace
@@ -78,34 +185,6 @@ public sealed class ZendiatorConfiguration
         _behaviors.Add((TypeName(behaviorType), order));
     }
 
-    /// <summary>Adds a closed stream behavior or an open generic stream behavior with an explicit order. MediatR migration alias with identical semantics to <see cref="AddOpenBehavior"/> for stream contracts.</summary>
-    public void AddOpenStreamBehavior(Type behaviorType, int order)
-    {
-        ThrowIfFrozen();
-        ArgumentNullException.ThrowIfNull(behaviorType);
-        _behaviors.Add((TypeName(behaviorType), order));
-    }
-
-    /// <summary>Adds a closed synchronous stream validator with an explicit, unique validator order.</summary>
-    /// <remarks>Validators run at StreamAsync entry. Their captured instances follow the same DI
-    /// lifetime and reuse rules as generated handlers and behaviors.</remarks>
-    public void AddStreamRequestValidator(Type validatorType, int order)
-    {
-        ThrowIfFrozen();
-        ArgumentNullException.ThrowIfNull(validatorType);
-        var name = TypeName(validatorType);
-        if (_behaviors is not StreamValidatorRegistrations registrations)
-        {
-            registrations = new StreamValidatorRegistrations(_behaviors, new());
-            _behaviors = registrations;
-        }
-        if (registrations.Validators.Any(entry => entry.ValidatorType == name))
-            throw new InvalidOperationException($"Validator {name} is registered more than once. Register each validator type once.");
-        if (registrations.Validators.Any(entry => entry.Order == order))
-            throw new InvalidOperationException($"Validator order {order} is used more than once. Validator order values must be unique.");
-        registrations.Validators.Add((name, order));
-    }
-
     /// <summary>Declares a known notification type, including subscriber-less and closed generic targets.</summary>
     public void AddNotification<TNotification>()
     {
@@ -139,9 +218,9 @@ public sealed class ZendiatorConfiguration
             _behaviors.OrderBy(static entry => entry.Order).ThenBy(static entry => entry.BehaviorType, StringComparer.Ordinal).ToList(),
             _notifications.OrderBy(static name => name, StringComparer.Ordinal).ToList(),
             _handlerOrders.OrderBy(static entry => entry.HandlerType, StringComparer.Ordinal).ToList(),
-            _behaviors is StreamValidatorRegistrations validators
-                ? validators.Validators.OrderBy(static entry => entry.Order).ThenBy(static entry => entry.ValidatorType, StringComparer.Ordinal).ToList()
-                : null);
+            _useLocalHandlers,
+            _handlers.Select(static type => type.AssemblyQualifiedName ?? TypeName(type)).OrderBy(static name => name, StringComparer.Ordinal).ToList(),
+            _pipelines.ToList(), _routeHandlers.ToList(), _catalogMarkers.ToList(), _streamOutputs.ToList());
     }
 
     private static string TypeName(Type type) => type.IsGenericTypeDefinition ? type.FullName ?? type.Name : type.ToString();

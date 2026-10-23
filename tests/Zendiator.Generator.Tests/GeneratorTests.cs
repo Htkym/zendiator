@@ -6,8 +6,10 @@ using Xunit;
 
 namespace Zendiator.Generator.Tests;
 
-public sealed class GeneratorTests
+public sealed partial class GeneratorTests
 {
+    private static Type CanonicalEntryService(Type mediator) => mediator.Assembly.GetType(mediator.Namespace + ".IZendiator")!;
+
     private const string Head = "using Zendiator; using System; using System.Threading; using System.Threading.Tasks; namespace App; [GenerateZendiator] public sealed partial class Zendiator; ";
 
     [Theory]
@@ -206,10 +208,12 @@ public sealed class GeneratorTests
     private static readonly MetadataReference[] References = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
         .Select(p => MetadataReference.CreateFromFile(p)).ToArray();
     private static CSharpCompilation Compilation(string source, string name = "Test") => CSharpCompilation.Create(name,
-        [CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Preview))], References,
+        [CSharpSyntaxTree.ParseText(source, SyncParseOptions)], References,
         new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
     private static GeneratorDriver Driver() => CSharpGeneratorDriver.Create([new ZendiatorGenerator().AsSourceGenerator()],
-        parseOptions: new CSharpParseOptions(LanguageVersion.Preview), driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, true));
+        parseOptions: SyncParseOptions, driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, true));
+    private static string LegacySource(GeneratorDriverRunResult result) =>
+        Assert.Single(result.Results.Single().GeneratedSources, s => s.HintName == "Zendiator.g.cs").SourceText.ToString();
 
     private static GeneratorDriverRunResult Run(CSharpCompilation input, bool success, bool emit = false)
     {
@@ -918,13 +922,13 @@ public sealed class GeneratorTests
         var first = Source(driver);
         Assert.Equal(first, Source(Driver().RunGenerators(input)));
 
-        input = input.AddSyntaxTrees(CSharpSyntaxTree.ParseText("namespace Other { class Unrelated {} }", new CSharpParseOptions(LanguageVersion.Preview)));
+        input = input.AddSyntaxTrees(CSharpSyntaxTree.ParseText("namespace Other { class Unrelated {} }", SyncParseOptions));
         driver = driver.RunGenerators(input);
         Assert.Equal(first, Source(driver));
         AssertEmission(driver, IncrementalStepRunReason.Cached);
 
         var bodyEdit = input.ReplaceSyntaxTree(input.SyntaxTrees[0], CSharpSyntaxTree.ParseText(
-            Head + Request + Handler.Replace("new(1)", "new(2)"), new CSharpParseOptions(LanguageVersion.Preview)));
+            Head + Request + Handler.Replace("new(1)", "new(2)"), SyncParseOptions));
         driver = driver.RunGenerators(bodyEdit);
         Assert.Equal(first, Source(driver));
         AssertEmission(driver, IncrementalStepRunReason.Cached);
@@ -960,6 +964,314 @@ public sealed class GeneratorTests
             Assert.All(value.GetRunResult().Results.Single().TrackedSteps["SourceEmission"].SelectMany(s => s.Outputs),
                 output => Assert.Equal(reason, output.Reason));
     }
+
+    [Fact]
+    public void Legacy_wrapper_emission_keeps_opaque_continuations_and_incremental_contracts()
+    {
+        const string wrapper = """
+            public sealed class Wrapper : IPipelineBehavior<Ping,int> {
+                public ValueTask<int> HandleAsync<TNext>(Ping request, TNext next, CancellationToken ct)
+                    where TNext : struct, IRequestContinuation<Ping,int> => next.InvokeAsync(request, ct);
+            }
+            """;
+        var head = Head.Replace("[GenerateZendiator]", "[GenerateZendiator, PipelineBehavior(typeof(Wrapper))]");
+        var input = Compilation(head + Request + Handler + wrapper);
+        var driver = Driver().RunGeneratorsAndUpdateCompilation(input, out var output, out var diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        var model = Model(driver);
+        var route = Assert.Single(model.Routes.Requests.Single);
+        Assert.Equal("global::App.Wrapper", Assert.Single(route.Behaviors).Name);
+        var initial = driver.GetRunResult().GeneratedTrees.Single().ToString();
+        Assert.Contains("IRequestContinuation<global::App.Ping", initial);
+
+        input = input.AddSyntaxTrees(CSharpSyntaxTree.ParseText("namespace Other { class Unrelated {} }",
+            SyncParseOptions));
+        driver = driver.RunGenerators(input);
+        Assert.Equal(model, Model(driver));
+        AssertEmissionReason(driver, IncrementalStepRunReason.Cached);
+        var bodyEdit = Compilation(head + Request + Handler.Replace("new(1)", "new(2)") + wrapper);
+        driver = driver.RunGenerators(bodyEdit);
+        Assert.Equal(model, Model(driver));
+        AssertEmissionReason(driver, IncrementalStepRunReason.Cached);
+        Assert.Equal(initial, driver.GetRunResult().GeneratedTrees.Single().ToString());
+
+        var contractEdit = Compilation(head + Request + Handler.Replace("public ValueTask<int> HandleAsync",
+            "ValueTask<int> IRequestHandler<Ping,int>.HandleAsync") + wrapper);
+        driver = driver.RunGeneratorsAndUpdateCompilation(contractEdit, out output, out diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        Assert.False(Assert.Single(Model(driver).Routes.Requests.Single).Handler.DirectCall);
+        AssertEmissionReason(driver, IncrementalStepRunReason.Modified);
+
+        var inserted = Compilation(head + Request + Handler + wrapper +
+            "public sealed record A : IRequest<int>; public sealed class AHandler : IRequestHandler<A,int> { " +
+            "public ValueTask<int> HandleAsync(A request, CancellationToken ct) => new(3); }");
+        driver = driver.RunGeneratorsAndUpdateCompilation(inserted, out output, out diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Equal("global::App.A", Model(driver).Routes.Requests.Single[0].Request.Name);
+        Assert.Equal(route, Model(driver).Routes.Requests.Single.Single(r => r.Request.Name == "global::App.Ping"));
+
+        driver = driver.RunGenerators(Compilation(Head + Request));
+        var error = Assert.Single(driver.GetRunResult().Diagnostics, d => d.Id == "ZEN0001");
+        var moved = Compilation("\n\n" + Head + Request);
+        driver = driver.RunGenerators(moved);
+        var movedError = Assert.Single(driver.GetRunResult().Diagnostics, d => d.Id == "ZEN0001");
+        Assert.Same(moved.SyntaxTrees[0], movedError.Location.SourceTree);
+        Assert.Equal(error.Location.SourceSpan.Start + 2, movedError.Location.SourceSpan.Start);
+        AssertEmissionReason(driver, IncrementalStepRunReason.Cached);
+        Assert.Empty(driver.GetRunResult().GeneratedTrees);
+
+        static GenerationModel Model(GeneratorDriver value) => Assert.IsType<GenerationModel>(
+            Assert.Single(value.GetRunResult().Results.Single().TrackedSteps["EmissionModel"]
+                .SelectMany(s => s.Outputs)).Value);
+        static void AssertEmissionReason(GeneratorDriver value, IncrementalStepRunReason reason) =>
+            Assert.All(value.GetRunResult().Results.Single().TrackedSteps["SourceEmission"].SelectMany(s => s.Outputs),
+                result => Assert.Equal(reason, result.Reason));
+    }
+
+    [Fact]
+    public void Marked_handler_metadata_stays_cached_while_current_fact_location_moves()
+    {
+        var source = Head + Request + Handler.Replace("public sealed class Handler", "[ZendiatorHandler] public sealed class Handler") + SelectedComposition;
+        var driver = Driver().RunGenerators(Compilation(source));
+        var initial = Catalog(driver);
+        var initialComposition = Composition(driver);
+        var handler = Assert.Single(initial.Handlers);
+        Assert.Equal("global::App.Handler", handler.Name);
+        Assert.Equal("Zendiator.IRequestHandler`2", Assert.Single(handler.Contracts).Contract);
+        var error = Assert.Single(driver.GetRunResult().Diagnostics);
+        Assert.Equal("ZEN0035", error.Id);
+        Assert.Equal(source.IndexOf("global::Zendiator.DependencyInjection.ZendiatorServiceCollectionExtensions.AddZendiator", StringComparison.Ordinal), error.Location.SourceSpan.Start);
+        Assert.DoesNotContain("GetRequiredService<global::App.Handler>", string.Join("", driver.GetRunResult().GeneratedTrees));
+
+        var moved = Compilation("\n\n" + source);
+        driver = driver.RunGenerators(moved);
+        Assert.Equal(initial, Catalog(driver));
+        AssertCatalogReason(driver, IncrementalStepRunReason.Cached);
+        Assert.Equal(initialComposition, Composition(driver));
+        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs),
+            output => Assert.Equal(IncrementalStepRunReason.Cached, output.Reason));
+        var movedError = Assert.Single(driver.GetRunResult().Diagnostics);
+        Assert.Same(moved.SyntaxTrees[0], movedError.Location.SourceTree);
+        Assert.Equal(error.Location.SourceSpan.Start + 2, movedError.Location.SourceSpan.Start);
+
+        driver = driver.RunGenerators(Compilation(source.Replace("new(1)", "new(2)")));
+        Assert.Equal(initial, Catalog(driver));
+        AssertCatalogReason(driver, IncrementalStepRunReason.Cached);
+        driver = driver.RunGenerators(Compilation(source.Replace("public ValueTask<int> HandleAsync",
+            "ValueTask<int> IRequestHandler<Ping,int>.HandleAsync")));
+        Assert.NotEqual(initial, Catalog(driver));
+        AssertCatalogReason(driver, IncrementalStepRunReason.Modified);
+        Assert.NotEqual(initialComposition, Composition(driver));
+
+        static CompositionSelectionCatalog Composition(GeneratorDriver value) => Assert.IsType<CompositionSelectionCatalog>(
+            Assert.Single(value.GetRunResult().Results.Single().TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
+
+        static MarkedHandlerCatalog Catalog(GeneratorDriver value) => Assert.IsType<MarkedHandlerCatalog>(
+            Assert.Single(value.GetRunResult().Results.Single().TrackedSteps["MarkedHandlerModel"].SelectMany(s => s.Outputs)).Value);
+        static void AssertCatalogReason(GeneratorDriver value, IncrementalStepRunReason reason) =>
+            Assert.All(value.GetRunResult().Results.Single().TrackedSteps["MarkedHandlerModel"].SelectMany(s => s.Outputs),
+                output => Assert.Equal(reason, output.Reason));
+    }
+
+    [Fact]
+    public void Marked_handler_extraction_keeps_partial_inherited_contracts_and_constraint_edits_targeted()
+    {
+        var source = Head + """
+            public sealed record GenericPing<T> : IRequest<int> where T : class;
+            public abstract class Base<T> : IRequestHandler<GenericPing<T>,int> where T : class {
+                public ValueTask<int> HandleAsync(GenericPing<T> request, CancellationToken ct) => new(1);
+            }
+            [ZendiatorHandler] public sealed partial class Marked<T> : Base<T> where T : class;
+            public sealed partial class Marked<T>;
+            [Foreign.ZendiatorHandler] public sealed class Unmarked : IRequestHandler<GenericPing<string>,int> {
+                public ValueTask<int> HandleAsync(GenericPing<string> request, CancellationToken ct) => new(2);
+            }
+            """ + SelectedComposition.Replace("c.AddHandler<Handler>()", "c.AddHandler(typeof(Marked<>))");
+        const string foreign = "namespace Foreign { public sealed class ZendiatorHandlerAttribute : System.Attribute {} }";
+        var input = Compilation(source).AddSyntaxTrees(CSharpSyntaxTree.ParseText(foreign, SyncParseOptions));
+        var driver = Driver().RunGenerators(input);
+        var model = Catalog(driver);
+        var handler = Assert.Single(model.Handlers);
+        Assert.Equal("global::App.Marked<T>", handler.Name);
+        Assert.Contains("Base<T>", Assert.Single(handler.Contracts).Implementation);
+        Assert.Equal("ZEN0035", Assert.Single(driver.GetRunResult().Diagnostics).Id);
+        var generated = LegacySource(driver.GetRunResult());
+        Assert.Contains("global::App.Unmarked", generated);
+        Assert.DoesNotContain("global::App.Marked", generated);
+
+        var edited = Compilation(source.Replace("where T : class", "where T : notnull"))
+            .AddSyntaxTrees(CSharpSyntaxTree.ParseText(foreign, SyncParseOptions));
+        driver = driver.RunGenerators(edited);
+        Assert.NotEqual(model, Catalog(driver));
+        Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["MarkedHandlerModel"].SelectMany(s => s.Outputs),
+            output => Assert.Equal(IncrementalStepRunReason.Modified, output.Reason));
+
+        static MarkedHandlerCatalog Catalog(GeneratorDriver value) => Assert.IsType<MarkedHandlerCatalog>(
+            Assert.Single(value.GetRunResult().Results.Single().TrackedSteps["MarkedHandlerModel"].SelectMany(s => s.Outputs)).Value);
+    }
+
+    private const string SelectedComposition = """
+        [ZendiatorComposition("reads")] public sealed class Reads;
+        public static class Startup {
+            public static void Configure(Microsoft.Extensions.DependencyInjection.IServiceCollection services) =>
+                global::Zendiator.DependencyInjection.ZendiatorServiceCollectionExtensions.AddZendiator<Reads>(services, c => c.AddHandler<Handler>());
+        }
+        """;
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Foreign_only_marker_keeps_legacy_generation(bool identicalMetadataName)
+    {
+        var attributeNamespace = identicalMetadataName ? "Zendiator" : "Foreign";
+        var source = Head + Request + Handler.Replace("public sealed class Handler", $"[global::{attributeNamespace}.ZendiatorHandler] public sealed class Handler");
+        var attribute = CSharpSyntaxTree.ParseText($"namespace {attributeNamespace} {{ public sealed class ZendiatorHandlerAttribute : System.Attribute {{}} }}",
+            SyncParseOptions);
+        var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source).AddSyntaxTrees(attribute), out var output, out var diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Contains("global::App.Handler", LegacySource(driver.GetRunResult()));
+        var run = driver.GetRunResult().Results.Single();
+        if (run.TrackedSteps.TryGetValue("MarkedHandlerModel", out var steps))
+            Assert.Empty(Assert.IsType<MarkedHandlerCatalog>(Assert.Single(steps.SelectMany(s => s.Outputs)).Value).Handlers);
+        else Assert.DoesNotContain(run.GeneratedSources, s => s.HintName == "Zendiator.GeneratedCatalog.g.cs");
+    }
+
+    [Fact]
+    public void Unselected_marker_add_remove_keeps_normal_legacy_and_restores_its_own_route()
+    {
+        var extra = Request.Replace("Ping", "Extra") + Handler.Replace("class Handler", "class ExtraHandler").Replace("Ping", "Extra");
+        var driver = Driver();
+        string? original = null;
+        foreach (var marked in new[] { false, true, false })
+        {
+            var input = Compilation(Head + Request + Handler + (marked ? extra.Replace("public sealed class ExtraHandler", "[ZendiatorHandler] public sealed class ExtraHandler") : extra));
+            driver = driver.RunGeneratorsAndUpdateCompilation(input, out var output, out var diagnostics);
+            Assert.Empty(diagnostics);
+            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+            var generated = LegacySource(driver.GetRunResult());
+            Assert.Contains("global::App.Handler", generated);
+            Assert.Equal(!marked, generated.Contains("global::App.ExtraHandler"));
+            if (original == null) original = generated;
+            else if (!marked) Assert.Equal(original, generated);
+        }
+        // An unrelated orphan request must still report the existing legacy error.
+        var missing = Run(Compilation(Head + Request + Handler + extra.Replace("public sealed class ExtraHandler", "[ZendiatorHandler] public sealed class ExtraHandler") +
+            "public sealed record Orphan : IRequest<int>;"), false);
+        Assert.Equal("ZEN0001", Assert.Single(missing.Diagnostics).Id);
+    }
+
+    [Fact]
+    public void Separate_selected_compositions_keep_membership_and_legacy_emission_isolated()
+    {
+        var source = Head + Request + Handler + """
+            [ZendiatorHandler] public sealed class A : IRequestHandler<Ping,int> {
+                public ValueTask<int> HandleAsync(Ping request, CancellationToken ct) => new(3);
+            }
+            public sealed record WriteRequest : IRequest<int>;
+            [ZendiatorHandler] public sealed class B : IRequestHandler<WriteRequest,int> {
+                public ValueTask<int> HandleAsync(WriteRequest request, CancellationToken ct) => new(4);
+            }
+            public sealed record UnselectedRequest : IRequest<int>;
+            [ZendiatorHandler] public sealed class C : IRequestHandler<UnselectedRequest,int> {
+                public ValueTask<int> HandleAsync(UnselectedRequest request, CancellationToken ct) => new(5);
+            }
+            """ + SelectedComposition.Replace("c.AddHandler<Handler>()", "c.AddHandler<A>()") + """
+            [ZendiatorComposition("writes")] public sealed class Writes;
+            public static class OtherStartup {
+                public static void Configure(Microsoft.Extensions.DependencyInjection.IServiceCollection services) =>
+                    global::Zendiator.DependencyInjection.ZendiatorServiceCollectionExtensions.AddZendiator<Writes>(services, c => c.AddHandler(typeof(B)));
+            }
+            [ZendiatorComposition("empty")] public sealed class Empty;
+            public static class EmptyStartup {
+                public static void Configure(Microsoft.Extensions.DependencyInjection.IServiceCollection services) =>
+                    global::Zendiator.DependencyInjection.ZendiatorServiceCollectionExtensions.AddZendiator<Empty>(services, c => {});
+            }
+            """;
+        var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source), out var output, out var diagnostics);
+        Assert.Equal(3, diagnostics.Length);
+        Assert.All(diagnostics, d => Assert.Equal("ZEN0035", d.Id));
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error && d.Id != "ZEN0035"));
+        var generated = LegacySource(driver.GetRunResult());
+        Assert.Contains("global::App.Handler", generated);
+        foreach (var name in new[] { "A", "B", "C" }) Assert.DoesNotContain("global::App." + name, generated);
+        var selections = Selections(driver);
+        Assert.Equal(3, selections.Compositions.Count);
+        Assert.Equal("global::App.A", Assert.Single(selections.Compositions.Single(c => c.Key == "reads").Handlers).Definition.Name);
+        Assert.Equal("global::App.B", Assert.Single(selections.Compositions.Single(c => c.Key == "writes").Handlers).Definition.Name);
+        Assert.Empty(selections.Compositions.Single(c => c.Key == "empty").Handlers);
+
+        driver = driver.RunGenerators(Compilation(source.Replace("new(5)", "new(6)")));
+        Assert.Equal(selections, Selections(driver));
+
+        driver = driver.RunGenerators(Compilation(source.Replace("c => c.AddHandler(typeof(B))", "c => c.UseLocalHandlers()")));
+        var updated = Selections(driver);
+        Assert.Equal(selections.Compositions.Single(c => c.Key == "reads"), updated.Compositions.Single(c => c.Key == "reads"));
+        Assert.Equal(new[] { "global::App.A", "global::App.B", "global::App.C" },
+            updated.Compositions.Single(c => c.Key == "writes").Handlers.Select(h => h.Definition.Name).OrderBy(n => n, StringComparer.Ordinal));
+        Assert.Empty(updated.Compositions.Single(c => c.Key == "empty").Handlers);
+        var duplicateKey = Run(Compilation(source.Replace("ZendiatorComposition(\"writes\")", "ZendiatorComposition(\"reads\")")), false);
+        Assert.Equal(3, duplicateKey.Diagnostics.Length);
+        Assert.Single(duplicateKey.Diagnostics.Single(d => d.AdditionalLocations.Count != 0).AdditionalLocations);
+
+        static CompositionSelectionCatalog Selections(GeneratorDriver value) => Assert.IsType<CompositionSelectionCatalog>(
+            Assert.Single(value.GetRunResult().Results.Single().TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
+    }
+
+    [Fact]
+    public void Producer_only_marker_has_no_consumer_backend_error_and_duplicate_marker_belongs_to_compiler()
+    {
+        var handler = Handler.Replace("public sealed class Handler", "[ZendiatorHandler] public sealed class Handler");
+        var producer = Run(Compilation(Head.Replace("[GenerateZendiator] public sealed partial class Zendiator;", "") + Request + handler), true);
+        Assert.Empty(producer.Diagnostics);
+        var catalog = Assert.Single(producer.Results.Single().GeneratedSources);
+        Assert.Equal("Zendiator.GeneratedCatalog.g.cs", catalog.HintName);
+        Assert.Contains("typeof(global::App.Handler)", catalog.SourceText.ToString());
+        var source = Head + Request + Handler + handler.Replace("class Handler", "class Marked").Replace("[ZendiatorHandler]", "[ZendiatorHandler, ZendiatorHandler]") +
+            SelectedComposition.Replace("c.AddHandler<Handler>()", "c.AddHandler<Marked>()");
+        var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source), out var output, out var diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Equal("CS0579", Assert.Single(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error)).Id);
+        Assert.Contains("global::App.Handler", LegacySource(driver.GetRunResult()));
+    }
+
+    [Fact]
+    public void Explicit_default_membership_is_retained_and_control_flow_is_diagnosed_at_selection()
+    {
+        var source = Head + Request + Handler.Replace("public sealed class Handler", "[ZendiatorHandler] public sealed class Handler") + """
+            public sealed record OtherRequest : IRequest<int>;
+            [ZendiatorHandler] public sealed class Other : IRequestHandler<OtherRequest,int> {
+                public ValueTask<int> HandleAsync(OtherRequest request, CancellationToken ct) => new(2);
+            }
+            """ +
+            SelectedComposition.Replace("AddZendiator<Reads>", "AddZendiator").Replace("c.AddHandler<Handler>()", "c.UseLocalHandlers()");
+        foreach (var selection in new[] { "c.UseLocalHandlers()", "c.AddHandler<Handler>()" })
+        {
+            var driver = Driver().RunGenerators(Compilation(source.Replace("c.UseLocalHandlers()", selection)));
+            var catalog = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single()
+                .TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
+            Assert.Equal("default", Assert.Single(catalog.Compositions).Key);
+            Assert.Equal(new[] { "global::App.Handler", "global::App.Other" },
+                catalog.Compositions[0].Handlers.Select(h => h.Definition.Name).OrderBy(n => n, StringComparer.Ordinal));
+            Assert.Equal("ZEN0035", Assert.Single(driver.GetRunResult().Diagnostics).Id);
+        }
+        var conditional = source.Replace("c.UseLocalHandlers()", "{ if (DateTime.UtcNow.Ticks > 0) c.UseLocalHandlers(); }");
+        var rejected = Run(Compilation(conditional), false);
+        Assert.Contains("control flow", Assert.Single(rejected.Diagnostics).GetMessage());
+
+        var configuration = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+        configuration.AddHandler(typeof(List<>));
+        configuration.UseLocalHandlers();
+        var snapshot = configuration.Snapshot();
+        Assert.True(snapshot.UseLocalHandlers);
+        Assert.Single(snapshot.Handlers);
+        Assert.Contains("localHandlers=True", snapshot.GetFingerprint());
+        Assert.Throws<InvalidOperationException>(() => configuration.AddHandler<object>());
+    }
+
     [Fact]
     public void Shared_generator_keeps_parallel_compositions_isolated()
     {
@@ -969,7 +1281,7 @@ public sealed class GeneratorTests
             var requestName = "ParallelPing" + index;
             var input = Compilation((Head + Request + Handler).Replace("Ping", requestName));
             var driver = CSharpGeneratorDriver.Create([generator.AsSourceGenerator()],
-                parseOptions: new CSharpParseOptions(LanguageVersion.Preview));
+                parseOptions: SyncParseOptions);
             var result = driver.RunGeneratorsAndUpdateCompilation(input, out var output, out var diagnostics).GetRunResult();
             Assert.Empty(diagnostics);
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));

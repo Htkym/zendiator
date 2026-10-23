@@ -3,6 +3,7 @@
     <Project Path="src/Zendiator.Abstractions/Zendiator.Abstractions.csproj" />
     <Project Path="src/Zendiator/Zendiator.csproj" />
     <Project Path="src/Zendiator.SourceGenerator/Zendiator.SourceGenerator.csproj" />
+    <Project Path="src/Zendiator.CodeFixes/Zendiator.CodeFixes.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Zendiator.Tests/Zendiator.Tests.csproj" />

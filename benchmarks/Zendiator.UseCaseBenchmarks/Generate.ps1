@@ -29,7 +29,7 @@ public sealed class ZPing$b : Z.IRequestHandler<Ping$b,int> { public ValueTask<i
 public sealed class MPing$b : M.IRequestHandler<Ping$b,int> { public Task<int> Handle(Ping$b r,CancellationToken t) => Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class GPing$b : G.IRequestHandler<Ping$b,int> { public ValueTask<int> Handle(Ping$b r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DPing$b : D.IRequestHandler<Ping$b,ValueTask<int>> { public ValueTask<int> Handle(Ping$b r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
-public sealed class ZStream$b : Z.IStreamRequestHandler<Stream$b,int> { public IAsyncEnumerable<int> HandleAsync(Stream$b r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
+[Z.ZendiatorHandler] public sealed class ZStream$b : Z.IStreamSourceHandler<Stream$b,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Stream$b r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MStream$b : M.IStreamRequestHandler<Stream$b,int> { public IAsyncEnumerable<int> Handle(Stream$b r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GStream$b : G.IStreamRequestHandler<Stream$b,int> { public IAsyncEnumerable<int> Handle(Stream$b r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DStream$b : DS.IStreamRequestHandler<Stream$b,int> { public IAsyncEnumerable<int> Handle(Stream$b r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
@@ -55,8 +55,8 @@ foreach ($i in 1..5) {
     $lines.Add(@"
 public sealed class ZBehavior$i<T,R> : Z.IPipelineBehavior<T,R> where T : Z.IRequest<R>, ILevel$i
 { public ValueTask<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IRequestContinuation<T,R> { Work.Enter(r,$i); return next.InvokeAsync(r,t); } }
-public sealed class ZSBehavior$i<T,R> : Z.IStreamPipelineBehavior<T,R> where T : Z.IStreamRequest<R>, ILevel$i
-{ public async IAsyncEnumerable<R> HandleAsync<TNext>(T r,TNext next,[EnumeratorCancellation] CancellationToken t) where TNext:struct,Z.IStreamContinuation<T,R> { Work.Enter(r,$i); await foreach(var item in next.InvokeAsync(r,t).WithCancellation(t).ConfigureAwait(false)) yield return item; } }
+public sealed class ZSBehavior$i<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, ILevel$i
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Enter(r,$i); return next.OpenAsync(r,t); } }
 public sealed class MBehavior$i<T,R> : M.IPipelineBehavior<T,R> where T : notnull,IWork
 { public Task<R> Handle(T r,M.RequestHandlerDelegate<R> next,CancellationToken t) { Work.Enter(r,$i); return next(t); } }
 public sealed class MSBehavior$i<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
@@ -95,9 +95,8 @@ public static class Registration
                     c.RegisterServicesFromAssemblyContaining<Ping0>();
 '@)
 foreach($i in 1..5) {
-    $lines.Add("c.AddOpenBehavior(typeof(ZBehavior$i<,>), order: $i); c.AddOpenStreamBehavior(typeof(ZSBehavior$i<,>), order: $(10+$i));")
+    $lines.Add("c.AddOpenBehavior(typeof(ZBehavior$i<,>), order: $i);")
     $lines.Add("c.AddOpenBehavior(typeof(ZVBehavior$i<>), order: $(20+$i));")
-    $lines.Add("c.AddOpenStreamBehavior(typeof(ZRBehavior$i<,>), order: $(30+$i));")
 }
 $lines.Add(@'
                 });
@@ -146,6 +145,32 @@ if (library == "Mediator" && lifetime != "Default" && lifetime != MediatorLifeti
 RegistrationAudit.Record(s, library, lifetime, "before-provider");
 return s.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }); } }
 '@)
+$lines.Add(@'
+[Z.ZendiatorComposition("competitiveStreams")] public sealed class BenchmarkStreams;
+public static class StreamRegistration
+{
+    public static ServiceProvider Create()
+    {
+        var s = new ServiceCollection();
+        s.AddLogging();
+        s.AddZendiator<BenchmarkStreams>(c => {
+'@)
+foreach($b in 0,1,3,5) {
+    $lines.Add("c.Handlers<Stream$b>(Z.DispatchFamily.Stream,typeof(ZStream$b));")
+    $stages=if($b){(($b..1 | ForEach-Object {"Z.Stage.Wrapper<ZSBehavior$_<Stream$b,int>>()"}) -join ',')}else{''}
+    $lines.Add("c.Pipeline<Stream$b>(Z.DispatchFamily.Stream$(if($stages){','+$stages}));")
+}
+foreach($b in $RelayDepths) {
+    $lines.Add("c.Handlers<Relay$b>(Z.DispatchFamily.Stream,typeof(ZRelay$b));")
+    $stages=(($b..1 | ForEach-Object {"Z.Stage.Wrapper<ZRBehavior$_<Relay$b,int>>()"}) -join ',')
+    $lines.Add("c.Pipeline<Relay$b>(Z.DispatchFamily.Stream,$stages);")
+}
+$lines.Add(@'
+        });
+        return s.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+    }
+}
+'@)
 foreach($lib in 'Direct','Zendiator','MediatRHistorical','Mediator','DispatchR','Immediate') {
     foreach($b in 0,1,3,5) {
         if($lib -eq 'Direct' -and $b -ne 0) {continue}
@@ -153,7 +178,7 @@ foreach($lib in 'Direct','Zendiator','MediatRHistorical','Mediator','DispatchR',
             Direct='ZPing0'; Zendiator='Competitive.Generated.IZendiator'; MediatRHistorical='M.IMediator';
             Mediator='G.Mediator'; DispatchR='DispatchR.IMediator'; Immediate="IPing$b.Handler"
         }[$lib]
-        $streamEntry=if($lib -eq 'Immediate'){"IStream$b.Handler"}else{$entry}
+        $streamEntry=if($lib -eq 'Immediate'){"IStream$b.Handler"}elseif($lib -eq 'Zendiator'){'Competitive.Generated.BenchmarkStreams.IZendiator'}else{$entry}
         $resolve=if($lib -eq 'Direct'){'new ZPing0()'}else{"scope.ServiceProvider.GetRequiredService<$entry>()"}
         $sresolve=if($lib -eq 'Direct'){'new ZPing0()'}else{"scope.ServiceProvider.GetRequiredService<$streamEntry>()"}
         $send=@{
@@ -277,7 +302,9 @@ foreach($lib in 'Direct','Zendiator','MediatRHistorical','Mediator','DispatchR',
     }
     finally { send.Cleanup(); }
     var stream=new ${lib}Stream$b(); stream.Setup();
-    try { await Correctness.Stream("$lib",$b,(n,a,p,t)=>stream.Invoke(new Stream$b(n,a,p),t)); }
+    try { await Correctness.Stream("$lib",$b,(n,a,p,t)=>stream.Invoke(new Stream$b(n,a,p),t));
+$(if($lib -eq 'Zendiator'){'        await Correctness.TypedStream("Zendiator",'+$b+', (n,a,p,s,t)=>stream.InvokeTyped(new Stream'+$b+'(n,a,p),s,t));'})
+    }
     finally { stream.Cleanup(); }
 }
 "@)

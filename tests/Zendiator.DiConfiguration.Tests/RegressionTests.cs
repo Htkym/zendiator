@@ -1,6 +1,7 @@
 using Di.Generated;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using NativeMediator = global::Zendiator.DiConfiguration.Tests.Generated.NativeDiStreams.IZendiator;
 
 namespace Zendiator.DiConfiguration.Tests;
 
@@ -12,12 +13,12 @@ public sealed class RegressionTests
     {
         using var provider = DiRuntimeTests.CreateServices(dependencyLifetime: ServiceLifetime.Scoped).BuildServiceProvider();
         using var scope = provider.CreateScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        var mediator = scope.ServiceProvider.GetRequiredService<NativeMediator>();
         Assert.Equal(1, await mediator.SendAsync(new MixedFirst()));
         Assert.Equal(7, await mediator.SendAsync(new MixedSecond()));
-        Assert.Equal(7, mediator.SendSync(new MixedSyncSecond()));
-        await mediator.PublishAsync(new MixedNoteSecond());
-        Assert.Equal(7, scope.ServiceProvider.GetRequiredService<MixedHandler>().NotificationResult);
+        Assert.Equal(7, mediator.Send(new MixedSyncSecond()));
+        await scope.ServiceProvider.GetRequiredService<IZendiator>().PublishAsync(new MixedNoteSecond());
+        Assert.Equal(7, scope.ServiceProvider.GetRequiredService<MixedNotificationHandler>().NotificationResult);
         var items = new List<int>();
         await foreach (var item in mediator.StreamAsync(new MixedStreamSecond())) items.Add(item);
         Assert.Equal([7], items);

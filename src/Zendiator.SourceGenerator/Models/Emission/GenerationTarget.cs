@@ -3,7 +3,6 @@ using System.Collections.Generic;
 
 namespace Zendiator.SourceGenerator;
 
-/// <summary>Names and registration strategy for the generated composition.</summary>
 internal sealed record GenerationTarget
 {
     internal GenerationTarget(

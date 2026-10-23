@@ -1,0 +1,117 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+
+namespace Zendiator.SourceGenerator;
+
+internal static class CanonicalSyncEmissionNormalizer
+{
+    internal static CanonicalSyncEmissionModel Create(CompositionSelectionCatalog catalog, CanonicalExecutionGraphCatalog execution)
+    {
+        var output = new List<CanonicalSyncCompositionEmission>();
+        for (var i = 0; i < catalog.Compositions.Count; i++)
+        {
+            var composition = catalog.Compositions[i];
+            if (composition.GeneratedNamespace == null || composition.Errors.Count != 0 || composition.CompilerOwnsHandlerError ||
+                composition.Pipelines.Count != 1 ||
+                composition.Facts.Count != 1 || composition.Facts[0].Key != "IncompleteExecutionContract" ||
+                catalog.Compositions.Count(c => c.Identity == composition.Identity || c.Key == composition.Key ||
+                    c.GeneratedNamespace == composition.GeneratedNamespace) != 1) continue;
+            var route = composition.Pipelines[0];
+            var graph = execution.Compositions[i].SingleOrDefault(g => g.Contract.Anchor == route.Anchor);
+            if (route.RequestShape == BoundRequestShape.ClosedRefLike)
+            {
+                if (composition.MarkerName != null && graph is { IsValid: true, ScopedSync: { } proof } &&
+                    composition.Handlers.Any(h => h.Identity == route.Handlers[0].Type))
+                    output.Add(new(i, composition.GeneratedNamespace, composition.MarkerName, composition.UseLocalHandlers,
+                        proof.Handler, null, false, route.PipelineFamily, composition.MicrosoftDiProviderName ?? "")
+                    {
+                        ScopedObserver = proof.Observer,
+                        RegistrationStages = new(new[] { new RegistrationStageEmission(proof.Observer.ObserverName, "Hook", null) }),
+                        ExplicitHandlerTypes = composition.ExplicitHandlerTypes,
+                        CatalogMarkerTypes = composition.CatalogMarkerTypes,
+                        ExternAliases = composition.ExternAliases
+                    });
+                continue;
+            }
+            if (graph?.IsValid != true || graph.Schedule == null || route.Family != BoundDispatchFamily.SendSync ||
+                route.Stages.Count > 2 || route.Handlers.Count != 1 || !route.ExplicitHandlerOrder ||
+                route.ResultKind is not (FusionResultKind.Void or FusionResultKind.Response)) continue;
+            var handler = route.Handlers[0];
+            if (route.RequestShape == BoundRequestShape.OpenSyncReference &&
+                (composition.MarkerName == null || route.SendGeneric == null || route.SendOpenRegistration is not { } open ||
+                route.Stages.Count is not (0 or 1) || open.Stages.Count != route.Stages.Count || handler.Sessions.Count != 0 ||
+                handler.SyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false } ||
+                route.Stages.Any(s => s.Sessions.Count != 0 || s.SyncEmission is not { HookIsValueType: false }) ||
+                composition.Handlers.Any(h => !open.HandlerMembership.Contains(h.Identity)))) continue;
+            // Default membership may contain an open definition and its explicitly closed route.
+            // Only the authoritative route participates in lowering or DI registration.
+            if (handler.CompilerOwnsError || handler.SyncEmission == null || !composition.Handlers.Any(h => h.Identity == handler.Type)) continue;
+            var hooks = new List<BoundSyncHookEmission>();
+            if (route.Stages.Count != 0)
+            {
+                if ((handler.Sessions.Count != 0 && route.Stages.Count != 1) || route.Stages.Any(stage => stage.CompilerOwnsError ||
+                    stage.Kind != FusionStageKind.Hook || stage.SyncEmission == null)) continue;
+                if (route.Stages.Any(stage => stage.Sessions.Count != 0))
+                {
+                    // One session Hook; a Handler session stays inside its observation and cleanup boundary.
+                    var stage = route.Stages[0];
+                    if (route.Stages.Count != 1 || stage.Sessions.Count != 1 ||
+                        stage.ServiceOwnership != stage.Sessions[0].Ownership ||
+                        SyncFactory(stage.Sessions[0]) is not { } hookFactory) continue;
+                    hooks.Add(stage.SyncEmission! with { Factory = hookFactory });
+                }
+                else
+                {
+                    if (route.Stages.Any(stage => stage.ServiceOwnership != FusionOwnership.BorrowedService)) continue;
+                    hooks.AddRange(route.Stages.Select(stage => stage.SyncEmission!));
+                }
+            }
+            BoundSyncFactoryEmission? factory = null;
+            if (handler.Sessions.Count != 0)
+            {
+                if (handler.Sessions.Count != 1) continue;
+                factory = SyncFactory(handler.Sessions[0]);
+                if (factory == null) continue;
+            }
+            else if (handler.ServiceOwnership != FusionOwnership.BorrowedService) continue;
+            output.Add(new(i, composition.GeneratedNamespace, composition.MarkerName, composition.UseLocalHandlers,
+                handler.SyncEmission, factory, route.HasEmptyPipeline, route.PipelineFamily, composition.MicrosoftDiProviderName ?? "")
+            {
+                Generic = route.SendGeneric,
+                OpenRegistration = route.SendOpenRegistration,
+                Hooks = new(hooks),
+                ExplicitHandlerTypes = composition.ExplicitHandlerTypes,
+                CatalogMarkerTypes = composition.CatalogMarkerTypes,
+                ExternAliases = composition.ExternAliases
+            });
+        }
+        return new(new(output));
+    }
+
+    internal static BoundSyncFactoryEmission? SyncFactory(BoundSessionModel session)
+    {
+        if (!session.SuppliesCallbackReceiver || session.SyncEmission == null || session.Acquire.Completion != BoundCompletionKind.Synchronous ||
+            session.Ownership is not (FusionOwnership.OwnedSession or FusionOwnership.BorrowedResource) ||
+            session.Ownership == FusionOwnership.OwnedSession && (session.Cleanup?.Completion != BoundCompletionKind.Synchronous ||
+                session.SyncEmission.CleanupContractName == null) ||
+            session.Ownership == FusionOwnership.BorrowedResource && (session.Cleanup != null || session.SyncEmission.CleanupContractName != null)) return null;
+        return session.SyncEmission;
+    }
+
+    internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalSyncEmissionModel model,
+        EquatableArray<CanonicalSyncCallSite?> current, CancellationToken ct) =>
+        BindCallSites(model.Compositions.Select(c => c.Index), current, ct);
+
+    internal static CanonicalSyncInterceptorModel BindCallSites(IEnumerable<int> compositionIndices,
+        EquatableArray<CanonicalSyncCallSite?> current, CancellationToken ct)
+    {
+        var output = new List<CanonicalSyncCallSite>();
+        foreach (var index in compositionIndices)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (current[index] is { } site) output.Add(site);
+        }
+        return new(new(output));
+    }
+}

@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Zendiator;
 
 namespace Zendiator.DiConfiguration.Tests;
@@ -15,38 +14,42 @@ public sealed class StreamValidationTrace
     public bool FailFirst, FailMiddle, FailMiddleActivation;
     public int FirstConstructions, MiddleConstructions, LastConstructions, BehaviorConstructions, OtherHandlerConstructions;
     public int FirstValidations, OtherValidations, LastValidations, HandlerCalls, BehaviorCalls;
-    public int MiddleFactories, PipelineFirstFactories, OtherPipelineFactories, FirstDisposals, MiddleDisposals, LastDisposals, IteratorDisposals;
+    public int MiddleFactories, FirstDisposals, MiddleDisposals, LastDisposals, IteratorDisposals;
     public CancellationToken ObservedToken;
 }
 
-public abstract class EntryValidatorBase<T>(StreamValidationTrace trace) : IStreamRequestValidator<ValidatedStream>
-{
-    protected StreamValidationTrace Trace { get; } = trace;
-    public void Validate(ValidatedStream request)
-    {
-        Trace.FirstValidations++;
-        Trace.Events.Add("first:validate");
-        if (Trace.FailFirst || request.Count < 0) throw Trace.Failure;
-    }
-}
-
-public sealed class SharedStreamValidator : EntryValidatorBase<int>, IStreamRequestValidator<OtherValidatedStream>,
+[ZendiatorHandler]
+public sealed class SharedStreamValidator : IStreamMiddleware<ValidatedStream, int>, IStreamMiddleware<OtherValidatedStream, int>,
     IRequestHandler<ValidationLookup, int>, IDisposable
 {
-    public SharedStreamValidator(StreamValidationTrace trace) : base(trace)
+    private readonly StreamValidationTrace _trace;
+    public SharedStreamValidator(StreamValidationTrace trace)
     {
+        _trace = trace;
         Id = ++trace.FirstConstructions;
         trace.Events.Add("first:new");
     }
     public int Id { get; }
-    void IStreamRequestValidator<OtherValidatedStream>.Validate(OtherValidatedStream request) => Trace.OtherValidations++;
+    public ValueTask<IAsyncEnumerator<int>> OpenAsync(ValidatedStream request, IStreamUpstream<ValidatedStream, int> upstream, CancellationToken cancellationToken)
+    {
+        _trace.FirstValidations++;
+        _trace.Events.Add("first:validate");
+        if (_trace.FailFirst || request.Count < 0) throw _trace.Failure;
+        return upstream.OpenAsync(request, cancellationToken);
+    }
+    ValueTask<IAsyncEnumerator<int>> IStreamMiddleware<OtherValidatedStream, int>.OpenAsync(OtherValidatedStream request,
+        IStreamUpstream<OtherValidatedStream, int> upstream, CancellationToken cancellationToken)
+    {
+        _trace.OtherValidations++;
+        return upstream.OpenAsync(request, cancellationToken);
+    }
     public ValueTask<int> HandleAsync(ValidationLookup request, CancellationToken cancellationToken) => new(Id);
-    public void Dispose() => Trace.FirstDisposals++;
+    public void Dispose() => _trace.FirstDisposals++;
 }
 
 public static class EntryValidators<T>
 {
-    public sealed class Middle : IStreamRequestValidator<ValidatedStream>, IDisposable
+    public sealed class Middle : IStreamMiddleware<ValidatedStream, int>, IDisposable
     {
         private readonly StreamValidationTrace _trace;
         public Middle(StreamValidationTrace trace)
@@ -55,16 +58,18 @@ public static class EntryValidators<T>
             trace.MiddleConstructions++;
             trace.Events.Add("middle:new");
         }
-        public void Validate(ValidatedStream request)
+        public ValueTask<IAsyncEnumerator<int>> OpenAsync(ValidatedStream request, IStreamUpstream<ValidatedStream, int> upstream, CancellationToken cancellationToken)
         {
             _trace.Events.Add("middle:validate");
             if (_trace.FailMiddle) throw _trace.Failure;
+            return upstream.OpenAsync(request, cancellationToken);
         }
         public void Dispose() => _trace.MiddleDisposals++;
     }
 }
 
-public sealed class ValidatedStreamHandler : IStreamRequestValidator<ValidatedStream>, IStreamRequestHandler<ValidatedStream, int>, IDisposable
+[ZendiatorHandler]
+public sealed class ValidatedStreamHandler : IStreamSourceHandler<ValidatedStream, int, DiNumbersCursor>, IDisposable
 {
     private readonly StreamValidationTrace _trace;
     public ValidatedStreamHandler(StreamValidationTrace trace)
@@ -73,30 +78,18 @@ public sealed class ValidatedStreamHandler : IStreamRequestValidator<ValidatedSt
         trace.LastConstructions++;
         trace.Events.Add("last:new");
     }
-    public void Validate(ValidatedStream request)
+    public ValueTask<DiNumbersCursor> OpenAsync(ValidatedStream request, CancellationToken cancellationToken)
     {
         _trace.LastValidations++;
         _trace.Events.Add("last:validate");
-    }
-    public async IAsyncEnumerable<int> HandleAsync(ValidatedStream request, [EnumeratorCancellation] CancellationToken cancellationToken)
-    {
         _trace.HandlerCalls++;
         _trace.ObservedToken = cancellationToken;
-        try
-        {
-            for (var i = 0; i < request.Count; i++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                await Task.Yield();
-                yield return i;
-            }
-        }
-        finally { _trace.IteratorDisposals++; }
+        return new(new DiNumbersCursor(request.Count, cancellationToken, () => _trace.IteratorDisposals++));
     }
     public void Dispose() => _trace.LastDisposals++;
 }
 
-public sealed class ValidatedStreamBehavior : IStreamPipelineBehavior<ValidatedStream, int>
+public sealed class ValidatedStreamBehavior : IStreamMiddleware<ValidatedStream, int>
 {
     private readonly StreamValidationTrace _trace;
     public ValidatedStreamBehavior(StreamValidationTrace trace)
@@ -104,27 +97,17 @@ public sealed class ValidatedStreamBehavior : IStreamPipelineBehavior<ValidatedS
         _trace = trace;
         trace.BehaviorConstructions++;
     }
-    public IAsyncEnumerable<int> HandleAsync<TNext>(ValidatedStream request, TNext next, CancellationToken cancellationToken)
-        where TNext : struct, IStreamContinuation<ValidatedStream, int>
+    public ValueTask<IAsyncEnumerator<int>> OpenAsync(ValidatedStream request, IStreamUpstream<ValidatedStream, int> upstream, CancellationToken cancellationToken)
     {
         _trace.BehaviorCalls++;
-        return next.InvokeAsync(request, cancellationToken);
+        return upstream.OpenAsync(request, cancellationToken);
     }
 }
 
-public sealed class OtherValidatedStreamHandler : IStreamRequestHandler<OtherValidatedStream, int>
+[ZendiatorHandler]
+public sealed class OtherValidatedStreamHandler : IStreamSourceHandler<OtherValidatedStream, int, DiNumbersCursor>
 {
-    public OtherValidatedStreamHandler(StreamValidationTrace trace)
-    {
-        trace.OtherHandlerConstructions++;
-    }
-    public async IAsyncEnumerable<int> HandleAsync(OtherValidatedStream request, [EnumeratorCancellation] CancellationToken cancellationToken)
-    {
-        for (var i = 0; i < request.Count; i++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            await Task.Yield();
-            yield return i;
-        }
-    }
+    public OtherValidatedStreamHandler(StreamValidationTrace trace) => trace.OtherHandlerConstructions++;
+    public ValueTask<DiNumbersCursor> OpenAsync(OtherValidatedStream request, CancellationToken cancellationToken) =>
+        new(new DiNumbersCursor(request.Count, cancellationToken));
 }

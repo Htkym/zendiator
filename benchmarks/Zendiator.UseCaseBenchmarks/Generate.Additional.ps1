@@ -2,6 +2,15 @@
 $RelayDepths = 1,5
 
 function Add-StreamBenchmark([string]$lib, [string]$name, [string]$request, [string]$entry, [string]$resolve, [string]$stream) {
+    $createProvider = if($lib -eq 'Zendiator') {'StreamRegistration.Create()'} else {'Registration.Create("'+$lib+'")'}
+    $typedField = if($lib -eq 'Zendiator') {"    private readonly StreamBenchmarkSink typedSink = new();`n"} else {''}
+    $typedMethods = if($lib -eq 'Zendiator') {
+@"
+    public ValueTask InvokeTyped<TSink>($request r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamSource(r,t).ConsumeAsync(sink);
+    [Benchmark] public async ValueTask<int> FullTyped() { typedSink.Reset(false); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.Sum; }
+    [Benchmark] public async ValueTask<int> EarlyBreakTyped() { typedSink.Reset(true); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.First; }
+"@
+    } else {''}
     $lines.Add(@"
 [MemoryDiagnoser]
 public class $name
@@ -10,12 +19,12 @@ public class $name
     private IServiceScope scope = null!;
     private $entry entry = null!;
     private $request request = null!;
-    [Params(0,1,16,1024)] public int Count {get;set;}
+${typedField}    [Params(0,1,16,1024)] public int Count {get;set;}
     [Params(false,true)] public bool Asynchronous {get;set;}
-    [GlobalSetup] public void Setup() { provider=Registration.Create("$lib"); scope=provider.CreateScope(); entry=$resolve; request=new(Count,Asynchronous); ChildEvidence.Record("$name", "Default"); }
+    [GlobalSetup] public void Setup() { provider=$createProvider; scope=provider.CreateScope(); entry=$resolve; request=new(Count,Asynchronous); ChildEvidence.Record("$name", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public IAsyncEnumerable<int> Invoke($request r,CancellationToken t=default) => $stream;
-    [Benchmark] public IAsyncEnumerable<int> Creation() => Invoke(request);
+$(if($typedMethods){$typedMethods+"`n"})    [Benchmark] public IAsyncEnumerable<int> Creation() => Invoke(request);
     [Benchmark] public async ValueTask<int> Full() { int sum=0; await foreach(var item in Invoke(request).ConfigureAwait(false)) sum+=item; return sum; }
     [Benchmark] public async ValueTask<bool> First() { await using var e=Invoke(request).GetAsyncEnumerator(); return await e.MoveNextAsync(); }
     [Benchmark] public async ValueTask<int> EarlyBreak() { await foreach(var item in Invoke(request).ConfigureAwait(false)) return item; return -1; }
@@ -37,7 +46,7 @@ function Add-ExtraDefinitions {
         $iattrs='[I.Behaviors(' + ((1..$b | ForEach-Object {"typeof(IRBehavior$_<,>)"}) -join ',') + ')]'
         $lines.Add(@"
 public sealed record Relay$b(int Count, bool Asynchronous, Probe? Probe = null) : IRelayLevel$b, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Relay$b, int>;
-public sealed class ZRelay$b : Z.IStreamRequestHandler<Relay$b,int> { public IAsyncEnumerable<int> HandleAsync(Relay$b r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
+[Z.ZendiatorHandler] public sealed class ZRelay$b : Z.IStreamSourceHandler<Relay$b,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Relay$b r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MRelay$b : M.IStreamRequestHandler<Relay$b,int> { public IAsyncEnumerable<int> Handle(Relay$b r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GRelay$b : G.IStreamRequestHandler<Relay$b,int> { public IAsyncEnumerable<int> Handle(Relay$b r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DRelay$b : DS.IStreamRequestHandler<Relay$b,int> { public IAsyncEnumerable<int> Handle(Relay$b r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
@@ -53,8 +62,8 @@ public sealed class DRBehavior${b}_$i : DS.IStreamPipelineBehavior<Relay$b,int>
     }
     foreach($i in 1..5) {
         $lines.Add(@"
-public sealed class ZRBehavior$i<T,R> : Z.IStreamPipelineBehavior<T,R> where T : Z.IStreamRequest<R>, IRelayLevel$i
-{ public IAsyncEnumerable<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamContinuation<T,R> { Work.Relay(r,$i); return next.InvokeAsync(r,t); } }
+public sealed class ZRBehavior$i<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, IRelayLevel$i
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Relay(r,$i); return next.OpenAsync(r,t); } }
 public sealed class MRBehavior$i<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
 { public IAsyncEnumerable<R> Handle(T r,M.StreamHandlerDelegate<R> next,CancellationToken t) { Work.Relay(r,$i); return next(); } }
 public sealed class GRBehavior$i<T,R> : G.IStreamPipelineBehavior<T,R> where T : G.IStreamMessage,IWork
@@ -177,7 +186,7 @@ $asyncBenchmark}
     }
     foreach($lib in 'Zendiator','MediatRHistorical','Mediator','DispatchR','Immediate') {
         foreach($b in $RelayDepths) {
-            $entry=@{Zendiator='Competitive.Generated.IZendiator';MediatRHistorical='M.IMediator';Mediator='G.Mediator';DispatchR='DispatchR.IMediator';Immediate="IRelay$b.Handler"}[$lib]
+            $entry=@{Zendiator='Competitive.Generated.BenchmarkStreams.IZendiator';MediatRHistorical='M.IMediator';Mediator='G.Mediator';DispatchR='DispatchR.IMediator';Immediate="IRelay$b.Handler"}[$lib]
             $stream=@{Zendiator='entry.StreamAsync(r,t)';MediatRHistorical='entry.CreateStream(r,t)';Mediator='entry.CreateStream(r,t)';DispatchR='entry.CreateStream(r,t)';Immediate='entry.HandleAsync(r,t)'}[$lib]
             Add-StreamBenchmark $lib "${lib}Relay$b" "Relay$b" $entry "scope.ServiceProvider.GetRequiredService<$entry>()" $stream
         }
@@ -221,6 +230,7 @@ function Add-ExtraGate {
     foreach($lib in 'Zendiator','MediatRHistorical','Mediator','DispatchR','Immediate') {
         foreach($b in $RelayDepths) {
             $lines.Add("{ var x=new ${lib}Relay$b(); x.Setup(); try { await Correctness.Stream(`"$lib-Relay`",$b,(n,a,p,t)=>x.Invoke(new Relay$b(n,a,p),t)); await Correctness.RelayTiming(`"$lib`",$b,p=>x.Invoke(new Relay$b(2,false,p))); } finally {x.Cleanup();} }")
+            if($lib -eq 'Zendiator') { $lines.Add("{ var x=new ${lib}Relay$b(); x.Setup(); try { await Correctness.TypedStream(`"$lib-Relay`",$b,(n,a,p,s,t)=>x.InvokeTyped(new Relay$b(n,a,p),s,t)); } finally {x.Cleanup();} }") }
         }
     }
 }

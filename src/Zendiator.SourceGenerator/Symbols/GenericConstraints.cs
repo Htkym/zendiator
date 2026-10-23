@@ -12,34 +12,40 @@ internal static class GenericConstraints
     {
         for (var i = 0; i < args.Length; i++)
         {
-            var parameter = type.TypeParameters[i];
-            var arg = args[i];
-            var nullableValue = arg is INamedTypeSymbol n && n.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
-            if ((parameter.HasReferenceTypeConstraint && !arg.IsReferenceType) ||
-                (parameter.HasValueTypeConstraint && (!arg.IsValueType || nullableValue)) ||
-                (parameter.HasUnmanagedTypeConstraint && !arg.IsUnmanagedType) ||
-                (parameter.HasNotNullConstraint && (arg.NullableAnnotation == NullableAnnotation.Annotated || nullableValue)) ||
-                (parameter.HasReferenceTypeConstraint && parameter.ReferenceTypeConstraintNullableAnnotation != NullableAnnotation.Annotated && arg.NullableAnnotation == NullableAnnotation.Annotated))
-                return false;
-            if (parameter.HasConstructorConstraint && !arg.IsValueType &&
-                arg is not ITypeParameterSymbol { HasConstructorConstraint: true } &&
-                (arg is not INamedTypeSymbol named || named.IsAbstract ||
-                 !named.InstanceConstructors.Any(c => c.DeclaredAccessibility == Accessibility.Public && c.Parameters.Length == 0)))
-                return false;
-            foreach (var constraint in parameter.ConstraintTypes)
+            if (!SatisfiesParameterConstraints(type, args, i, compilation)) return false;
+        }
+        return true;
+    }
+
+    internal static bool SatisfiesParameterConstraints(INamedTypeSymbol type, ITypeSymbol[] args, int i, Compilation compilation)
+    {
+        var parameter = type.TypeParameters[i];
+        var arg = args[i];
+        var nullableValue = arg is INamedTypeSymbol n && n.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
+        if ((parameter.HasReferenceTypeConstraint && !arg.IsReferenceType) ||
+            (parameter.HasValueTypeConstraint && (!arg.IsValueType || nullableValue)) ||
+            (parameter.HasUnmanagedTypeConstraint && !arg.IsUnmanagedType) ||
+            (parameter.HasNotNullConstraint && (arg.NullableAnnotation == NullableAnnotation.Annotated || nullableValue)) ||
+            (parameter.HasReferenceTypeConstraint && parameter.ReferenceTypeConstraintNullableAnnotation != NullableAnnotation.Annotated && arg.NullableAnnotation == NullableAnnotation.Annotated))
+            return false;
+        if (parameter.HasConstructorConstraint && !arg.IsValueType &&
+            arg is not ITypeParameterSymbol { HasConstructorConstraint: true } &&
+            (arg is not INamedTypeSymbol named || named.IsAbstract ||
+             !named.InstanceConstructors.Any(c => c.DeclaredAccessibility == Accessibility.Public && c.Parameters.Length == 0)))
+            return false;
+        foreach (var constraint in parameter.ConstraintTypes)
+        {
+            var resolved = Substitute(constraint, type, args, compilation);
+            if (arg is INamedTypeSymbol refArg && refArg.IsRefLikeType)
             {
-                var resolved = Substitute(constraint, type, args, compilation);
-                if (arg is INamedTypeSymbol refArg && refArg.IsRefLikeType)
-                {
-                    // No boxing conversion exists for ref structs; verify the
-                    // interface implementation directly instead.
-                    if (resolved is INamedTypeSymbol required &&
-                        refArg.AllInterfaces.Any(i => Same(i, required))) continue;
-                    return false;
-                }
-                var conversion = ((CSharpCompilation)compilation).ClassifyConversion(arg, resolved);
-                if (!(conversion.IsIdentity || conversion.IsImplicit && (conversion.IsReference || conversion.IsBoxing))) return false;
+                // No boxing conversion exists for ref structs; verify the
+                // interface implementation directly instead.
+                if (resolved is INamedTypeSymbol required &&
+                    refArg.AllInterfaces.Any(i => Same(i, required))) continue;
+                return false;
             }
+            var conversion = ((CSharpCompilation)compilation).ClassifyConversion(arg, resolved);
+            if (!(conversion.IsIdentity || conversion.IsImplicit && (conversion.IsReference || conversion.IsBoxing))) return false;
         }
         return true;
     }

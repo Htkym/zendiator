@@ -45,9 +45,6 @@ internal sealed partial class SourceEmitter
         AddMany("SyncMultiRoute", all.Synchronous.Multiple);
         for (var i = 0; i < all.Notifications.Count; i++)
             Add("NotificationRoute" + i, all.Notifications[i].IsOpen, all.Notifications[i].Subscribers.Select(static s => s.Handler));
-        for (var i = 0; i < all.Streams.Count; i++)
-            AddRoute("StreamRoute" + i, all.Streams[i]);
-        // Each route resolves its first listed dependency right after creating its set.
         for (var i = 0; i < routes.Count; i++)
             routes[i] = routes[i] with { First = routes[i].Types.FirstOrDefault() };
         return routes;

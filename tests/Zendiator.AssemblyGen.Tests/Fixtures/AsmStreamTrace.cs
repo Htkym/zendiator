@@ -2,17 +2,26 @@ using global::Zendiator;
 
 namespace Zendiator.AssemblyGen.Tests;
 
-public sealed class AsmStreamTrace(Trace trace) : IStreamPipelineBehavior<AsmNumbers, int>
+public sealed class AsmStreamTrace(Trace trace) : IStreamMiddleware<AsmNumbers, int>
 {
-    public async IAsyncEnumerable<int> HandleAsync<TNext>(AsmNumbers request, TNext next, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
-        where TNext : struct, IStreamContinuation<AsmNumbers, int>
+    public async ValueTask<IAsyncEnumerator<int>> OpenAsync(AsmNumbers request, IStreamUpstream<AsmNumbers, int> upstream, CancellationToken cancellationToken)
     {
         trace.Events.Add("s-before");
         try
         {
-            await foreach (var i in next.InvokeAsync(request, cancellationToken).WithCancellation(cancellationToken))
-                yield return i;
+            return new TracedCursor(await upstream.OpenAsync(request, cancellationToken), trace);
         }
-        finally { trace.Events.Add("s-after"); }
+        catch { trace.Events.Add("s-after"); throw; }
+    }
+
+    private sealed class TracedCursor(IAsyncEnumerator<int> inner, Trace trace) : IAsyncEnumerator<int>
+    {
+        public int Current => inner.Current;
+        public ValueTask<bool> MoveNextAsync() => inner.MoveNextAsync();
+        public async ValueTask DisposeAsync()
+        {
+            try { await inner.DisposeAsync(); }
+            finally { trace.Events.Add("s-after"); }
+        }
     }
 }

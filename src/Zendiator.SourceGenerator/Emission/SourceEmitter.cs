@@ -23,7 +23,7 @@ internal sealed partial class SourceEmitter
         var routes = model.Routes;
         if (!model.Target.InheritServiceResolver || (routes.Requests.Single.Count == 0 && routes.Synchronous.Single.Count == 0)
             || routes.Requests.Multiple.Count != 0
-            || routes.Synchronous.Multiple.Count != 0 || routes.Notifications.Count != 0 || routes.Streams.Count != 0)
+            || routes.Synchronous.Multiple.Count != 0 || routes.Notifications.Count != 0)
             return null;
         var handler = routes.Requests.Single.Count != 0 ? routes.Requests.Single[0].Handler : routes.Synchronous.Single[0].Handler;
         // The generated public mediator cannot expose an internal type in its generic base.
@@ -117,8 +117,6 @@ internal sealed partial class SourceEmitter
         EmitMulti(b);
         EmitSyncRoutes(b);
         EmitSyncMulti(b);
-        EmitStreams(b);
-        EmitStreamTokenMerge(b);
         EmitFaulted(b);
         EmitDependencySets(b);
         b.AppendLine("""}""");

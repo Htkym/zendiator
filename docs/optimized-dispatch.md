@@ -1,6 +1,6 @@
 # Construction and dispatch lifetime
 
-Zendiator has one dispatch path. It lazily captures each Handler, Behavior and registered Stream validator from
+Zendiator has one dispatch path. It lazily captures each Handler and Behavior from
 standard DI on first use, then reuses that dependency for the mediator instance.
 There is no optimized-mode switch, custom provider, or provider factory.
 
@@ -30,7 +30,7 @@ The default mediator lifetime remains `Scoped`. Generated Handler and Behavior
 registrations default to `Transient` when the mediator is Scoped; the mediator
 still captures each instance on first use. Handlers, Behaviors and subscribers are resolved
 only when their pipeline node is first reached, including synchronous and stream
-handlers. Explicit Stream validators are resolved at the StreamAsync entry. Short-circuiting does not construct
+handlers. Stream source opening and dependency resolution are deferred until the first move. Short-circuiting does not construct
 unused downstream dependencies. Retrying a continuation invokes it again with the
 new request/token but reuses the dependency already captured by that mediator.
 
@@ -69,7 +69,7 @@ rather than depend on a concrete generated base type.
 
 ## Ownership and disposal
 
-DI owns Handler, Behavior and Validator disposal. The generated mediator does not implement
+DI owns Handler and Behavior disposal. The generated mediator does not implement
 `IDisposable` and does not dispose cached dependencies. Keep its scope alive until
 sends and stream enumeration finish. Sending after scope or root-provider disposal
 is unsupported: a cached route may still call its former handler, while a route
@@ -124,3 +124,6 @@ provable misuse of this lifetime contract. They cover explicit `IDisposable`
 treatment, returning a mediator from a local `using` scope, and sending after
 explicit scope disposal in the same method. They do not establish safety for
 other control flow, asynchronous work, or mediators stored in fields.
+
+The new [0.5.0 Stream contract](streaming-0.5.0.ja.md) uses native typed cursors,
+standard enumeration and a typed terminal; these paths require separate measurements.

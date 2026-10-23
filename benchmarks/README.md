@@ -43,3 +43,18 @@ python benchmarks/Zendiator.UseCaseBenchmarks/run_interleaved.py --group all --o
 After reviewing the plan, omit `--dry-run` to execute. `--max-cases 2` makes a bounded partial run; continue it with the same output path and `--resume`, omitting `--max-cases`. Resume requires the same checkout, commit, SDK and matrix and valid saved artifact proofs. Do not run benchmarks concurrently with builds or other measurement workloads. Nested checkouts can make BDN find more than one project; use an isolated checkout.
 
 The generated fixture and matrix are in [Zendiator.UseCaseBenchmarks](Zendiator.UseCaseBenchmarks). Regenerate with `Generate.ps1` / `build_case_lists.py` only when deliberately changing cases, then review the diff and correctness gate. `Run-Jit.ps1` and `--breakdown` provide separate code/allocation diagnostics; their output is not competitive timing evidence.
+
+## New Stream protocol preparation
+
+Zendiator Stream fixtures use named typed cursors and a dedicated canonical composition.
+Peer/direct class bodies and Work.Stream remain unchanged. Full/EarlyBreak use standard
+enumeration through StreamAsync; FullTyped/EarlyBreakTyped use
+StreamSource(...).ConsumeAsync(...) with a sequentially reused class sink. The typed
+plan is not IAsyncEnumerable and creates a private owner per consumption. These
+DI/config and protocol differences distinguish this work from
+saved historical/w64 evidence. Screening uses public Mediator routes and handwritten
+enumerable references; large-middleware-session replaces the old wrapper fixture.
+Keep old protocol artifacts separate. Evaluate standard enumeration, typed terminals
+and HTTP separately using the measured revision, conditions and results. API migration
+or source changes alone do not establish a speedup, and typed consumption does not
+guarantee lower time or allocation.

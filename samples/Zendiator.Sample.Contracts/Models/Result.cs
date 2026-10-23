@@ -28,9 +28,7 @@ public readonly record struct Result<T, TError>
     /// <summary>Gets the error on failure.</summary>
     public TError Error => !IsSuccess ? _error! : throw new InvalidOperationException("Result is success.");
 
-    /// <summary>Creates a success result.</summary>
     public static Result<T, TError> Success(T value) => new(value);
 
-    /// <summary>Creates a failure result.</summary>
     public static Result<T, TError> Failure(TError error) => new(error);
 }
