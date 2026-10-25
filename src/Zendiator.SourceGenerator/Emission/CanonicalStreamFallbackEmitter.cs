@@ -107,6 +107,15 @@ internal static class CanonicalStreamFallbackEmitter
             : Storage(segment.Wrapper.WrapperName, segment.Wrapper.WrapperIsValueType);
         var standalone = IsStandalone(model);
         var parent = model.Segments.SingleOrDefault(s => s.Upstream == n);
+        var awaitMove = segment.Hooks.Count == 0 ? CanonicalStreamPendingTaskEmitter.Emit(model, n) : """
+                        private async global::System.Threading.Tasks.ValueTask<bool> AwaitMoveAsync(global::System.Threading.Tasks.ValueTask<bool> pending)
+                        {
+                            bool moved;
+                            try { moved = await pending.ConfigureAwait(false); }
+                            catch (global::System.Exception error) { return await MoveFailed(error).ConfigureAwait(false); }
+                            return moved ? MoveSucceeded(true).GetAwaiter().GetResult() : await EndAsync().ConfigureAwait(false);
+                        }
+            """;
         var initialization = new StringBuilder();
         EmitInitialization(initialization, model, segment, factory, receiver, referenceSource);
         var rootCheck = standalone ? "" : """
@@ -181,13 +190,7 @@ internal static class CanonicalStreamFallbackEmitter
                             }
                             catch (global::System.Exception error) { return MoveFailed(error); }
                         }
-                        private async global::System.Threading.Tasks.ValueTask<bool> AwaitMoveAsync(global::System.Threading.Tasks.ValueTask<bool> pending)
-                        {
-                            bool moved;
-                            try { moved = await pending.ConfigureAwait(false); }
-                            catch (global::System.Exception error) { return await MoveFailed(error).ConfigureAwait(false); }
-                            return moved ? MoveSucceeded(true).GetAwaiter().GetResult() : await EndAsync().ConfigureAwait(false);
-                        }
+            {{awaitMove}}
                         private async global::System.Threading.Tasks.ValueTask<bool> EndAsync()
                         {
                             await MoveSucceeded(false).ConfigureAwait(false);
