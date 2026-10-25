@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0 (unreleased)
+
+- Add explicit handler markers, named compositions and ordered handler/pipeline declarations. Dedicated hooks can be generated together; arbitrary wrappers retain their own execution boundaries.
+- Replace the previous Stream handler contract with `IStreamSourceHandler<TRequest, TItem, TCursor>` and a named cursor opened through `OpenAsync`. `StreamAsync` returns standard `IAsyncEnumerable<T>` for normal enumeration and HTTP serialization. `StreamSource(...).ConsumeAsync(...)` provides a separate typed terminal without a performance guarantee.
+- Give each Stream enumeration independent ownership, lazy activation, sequential operation guards and deterministic cleanup. Callers must retain their DI scope and consume each returned `ValueTask` once. Internal helpers do not guarantee ambient-context isolation or return to a UI context.
+- Let eligible plain `SendAsync` routes return the handler's original `ValueTask`. Dependency resolution and synchronous callback failures, including cancellation, can now throw during the call; synchronous ambient changes can be visible to the caller.
+- Register one Scoped `IZendiator` entry and Transient defaults for user dependencies. Each Mediator lazily captures its first successful dependency instance; native DI retains activation and disposal ownership. Use after scope disposal is unsupported.
+- Keep closed dependency storage inline by default, with explicit `ClosedServiceCacheMode.LazyBlocks` for suitable sparse compositions. Open generic captures use a small cache before dictionary promotion. Neither layout guarantees faster dispatch for every workload.
+- Split generated outputs and share registration analysis. Some parsing and the legacy renderer remain; generation-time improvements have not been established.
+- Add the separately installed `Zendiator.CodeFixes` package for the missing-handler-marker fix and document-scoped Fix All. It does not automate semantic migration.
+
+See [getting started and migration](docs/getting-started-0.5.0.md) and
+[known limitations](docs/release/known-limitations.md). These are breaking development
+APIs; no 0.5.0 package or release date is announced here. Existing 0.4.0 performance
+tables are historical, and a complete public 0.5.0 comparison has not been published.
+Limited comparisons do not establish universal non-regression or a performance lead
+for Streams that genuinely suspend.
+
 ## 0.4.0
 
 - 同期のStream入力Validatorを明示登録するAPIを追加しました。検証は入口で1回実行し、HandlerとBehaviorは列挙時に開始します。

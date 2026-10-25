@@ -1,6 +1,6 @@
 # 0.5.0候補の使い方
 
-このガイドは、未公開の0.5.0候補packageで同期処理・非同期処理・Streamを使う例です。NuGetで公開済みの0.4.0を使う場合は、[README](../README.ja.md)を参照してください。
+このガイドは、未公開の0.5.0候補packageで同期処理・非同期処理・Streamを使う例です。NuGetで公開済みの0.4.0を使う場合は、[README](https://github.com/Htkym/zendiator/blob/v0.4.0/README.ja.md)を参照してください。
 
 ## 準備と実行
 

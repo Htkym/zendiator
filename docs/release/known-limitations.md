@@ -1,77 +1,129 @@
-# Known limitations and Stream contracts
+# Known limitations for the 0.5.0 candidate
 
-Except for the explicitly labeled 0.5.0 Stream enumeration section, this page records
-historical 0.4.0 boundaries. For the current Stream protocol, see
-[migration and contracts](../streaming-0.5.0.ja.md).
-
-For the historical design, see the [0.4.0 release notes](0.4.0-release-notes.md)
-and [construction and dispatch lifetime](../optimized-dispatch.md) before upgrading.
+0.5.0 is unreleased and changes the handler, composition and Stream contracts.
+Start with [getting started](../getting-started-0.5.0.md) and the
+[Stream migration guide](../streaming-0.5.0.ja.md). Historical 0.4.0 APIs and results
+are described in the [0.4.0 release notes](0.4.0-release-notes.md); they are not
+compatibility promises for this candidate.
 
 ## Dependency capture and lifetime
 
-Each mediator lazily captures the first resolved instance of each handler or behavior
-service type, including Transient registrations. A new send or retry does not imply a
-new instance. DI still constructs and disposes dependencies and may share Scoped or
-Singleton instances across mediators according to its registrations.
+Each Mediator lazily captures the first published successful resolution of each
+dependency type, including Transient services and implementation factories. A new
+send, retry or route does not imply a new instance. Native DI still constructs and
+disposes these objects and controls Scoped or Singleton sharing.
 
-Keep the scope alive until dispatch and stream enumeration finish. Do not use a
-mediator after its scope is disposed. Disposal does not cancel or join ongoing
-operations. Concurrent initialization is synchronized, but handlers and behaviors
-must support any application-level concurrent use themselves.
+Concurrent first resolutions can activate several Transients. Successful callers
+use the publication winner; losing objects remain DI-owned. A resolution failure
+still reports its own error even if another caller publishes an instance. Failures
+and null results are not cached as successful activations.
 
-Lazy resolution means `ValidateOnBuild` alone cannot validate every dispatch dependency.
-Exercise the routes used by the application, especially when changing service lifetimes.
-Do not use a Singleton mediator to capture Scoped services.
+Keep the scope alive until dispatch, enumeration or HTTP serialization and final
+cleanup finish. Using a Mediator after scope disposal is unsupported. Scope disposal
+does not cancel or join pending operations. Independent Stream owners do not make
+shared handlers, hooks or sinks safe for concurrent use.
 
-## Allocation
+Lazy resolution means `ValidateOnBuild` alone cannot validate every dispatch
+dependency. Exercise the routes your application uses, especially after changing
+lifetimes. Do not let a Singleton Mediator capture Scoped services.
 
-Not every operation or user handler is allocation-free. Cold dependency resolution,
-scope creation, asynchronous suspension, and stream enumeration have separate costs.
+Closed storage is inline by default. Explicit lazy blocks can reduce retained empty
+slots for some sparse compositions, but add block allocation and access costs for
+others. Open generic cache promotion also has a cost. See the
+[storage tradeoffs](../getting-started-0.5.0.md#closed-dependency-storage); neither
+choice establishes a gain for all scopes.
 
-## Native AOT generic value-type closure
+## Completion and ambient context
 
-The tested open-generic DI handlers closed over value types require runtime generic
-construction that is unavailable under Native AOT. Both request and stream probes
-report this limitation. Reference-type closures are covered by AOT04/AOT10.
-The release verification target is AOT01-AOT12 on win-x64 with package consumers;
-it is not an every-RID guarantee.
+Eligible plain `SendAsync` routes can fail synchronously before returning their
+original `ValueTask`. Put both the call and its await inside a `try` block. Consume
+the returned operation once; do not separately consume its `AsTask()` conversion.
 
-## Stream enumeration (0.5.0)
+Stream follows ordinary call and await context flow. Synchronous changes to
+`AsyncLocal`, culture or `SynchronizationContext` can be visible to subsequent
+callbacks or the caller; synchronous and pending completion need not expose the
+same changes. Internal helpers are not ambient-state isolation boundaries. The
+framework does not suppress `ExecutionContext`, replay an enumeration-wide saved
+context, or guarantee a return to a UI context. Keep guaranteed operation data in
+the request, cursor or session, and balance ambient scopes around their awaited use.
 
-The generated Mediator's `StreamAsync` returns standard `IAsyncEnumerable<T>`.
-Each enumeration of the same returned source has an independent cursor owner,
-including concurrent enumerations. Each enumerator must be used sequentially:
-await a pending Move before another Move or disposal. Independent owners do not make
-shared handlers, hooks, or other borrowed dependencies safe for concurrent use.
+## Stream ownership and use
 
-Creating the source or obtaining an enumerator does not acquire user dependencies
-or start handler I/O. DI resolution, opening, and owned sessions start on that owner's
-first Move. Keep the caller's DI scope alive through enumeration and final cleanup.
+`StreamAsync` returns standard `IAsyncEnumerable<T>`. Each enumeration has an
+independent owner. Source creation and `GetAsyncEnumerator` do not acquire user
+dependencies or start handler I/O; activation begins on the first move. An
+unconsumed standalone source still allocates its first owner.
 
-Use the source with `await foreach` or return it naturally as `IAsyncEnumerable<T>`
-from an HTTP action for the host to serialize. Do not return a source from an
-action-local scope that is disposed before serialization and cleanup finish.
+Use each enumerator sequentially. Await a pending move before another move or
+disposal; overlapping operations throw without canceling or joining the first
+operation. Pending disposal rejects new moves and shares completion with repeated
+disposal. Cancellation cannot immediately stop I/O that ignores its token.
 
-## Stream entry validation (0.4.0)
+`Current` is valid after a successful move until the next accepted operation. EOF,
+failure and disposal invalidate it. Custom cursors and `ValueTask` sources must obey
+the .NET awaiter and single-consumption contracts; duplicate continuation delivery
+and continuation registration that throws after accepting the callback are not
+supported recovery paths.
 
-Synchronous Stream validators are explicitly registered closed classes; they do
-not provide asynchronous validation, I/O, open-generic matching, or validation
-of arbitrary runtime-object requests. Validation occurs once at the API entry,
-while handler/behavior execution and cancellation remain at enumeration.
-Keep validated inputs stable and the scope alive. Captured validator instances
-are reused, so they must support concurrent calls when the mediator is shared.
+Owned cursors and sessions are cleaned up once in reverse ownership order. Cleanup
+failure takes precedence under ordinary `try/finally` rules. Borrowed DI services,
+the provider and sink are not disposed by the generated owner. Middleware can reopen
+its upstream only after normal EOF and completed cleanup; failure or early disposal
+prevents restart. Explicit reopening can duplicate already delivered items, and no
+automatic retry is supplied.
 
-Performance non-regression is not established for every composition, including a
-validator-free Stream in a composition with validators on other routes. Small
-observed time differences are not latency guarantees.
+`StreamSource(...).ConsumeAsync(...)` uses a fresh private owner. Its plan is not an
+enumerable, and value-type sinks are passed by value: retain results in shared
+reference state. This terminal does not promise lower time or allocation than
+standard enumeration.
 
-## Unsupported dispatch
+## HTTP and asynchronous work
 
-Parallel Publish is unsupported; notification dispatch is sequential.
-Runtime-object request/stream dispatch is unsupported. Notification erasure is a
-separate supported path. Parallel continuation calls and retention of continuations
-after completion are not guaranteed.
+Return `StreamAsync` naturally as `IAsyncEnumerable<T>` from an ASP.NET Core action.
+Keep the request scope alive through serialization and cleanup, pass the request's
+cancellation token, and do not return a source from an already disposed action-local
+scope. The host serializer owns JSON framing and options. Once a response has
+started, a later source or serializer failure may leave an incomplete response.
 
-## Other RIDs
+Functional HTTP integration does not establish HTTP throughput or external-I/O
+performance. A `Task.Yield` workload is not a substitute for database, network or
+storage behavior. Standard enumeration, typed consumption and HTTP are separate
+performance evaluations.
 
-Native AOT beyond win-x64 is unverified.
+## Performance evidence
+
+No universal allocation-free or non-regression guarantee is made. Scope creation,
+cold resolution, asynchronous suspension, middleware and cleanup have separate
+costs. Improvements in one synchronous enumeration case do not establish a lead for
+Streams that genuinely suspend; competitive superiority for those paths remains
+unestablished. Early termination and some pending paths retain adverse observations.
+
+Historical 0.4.0 tables and limited development comparisons are not a complete
+comparison of the final 0.5.0 candidate. Results from different source versions or
+protocols must not be combined into a single-version ranking. The native Zendiator
+cursor and competitors' compiler iterators are part of their complete product
+paths, so a difference cannot be attributed to dispatch alone.
+
+## Generator and CodeFix boundaries
+
+Some initial parsing, private-name/type rewriting and API projection parsing remain.
+The legacy renderer still serves features outside the canonical backend. Complete
+renderer unification and removal of all parsing have not been implemented, and the
+generation-time benefit of the changes has not been established.
+
+The optional [CodeFix package](../../src/Zendiator.CodeFixes/README.md) adds a missing
+handler marker and supports Fix All in the current document. It does not migrate
+pipeline order, lifetimes, wrappers or other behavior automatically. The command-line
+compiler does not apply code fixes; the IDE supplies Roslyn Workspaces assemblies.
+
+## Native AOT and dispatch boundaries
+
+The package verification target is win-x64; other RIDs are unverified. Tested open
+generic DI handlers closed over value types require runtime generic construction
+that is unavailable under Native AOT. Reference-type closures have package-consumer
+coverage, which is not an every-type or every-RID guarantee.
+
+Parallel Publish and runtime-object request/Stream dispatch are unsupported.
+Notification type erasure is a separate supported path. User stages must follow
+the sequential continuation and upstream-ownership contracts; retaining or invoking
+continuations concurrently after their operation completes is not supported.

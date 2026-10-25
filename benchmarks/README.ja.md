@@ -6,7 +6,7 @@
 
 ## 比較の読み方
 
-[README](../README.ja.md#性能比較)には、2026-10-08の全体比較から有利・不利な条件を含む8例を載せています。ソース版は `1c41d2b105073d2dc9be2c0e8684fdce2fa11f55` です。[丸めていない抜粋データ](results/20261008-1c41d2b-summary.csv)にはMean、信頼区間の半幅であるError、StdDev、標準誤差、N、管理ヒープの割り当てを別列で載せています。
+[0.4.0の過去の測定結果](#historical-040-results)には、2026-10-08の全体比較から有利・不利な条件を含む8例を載せています。ソース版は `1c41d2b105073d2dc9be2c0e8684fdce2fa11f55` です。[丸めていない抜粋データ](results/20261008-1c41d2b-summary.csv)にはMean、信頼区間の半幅であるError、StdDev、標準誤差、N、管理ヒープの割り当てを別列で載せています。
 
 測定環境はWindows 11 x64、Intel Core Ultra 7 258V、SDK 10.0.401、.NET 10.0.12、DI 10.0.12、BenchmarkDotNet 0.15.8、Releaseです。affinity mask 1、warmup20、measurement12、要求iteration 500 ms、各ケース1 launchで、比較キーごとに先頭のライブラリを交代しました。394件の正しさのgateと、保存した各consumerのartifact gateが通っています。BDNのoverhead補正と外れ値処理後のNは各ケース9〜12でした。
 
@@ -26,26 +26,62 @@ FirstSendは測定iterationごとに事前作成したScopeを16384個使い、u
 
 ## 再現手順
 
-.NET 10、PowerShell、Python 3を用意します。パッケージ版はlock fileで固定しています。リポジトリのルートから実行します。
+コマンドは、checkoutしたソース版のfixtureを実行します。過去の表を再現する場合は、
+表で固定した`1c41d2b`のソースと、それに対応する依存関係を使います。
+現在の0.5.0を実行しても、当時の実装を再現したことにはなりません。
+チェックイン済みのsuiteには、legacyのSend・Notification登録とnativeのStream登録が含まれます。
+canonicalな0.5.0全体の比較ではありません。
+
+.NET 10、PowerShell、Python 3を用意します。パッケージ版はlock fileで固定しています。
+リポジトリのルートから実行します。
 
 ```powershell
 pwsh -NoProfile -File benchmarks/Run-Comparison.ps1 -Group smoke
 ```
 
-`-Group all` は、ライブラリの型ごとのブロックで全体を測ります。BDN条件は同じですが、上の比較とは実行順が違います。新しい `.local/benchmarks/<timestamp>` にログと全BDN JSONを保存し、既存の出力先は上書きしません。
+`-Group all`は、チェックイン済みの全matrixをライブラリの型ごとのブロックで実行します。
+過去の表で使った、比較キーごとにライブラリを交代する順序とは異なります。
+未加工のBenchmarkDotNet JSONとログも、結果とともに保存します。
+測定するソース版、依存関係、workload、実行順は比較条件の一部です。
+同じコマンドを使ったことだけでは、条件の一致や現在の版の順位は確認できません。
 
-比較キーごとに先頭を交代する場合は、SDK 10.0.401を使い、変更のないcommit済みcheckoutから実行します。出力はcheckoutの外に置きます。
+## Stream比較の範囲
 
-```powershell
-python benchmarks/Zendiator.UseCaseBenchmarks/run_interleaved.py --group all --output D:/zendiator-results/new-run --dry-run
-```
+現在のZendiatorのStream fixtureは、名前付きの型付きcursorとcanonical compositionを使います。
+競合は、それぞれのproducerと登録形状を使います。
+Full/EarlyBreakは、StreamAsyncによる標準列挙を使います。FullTypedとEarlyBreakTypedは、
+classのsinkを渡してStreamSource(...).ConsumeAsync(...)を使います。
+typed planはIAsyncEnumerableではなく、消費ごとに非公開のownerを作ります。
+EarlyBreak16は、16項目の入力から1項目を消費します。16項目を消費する条件ではありません。
 
-計画を確認した後、`--dry-run` を外すと測定します。`--max-cases 2` なら2ケースだけの途中結果を作れます。同じ出力先に `--resume` を指定し、`--max-cases` を外すと続行します。同じcheckout、commit、SDK、matrixと、保存した実行物の有効な証明が必要です。ビルドや別の測定と同時に実行しません。checkout内に別のcheckoutがあるとBDNが複数のprojectを見つけるため、独立したcheckoutを使います。
+標準列挙、typed terminal、HTTPは別々に評価します。native cursorとコンパイラーが生成するiteratorでは、
+producer側の処理にかかる費用が異なります。そのため、これらは製品経路全体の比較であり、
+dispatcherだけを分離した時間測定ではありません。protocolの変更や割当量の削減だけでは、
+速度が向上したとは判断できません。typedな消費も、時間や割当量の削減を保証しません。
 
-fixtureとmatrixは [Zendiator.UseCaseBenchmarks](Zendiator.UseCaseBenchmarks) にあります。ケースを意図して変える場合だけ `Generate.ps1` / `build_case_lists.py` で再生成し、差分と正しさのgateを確認します。`Run-Jit.ps1` や `--breakdown` はコード・割り当ての別診断で、競合ライブラリとの時間比較には混ぜません。
+<a id='historical-040-results'></a>
 
-## 新Stream protocolの準備
+## 0.4.0の過去の測定結果
 
-現在のZ側fixtureは名前付きtyped cursorとStream専用canonical compositionを使います。peer/Directのclass本体とWork.Streamは保持します。Full/EarlyBreakはStreamAsyncの標準列挙、FullTyped/EarlyBreakTypedはStreamSource(...).ConsumeAsync(...)で、fixture内のclass sinkを逐次再利用します。typedの計画値はIAsyncEnumerableではなく、消費ごとに専用ownerを作ります。このDI/configとprotocolの違いをhistorical/w64の証拠と区別してください。
+ここに載せるのは、以下に記載した過去のソース版の結果です。現在の0.5.0候補の結果ではありません。
 
-Screeningは新protocolの公開Mediatorと手書き列挙referenceを使い、旧wrapper fixtureをlarge-middleware-sessionへ移します。旧protocolのartifactとは分け、標準列挙、typed terminal、HTTPをそれぞれ対象の版・条件・実測結果で評価してください。API移行やsource変更だけでは高速化の根拠にならず、typed消費による時間・割当の優位を保証しません。
+取得済みの入口、初回取得、Scopeの作成、Streamの消費を分けて比べた観測値です。時間と管理ヒープの割り当ては別の指標として選定に使ってください。
+
+|条件|Zendiator Mean ns|B/op|比較先|Mean ns|B/op|
+|---|---:|---:|---|---:|---:|
+|既存Scopeで入口を再取得してSend・Behavior 5|32.25|0|Immediate|46.07|0|
+|新Scope＋初回取得＋Send＋破棄・Behavior 0|79.43|376|Immediate|96.47|368|
+|新Scope＋初回取得＋Send＋破棄・Behavior 5|169.08|568|Immediate|121.61|568|
+|事前作成Scopeで初回取得＋Send・Behavior 5|807.98|440|Immediate|605.65|440|
+|同期Notification・購読者16|121.77|0|DispatchR|175.40|0|
+|同期Stream・全1024項目・Behavior 0|14,190.35|216|Immediate|14,222.54|144|
+|同期Stream・16項目の入力を1項目で終了・Behavior 0|62.57|216|Immediate|42.84|144|
+|同期Relay・全1024項目・前処理5段|15,028.75|216|DispatchR|13,610.87|144|
+
+上表の既存ScopeのSendはImmediateより平均時間が低い一方、Behaviorを含む初回取得や新Scopeで1回送る条件は高い値でした。Stream0の全1024項目では時間差が約0.23%と小さく、順位を確定できません。割り当てはZendiatorが72 B多く、途中で列挙を終える条件やRelayにも不利な例があります。
+
+2026-10-08にソース版 `1c41d2b105073d2dc9be2c0e8684fdce2fa11f55` を測定しました。Windows 11 x64、Intel Core Ultra 7 258V、SDK 10.0.401、.NET 10.0.12、BenchmarkDotNet 0.15.8、Release、affinity mask 1、warmup20、measurement12、要求iteration 500 ms、各ケース1 launchです。表の比較先はImmediate.Handlers 4.2.0とDispatchR.Mediator 2.3.1、DIは10.0.12です。
+
+MeanはBDNのoverhead補正と外れ値処理後の平均で、Nは9〜12でした。[丸めていない抜粋CSV](results/20261008-1c41d2b-summary.csv)にはMean、信頼区間の半幅であるError、StdDev、N、割り当てを別列で載せています。全体比較は74比較キー・全360件です。1 launchの比較から、独立実行での順位再現、全条件の非劣化、変更前後の因果的な改善は認定しません。
+
+Handlerは軽い処理で、ライブラリ間のAPI形状とDI登録も同一ではありません。ScopeK1はScopeの生成・破棄を含み、FirstSendは含みません。StreamとRelayは1項目でなく、列挙・破棄を含む操作全体の値です。Relayの前処理は同期的に実行し、次のEnumerableを直接返します。アプリ起動、HTTP全体や非同期I/Oへの予測には使いません。[ベンチマークの説明](#比較の読み方)に実行条件と再現手順があります。
