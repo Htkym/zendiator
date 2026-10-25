@@ -29,8 +29,9 @@ FirstSend uses 16384 pre-created scopes per measured iteration, unroll factor 1.
 Commands run the fixtures at the source revision you have checked out. To reproduce
 the historical table, use its pinned `1c41d2b` source and matching dependencies;
 running the current 0.5.0 checkout does not reproduce that historical implementation.
-The checked-in suite includes legacy Send/notification registrations and native
-Stream registrations. It is not a complete canonical 0.5.0 comparison.
+For Zendiator, Send and non-notification feature cases use a canonical composition;
+Stream and Relay use native cursor sources. Notification retains a separate legacy
+registration. These fixtures do not supply a new measurement of the final 0.5.0 candidate.
 
 Use .NET 10, PowerShell and Python 3. Package versions are locked. From the
 repository root:

@@ -76,7 +76,7 @@ public sealed class IRBehavior$i<T,R> : I.StreamingBehavior<T,R> where T:IWork
         $marker=if($b){"ILevel$b"}else{'IWork'}
         $lines.Add(@"
 public sealed record Void$b(Counter Counter, Probe? Probe = null) : $marker, Z.IRequest, M.IRequest, G.IRequest, D.IRequest<Void$b,ValueTask<ValueTuple>>;
-public sealed class ZVoid$b : Z.IRequestHandler<Void$b> { public ValueTask HandleAsync(Void$b r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
+[Z.ZendiatorHandler] public sealed class ZVoid$b : Z.IRequestHandler<Void$b> { public ValueTask HandleAsync(Void$b r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class MVoid$b : M.IRequestHandler<Void$b> { public Task Handle(Void$b r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return Task.CompletedTask; } }
 public sealed class GVoid$b : G.IRequestHandler<Void$b> { public ValueTask<G.Unit> Handle(Void$b r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class DVoid$b : D.IRequestHandler<Void$b,ValueTask<ValueTuple>> { public ValueTask<ValueTuple> Handle(Void$b r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
@@ -99,11 +99,11 @@ public sealed class ZVBehavior$i<T> : Z.IPipelineBehavior<T> where T:Z.IRequest,
     $lines.Add(@'
 public sealed record ClosedGeneric<T>(int Value=41, Probe? Probe=null) : IWork,Z.IRequest<int>,M.IRequest<int>,D.IRequest<ClosedGeneric<T>,ValueTask<int>>;
 public sealed record OpenGeneric<T>(int Value=41, Probe? Probe=null) : IWork,Z.IRequest<int>,M.IRequest<int>,D.IRequest<OpenGeneric<T>,ValueTask<int>>;
-public sealed class ZClosed : Z.IRequestHandler<ClosedGeneric<int>,int> { public ValueTask<int> HandleAsync(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.ZendiatorHandler] public sealed class ZClosed : Z.IRequestHandler<ClosedGeneric<int>,int> { public ValueTask<int> HandleAsync(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MClosed : M.IRequestHandler<ClosedGeneric<int>,int> { public Task<int> Handle(ClosedGeneric<int> r,CancellationToken t)=>Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DClosed : D.IRequestHandler<ClosedGeneric<int>,ValueTask<int>> { public ValueTask<int> Handle(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 [I.Handler][I.Behaviors()] public static partial class IClosed { private static ValueTask<int> HandleAsync(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
-public sealed class ZOpen<T> : Z.IRequestHandler<OpenGeneric<T>,int> { public ValueTask<int> HandleAsync(OpenGeneric<T> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.ZendiatorHandler] public sealed class ZOpen<T> : Z.IRequestHandler<OpenGeneric<T>,int> { public ValueTask<int> HandleAsync(OpenGeneric<T> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MOpen<T> : M.IRequestHandler<OpenGeneric<T>,int> { public Task<int> Handle(OpenGeneric<T> r,CancellationToken t)=>Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DOpen<T> : D.IRequestHandler<OpenGeneric<T>,ValueTask<int>> { public ValueTask<int> Handle(OpenGeneric<T> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 #if PROBE_IMMEDIATE_OPEN
@@ -148,7 +148,7 @@ if(library == "DispatchR") {
 
 function Add-ExtraBenchmarks {
     foreach($lib in 'Direct','Zendiator','MediatRHistorical','Mediator','DispatchR','Immediate') {
-        $entry=@{Direct='ZPing0';Zendiator='Competitive.Generated.IZendiator';MediatRHistorical='M.IMediator';Mediator='G.Mediator';DispatchR='DispatchR.IMediator';Immediate='IClosed.Handler'}[$lib]
+        $entry=@{Direct='ZPing0';Zendiator='Competitive.Generated.App.IZendiator';MediatRHistorical='M.IMediator';Mediator='G.Mediator';DispatchR='DispatchR.IMediator';Immediate='IClosed.Handler'}[$lib]
         $cases=@()
         if($lib -ne 'Mediator') {$cases+='Closed'}
         if($lib -notin 'Mediator','Immediate') {$cases+='Open'}
@@ -158,7 +158,8 @@ function Add-ExtraBenchmarks {
             $isvoid=$case.StartsWith('Void'); $isnotice=$case.StartsWith('Notification')
             $type=if($isvoid){$case}elseif($isnotice){$case.Replace('Notification','Notice')}else{"${case}Generic<int>"}
             $result=if($isvoid -or $isnotice){'ValueTask'}else{'ValueTask<int>'}
-            $e=if($lib -eq 'Immediate'){if($isvoid){"I$case.Handler"}else{'IClosed.Handler'}}else{$entry}
+            $e=if($lib -eq 'Zendiator' -and $isnotice){'Competitive.Generated.Notifications.IZendiator'}elseif($lib -eq 'Immediate'){if($isvoid){"I$case.Handler"}else{'IClosed.Handler'}}else{$entry}
+            $createProvider=if($lib -eq 'Zendiator' -and $isnotice){'NotificationRegistration.Create()'}else{'Registration.Create("'+$lib+'")'}
             $call=if($lib -eq 'Direct'){
                 if($isvoid){'Work.Void(r.Counter,r.Probe,t); await ValueTask.CompletedTask;'}
                 elseif($isnotice){$n=[int]$case.Replace('Notification','');"for(int i=1;i<=$n;i++) await Work.Notify(r.Counter,r.Probe,r.Asynchronous,i,t);"}
@@ -176,7 +177,7 @@ function Add-ExtraBenchmarks {
 {
 $asyncField    private ServiceProvider provider=null!; private IServiceScope scope=null!; private $e entry=null!;
     private readonly Counter counter=new(); private $type request=null!;
-    [GlobalSetup] public void Setup() { provider=Registration.Create("$lib"); scope=provider.CreateScope(); entry=$resolve; request=$request; ChildEvidence.Record("${lib}$case", "Default"); }
+    [GlobalSetup] public void Setup() { provider=$createProvider; scope=provider.CreateScope(); entry=$resolve; request=$request; ChildEvidence.Record("${lib}$case", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public async $result Invoke($type r,CancellationToken t=default) { $call }
     [Benchmark] public $result Dispatch() => Invoke(request);
@@ -211,6 +212,7 @@ function Add-ExtraGate {
         }
         foreach($life in 'Scoped','Singleton') {
             if($lib -eq 'Direct'){continue}
+            if($lib -eq 'Zendiator' -and $life -eq 'Singleton'){continue}
             if($lib -eq 'DispatchR' -and $life -eq 'Singleton'){continue}
             if($lib -eq 'Mediator') {$lines.Add("if(Registration.MediatorLifetime == `"$life`") {")}
             foreach($b in 0,1,3,5) {
@@ -221,6 +223,7 @@ function Add-ExtraGate {
         if($lib -ne 'Direct') {
             $handler=@{Zendiator='ZPing0';MediatRHistorical='M.IRequestHandler<Ping0,int>';Mediator='G.IRequestHandler<Ping0,int>';DispatchR='D.IRequestHandler<Ping0,ValueTask<int>>';Immediate='IPing0.Handler'}[$lib]
             foreach($life in 'Default','Scoped','Singleton') {
+                if($lib -eq 'Zendiator' -and $life -eq 'Singleton'){continue}
                 if($lib -eq 'DispatchR' -and $life -eq 'Singleton'){continue}
                 if($lib -eq 'Mediator' -and $life -ne 'Default') {$lines.Add("if(Registration.MediatorLifetime == `"$life`")")}
                 $lines.Add("Correctness.Lifetime(`"$lib`",`"$life`",typeof($handler));")

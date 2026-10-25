@@ -32,7 +32,7 @@ if (skipGate)
     if (args.Contains("--validate-only") || string.IsNullOrWhiteSpace(gateProof) || !File.Exists(gateProof))
         throw new InvalidOperationException("A completed correctness gate is required before a single-case run.");
     using var proof = JsonDocument.Parse(File.ReadAllText(gateProof));
-    if (proof.RootElement.ValueKind != JsonValueKind.Array || proof.RootElement.GetArrayLength() != 394 ||
+    if (proof.RootElement.ValueKind != JsonValueKind.Array || proof.RootElement.GetArrayLength() != 389 ||
         proof.RootElement.EnumerateArray().Any(row => !row.TryGetProperty("status", out var status) || status.GetString() != "Passed"))
         throw new InvalidOperationException("Correctness gate evidence is incomplete.");
     var streamProofRows = proof.RootElement.EnumerateArray().Where(row =>
@@ -79,7 +79,7 @@ File.WriteAllText(Path.Combine(output, "manifest.json"), JsonSerializer.Serializ
     args
 }, new JsonSerializerOptions { WriteIndented = true }));
 if (args.Contains("--validate-only")) return;
-if (args.Contains("--breakdown")) { await AllocationBreakdown.Run(output); return; }
+if (args.Contains("--breakdown")) throw new NotSupportedException("The legacy allocation diagnostic is outside this canonical comparison adapter.");
 if (args.Contains("--stream-breakdown")) { await StreamAllocationProfile.Run(output); return; }
 if (args.Contains("--inspect"))
 {

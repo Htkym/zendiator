@@ -205,7 +205,7 @@ def gate_valid(path):
     if not filesystem_path(path).exists():
         return False
     records = read(path)
-    return len(records) == 394 and all(row.get("status") == "Passed" for row in records)
+    return len(records) == 389 and all(row.get("status") == "Passed" for row in records)
 
 
 def check_case(row, attempt, session, require_artifact_gate=True):

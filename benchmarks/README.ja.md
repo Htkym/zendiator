@@ -29,8 +29,9 @@ FirstSendは測定iterationごとに事前作成したScopeを16384個使い、u
 コマンドは、checkoutしたソース版のfixtureを実行します。過去の表を再現する場合は、
 表で固定した`1c41d2b`のソースと、それに対応する依存関係を使います。
 現在の0.5.0を実行しても、当時の実装を再現したことにはなりません。
-チェックイン済みのsuiteには、legacyのSend・Notification登録とnativeのStream登録が含まれます。
-canonicalな0.5.0全体の比較ではありません。
+ZendiatorのSendと、Notification以外のfeatureはcanonical compositionを使い、
+StreamとRelayはnative cursorを使います。Notificationは分離したlegacy登録を維持します。
+このfixtureを用意したことは、最終版0.5.0候補の新しい測定結果を示すものではありません。
 
 .NET 10、PowerShell、Python 3を用意します。パッケージ版はlock fileで固定しています。
 リポジトリのルートから実行します。

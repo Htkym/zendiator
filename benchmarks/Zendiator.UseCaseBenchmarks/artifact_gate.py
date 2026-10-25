@@ -263,13 +263,13 @@ def verify_gate(request_path, proof_path):
                 "gateImplementationSha256", "gateDriverSha256", "bundleFiles"):
         if proof.get(key) != request[key]:
             raise ValueError(f"Gate proof identity differs: {key}")
-    if (proof.get("schemaVersion") != 1 or proof.get("benchmarkGateCases") != 394 or
+    if (proof.get("schemaVersion") != 1 or proof.get("benchmarkGateCases") != 389 or
         proof.get("bundleBeforeAndAfterVerified") is not True or proof.get("requestHash") != sha(request_path)):
         raise ValueError("Gate proof is incomplete")
     outcomes = read(proof_path.parent / "correctness.json")
-    if (len(outcomes) != 394 or any(item.get("status") != "Passed" for item in outcomes) or
+    if (len(outcomes) != 389 or any(item.get("status") != "Passed" for item in outcomes) or
         proof["correctnessSha256"] != sha(proof_path.parent / "correctness.json")):
-        raise ValueError("394-case benchmark gate evidence changed/failed")
+        raise ValueError("389-case benchmark gate evidence changed/failed")
     if tree_hashes(request["bundleRoot"]) != request["bundleFiles"]:
         raise ValueError("Saved gate bundle is missing or substituted")
     actual = assembly_map(proof["assemblies"])
@@ -418,4 +418,4 @@ def check_artifact_binding(row, attempt, session, project):
 def binding_result(path, binding):
     return {"bindingSha256": sha(path), "childFinalSha256": binding["childProofSha256"], "key": binding["key"],
             "proofSha256": binding["proofSha256"], "proofReused": binding["proofReused"],
-            "scope": "394 benchmark gate; notification-contract/full-suite evidence remains separate"}
+            "scope": "389 benchmark gate; notification-contract/full-suite evidence remains separate"}

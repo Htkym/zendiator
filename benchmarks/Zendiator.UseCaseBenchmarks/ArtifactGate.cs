@@ -73,8 +73,8 @@ internal static class ArtifactGate
                     throw new InvalidOperationException($"Entry startup substituted a binding: {item.Name}");
             }
             await GeneratedGate.Run();
-            if (Correctness.Results.Count != 394)
-                throw new InvalidOperationException($"Expected 394 benchmark-gate results, got {Correctness.Results.Count}");
+            if (Correctness.Results.Count != 389)
+                throw new InvalidOperationException($"Expected 389 benchmark-gate results, got {Correctness.Results.Count}");
             Correctness.Save(request.Output);
             var loaded = ArtifactEvidence.Assemblies();
             CheckBindings(request, loaded);
@@ -101,7 +101,7 @@ internal static class ArtifactGate
                 request.BundleFiles,
                 runtimeEvidence = ArtifactEvidence.Runtime(request.RuntimeConfigPath, request.DepsPath),
                 assemblies = loaded,
-                scope = "394 benchmark-gate checks; focused notification contracts and full-suite tests remain separate"
+                scope = "389 benchmark-gate checks; focused notification contracts and full-suite tests remain separate"
             });
         }
         finally

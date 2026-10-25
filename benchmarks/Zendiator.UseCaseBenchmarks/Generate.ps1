@@ -25,7 +25,7 @@ foreach ($b in 0,1,3,5) {
     $lines.Add(@"
 public sealed record Ping$b(int Value = 41, Probe? Probe = null) : $marker, Z.IRequest<int>, M.IRequest<int>, G.IRequest<int>, D.IRequest<Ping$b, ValueTask<int>>;
 public sealed record Stream$b(int Count, bool Asynchronous, Probe? Probe = null) : $marker, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Stream$b, int>;
-public sealed class ZPing$b : Z.IRequestHandler<Ping$b,int> { public ValueTask<int> HandleAsync(Ping$b r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.ZendiatorHandler] public sealed class ZPing$b : Z.IRequestHandler<Ping$b,int> { public ValueTask<int> HandleAsync(Ping$b r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MPing$b : M.IRequestHandler<Ping$b,int> { public Task<int> Handle(Ping$b r,CancellationToken t) => Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class GPing$b : G.IRequestHandler<Ping$b,int> { public ValueTask<int> Handle(Ping$b r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DPing$b : D.IRequestHandler<Ping$b,ValueTask<int>> { public ValueTask<int> Handle(Ping$b r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
@@ -89,16 +89,22 @@ public static class Registration
         switch(library)
         {
             case "Zendiator":
-                s.AddZendiator(c => {
-                    c.Namespace = "Competitive.Generated";
-                    c.ServiceLifetime = lifetime == "Singleton" ? ServiceLifetime.Singleton : lifetime == "Transient" ? ServiceLifetime.Transient : ServiceLifetime.Scoped;
-                    c.RegisterServicesFromAssemblyContaining<Ping0>();
+                if (lifetime is not ("Default" or "Scoped"))
+                    throw new NotSupportedException("The canonical comparison composition uses a Scoped mediator.");
+                s.AddZendiator<App>(c => {
 '@)
-foreach($i in 1..5) {
-    $lines.Add("c.AddOpenBehavior(typeof(ZBehavior$i<,>), order: $i);")
-    $lines.Add("c.AddOpenBehavior(typeof(ZVBehavior$i<>), order: $(20+$i));")
+foreach($family in 'Ping','Void') {
+    foreach($b in 0,1,3,5) {
+        $request = "$family$b"
+        $handler = "Z$family$b"
+        $lines.Add("                    c.Handlers<$request>(Z.DispatchFamily.SendAsync,typeof($handler));")
+        $stages = if($b) { ((1..$b | ForEach-Object {"Z.Stage.Hook<CanonicalBefore$_<$request>>()"}) -join ',') } else { '' }
+        $lines.Add("                    c.Pipeline<$request>(Z.DispatchFamily.SendAsync$(if($stages){','+$stages}));")
+    }
 }
 $lines.Add(@'
+                    c.Handlers<ClosedGeneric<int>>(Z.DispatchFamily.SendAsync,typeof(ZClosed));
+                    c.Handlers(typeof(OpenGeneric<>),Z.DispatchFamily.SendAsync,typeof(ZOpen<>));
                 });
                 break;
             case "MediatRHistorical":
@@ -175,7 +181,7 @@ foreach($lib in 'Direct','Zendiator','MediatRHistorical','Mediator','DispatchR',
     foreach($b in 0,1,3,5) {
         if($lib -eq 'Direct' -and $b -ne 0) {continue}
         $entry=@{
-            Direct='ZPing0'; Zendiator='Competitive.Generated.IZendiator'; MediatRHistorical='M.IMediator';
+            Direct='ZPing0'; Zendiator='Competitive.Generated.App.IZendiator'; MediatRHistorical='M.IMediator';
             Mediator='G.Mediator'; DispatchR='DispatchR.IMediator'; Immediate="IPing$b.Handler"
         }[$lib]
         $streamEntry=if($lib -eq 'Immediate'){"IStream$b.Handler"}elseif($lib -eq 'Zendiator'){'Competitive.Generated.BenchmarkStreams.IZendiator'}else{$entry}
@@ -206,7 +212,7 @@ public class ${lib}Send$b
     private bool firstSendStarted;
     private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
-    public IEnumerable<string> Lifetimes => $(if($lib -eq 'Direct'){'["Default"]'}elseif($lib -eq 'Mediator'){'Registration.MediatorLifetimes'}elseif($lib -eq 'DispatchR'){'["Default","Scoped"]'}else{'["Default","Scoped","Singleton"]'});
+    public IEnumerable<string> Lifetimes => $(if($lib -eq 'Direct'){'["Default"]'}elseif($lib -eq 'Mediator'){'Registration.MediatorLifetimes'}elseif($lib -in 'Zendiator','DispatchR'){'["Default","Scoped"]'}else{'["Default","Scoped","Singleton"]'});
     [GlobalSetup] public void Setup() { provider=Registration.Create("$lib",Lifetime); scope=provider.CreateScope(); entry=$resolve; ChildEvidence.Record("${lib}Send$b", Lifetime); }
     [GlobalCleanup] public void Cleanup()
     {
@@ -312,4 +318,5 @@ $(if($lib -eq 'Zendiator'){'        await Correctness.TypedStream("Zendiator",'+
 }
 Add-ExtraGate
 $lines.Add('} }')
-[IO.File]::WriteAllLines((Join-Path $PSScriptRoot 'GeneratedCases.cs'),$lines)
+$content = (($lines -join "`n") + "`n").Replace("`r`n", "`n")
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'GeneratedCases.cs'), $content, [Text.UTF8Encoding]::new($false))
