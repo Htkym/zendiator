@@ -23,12 +23,30 @@ public sealed partial class GeneratorTests
         }
         """.Replace("__CONFIG__", configuration).Replace("__DECLARATIONS__", declarations).Replace("__RUN__", run);
 
-    private static async Task RunNativeStreamFixture(string name, string source, string entryType = "NativeStream.Bridge")
+    private static async Task RunNativeStreamFixture(string name, string source, string entryType = "NativeStream.Bridge",
+        Func<string, string>? generatedTransform = null)
     {
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(
             SyncCompilation(source, "NativeStream_" + name + "_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
         Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var transformedSources = new Dictionary<string, string>();
+        if (generatedTransform is not null)
+        {
+            foreach (var file in driver.GetRunResult().Results.Single().GeneratedSources)
+            {
+                var transformed = generatedTransform(file.SourceText.ToString());
+                transformedSources.Add(file.HintName, transformed);
+                if (transformed != file.SourceText.ToString())
+                {
+                    var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(transformed,
+                        (Microsoft.CodeAnalysis.CSharp.CSharpParseOptions)file.SyntaxTree.Options, file.SyntaxTree.FilePath,
+                        encoding: System.Text.Encoding.UTF8);
+                    output = output.ReplaceSyntaxTree(file.SyntaxTree, tree);
+                }
+            }
+            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        }
         using var bytes = new MemoryStream();
         var emitted = output.Emit(bytes);
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
@@ -39,6 +57,12 @@ public sealed partial class GeneratorTests
             File.WriteAllText(Path.Combine(folder, "input.cs"), source);
             foreach (var file in driver.GetRunResult().Results.Single().GeneratedSources)
                 File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
+            if (generatedTransform is not null)
+            {
+                var transformedFolder = Path.Combine(folder, "execution-transformed"); Directory.CreateDirectory(transformedFolder);
+                foreach (var file in transformedSources)
+                    File.WriteAllText(Path.Combine(transformedFolder, file.Key), file.Value);
+            }
             File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
         }
         bytes.Position = 0;

@@ -129,6 +129,9 @@ public abstract class StreamCursorState : IAsyncDisposable
         Volatile.Write(ref _busy, 0);
     }
 
+    /// <summary>Releases a privately consumed Move after its result and cleanup have settled.</summary>
+    protected void ReleasePrivateMoveClaim() => Volatile.Write(ref _busy, 0);
+
     /// <summary>Checks Current validity before the generated getter reads its typed source.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     protected void ValidateCurrent()

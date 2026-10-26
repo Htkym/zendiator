@@ -123,7 +123,11 @@ internal static class CanonicalStreamFallbackEmitter
                                 operation = MoveFailed(new global::System.ObjectDisposedException("Stream"));
                             else
             """;
-        var repeatedMove = standalone && segment.Hooks.Count == 0 ? """
+        var repeatedMove = CanonicalStreamGroupAdvanceEmitter.IsParent(model, n)
+            ? "else if (_identitySource is { } child) operation = AdvanceGroup(child); else operation = ObserveMove(MoveCoreAsync());"
+            : CanonicalStreamPrivateAdvanceEmitter.IsParent(model, n)
+            ? "else if (_identitySource is { } child) operation = AdvanceIdentity(child); else operation = ObserveMove(MoveCoreAsync());"
+            : standalone && segment.Hooks.Count == 0 ? """
                             else
                             {
                                 var pending = MoveCoreAsync();
@@ -190,7 +194,7 @@ internal static class CanonicalStreamFallbackEmitter
                             }
                             catch (global::System.Exception error) { return MoveFailed(error); }
                         }
-            {{awaitMove}}
+            {{awaitMove}}{{CanonicalStreamPrivateAdvanceEmitter.Emit(model, n)}}{{CanonicalStreamGroupAdvanceEmitter.Emit(model, n)}}
                         private async global::System.Threading.Tasks.ValueTask<bool> EndAsync()
                         {
                             await MoveSucceeded(false).ConfigureAwait(false);
@@ -254,9 +258,9 @@ internal static class CanonicalStreamFallbackEmitter
         b.AppendLine("private static " + input + " ReadSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.Current;");
         b.AppendLine("private static global::System.Threading.Tasks.ValueTask DisposeSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.DisposeAsync();");
         EmitMove(b, segment);
-        EmitCleanup(b, segment, factory, referenceSource);
+        EmitCleanup(b, segment, factory, referenceSource, HasIdentitySource(model, n));
         b.AppendLine("}");
-        if (segment.Upstream is { } upstream) EmitUpstream(b, h, segment, upstream);
+        if (segment.Upstream is { } upstream) EmitUpstream(b, h, segment, upstream, HasIdentitySource(model, n));
     }
 
     private static void EmitInitialization(StringBuilder b, CanonicalStreamFallbackModel model,
@@ -276,6 +280,8 @@ internal static class CanonicalStreamFallbackEmitter
             b.AppendLine("_upstream = new Upstream" + segment.Id + "(_services, this, _root);");
             b.AppendLine("_source = await wrapper." + wrapper.MethodName + "(_request, _upstream, Token).ConfigureAwait(false)");
             b.AppendLine("""    ?? throw new global::System.InvalidOperationException("A Stream middleware returned a null cursor.");""");
+            if (HasIdentitySource(model, segment.Id))
+                b.AppendLine("_identitySource = _upstream.MatchIdentity(_source);");
         }
         else
         {
@@ -289,6 +295,9 @@ internal static class CanonicalStreamFallbackEmitter
 
     private static bool IsStandalone(CanonicalStreamFallbackModel model) =>
         model.Segments.Count == 1 && model.Segments[0].Wrapper == null;
+
+    private static bool HasIdentitySource(CanonicalStreamFallbackModel model, int cursor) =>
+        CanonicalStreamPrivateAdvanceEmitter.IsParent(model, cursor) || CanonicalStreamGroupAdvanceEmitter.HasIdentitySource(model, cursor);
 
     private static void EmitMove(StringBuilder b, CanonicalStreamFallbackSegment segment)
     {
@@ -337,9 +346,10 @@ internal static class CanonicalStreamFallbackEmitter
         b.AppendLine("_current = " + item + "; return true; }");
     }
 
-    private static void EmitCleanup(StringBuilder b, CanonicalStreamFallbackSegment segment, BoundAsyncFactoryEmission? receiverFactory, bool referenceSource)
+    private static void EmitCleanup(StringBuilder b, CanonicalStreamFallbackSegment segment, BoundAsyncFactoryEmission? receiverFactory, bool referenceSource, bool privateIdentityParent)
     {
         b.AppendLine("protected override async global::System.Threading.Tasks.ValueTask DisposeCoreAsync() {");
+        if (privateIdentityParent) b.AppendLine("_identitySource = null;");
         b.AppendLine(referenceSource
             ? "try { var source = _source; if (source is not null) { _source = default!; await DisposeSource(ref source).ConfigureAwait(false); } }"
             : "try { if (_acquired) { _acquired = false; var source = _source; _source = default!; await DisposeSource(ref source).ConfigureAwait(false); } }");
@@ -359,7 +369,7 @@ internal static class CanonicalStreamFallbackEmitter
         b.AppendLine("}");
     }
 
-    private static void EmitUpstream(StringBuilder b, BoundStreamHandlerEmission handler, CanonicalStreamFallbackSegment segment, int upstream)
+    private static void EmitUpstream(StringBuilder b, BoundStreamHandlerEmission handler, CanonicalStreamFallbackSegment segment, int upstream, bool privateIdentityParent)
     {
         var n = segment.Id;
         var item = segment.SourceItemName ?? handler.ItemName;
@@ -368,7 +378,7 @@ internal static class CanonicalStreamFallbackEmitter
                         global::Zendiator.Streaming.StreamCursorState owner, global::Zendiator.Streaming.StreamCursorState root)
                         : global::Zendiator.IStreamUpstream<{{handler.RequestName}}, {{item}}>
                     {
-                        private Cursor{{upstream}}? _active;
+                        private Cursor{{upstream}}? _active;{{(privateIdentityParent ? "\ninternal Cursor" + upstream + "? MatchIdentity(global::System.Collections.Generic.IAsyncEnumerator<" + item + "> source) { var active = _active; return global::System.Object.ReferenceEquals(source, active) ? active : null; }" : "")}}
                         private int _opening;
                         public global::System.Threading.Tasks.ValueTask<global::System.Collections.Generic.IAsyncEnumerator<{{item}}>> OpenAsync(
                             {{handler.RequestName}} request, global::System.Threading.CancellationToken token)
