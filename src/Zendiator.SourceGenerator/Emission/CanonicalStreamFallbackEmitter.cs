@@ -106,6 +106,7 @@ internal static class CanonicalStreamFallbackEmitter
         var receiver = segment.Wrapper == null ? Storage(h.HandlerName, h.HandlerIsValueType)
             : Storage(segment.Wrapper.WrapperName, segment.Wrapper.WrapperIsValueType);
         var standalone = IsStandalone(model);
+        var referenceAccess = segment.Upstream is null ? "private" : "internal";
         var parent = model.Segments.SingleOrDefault(s => s.Upstream == n);
         var awaitMove = segment.Hooks.Count == 0 ? CanonicalStreamPendingTaskEmitter.Emit(model, n) : """
                         private async global::System.Threading.Tasks.ValueTask<bool> AwaitMoveAsync(global::System.Threading.Tasks.ValueTask<bool> pending)
@@ -140,9 +141,9 @@ internal static class CanonicalStreamFallbackEmitter
                     private sealed class Cursor{{n}} : global::Zendiator.Streaming.StreamCursorState,
                         global::System.Collections.Generic.IAsyncEnumerator<{{output}}>{{(standalone ? ", global::System.Collections.Generic.IAsyncEnumerable<" + output + ">" : "")}}
                     {
-                        private readonly global::System.IServiceProvider _services;
+                        {{referenceAccess}} readonly global::System.IServiceProvider _services;
                         private readonly {{h.RequestName}} _request;
-                        {{(standalone ? "" : "private readonly global::Zendiator.Streaming.StreamCursorState _root;")}}
+                        {{(standalone ? "" : referenceAccess + " readonly global::Zendiator.Streaming.StreamCursorState _root;")}}
                         private {{source}} _source = default!;
                         {{(referenceSource ? "" : "private bool _acquired;")}}
                         {{(standalone ? "" : "private bool _normalEnd;\ninternal bool CanReopen => _normalEnd && !HasPendingOperation;")}}
@@ -277,7 +278,7 @@ internal static class CanonicalStreamFallbackEmitter
             var wrapperValue = factory == null ? Resolve("_services", wrapper.WrapperName, wrapper.ContractName)
                 : "(" + wrapper.ContractName + ")_receiver!";
             b.AppendLine("var wrapper = " + wrapperValue + ";");
-            b.AppendLine("_upstream = new Upstream" + segment.Id + "(_services, this, _root);");
+            b.AppendLine("_upstream = new Upstream" + segment.Id + "(this);");
             b.AppendLine("_source = await wrapper." + wrapper.MethodName + "(_request, _upstream, Token).ConfigureAwait(false)");
             b.AppendLine("""    ?? throw new global::System.InvalidOperationException("A Stream middleware returned a null cursor.");""");
             if (HasIdentitySource(model, segment.Id))
@@ -374,8 +375,7 @@ internal static class CanonicalStreamFallbackEmitter
         var n = segment.Id;
         var item = segment.SourceItemName ?? handler.ItemName;
         b.AppendLine($$"""
-                    private sealed class Upstream{{n}}(global::System.IServiceProvider services,
-                        global::Zendiator.Streaming.StreamCursorState owner, global::Zendiator.Streaming.StreamCursorState root)
+                    private sealed class Upstream{{n}}(Cursor{{n}} owner)
                         : global::Zendiator.IStreamUpstream<{{handler.RequestName}}, {{item}}>
                     {
                         private Cursor{{upstream}}? _active;{{(privateIdentityParent ? "\ninternal Cursor" + upstream + "? MatchIdentity(global::System.Collections.Generic.IAsyncEnumerator<" + item + "> source) { var active = _active; return global::System.Object.ReferenceEquals(source, active) ? active : null; }" : "")}}
@@ -387,10 +387,10 @@ internal static class CanonicalStreamFallbackEmitter
                                 throw new global::System.InvalidOperationException("Await the preceding Stream open.");
                             try
                             {
-                                if (owner.IsClosed || root.IsClosed) throw new global::System.ObjectDisposedException("Stream");
+                                if (owner.IsClosed || owner._root.IsClosed) throw new global::System.ObjectDisposedException("Stream");
                                 if (_active is { CanReopen: false }) throw new global::System.InvalidOperationException("The preceding Stream cursor must reach normal EOF and finish cleanup before reopening.");
                                 {{(handler.RequestIsValueType ? "" : "global::System.ArgumentNullException.ThrowIfNull(request);")}}
-                                var cursor = new Cursor{{upstream}}(services, request, token, default, root);
+                                var cursor = new Cursor{{upstream}}(owner._services, request, token, default, owner._root);
                                 _active = cursor;
                                 return cursor.OpenForMiddlewareAsync(this);
                             }
