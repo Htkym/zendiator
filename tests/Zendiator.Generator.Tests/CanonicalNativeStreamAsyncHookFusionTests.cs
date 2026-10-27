@@ -121,4 +121,117 @@ public sealed partial class GeneratorTests
             """);
         await RunNativeStreamFixture("async-hook-registration-reentry", source);
     }
+
+    [Fact]
+    public async Task Native_stream_async_map_releases_closed_output_without_changing_Current_reenumeration_or_cleanup()
+    {
+        var source = NativeStreamFixture("""
+            c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));
+            c.StreamPipeline<Items,Payload>(Stage.Hook<Map>());
+            """, """
+            public sealed record Items(string Mode):IStreamRequest<int>;
+            public sealed class Payload(int value){public int Value{get;}=value;}
+            public sealed class Probe{
+                public int Opened,Maps,Reads,Disposals;public WeakReference<Payload>? Last;
+                public readonly HashSet<int> Closed=new();
+                public readonly Exception MoveError=new FormatException("move"),CleanupError=new ArithmeticException("cleanup");
+            }
+            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>{
+                public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t)=>new(new Cursor(p,r.Mode,++p.Opened));
+            }
+            public sealed class Cursor(Probe p,string mode,int id):IAsyncEnumerator<int>{
+                private bool moved;
+                public int Current{get{p.Reads++;return id;}}
+                public ValueTask<bool> MoveNextAsync(){
+                    if(!moved){moved=true;return new(true);}
+                    if(mode=="fault")throw p.MoveError;
+                    return new(false);
+                }
+                public ValueTask DisposeAsync(){
+                    p.Disposals++;Check.That(p.Closed.Add(id),"raw cursor cleanup occurs once");
+                    if(mode=="fault")throw p.CleanupError;
+                    return default;
+                }
+            }
+            public sealed class Map(Probe p):IAsyncStreamItemMap<Items,int,Payload>{
+                public ValueTask<Payload> MapAsync(Items r,int item,CancellationToken t){
+                    var output=new Payload(item);p.Last=new(output);p.Maps++;return new(output);
+                }
+            }
+            public sealed class Held(IAsyncEnumerable<Payload> feed,WeakReference<Payload> weak,string mode,int id){
+                public readonly IAsyncEnumerable<Payload> Feed=feed;public readonly WeakReference<Payload> Weak=weak;
+                public readonly string Mode=mode;public readonly int Id=id;
+            }
+            public static class Memory{
+                [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+                public static Held Open(global::NativeStream.Generated.Reads.IZendiator mediator,Probe p,string mode)
+                    =>OpenCore(mediator,p,mode).GetAwaiter().GetResult();
+                private static async Task<Held> OpenCore(global::NativeStream.Generated.Reads.IZendiator mediator,Probe p,string mode){
+                    IAsyncEnumerable<Payload> feed=mediator.StreamAsync(new Items(mode));var cursor=feed.GetAsyncEnumerator();
+                    Check.That(ReferenceEquals(feed,cursor),"the first public enumerable is the owner retained by this test");
+                    Check.Invalid(()=>{_=cursor.Current;});
+                    Check.That(await cursor.MoveNextAsync(),"mapped first item");ReadCurrent(cursor,p.Opened);
+                    return new(feed,p.Last!,mode,p.Opened);
+                }
+                [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+                public static void ReadCurrent(IAsyncEnumerator<Payload> cursor,int expected)
+                    =>Check.That(cursor.Current.Value==expected,"Current exposes the mapped value before close");
+                [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+                public static void Close(Held state,Probe p)=>CloseCore(state,p).GetAwaiter().GetResult();
+                private static async Task CloseCore(Held state,Probe p){
+                    var cursor=(IAsyncEnumerator<Payload>)state.Feed;
+                    if(state.Mode=="fault"){
+                        Exception? caught=null;try{await cursor.MoveNextAsync();}catch(Exception error){caught=error;}
+                        Check.That(ReferenceEquals(caught,p.CleanupError),"the original cleanup failure has priority over the source Move failure");
+                        await cursor.DisposeAsync();await cursor.DisposeAsync();
+                    }else{
+                        if(state.Mode=="eof")Check.That(!await cursor.MoveNextAsync(),"normal EOF");
+                        await cursor.DisposeAsync();await cursor.DisposeAsync();
+                    }
+                    Check.Invalid(()=>{_=cursor.Current;});
+                }
+                [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+                public static bool Alive(WeakReference<Payload> weak)=>weak.TryGetTarget(out _);
+                public static void Collect(){
+                    GC.Collect(GC.MaxGeneration,GCCollectionMode.Forced,true,true);GC.WaitForPendingFinalizers();
+                    GC.Collect(GC.MaxGeneration,GCCollectionMode.Forced,true,true);
+                }
+                [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+                public static void CheckActive(Held[] states){
+                    Collect();Check.That(states.All(state=>Alive(state.Weak)),"valid Current retains every live mapped output");
+                    foreach(var state in states)GC.KeepAlive(state.Feed);
+                }
+                [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+                public static void CheckClosed(Held[] states){
+                    for(var attempt=0;attempt<3;attempt++){Collect();if(states.All(state=>!Alive(state.Weak)))break;}
+                    var retained=states.Where(state=>Alive(state.Weak)).Select(state=>state.Mode).ToArray();
+                    foreach(var state in states)GC.KeepAlive(state.Feed);
+                    Check.That(retained.Length==0,"closed enumerable retained mapped output: "+string.Join(",",retained));
+                }
+                [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+                public static void Reopen(Held state,Probe p)=>ReopenCore(state,p).GetAwaiter().GetResult();
+                private static async Task ReopenCore(Held state,Probe p){
+                    var cursor=state.Feed.GetAsyncEnumerator();
+                    Check.That(!ReferenceEquals(state.Feed,cursor),"re-enumeration owns an independent cursor");
+                    Check.That(await cursor.MoveNextAsync(),"closed source can start a fresh enumeration");ReadCurrent(cursor,p.Opened);
+                    Check.Invalid(()=>{_=((IAsyncEnumerator<Payload>)state.Feed).Current;});
+                    Check.That(!await cursor.MoveNextAsync(),"independent enumeration reaches EOF");
+                    await cursor.DisposeAsync();Check.Invalid(()=>{_=cursor.Current;});
+                }
+            }
+            """, """
+            var p=new Probe();var services=new ServiceCollection();services.AddSingleton(p);Register(services);
+            await using var provider=services.BuildServiceProvider();await using var scope=provider.CreateAsyncScope();
+            var mediator=scope.ServiceProvider.GetRequiredService<global::NativeStream.Generated.Reads.IZendiator>();
+            var states=new[]{Memory.Open(mediator,p,"eof"),Memory.Open(mediator,p,"early"),Memory.Open(mediator,p,"fault")};
+            Memory.CheckActive(states);
+            foreach(var state in states)Memory.Close(state,p);
+            Check.That(p.Opened==3&&p.Maps==3&&p.Reads==3&&p.Disposals==3&&p.Closed.Count==3,"all first owners close once without another map or Current read");
+            Memory.CheckClosed(states);
+            Memory.Reopen(states[0],p);
+            Check.That(p.Opened==4&&p.Maps==4&&p.Reads==4&&p.Disposals==4&&p.Closed.Count==4,"re-enumeration preserves fresh acquisition and single cleanup");
+            GC.KeepAlive(states);
+            """);
+        await RunNativeStreamFixture("async-hook-closed-output", source);
+    }
 }

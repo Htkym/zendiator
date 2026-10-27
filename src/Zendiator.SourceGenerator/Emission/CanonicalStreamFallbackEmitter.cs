@@ -353,6 +353,7 @@ internal static class CanonicalStreamFallbackEmitter
     private static void EmitCleanup(StringBuilder b, CanonicalStreamFallbackSegment segment, BoundAsyncFactoryEmission? receiverFactory, bool referenceSource, bool privateIdentityParent)
     {
         b.AppendLine("protected override async global::System.Threading.Tasks.ValueTask DisposeCoreAsync() {");
+        if (segment.Hooks.Count != 0) b.AppendLine("_current = default!;");
         if (privateIdentityParent) b.AppendLine("_identitySource = null;");
         b.AppendLine(referenceSource
             ? "try { var source = _source; if (source is not null) { _source = default!; await DisposeSource(ref source).ConfigureAwait(false); } }"
