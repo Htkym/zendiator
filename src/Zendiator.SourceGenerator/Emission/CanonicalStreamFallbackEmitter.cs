@@ -303,6 +303,14 @@ internal static class CanonicalStreamFallbackEmitter
     private static void EmitMove(StringBuilder b, CanonicalStreamFallbackSegment segment)
     {
         var asynchronous = segment.Hooks.Any(h => h.Completion == BoundCompletionKind.ValueTask);
+        if (asynchronous)
+        {
+            b.AppendLine("private async global::System.Threading.Tasks.ValueTask<bool> MoveCoreAsync() {");
+            b.AppendLine("while (true) { Token.ThrowIfCancellationRequested(); if (!await MoveSource(ref _source).ConfigureAwait(false)) return false;");
+            var accepted = EmitItemHooks(b, segment, "continue;");
+            b.AppendLine("_current = " + accepted + "; return true; } }");
+            return;
+        }
         b.AppendLine("private global::System.Threading.Tasks.ValueTask<bool> MoveCoreAsync() {");
         if (segment.Hooks.Count == 0)
         {
@@ -312,24 +320,19 @@ internal static class CanonicalStreamFallbackEmitter
         b.AppendLine("while (true) { Token.ThrowIfCancellationRequested(); var pending = MoveSource(ref _source);");
         b.AppendLine("if (!pending.IsCompletedSuccessfully) return AwaitSourceAsync(pending);");
         b.AppendLine("if (!pending.GetAwaiter().GetResult()) return new(false);");
-        if (asynchronous)
-        {
-            b.AppendLine("var publication = PublishAsync(); if (!publication.IsCompletedSuccessfully) return AwaitPublicationAsync(publication);");
-            b.AppendLine("if (publication.GetAwaiter().GetResult()) return new(true);");
-        }
-        else b.AppendLine("if (TryPublish()) return new(true);");
+        b.AppendLine("if (TryPublish()) return new(true);");
         b.AppendLine("} }");
         b.AppendLine("private async global::System.Threading.Tasks.ValueTask<bool> AwaitSourceAsync(global::System.Threading.Tasks.ValueTask<bool> pending) {");
         b.AppendLine("var moved = await pending.ConfigureAwait(false); while (moved) {");
-        b.AppendLine(asynchronous ? "if (await PublishAsync().ConfigureAwait(false)) return true;" : "if (TryPublish()) return true;");
+        b.AppendLine("if (TryPublish()) return true;");
         b.AppendLine("Token.ThrowIfCancellationRequested(); moved = await MoveSource(ref _source).ConfigureAwait(false); } return false; }");
-        if (asynchronous)
-        {
-            b.AppendLine("private async global::System.Threading.Tasks.ValueTask<bool> AwaitPublicationAsync(global::System.Threading.Tasks.ValueTask<bool> pending) {");
-            b.AppendLine("if (await pending.ConfigureAwait(false)) return true; while (true) { Token.ThrowIfCancellationRequested();");
-            b.AppendLine("if (!await MoveSource(ref _source).ConfigureAwait(false)) return false; if (await PublishAsync().ConfigureAwait(false)) return true; } }");
-        }
-        b.AppendLine(asynchronous ? "private async global::System.Threading.Tasks.ValueTask<bool> PublishAsync() {" : "private bool TryPublish() {");
+        b.AppendLine("private bool TryPublish() {");
+        var item = EmitItemHooks(b, segment, "return false;");
+        b.AppendLine("_current = " + item + "; return true; }");
+    }
+
+    private static string EmitItemHooks(StringBuilder b, CanonicalStreamFallbackSegment segment, string reject)
+    {
         b.AppendLine("var item0 = ReadSource(ref _source);");
         var item = "item0";
         for (var i = 0; i < segment.Hooks.Count; i++)
@@ -339,12 +342,12 @@ internal static class CanonicalStreamFallbackEmitter
             if (hook.Factory == null) b.AppendLine("_hook" + i + " ??= " + Resolve("_services", hook.HookName, Storage(hook.HookName, hook.HookIsValueType)) + ";");
             var call = "((" + hook.ContractName + ")_hook" + i + "!)." + hook.MethodName + "(_request, " + item + ", Token)";
             if (hook.Completion == BoundCompletionKind.ValueTask) call = "(await " + call + ".ConfigureAwait(false))";
-            if (hook.Phase == BoundCallbackPhase.Filter) b.AppendLine("if (!" + call + ") return false;");
+            if (hook.Phase == BoundCallbackPhase.Filter) b.AppendLine("if (!" + call + ") " + reject);
             else if (hook.Phase == BoundCallbackPhase.Map)
             { var next = "item" + (i + 1); b.AppendLine("var " + next + " = " + call + ";"); item = next; }
             else throw new InvalidOperationException("An item region contains a non-item callback.");
         }
-        b.AppendLine("_current = " + item + "; return true; }");
+        return item;
     }
 
     private static void EmitCleanup(StringBuilder b, CanonicalStreamFallbackSegment segment, BoundAsyncFactoryEmission? receiverFactory, bool referenceSource, bool privateIdentityParent)

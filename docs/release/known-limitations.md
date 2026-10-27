@@ -47,6 +47,13 @@ framework does not suppress `ExecutionContext`, replay an enumeration-wide saved
 context, or guarantee a return to a UI context. Keep guaranteed operation data in
 the request, cursor or session, and balance ambient scopes around their awaited use.
 
+Segments with asynchronous Filter/Map hooks use one async move loop for source waits,
+hooks and rejected-item retries. A synchronous hook's ambient change can reach the
+next source pull after rejection, while synchronous source changes are restored
+before outer cleanup or the caller resumes. Cleanup can thus observe different
+ambient state than with the former helper boundaries. Keep cleanup resource identity
+in explicit operation state.
+
 ## Stream ownership and use
 
 `StreamAsync` returns standard `IAsyncEnumerable<T>`. Each enumeration has an
@@ -71,6 +78,13 @@ the provider and sink are not disposed by the generated owner. Middleware can re
 its upstream only after normal EOF and completed cleanup; failure or early disposal
 prevents restart. Explicit reopening can duplicate already delivered items, and no
 automatic retry is supplied.
+
+An asynchronous item-processing frame can retain rejected input references while
+waiting for the next source item. Longer waits can mean longer retention. Release
+after the pending operation settled and the cursor was disposed was observed in
+representative checks; no general lifetime or retained-memory bound is established.
+B/op results for value-type items do not include the memory cost of keeping a
+reference graph alive.
 
 `StreamSource(...).ConsumeAsync(...)` uses a fresh private owner. Its plan is not an
 enumerable, and value-type sinks are passed by value: retain results in shared
@@ -97,6 +111,12 @@ cold resolution, asynchronous suspension, middleware and cleanup have separate
 costs. Improvements in one synchronous enumeration case do not establish a lead for
 Streams that genuinely suspend; competitive superiority for those paths remains
 unestablished. Early termination and some pending paths retain adverse observations.
+
+The async Filter/Map comparison used a synchronous source with 1024 inputs and 1536
+pending hook operations backed by synthetic ThreadPool scheduling. Full enumeration
+showed lower time and allocation in that workload. Synchronous-completion and Early
+intervals still included no improvement; Early accepted its first input. These results
+do not establish gains for a pending source, five middleware stages, real I/O or HTTP.
 
 Historical 0.4.0 tables and limited development comparisons are not a complete
 comparison of the final 0.5.0 candidate. Results from different source versions or

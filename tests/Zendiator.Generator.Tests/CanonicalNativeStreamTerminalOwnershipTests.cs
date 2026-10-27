@@ -141,11 +141,14 @@ public sealed partial class GeneratorTests
                 Check.That(p.Trace.SequenceEqual(expected)&&terminalSink.Values.SequenceEqual(publicSink.Values),"terminal and public pull preserve the same callback context and results");
                 Check.That(p.Trace.Contains(route+"/open=request")&&p.Trace.Contains(route+"/move1="+route+":open-change"),"synchronous Open changes reach the first Move within the same activation flow");
                 Check.That(p.Trace.Contains(route+"/sink1=request")&&p.Trace.Contains(route+"/move2=request"),"first Move changes stay inside the first-Move async boundary");
-                Check.That(p.Trace.Contains(route+"/sink2="+route+":move2")&&p.Trace.Contains(route+"/dispose="+route+":move3"),"later synchronous Move context flows to its sink and cleanup");
                 if(route=="mapped"){
                     Check.That(terminalSink.Values.SequenceEqual(new[]{10,20}),"the mapped route actually executes both async-contract callbacks");
-                    Check.That(p.Trace.Contains("mapped/filter1=mapped:move1")&&p.Trace.Contains("mapped/map1=mapped:filter1")&&p.Trace.Contains("mapped/filter2=mapped:move2")&&p.Trace.Contains("mapped/map2=mapped:filter2"),"filter changes reach the following map inside PublishAsync without leaking to the outer sink");
-                }else Check.That(terminalSink.Values.SequenceEqual(new[]{1,2}),"plain route values");
+                    Check.That(p.Trace.Contains("mapped/filter1=mapped:move1")&&p.Trace.Contains("mapped/map1=mapped:filter1")&&p.Trace.Contains("mapped/filter2=mapped:move2")&&p.Trace.Contains("mapped/map2=mapped:filter2"),"filter changes reach the following map inside the item loop without leaking to the outer sink");
+                    Check.That(p.Trace.Contains("mapped/sink2=request")&&p.Trace.Contains("mapped/dispose=request"),"the async item loop restores the caller context before its sink and outer cleanup");
+                }else{
+                    Check.That(terminalSink.Values.SequenceEqual(new[]{1,2}),"plain route values");
+                    Check.That(p.Trace.Contains("plain/sink2=plain:move2")&&p.Trace.Contains("plain/dispose=plain:move3"),"later plain synchronous Move context flows to its sink and cleanup");
+                }
             }
             """);
         await RunNativeStreamFixture("terminal-context-boundaries", source);
