@@ -46,4 +46,6 @@ internal static class ContractNames
     internal const string StreamSink = "Zendiator.IStreamSink`1";
 
     internal const string StreamHandler = "Zendiator.IStreamSourceHandler`3";
+
+    internal const string EnumerableStreamHandler = "Zendiator.IStreamHandler`2";
 }

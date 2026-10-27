@@ -5,6 +5,7 @@ internal sealed record BoundStreamHandlerEmission(string RequestName, string Ite
 {
     public string CursorName { get; init; } = "";
     public bool CursorIsValueType { get; init; }
+    public bool ReturnsEnumerable { get; init; }
     public BoundAsyncCallTargetEmission? CallTarget { get; init; }
 }
 internal sealed record BoundStreamHookEmission(string HookName, string ContractName, string MethodName,

@@ -30,7 +30,7 @@ internal static class CanonicalStreamTypeClosure
         var itemContract = assembly?.GetTypeByMetadataName(ContractNames.StreamRequest);
         var items = request.AllInterfaces.Where(i => Same(i.OriginalDefinition, itemContract)).Select(i => i.TypeArguments[0]).ToArray();
         if (items.Length != 1) return new(null, "A Stream request requires one item contract before closing its handler.");
-        return Close(type, request, items[0], new[] { ContractNames.StreamHandler }, compilation, open);
+        return Close(type, request, items[0], new[] { ContractNames.StreamHandler, ContractNames.EnumerableStreamHandler }, compilation, open);
     }
     internal static Result Stage(INamedTypeSymbol type, INamedTypeSymbol request, ITypeSymbol item,
         FusionStageKind kind, Compilation compilation, CanonicalStreamOpenBinding? open = null) => Close(type, request, item,

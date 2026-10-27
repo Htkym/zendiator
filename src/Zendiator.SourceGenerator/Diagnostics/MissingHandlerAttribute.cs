@@ -77,13 +77,13 @@ internal static class MissingHandlerAttribute
         {
             0 or 2 => new[] { "Zendiator.IRequestHandler`2", "Zendiator.IRequestHandler`1" },
             1 or 3 => new[] { "Zendiator.ISyncRequestHandler`2", "Zendiator.ISyncRequestHandler`1" },
-            _ => new[] { "Zendiator.IStreamSourceHandler`3" }
+            _ => new[] { "Zendiator.IStreamSourceHandler`3", "Zendiator.IStreamHandler`2" }
         };
         var definitions = names.Select(n => contractAssembly!.GetTypeByMetadataName(n)).ToArray();
         var contracts = handler.AllInterfaces.Where(i => definitions.Any(d => Same(i.OriginalDefinition, d)) && Same(i.TypeArguments[0], request)).ToArray();
         if (contracts.Length != 1 || contracts[0].GetMembers().OfType<IMethodSymbol>().Any(m =>
             handler.FindImplementationForInterfaceMember(m) is not IMethodSymbol { IsAbstract: false })) return null;
-        if (family == 4)
+        if (family == 4 && contracts[0].TypeArguments.Length == 3)
         {
             var cursor = contracts[0].TypeArguments[2] as INamedTypeSymbol;
             var enumerator = compilation.GetTypeByMetadataName("System.Collections.Generic.IAsyncEnumerator`1");

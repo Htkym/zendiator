@@ -86,6 +86,11 @@ and these results do not establish a gain for all scopes.
 
 ## Stream execution
 
+For a compiler async iterator, use `IStreamHandler<TRequest,TItem>.Handle` returning
+`IAsyncEnumerable<TItem>`; see the [iterator example](streaming-iterators.md).
+It uses the same registration and pipeline, with Handle and cursor acquisition
+deferred until the first move.
+
 The sample opens a named NumberCursor through IStreamSourceHandler. Dedicated Filter/Map
 hooks use the typed pipeline. StreamAsync returns a class implementing standard
 IAsyncEnumerable. This example uses `StreamSource(...).ConsumeAsync(...)`, a readonly

@@ -11,7 +11,10 @@ using static Zendiator.SourceGenerator.SymbolUtilities;
 namespace Zendiator.SourceGenerator;
 
 internal sealed record CatalogHandlerContract(BoundDispatchFamily Family, ITypeSymbol Request, ITypeSymbol? Response)
-{ public ITypeSymbol? Cursor { get; init; } }
+{
+    public ITypeSymbol? Cursor { get; init; }
+    public bool ReturnsEnumerable { get; init; }
+}
 internal sealed record CatalogHandlerFact(INamedTypeSymbol Type, CatalogHandlerContract[] Contracts, string[] Errors);
 
 // Catalog signatures exclude method bodies, tokens, MVIDs and syntax positions.
@@ -52,10 +55,14 @@ internal static class CatalogSignatureV1
         var assembly = compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly;
         var definitions = new[]{(ContractNames.Handler,BoundDispatchFamily.SendAsync),(ContractNames.VoidHandler,BoundDispatchFamily.SendAsync),
             (ContractNames.SyncHandler,BoundDispatchFamily.SendSync),(ContractNames.SyncVoidHandler,BoundDispatchFamily.SendSync),
-            (ContractNames.StreamHandler,BoundDispatchFamily.Stream),(ContractNames.NotificationHandler,BoundDispatchFamily.Notification)};
+            (ContractNames.StreamHandler,BoundDispatchFamily.Stream),(ContractNames.EnumerableStreamHandler,BoundDispatchFamily.Stream),
+            (ContractNames.NotificationHandler,BoundDispatchFamily.Notification)};
         foreach (var iface in type.AllInterfaces) foreach (var (name, family) in definitions)
             if (Same(iface.OriginalDefinition, assembly?.GetTypeByMetadataName(name))) contracts.Add(new(family, iface.TypeArguments[0], iface.TypeArguments.Length >= 2 ? iface.TypeArguments[1] : null)
-            { Cursor = family == BoundDispatchFamily.Stream ? iface.TypeArguments[2] : null });
+            {
+                Cursor = family == BoundDispatchFamily.Stream && iface.TypeArguments.Length == 3 ? iface.TypeArguments[2] : null,
+                ReturnsEnumerable = name == ContractNames.EnumerableStreamHandler
+            });
         if (contracts.Count == 0) errors.Add("MissingHandlerContract");
         if (ContainsErrorType(type) || type.AllInterfaces.Any(ContainsErrorType) ||
             Parameters(type).SelectMany(p => p.ConstraintTypes).Any(ContainsErrorType) || MissingBaseType(type))
@@ -104,6 +111,8 @@ internal static class CatalogSignatureV1
                 p.HasConstructorConstraint,p.AllowsRefLikeType,p.ConstraintTypes.Select(t=>TypeId(t)).OrderBy(t=>t,StringComparer.Ordinal).ToArray()}));
         rows.AddRange(fact.Contracts.Select(c => Json(new[] { c.Family.ToString(), TypeId(c.Request), c.Response == null ? "void" : TypeId(c.Response) })).OrderBy(c => c, StringComparer.Ordinal));
         rows.AddRange(fact.Contracts.Where(c => c.Cursor != null).Select(c => Json(new[] { "StreamCursor", TypeId(c.Request), TypeId(c.Cursor!) }))
+            .OrderBy(c => c, StringComparer.Ordinal));
+        rows.AddRange(fact.Contracts.Where(c => c.ReturnsEnumerable).Select(c => Json(new[] { "StreamEnumerable", TypeId(c.Request), TypeId(c.Response!) }))
             .OrderBy(c => c, StringComparer.Ordinal));
         using var hash = SHA256.Create();
         return string.Concat(hash.ComputeHash(Encoding.UTF8.GetBytes(Json(rows))).Select(b => b.ToString("X2", CultureInfo.InvariantCulture)));

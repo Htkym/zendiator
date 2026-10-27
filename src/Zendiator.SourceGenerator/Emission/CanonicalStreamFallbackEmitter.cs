@@ -85,9 +85,25 @@ internal static class CanonicalStreamFallbackEmitter
                     }
                 """);
         foreach (var segment in model.Segments) EmitCursor(b, model, segment);
-        CanonicalAsyncCallEmitter.EmitCall(b, "OpenHandler", "global::System.Threading.Tasks.ValueTask<" + h.CursorName + ">",
-            h.HandlerIsValueType ? "object" : h.HandlerName, h.ContractName, h.MethodName, h.CallTarget,
-            new[] { h.RequestName, "global::System.Threading.CancellationToken" }, new[] { "request", "token" }, "", "");
+        if (h.ReturnsEnumerable)
+        {
+            CanonicalAsyncCallEmitter.EmitCall(b, "CreateHandlerEnumerable", "global::System.Collections.Generic.IAsyncEnumerable<" + h.ItemName + ">",
+                h.HandlerIsValueType ? "object" : h.HandlerName, h.ContractName, h.MethodName, h.CallTarget,
+                new[] { h.RequestName, "global::System.Threading.CancellationToken" }, new[] { "request", "token" }, "", "");
+            b.AppendLine($$"""
+                        private static global::System.Threading.Tasks.ValueTask<{{h.CursorName}}> OpenHandler(
+                            {{(h.HandlerIsValueType ? "object" : h.HandlerName)}} receiver, {{h.RequestName}} request, global::System.Threading.CancellationToken token)
+                        {
+                            var enumerable = CreateHandlerEnumerable(receiver, request, token)
+                                ?? throw new global::System.InvalidOperationException("A Stream handler returned a null enumerable.");
+                            return new(enumerable.GetAsyncEnumerator(token));
+                        }
+                """);
+        }
+        else
+            CanonicalAsyncCallEmitter.EmitCall(b, "OpenHandler", "global::System.Threading.Tasks.ValueTask<" + h.CursorName + ">",
+                h.HandlerIsValueType ? "object" : h.HandlerName, h.ContractName, h.MethodName, h.CallTarget,
+                new[] { h.RequestName, "global::System.Threading.CancellationToken" }, new[] { "request", "token" }, "", "");
         b.AppendLine("    }");
         b.AppendLine("}");
         return new(model.HintName, b.ToString());
@@ -100,7 +116,7 @@ internal static class CanonicalStreamFallbackEmitter
         var input = segment.SourceItemName ?? h.ItemName;
         var output = segment.OutputItemName ?? h.ItemName;
         var source = segment.Wrapper == null ? h.CursorName : "global::System.Collections.Generic.IAsyncEnumerator<" + input + ">";
-        // Bound handler cursors are named classes or structs; opaque segments keep their acquisition flag.
+        // Source references encode acquisition; opaque segments keep their acquisition flag.
         var referenceSource = segment.Wrapper == null && !h.CursorIsValueType;
         var factory = segment.Wrapper == null ? model.HandlerFactory : segment.WrapperFactory;
         var receiver = segment.Wrapper == null ? Storage(h.HandlerName, h.HandlerIsValueType)

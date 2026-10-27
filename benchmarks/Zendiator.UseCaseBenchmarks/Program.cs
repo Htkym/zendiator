@@ -15,6 +15,13 @@ if (args.Length > 0 && args[0] == "--artifact-gate")
     return;
 }
 
+if (args.Length > 0 && args[0] == "--validate-same-producer")
+{
+    if (args.Length != 2) throw new ArgumentException("--validate-same-producer requires one output directory");
+    await SameProducerStreamGate.Run(Path.GetFullPath(args[1]));
+    return;
+}
+
 if (!File.Exists("Zendiator.UseCaseBenchmarks.csproj")) throw new InvalidOperationException("Run from the use-case benchmark directory.");
 if (args.Contains("--help")) { BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args); return; }
 var output = Path.GetFullPath(Environment.GetEnvironmentVariable("COLD_RUN") ?? Path.Combine("..", "..", ".local", "benchmarks", "explore"));

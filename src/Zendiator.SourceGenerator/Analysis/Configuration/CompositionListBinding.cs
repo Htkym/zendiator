@@ -300,7 +300,12 @@ internal sealed class CompositionListBinding
                 var contracts = Contracts(entry.Type, request, family.Value).ToArray();
                 if (contracts.Length != 1)
                 {
-                    Reject("UnsupportedGenerationShape", entry.Anchor, $"Handler {Name(entry.Type)} requires exactly one matching request/family/result or void contract.");
+                    var ambiguousStreamInputs = family == BoundDispatchFamily.Stream &&
+                        contracts.Any(c => CanonicalStreamContractBinding.IsEnumerableSource(c, _compilation)) &&
+                        contracts.Any(c => !CanonicalStreamContractBinding.IsEnumerableSource(c, _compilation));
+                    Reject("UnsupportedGenerationShape", entry.Anchor, ambiguousStreamInputs
+                        ? $"Stream handler {Name(entry.Type)} requires exactly one matching input contract; IStreamSourceHandler and IStreamHandler cannot both handle the same route."
+                        : $"Handler {Name(entry.Type)} requires exactly one matching request/family/result or void contract.");
                     continue;
                 }
                 var contract = contracts[0];
@@ -324,12 +329,15 @@ internal sealed class CompositionListBinding
                 var member = contract.GetMembers().OfType<IMethodSymbol>().SingleOrDefault();
                 var implementation = member == null ? null : entry.Type.FindImplementationForInterfaceMember(member) as IMethodSymbol;
                 var streamSource = family == BoundDispatchFamily.Stream;
+                var enumerableSource = streamSource && CanonicalStreamContractBinding.IsEnumerableSource(contract, _compilation);
                 INamedTypeSymbol? cursor = null;
                 if (streamSource && (!CanonicalStreamContractBinding.Matches(contract, implementation, _compilation) ||
                     !CanonicalStreamContractBinding.TryCursor(contract, _compilation, out cursor)))
                 {
                     Reject("StageContractMismatch", entry.Anchor,
-                        $"Stream source {Name(entry.Type)} requires OpenAsync(request, token) returning ValueTask<TCursor>, with an accessible named cursor implementing IAsyncEnumerator<TItem>.");
+                        enumerableSource
+                            ? $"Stream handler {Name(entry.Type)} requires Handle(request, token) returning IAsyncEnumerable<TItem>."
+                            : $"Stream source {Name(entry.Type)} requires OpenAsync(request, token) returning ValueTask<TCursor>, with an accessible named cursor implementing IAsyncEnumerator<TItem>.");
                     continue;
                 }
                 var requestReferenceResponse = nextResult is ITypeParameterSymbol && open?.IsRequestReferenceResponse(nextResult) == true;
@@ -337,12 +345,12 @@ internal sealed class CompositionListBinding
                     implementation == null ? "<missing>" : implementation.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) +
                     "/return=" + Identity(implementation.ReturnType) + "/constraints=" + Constraints(implementation.TypeParameters),
                     FusionOwnership.BorrowedService, implementation == null, implementation == null ? null : new(
-                        BoundCallbackPhase.Handler, streamSource ? BoundCompletionKind.ValueTask :
+                        BoundCallbackPhase.Handler, streamSource ? (enumerableSource ? BoundCompletionKind.Enumerable : BoundCompletionKind.ValueTask) :
                             family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync ? BoundCompletionKind.ValueTask : BoundCompletionKind.Synchronous,
                         Identity(contract), implementation.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat),
                         new(implementation.Parameters.Select(p => new BoundParameterModel(Identity(p.Type), p.RefKind.ToString(), p.ScopedKind.ToString()))),
                         Identity(implementation.ReturnType), Constraints(implementation.TypeParameters),
-                        streamSource || family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync))
+                        streamSource ? !enumerableSource : family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync))
                 {
                     ReceiverIsGeneric = entry.Type.IsGenericType,
                     ReceiverIsPublic = open?.Public(entry.Type) ?? Public(entry.Type),
@@ -384,6 +392,7 @@ internal sealed class CompositionListBinding
                         {
                             CursorName = BoundName(cursor!),
                             CursorIsValueType = cursor!.IsValueType,
+                            ReturnsEnumerable = enumerableSource,
                             CallTarget = CanonicalAsyncCallBinding.BindStreamSource(entry.Type, member, implementation, _compilation, BoundName)
                         }
                     };
@@ -623,7 +632,7 @@ internal sealed class CompositionListBinding
         {
             BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync => new[] { ContractNames.Handler, ContractNames.VoidHandler },
             BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync => new[] { ContractNames.SyncHandler, ContractNames.SyncVoidHandler },
-            BoundDispatchFamily.Stream => new[] { ContractNames.StreamHandler },
+            BoundDispatchFamily.Stream => new[] { ContractNames.StreamHandler, ContractNames.EnumerableStreamHandler },
             _ => new[] { ContractNames.NotificationHandler }
         };
         var assembly = _compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly;

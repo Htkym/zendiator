@@ -533,10 +533,15 @@ reused across retries and subsequent sends, including Transient registrations.
 
 ## Rewriting streams
 
-Keep standard IAsyncEnumerable consumers. Replace yield handlers with a marked
-`IStreamSourceHandler<TRequest,TItem,TCursor>` opening a named IAsyncEnumerator cursor.
-Move state, real I/O, cancellation and finally/ownership cleanup into that cursor;
-a private compiler iterator type cannot serve as the named public declaration.
+Keep standard IAsyncEnumerable consumers. A yield handler can implement marked
+`IStreamHandler<TRequest,TItem>` and return `IAsyncEnumerable<TItem>` from Handle.
+Handle and GetAsyncEnumerator run on the first move; see the
+[iterator example](streaming-iterators.md).
+
+For a named class or struct cursor, implement
+`IStreamSourceHandler<TRequest,TItem,TCursor>` and open it through OpenAsync.
+A private compiler iterator type cannot serve as that named cursor declaration.
+Select one source contract for each route.
 
 StreamAsync returns a generated class implementing standard IAsyncEnumerable. Move
 typed terminals to `StreamSource(request, apiToken).ConsumeAsync(sink, enumerationToken)`.

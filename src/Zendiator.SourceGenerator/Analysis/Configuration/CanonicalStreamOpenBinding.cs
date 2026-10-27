@@ -35,7 +35,7 @@ internal sealed class CanonicalStreamOpenBinding
     {
         error = null;
         handler = handler.OriginalDefinition;
-        var contracts = new[] { ContractNames.StreamHandler }
+        var contracts = new[] { ContractNames.StreamHandler, ContractNames.EnumerableStreamHandler }
             .Select(compilation.GetTypeByMetadataName).ToArray();
         var matches = handler.AllInterfaces.Where(i => contracts.Any(c => Same(i.OriginalDefinition, c)) &&
             i.TypeArguments[0] is INamedTypeSymbol request && Same(request.OriginalDefinition, definition.OriginalDefinition)).ToArray();

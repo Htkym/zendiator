@@ -128,12 +128,20 @@ explains the option, open-generic cache promotion and measured tradeoffs.
 
 ## Streaming and HTTP
 
-A marked `IStreamSourceHandler<TRequest,TItem,TCursor>` opens a named class or struct
+A marked `IStreamHandler<TRequest,TItem>` returns `IAsyncEnumerable<TItem>` from
+`Handle(request, token)`, so it can use a compiler async iterator directly. A marked
+`IStreamSourceHandler<TRequest,TItem,TCursor>` opens a named class or struct
 implementing `IAsyncEnumerator<TItem>` through `OpenAsync`. Dedicated Filter/Map
 hooks preserve typed item flow; `Stage.Wrapper` connects an explicit
 `IStreamMiddleware` boundary. The
 [named-cursor sample](samples/Zendiator.Sample.GettingStarted/Program.cs) includes a
 pending first move and an ordered Filter/Map pipeline.
+
+For an iterator handler, the generated route calls `Handle` and then
+`GetAsyncEnumerator` on its first move, passing the effective cancellation token to
+both. Each enumeration acquires its own cursor. Register the handler in the same
+composition as a typed source handler; selecting both contracts for one route is
+rejected. See the [iterator example](docs/streaming-iterators.md).
 
 `StreamAsync(request, token)` returns a generated source implementing standard
 `IAsyncEnumerable<T>`. Consume it with `await foreach`, or return it naturally from
@@ -171,7 +179,8 @@ limited to the current document. It does not migrate pipeline ordering, wrapper
 logic, service lifetimes or ownership, and command-line compilation does not apply
 IDE fixes.
 
-The 0.4.0 Stream handler contract is replaced by named cursor opening. Migrate
+The 0.4.0 Stream handler contract is replaced by an explicit enumerable or typed
+cursor source contract. Migrate
 handlers, explicit stage registration and context assumptions using the
 [0.5.0 guide](docs/getting-started-0.5.0.md#migrating-from-040); source compatibility
 with 0.4.0 is not promised.

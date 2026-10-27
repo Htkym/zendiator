@@ -34,7 +34,9 @@ internal static class CanonicalStreamGraphValidator
         {
             CheckSessions(handler.Type, handler.ServiceOwnership, handler.Sessions, handler.Anchor, "Handler");
             if (handler.CompilerOwnsError || handler.Callback == null) { Reject("HandlerImplementationUnavailable", handler.Anchor); continue; }
-            if (handler.Callback.Phase != BoundCallbackPhase.Handler || handler.Callback.Completion != BoundCompletionKind.ValueTask || !handler.Callback.RequiresSingleConsumption)
+            var completion = handler.StreamEmission?.ReturnsEnumerable == true ? BoundCompletionKind.Enumerable : BoundCompletionKind.ValueTask;
+            if (handler.Callback.Phase != BoundCallbackPhase.Handler || handler.Callback.Completion != completion ||
+                handler.Callback.RequiresSingleConsumption != (completion == BoundCompletionKind.ValueTask))
                 Reject("StreamHandlerCompletionMismatch", handler.Anchor);
             CheckParameters(handler.Callback, handler.Anchor);
         }

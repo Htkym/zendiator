@@ -39,7 +39,7 @@ internal static class MarkedHandlerDiscovery
         if (markerRequired && attributes.Length == 0) return null;
         var contracts = new List<MarkedHandlerContract>();
         foreach (var metadataName in new[] { ContractNames.Handler, ContractNames.VoidHandler,
-            ContractNames.SyncHandler, ContractNames.SyncVoidHandler, ContractNames.StreamHandler, ContractNames.NotificationHandler })
+            ContractNames.SyncHandler, ContractNames.SyncVoidHandler, ContractNames.StreamHandler, ContractNames.EnumerableStreamHandler, ContractNames.NotificationHandler })
         {
             ct.ThrowIfCancellationRequested();
             var definition = compilation.GetTypeByMetadataName(metadataName);
