@@ -124,15 +124,21 @@ internal static class CanonicalStreamFallbackEmitter
                                 operation = MoveFailed(new global::System.ObjectDisposedException("Stream"));
                             else
             """;
+        var completionLocal = "moveCompletion";
+        while (model.Generic?.Parameters.Contains(completionLocal) == true) completionLocal = "_" + completionLocal;
         var repeatedMove = CanonicalStreamGroupAdvanceEmitter.IsParent(model, n)
             ? "else if (_identitySource is { } child) operation = AdvanceGroup(child); else operation = ObserveMove(MoveCoreAsync());"
             : CanonicalStreamPrivateAdvanceEmitter.IsParent(model, n)
             ? "else if (_identitySource is { } child) operation = AdvanceIdentity(child); else operation = ObserveMove(MoveCoreAsync());"
-            : standalone && segment.Hooks.Count == 0 ? """
+            : standalone && segment.Hooks.Count == 0 ? $$"""
                             else
                             {
                                 var pending = MoveCoreAsync();
-                                if (!pending.IsCompletedSuccessfully) operation = AwaitMoveAsync(pending);
+                                if (!pending.IsCompletedSuccessfully)
+                                {
+                                    operation = AwaitMoveAsync(pending, out var {{completionLocal}});
+                                    if ({{completionLocal}} is not null) return PublishMove(operation, {{completionLocal}});
+                                }
                                 else if (pending.GetAwaiter().GetResult()) return CompleteSynchronousMove();
                                 else operation = EndAsync();
                             }
@@ -259,7 +265,7 @@ internal static class CanonicalStreamFallbackEmitter
         b.AppendLine("private static " + input + " ReadSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.Current;");
         b.AppendLine("private static global::System.Threading.Tasks.ValueTask DisposeSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.DisposeAsync();");
         EmitMove(b, segment);
-        EmitCleanup(b, segment, factory, referenceSource, HasIdentitySource(model, n));
+        EmitCleanup(b, segment, factory, referenceSource, HasIdentitySource(model, n), standalone && segment.Hooks.Count == 0);
         b.AppendLine("}");
         if (segment.Upstream is { } upstream) EmitUpstream(b, h, segment, upstream, HasIdentitySource(model, n));
     }
@@ -350,9 +356,10 @@ internal static class CanonicalStreamFallbackEmitter
         return item;
     }
 
-    private static void EmitCleanup(StringBuilder b, CanonicalStreamFallbackSegment segment, BoundAsyncFactoryEmission? receiverFactory, bool referenceSource, bool privateIdentityParent)
+    private static void EmitCleanup(StringBuilder b, CanonicalStreamFallbackSegment segment, BoundAsyncFactoryEmission? receiverFactory, bool referenceSource, bool privateIdentityParent, bool completionCell)
     {
         b.AppendLine("protected override async global::System.Threading.Tasks.ValueTask DisposeCoreAsync() {");
+        if (completionCell) b.AppendLine("_pendingTaskRunner = null;");
         if (segment.Hooks.Count != 0) b.AppendLine("_current = default!;");
         if (privateIdentityParent) b.AppendLine("_identitySource = null;");
         b.AppendLine(referenceSource

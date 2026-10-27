@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
+using System.Threading.Tasks.Sources;
 
 namespace Zendiator.Streaming;
 
@@ -23,7 +24,7 @@ public abstract class StreamCursorState : IAsyncDisposable
     private bool _cleanupComplete;
     private Exception? _disposeError;
     private DisposeCompletion? _disposeCompletion;
-    private Task<bool>? _pendingMove;
+    private object? _pendingMove;
 
     /// <summary>Creates a cursor owner without acquiring dependencies or combining tokens.</summary>
     protected StreamCursorState(CancellationToken apiToken = default, CancellationToken enumerationToken = default,
@@ -69,12 +70,16 @@ public abstract class StreamCursorState : IAsyncDisposable
 
     private bool HasCompletedDisposal => IsClosed
         && Volatile.Read(ref _disposeCompletion) is { Task.IsCompleted: true }
-        && Volatile.Read(ref _pendingMove) is not { IsCompleted: false };
+        && !IsPendingMoveCompletion(Volatile.Read(ref _pendingMove));
 
-    private bool HasPendingMove => Volatile.Read(ref _pendingMove) is { IsCompleted: false };
+    private bool HasPendingMove => IsPendingMoveCompletion(Volatile.Read(ref _pendingMove));
 
-    private bool HasPendingCompletion => Volatile.Read(ref _pendingMove) is { IsCompleted: false }
+    private bool HasPendingCompletion => IsPendingMoveCompletion(Volatile.Read(ref _pendingMove))
         || Volatile.Read(ref _disposeCompletion) is { Task.IsCompleted: false };
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsPendingMoveCompletion(object? completion) => completion is not null
+        && (completion is Task<bool> task ? !task.IsCompleted : !((MoveCompletion)completion).IsCompleted);
 
     /// <summary>Claims one Move, invalidates Current, and returns false for an already closed owner.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -90,7 +95,7 @@ public abstract class StreamCursorState : IAsyncDisposable
 
         // Check after claiming the gate: publication may finish between an earlier check and the CAS.
         var pendingMove = Volatile.Read(ref _pendingMove);
-        if (pendingMove is { IsCompleted: false }
+        if (IsPendingMoveCompletion(pendingMove)
             || Volatile.Read(ref _disposeCompletion) is { Task.IsCompleted: false })
         {
             Volatile.Write(ref _busy, 0);
@@ -187,6 +192,15 @@ public abstract class StreamCursorState : IAsyncDisposable
         }
 
         return PublishPendingMove(operation);
+    }
+
+    /// <summary>Publishes an operation backed by the supplied generation completion.</summary>
+    /// <remarks>The operation must belong to this completion; do not use it for an unrelated ValueTask.</remarks>
+    protected ValueTask<bool> PublishMove(ValueTask<bool> operation, MoveCompletion completion)
+    {
+        Volatile.Write(ref _pendingMove, completion);
+        Volatile.Write(ref _busy, 0);
+        return operation;
     }
 
     private ValueTask<bool> PublishPendingMove(ValueTask<bool> operation)
@@ -422,6 +436,83 @@ public abstract class StreamCursorState : IAsyncDisposable
     {
         await ValueTask.CompletedTask.ConfigureAwait(false);
         ExceptionDispatchInfo.Capture(error).Throw();
+    }
+
+    /// <summary>A single-consumption generation whose result survives until its caller consumes it.</summary>
+    protected sealed class MoveCompletion : IValueTaskSource<bool>
+    {
+        private const int Consumed = 1, Retired = 2, Ready = 4;
+        private ManualResetValueTaskSourceCore<bool> _core;
+        private int _lifecycle = Ready;
+
+        public MoveCompletion() { }
+
+        /// <summary>Claims an unused or fully consumed and retired generation.</summary>
+        public bool TryPrepare(out ValueTask<bool> operation)
+        {
+            if (Interlocked.CompareExchange(ref _lifecycle, 0, Ready) != Ready)
+            {
+                operation = default;
+                return false;
+            }
+
+            operation = new(this, _core.Version);
+            return true;
+        }
+
+        internal bool IsCompleted
+        {
+            get
+            {
+                var lifecycle = Volatile.Read(ref _lifecycle);
+                if (lifecycle != 0)
+                    return true;
+                try
+                {
+                    return _core.GetStatus(_core.Version) != ValueTaskSourceStatus.Pending
+                        || Volatile.Read(ref _lifecycle) != 0;
+                }
+                catch (InvalidOperationException) { return Volatile.Read(ref _lifecycle) != 0; }
+            }
+        }
+
+        /// <summary>Publishes after owner state and cleanup have settled.</summary>
+        public void Complete(bool result, Exception? error)
+        {
+            try
+            {
+                if (error is null) _core.SetResult(result);
+                else _core.SetException(error);
+            }
+            finally
+            {
+                if ((Interlocked.Or(ref _lifecycle, Retired) & Consumed) != 0)
+                    Recycle();
+            }
+        }
+
+        bool IValueTaskSource<bool>.GetResult(short token)
+        {
+            if (_core.GetStatus(token) == ValueTaskSourceStatus.Pending)
+                throw new InvalidOperationException("Await the pending Stream completion before consuming it.");
+            try { return _core.GetResult(token); }
+            finally
+            {
+                if ((Interlocked.Or(ref _lifecycle, Consumed) & Retired) != 0)
+                    Recycle();
+            }
+        }
+
+        ValueTaskSourceStatus IValueTaskSource<bool>.GetStatus(short token) => _core.GetStatus(token);
+
+        void IValueTaskSource<bool>.OnCompleted(Action<object?> continuation, object? state, short token,
+            ValueTaskSourceOnCompletedFlags flags) => _core.OnCompleted(continuation, state, token, flags);
+
+        private void Recycle()
+        {
+            _core.Reset();
+            Volatile.Write(ref _lifecycle, Ready);
+        }
     }
 
     private sealed class DisposeCompletion

@@ -6,6 +6,8 @@ internal static class CanonicalStreamPendingTaskEmitter
 {
     internal static string Emit(CanonicalStreamFallbackModel model, int cursor)
     {
+        if (model.Segments.Count == 1 && model.Segments[0].Wrapper is null && model.Segments[0].Hooks.Count == 0)
+            return CanonicalStreamCompletionCellEmitter.Emit(model, cursor);
         if (CanonicalStreamGroupAdvanceEmitter.IsParent(model, cursor))
             return CanonicalStreamGroupPendingEmitter.Emit(model, CanonicalStreamGroupAdvanceEmitter.Chain(model));
         if (CanonicalStreamPrivateAdvanceEmitter.IsParent(model, cursor))
