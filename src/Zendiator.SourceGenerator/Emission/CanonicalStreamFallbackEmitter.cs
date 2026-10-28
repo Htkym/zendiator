@@ -428,10 +428,14 @@ internal static class CanonicalStreamFallbackEmitter
                             catch { global::System.Threading.Volatile.Write(ref _opening, 0); throw; }
                         }
                         internal void ReleaseOpening() => global::System.Threading.Volatile.Write(ref _opening, 0);
-                        internal async global::System.Threading.Tasks.ValueTask DisposeActiveAsync()
+                        internal global::System.Threading.Tasks.ValueTask DisposeActiveAsync()
                         {
                             var active = _active; _active = null;
-                            if (active is not null) await active.DisposeAsync().ConfigureAwait(false);
+                            return active is null ? default : DisposeActiveCoreAsync(active);
+                        }
+                        private static async global::System.Threading.Tasks.ValueTask DisposeActiveCoreAsync(Cursor{{upstream}} active)
+                        {
+                            await active.DisposeAsync().ConfigureAwait(false);
                         }
                     }
             """);

@@ -153,4 +153,114 @@ public sealed partial class GeneratorTests
             """);
         await RunNativeStreamFixture("terminal-context-boundaries", source);
     }
+
+    [Fact]
+    public async Task Native_stream_active_upstream_cleanup_preserves_GetResult_context_and_error_state()
+    {
+        var source = NativeStreamFixture("""
+            c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));
+            c.Pipeline<Items>(DispatchFamily.Stream,Stage.Wrapper<Opaque>());
+            """, """
+            public sealed record Items:IStreamRequest<int>;
+            public sealed class Probe(string mode){
+                public static readonly AsyncLocal<string?> Ambient=new();
+                public readonly SynchronizationContext ChangedContext=new();
+                public readonly bool Pending=mode=="pending";
+                public readonly Exception? Error=mode=="fault"?new InvalidOperationException("source cleanup"):
+                    mode=="cancel"?new OperationCanceledException("source cleanup",null,new CancellationToken(true)):null;
+                public readonly List<string> Trace=new();
+                public IAsyncEnumerator<int>? Child;
+                public DisposeResult? Cleanup;
+                public int Opened,RawMoves,RawDisposals,Consumptions,OpaqueDisposals,Registrations;
+            }
+            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,RawCursor>{
+                public ValueTask<RawCursor> OpenAsync(Items r,CancellationToken token){p.Opened++;return new(new RawCursor(p));}
+            }
+            public sealed class RawCursor(Probe p):IAsyncEnumerator<int>{
+                public int Current=>throw new InvalidOperationException("the opaque cursor supplies Current");
+                public ValueTask<bool> MoveNextAsync(){p.RawMoves++;return new(true);}
+                public ValueTask DisposeAsync(){
+                    Check.That(++p.RawDisposals==1,"the retained active child is disposed once");
+                    p.Trace.Add("source.Dispose");p.Cleanup=new DisposeResult(p);return new(p.Cleanup,0);
+                }
+            }
+            public sealed class DisposeResult:global::System.Threading.Tasks.Sources.IValueTaskSource{
+                private readonly Probe p;
+                private global::System.Threading.Tasks.Sources.ManualResetValueTaskSourceCore<bool> core;
+                public DisposeResult(Probe p){
+                    this.p=p;if(!p.Pending){if(p.Error is null)core.SetResult(true);else core.SetException(p.Error);}
+                }
+                public global::System.Threading.Tasks.Sources.ValueTaskSourceStatus GetStatus(short token)=>core.GetStatus(token);
+                public void GetResult(short token){
+                    Check.That(token==0&&++p.Consumptions==1,"completed raw cleanup is consumed once");
+                    p.Trace.Add("source.GetResult");Probe.Ambient.Value="source cleanup result";
+                    SynchronizationContext.SetSynchronizationContext(p.ChangedContext);
+                    core.GetResult(token);
+                }
+                public void Complete()=>core.SetResult(true);
+                public void OnCompleted(Action<object?> continuation,object? state,short token,
+                    global::System.Threading.Tasks.Sources.ValueTaskSourceOnCompletedFlags flags){
+                    Check.That(p.Pending&&++p.Registrations==1,"only pending cleanup registers its single continuation");
+                    core.OnCompleted(continuation,state,token,flags);
+                }
+            }
+            public sealed class Opaque(Probe p):IStreamMiddleware<Items,int>{
+                public async ValueTask<IAsyncEnumerator<int>> OpenAsync(Items r,IStreamUpstream<Items,int> next,CancellationToken token){
+                    p.Child=await next.OpenAsync(r,token).ConfigureAwait(false);return new OpaqueCursor(p);
+                }
+            }
+            public sealed class OpaqueCursor(Probe p):IAsyncEnumerator<int>{
+                public int Current=>42;
+                public ValueTask<bool> MoveNextAsync()=>new(true);
+                public ValueTask DisposeAsync(){
+                    Check.That(++p.OpaqueDisposals==1,"the returned opaque cursor is disposed once");
+                    p.Trace.Add("opaque.Dispose");return default;
+                }
+            }
+            """, """
+            foreach(var mode in new[]{"success","fault","cancel","pending"}){
+                var p=new Probe(mode);var services=new ServiceCollection();services.AddSingleton(p);Register(services);
+                await using var provider=services.BuildServiceProvider();await using var scope=provider.CreateAsyncScope();
+                var mediator=scope.ServiceProvider.GetRequiredService<global::NativeStream.Generated.Reads.IZendiator>();
+                var cursor=mediator.StreamAsync(new Items()).GetAsyncEnumerator();
+                var originalContext=SynchronizationContext.Current;
+                SynchronizationContext? callerContext=p.Pending?null:new SynchronizationContext();
+                try{
+                    Probe.Ambient.Value="cleanup caller";SynchronizationContext.SetSynchronizationContext(callerContext);
+                    Check.That(await cursor.MoveNextAsync()&&cursor.Current==42,"the real public opaque pipeline supplies its item");
+                    Check.That(p.Opened==1&&p.RawMoves==0&&p.RawDisposals==0&&
+                        p.Child is global::Zendiator.Streaming.StreamCursorState {IsClosed:false},
+                        "opaque return leaves an initialized active upstream child for parent cleanup");
+                    var disposal=cursor.DisposeAsync();
+                    Task? shared=null;
+                    Check.That(Probe.Ambient.Value=="cleanup caller"&&ReferenceEquals(SynchronizationContext.Current,callerContext),
+                        "synchronous cleanup GetResult mutations are isolated before Dispose returns");
+                    if(p.Pending){
+                        shared=disposal.AsTask();var repeated=cursor.DisposeAsync().AsTask();
+                        Check.That(!disposal.IsCompleted&&ReferenceEquals(shared,repeated)&&p.Registrations==1&&p.Consumptions==0,
+                            "the retained active child truly suspends cleanup and repeated Dispose joins the same Task");
+                        p.Cleanup!.Complete();
+                        Check.That(Probe.Ambient.Value=="cleanup caller"&&SynchronizationContext.Current is null,
+                            "inline cleanup continuation does not leak ambient changes into its completing caller");
+                    }
+                    else
+                    Check.That(disposal.IsCompleted&&disposal.IsCanceled==(p.Error is OperationCanceledException)&&
+                        disposal.IsFaulted==(p.Error is not null&&p.Error is not OperationCanceledException),
+                        "the completed public cleanup preserves success, fault and cancellation state");
+                    Exception? observed=null;
+                    try{if(shared is null)await disposal.ConfigureAwait(false);else await shared.ConfigureAwait(false);}
+                    catch(Exception error){observed=error;}
+                    Check.That(ReferenceEquals(observed,p.Error),"cleanup preserves the original exception instance");
+                    Check.That(Probe.Ambient.Value=="cleanup caller"&&ReferenceEquals(SynchronizationContext.Current,callerContext),
+                        "awaiting cleanup does not leak source GetResult context changes");
+                    Check.That(p.RawDisposals==1&&p.Consumptions==1&&p.OpaqueDisposals==1&&
+                        p.Trace.SequenceEqual(new[]{"opaque.Dispose","source.Dispose","source.GetResult"}),
+                        "the nonempty upstream cleanup follows opaque cleanup and consumes the source once");
+                    Check.That(p.Child is global::Zendiator.Streaming.StreamCursorState {IsClosed:true},
+                        "parent finally closes the retained upstream even when its cleanup fails");
+                }finally{Probe.Ambient.Value=null;SynchronizationContext.SetSynchronizationContext(originalContext);}
+            }
+            """);
+        await RunNativeStreamFixture("active-upstream-cleanup-context", source);
+    }
 }
