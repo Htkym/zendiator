@@ -245,6 +245,7 @@ public sealed partial class GeneratorTests
     private static async Task RunAsyncHookCase(AsyncHookFixture f, string mode, bool isVoid, bool generated, string scenario, string? pending = null)
     {
         var p = new AsyncHookProbe { Pending = pending }; var prior = AsyncHookProbe.Ambient.Value;
+        var eager = generated && mode is ("direct" or "two");
         using var foreign = new CancellationTokenSource(); var body = new Exception("body"); var before = new Exception("before"); var after = new Exception("after"); var observer = new Exception("observer"); var final = new Exception("finally"); var cleanup = new Exception("cleanup"); var factory = new Exception("factory"); var oce = new OperationCanceledException("OCE identity", foreign.Token);
         if (scenario.Contains("handler", StringComparison.Ordinal) || scenario is "observer-error" or "observer-oce" or "finally-body-error" or "cleanup-body-error" or "cleanup-finally-oce" or "inner-observer-error" or "inner-finally-error" or "observer-pending-oce") p.Failures["handler"] = scenario == "handler-oce" ? oce : body;
         switch (scenario)
@@ -295,7 +296,7 @@ public sealed partial class GeneratorTests
                 Assert.Equal(actual is OperationCanceledException, task.IsCanceled); Assert.Equal(actual != null && actual is not OperationCanceledException, task.IsFaulted);
                 if (ReferenceEquals(actual, oce)) Assert.Equal(foreign.Token, ((OperationCanceledException)actual!).CancellationToken);
                 if (actual == null && !isVoid) Assert.Equal(mode == "two" ? 14 : 12, await (Task<int>)task);
-                Assert.Equal(ExpectedAsyncHookTrace(mode, scenario), p.Trace);
+                Assert.Equal(ExpectedAsyncHookTrace(mode, scenario, eager), p.Trace);
                 if (scenario == "native-before") Assert.Equal("caller", p.Calls.Single(c => c.Phase == "handler").Ambient);
                 var owned = mode.EndsWith("owned", StringComparison.Ordinal); Assert.Equal(owned && p.Hooks.Count != 0 ? 1 : 0, p.ReleasedHooks.Count);
                 foreach (var call in p.Calls.Where(c => c.Phase.Contains("exception", StringComparison.Ordinal))) Assert.NotNull(call.Error);
@@ -319,7 +320,7 @@ public sealed partial class GeneratorTests
             if (mode is "borrowed" or "async-borrowed") foreach (var hook in p.Hooks) await ((IAsyncDisposable)hook).DisposeAsync();
             Assert.Equal(p.Hooks.Count, p.ReleasedHooks.Count); Assert.All(p.Hooks, h => Assert.Single(p.ReleasedHooks, x => ReferenceEquals(x, h)));
             Assert.Equal(p.Trace.Contains("handler.construct") ? 1 : 0, p.HandlerDisposals); Assert.Equal(p.Trace.Contains("factory.construct") ? 1 : 0, p.FactoryDisposals);
-            var lifetime = ExpectedAsyncHookTrace(mode, scenario).ToList(); if (p.HandlerDisposals != 0) lifetime.Add("handler.dispose");
+            var lifetime = ExpectedAsyncHookTrace(mode, scenario, eager).ToList(); if (p.HandlerDisposals != 0) lifetime.Add("handler.dispose");
             if (mode == "two" && p.Hooks.Count == 2) lifetime.Add("h1.cleanup");
             if (mode is "direct" or "two") { if (p.Hooks.Count != 0) lifetime.Add("h0.cleanup"); }
             else if (p.FactoryDisposals != 0) lifetime.Add("factory.dispose");
@@ -343,7 +344,7 @@ public sealed partial class GeneratorTests
         "pre-cancel" => null,
         _ => null
     };
-    private static string[] ExpectedAsyncHookTrace(string mode, string s)
+    private static string[] ExpectedAsyncHookTrace(string mode, string s, bool eager = false)
     {
         if (s == "pre-cancel") return [];
         var factory = mode is not ("direct" or "two"); var list = new List<string>(); if (factory) list.AddRange(["factory.construct", "factory"]);
@@ -369,7 +370,15 @@ public sealed partial class GeneratorTests
                 else { list.AddRange(["h1.after", "h1.finally", "h0.after"]); if (s == "outer-after-error") list.Add("h0.exception"); list.Add("h0.finally"); }
             }
         }
-        if (mode.EndsWith("owned", StringComparison.Ordinal)) list.Add("h0.cleanup"); return list.ToArray();
+        if (mode.EndsWith("owned", StringComparison.Ordinal)) list.Add("h0.cleanup");
+        if (eager)
+        {
+            // Eligible generated routes acquire borrowed receivers before entering callbacks.
+            string[] constructors = mode == "two" ? ["h0.construct", "h1.construct", "handler.construct"] : ["h0.construct", "handler.construct"];
+            list.RemoveAll(phase => constructors.Contains(phase, StringComparer.Ordinal));
+            list.InsertRange(0, constructors);
+        }
+        return list.ToArray();
     }
     private static void AssertStageRequestIdentities(AsyncHookProbe p, object original)
     {

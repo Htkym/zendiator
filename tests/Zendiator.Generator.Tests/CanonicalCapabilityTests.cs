@@ -155,7 +155,9 @@ public sealed partial class GeneratorTests
                 foreach (var c in p.Calls.Where(c => c.Exit != null)) { Assert.Equal(scenario == "success", c.Exit!.Value.Success); if (scenario == "observer") Assert.Same(boundary, c.Exit.Value.Error); else if (scenario == "body" || scenario == "finally") Assert.Same(body, c.Exit.Value.Error); }
                 Assert.Equal(0, p.Disposals); WriteNestedHookEvidence("capability-observations", async + "-" + isVoid + "-" + pattern + "-" + two + "-" + generated + "-" + scenario + "-" + (pending ?? "complete"), new { async, isVoid, pattern, two, generated, scenario, pending, trace = p.Trace.ToArray(), result, error = error?.Message, consumptions = p.Gates.Select(g => g.Consumptions), calls = p.Calls.Select(c => new { c.Phase, value = c.Request?.GetType().GetProperty("Value")!.GetValue(c.Request), error = c.Error?.Message, success = c.Exit?.Success, exitError = c.Exit?.Error?.Message }) }); p.Failures.Clear(); p.Pending = null;
             }
-            Assert.Equal(p.Trace.Contains("handler") ? 1 : 0, p.Disposals);
+            // Eligible async generation captures the handler even if an earlier callback stops execution.
+            var capturedHandler = generated && async && pattern != "s---";
+            Assert.Equal(p.Trace.Contains("handler") || capturedHandler ? 1 : 0, p.Disposals);
         }
         finally { p.Cancellation.Dispose(); }
     }

@@ -184,10 +184,23 @@ public sealed partial class GeneratorTests
                 }
                 else Assert.Equal(16, await task.WaitAsync(TimeSpan.FromSeconds(10)));
                 Assert.Empty(p.ReleasedHooks); Assert.Equal(0, p.HandlerDisposals); Assert.All(p.Gates, g => Assert.Equal(1, g.Consumptions));
-                if (scenario == "inner-cancel") { Assert.DoesNotContain("h2.construct", p.Trace); Assert.DoesNotContain("handler.construct", p.Trace); }
+                if (scenario == "inner-cancel")
+                {
+                    if (generated) { Assert.Contains("h2.construct", p.Trace); Assert.Contains("handler.construct", p.Trace); }
+                    else { Assert.DoesNotContain("h2.construct", p.Trace); Assert.DoesNotContain("handler.construct", p.Trace); }
+                    Assert.DoesNotContain("h2.before", p.Trace); Assert.DoesNotContain("handler", p.Trace);
+                }
             }
             Assert.Equal(p.Hooks.Count, p.ReleasedHooks.Count); Assert.All(p.Hooks, h => Assert.Single(p.ReleasedHooks, x => ReferenceEquals(x, h)));
-            if (expected == null) expected = p.Trace.ToArray(); else Assert.Equal(expected, p.Trace);
+            if (expected == null) expected = p.Trace.ToArray();
+            else if (scenario == "pre-cancel") Assert.Equal(expected, p.Trace);
+            else
+            {
+                var callbacks = expected.Where(phase => !phase.EndsWith(".construct", StringComparison.Ordinal) &&
+                    !phase.EndsWith(".cleanup", StringComparison.Ordinal) && phase != "handler.dispose");
+                Assert.Equal(new[] { "h0.construct", "h1.construct", "h2.construct", "handler.construct" }
+                    .Concat(callbacks).Concat(["handler.dispose", "h2.cleanup", "h1.cleanup", "h0.cleanup"]), p.Trace);
+            }
         }
     }
 
