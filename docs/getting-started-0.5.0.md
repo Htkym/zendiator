@@ -33,10 +33,10 @@ Resolve the generated `IZendiator` from a DI scope. Keep that scope alive until
 the operation or Stream enumeration, including cleanup, has finished. Let DI
 dispose its handler and hook services. Generated registration uses a Scoped
 `IZendiator` entry and Transient defaults for handlers, hooks and session
-factories. Each Mediator captures the first published successful resolution of
-each dependency and reuses it. Concurrent successful resolutions share that
-instance; a failed resolution still reports its own error. Await each returned
-`ValueTask` once.
+factories. Each Mediator reuses captured services, either per dependency or as
+a route-local set for eligible asynchronous Hook routes described below.
+Concurrent successful initializations share the published winner; a failed
+initialization still reports its own error. Await each returned `ValueTask` once.
 
 An eligible plain `SendAsync` route with no hooks, or only synchronous Before
 hooks, and no factories, wrappers or sessions returns the handler's original
@@ -46,11 +46,42 @@ returned. Synchronous changes to `AsyncLocal`, culture or `SynchronizationContex
 are visible to the caller. Other asynchronous failures arrive when awaiting the
 result. Put both the call and the await inside your `try` block.
 
+## Route-local capture for asynchronous Hooks
+
+Closed `SendAsync` routes using the asynchronous Hook execution path capture a
+route-local dependency set when the handler and all Hooks are borrowed reference
+types, use no session/factory contracts, and include at least two distinct receiver
+types. Open generic route definitions, value-type receivers, wrappers, handler-only
+routes and the synchronous-Before-only fast path retain their existing capture
+behavior. This does not exclude ordinary DI activation factories. Use generated
+composition registration so DI can construct the route-local set. A custom
+provider must also resolve that generated set.
+
+The set is acquired on the route's first dispatch, after the initial cancellation
+check and inside the existing asynchronous execution boundary. DI resolves all
+receivers before the first Hook runs, including a handler that an outer Hook
+failure leaves unused. Constructor side effects and failures therefore occur
+earlier than with per-node lazy acquisition, before the Hook's error and cleanup
+callbacks begin. If set construction fails, Hook callbacks are not entered.
+Native constructor injection does not check cancellation between
+arguments. A null required receiver prevents set publication; a failed
+initialization may be retried. Native DI may already have obtained later arguments
+before the constructor rejects a null receiver.
+
+The Mediator reuses the successful set for that route. A Transient receiver can
+differ between routes, and from the same type requested through the Mediator's
+explicit `IServiceProvider` interface. Register a receiver as Scoped or Singleton
+when native DI must share its identity. DI owns every activation and disposal,
+including unused receivers and concurrent losing initializations; the set does not
+dispose borrowed services. Keep the owning scope alive until dispatch completes.
+
 ## Closed dependency storage
 
 Closed dependency slots are inline by default, at every composition size. This
-controls storage only: native DI activation stays lazy, and the Mediator reuses
-the first published successful instance without owning its disposal.
+controls storage only: dependency or route-set activation stays deferred until
+first use, and the Mediator reuses the first published successful result without
+owning its disposal. An eligible route set resolves its receivers together as
+described above.
 
 For a composition known to touch few dependencies in short-lived scopes, select
 lazy blocks on its marker:

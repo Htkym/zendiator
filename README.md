@@ -102,10 +102,12 @@ is separate from the composition's Send and Stream routes.
 
 Generated composition registration uses one Scoped `IZendiator` entry and Transient
 defaults for handlers, hooks and session factories. Register overrides before
-`AddZendiator`; existing registrations are preserved. Each Mediator lazily captures
-the first published successful instance of each dependency type, including
-Transient dependencies. It reuses that instance across its routes. This does not
-make a shared handler or hook thread-safe.
+`AddZendiator`; existing registrations are preserved. Each Mediator reuses captured
+dependencies. Eligible asynchronous Hook routes acquire a route-local set before
+the first Hook, including receivers left unused by an outer failure; other routes
+retain per-dependency capture. Transient identity can differ between those sets
+and other routes. See the [route capture contract](docs/getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks).
+Reused handlers and hooks must support concurrent invocation.
 
 DI owns activation and disposal of borrowed dependencies. Keep the caller's scope
 alive through asynchronous completion, enumeration and cleanup. The Mediator does

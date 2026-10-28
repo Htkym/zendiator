@@ -34,7 +34,9 @@ internal static class CanonicalRegistrationSourceEmitter
                         if (snapshot.GetFingerprint() != expected.Snapshot().GetFingerprint())
                             throw new global::System.InvalidOperationException("AddZendiator configuration does not match this generated composition.");
             """);
-        foreach (var type in plan.Routes.SelectMany(r => r.ServiceTypes).Distinct(StringComparer.Ordinal))
+        var carriers = plan.Routes.Select(r => CanonicalRouteDependenciesEmitter.Plan(r.Registration, r.Family))
+            .Where(carrier => carrier != null).Select(carrier => carrier!.QualifiedName);
+        foreach (var type in plan.Routes.SelectMany(r => r.ServiceTypes).Concat(carriers).Distinct(StringComparer.Ordinal))
             b.AppendLine($$"""
                         global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAdd(services,
                             global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Transient(typeof({{type}}), typeof({{type}})));

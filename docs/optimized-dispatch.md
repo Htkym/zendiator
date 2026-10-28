@@ -1,5 +1,8 @@
 # Construction and dispatch lifetime
 
+This page describes the legacy resolver-based API. For generated 0.5.0
+compositions, use the [current capture and ownership contract](getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks).
+
 Zendiator has one dispatch path. It lazily captures each Handler and Behavior from
 standard DI on first use, then reuses that dependency for the mediator instance.
 There is no optimized-mode switch, custom provider, or provider factory.

@@ -13,9 +13,11 @@ internal static class CanonicalAsyncSourceEmitter
         b.Append(CanonicalSymbolName.Declarations(model.Compositions.SelectMany(c => c.ExternAliases)));
         foreach (var c in model.Compositions)
         {
+            var registration = CanonicalAsyncEmissionNormalizer.Registration(c);
+            var dependencies = CanonicalRouteDependenciesEmitter.Plan(registration, BoundDispatchFamily.SendAsync);
             if (c.Factory == null && c.Hooks.Count == 0)
             {
-                CanonicalAsyncFastPathEmitter.Emit(b, CanonicalAsyncEmissionNormalizer.Registration(c), c.Handler.CallTarget,
+                CanonicalAsyncFastPathEmitter.Emit(b, registration, c.Handler.CallTarget,
                     System.Array.Empty<HookCapabilityEmission>());
                 continue;
             }
@@ -45,6 +47,7 @@ internal static class CanonicalAsyncSourceEmitter
                             return {{(typedInvoker ? "new SendInvoker" + typeParameters + "(_provider).InvokeAsync(request, cancellationToken)" : "ExecuteAsync" + typeParameters + "(request, cancellationToken)")}};
                         }
                 """);
+            CanonicalRouteDependenciesEmitter.Emit(b, dependencies);
             if (typedInvoker) b.AppendLine($$"""
                     private readonly struct SendInvoker{{typeParameters}}{{constraints}}
                     {
@@ -59,10 +62,11 @@ internal static class CanonicalAsyncSourceEmitter
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                 """);
+            CanonicalRouteDependenciesEmitter.Acquire(b, dependencies);
             if (c.Hooks.Count != 0)
             {
                 if (h.ResultName != null) b.AppendLine($"            {h.ResultName} response;");
-                EmitHookScope(b, c, 0, "request", typedInvoker: true);
+                EmitHookScope(b, c, 0, "request", typedInvoker: true, dependencies);
                 if (h.ResultName != null) b.AppendLine("            return response;");
             }
             else
@@ -96,13 +100,14 @@ internal static class CanonicalAsyncSourceEmitter
                 b.AppendLine("    }");
             }
             b.AppendLine("    }");
-            CanonicalSyncSourceEmitter.EmitRegistrar(b, CanonicalAsyncEmissionNormalizer.Registration(c), BoundDispatchFamily.SendAsync);
+            CanonicalSyncSourceEmitter.EmitRegistrar(b, registration, BoundDispatchFamily.SendAsync);
             b.AppendLine("}");
         }
         return b.ToString();
     }
 
-    internal static void EmitHookScope(StringBuilder b, CanonicalAsyncCompositionEmission c, int index, string input, bool typedInvoker = false)
+    internal static void EmitHookScope(StringBuilder b, CanonicalAsyncCompositionEmission c, int index, string input, bool typedInvoker = false,
+        CanonicalRouteDependenciesPlan? dependencies = null)
     {
         var h = c.Handler; var hook = c.Hooks[index];
         var receiver = "hook" + index; var saved = "saved" + index; var error = "error" + index; var success = "success" + index;
@@ -117,7 +122,7 @@ internal static class CanonicalAsyncSourceEmitter
                 {{hook.HookName}}? {{receiver}} = {{(factory.AwaitAcquire ? "await " : "")}}(({{factory.ContractName}})hookFactory{{index}}).{{factory.MethodName}}({{input}}, cancellationToken){{(factory.AwaitAcquire ? ".ConfigureAwait(false)" : "")}}
                     ?? throw new global::System.InvalidOperationException("A session factory must return a nonnull Hook session.");
                 """);
-        else b.AppendLine($$"""var {{receiver}} = {{CanonicalServiceResolution.Emit(hook.HookName, hook.HookIsValueType)}};""");
+        else b.AppendLine($$"""var {{receiver}} = {{CanonicalRouteDependenciesEmitter.Receiver(dependencies, hook.HookName, hook.HookIsValueType)}};""");
         var owned = hook.Factory?.CleanupContractName != null;
         if (owned) b.AppendLine("try\n{");
         b.AppendLine($$"""
@@ -130,9 +135,9 @@ internal static class CanonicalAsyncSourceEmitter
                 {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(" + saved + ", \"request\");")}}
                 cancellationToken.ThrowIfCancellationRequested();
             """);
-        if (index + 1 < c.Hooks.Count) EmitHookScope(b, c, index + 1, saved, typedInvoker);
+        if (index + 1 < c.Hooks.Count) EmitHookScope(b, c, index + 1, saved, typedInvoker, dependencies);
         else if (c.Factory == null) b.AppendLine($$"""
-            var handler = {{CanonicalServiceResolution.Emit(h.HandlerName, h.HandlerIsValueType)}};
+            var handler = {{CanonicalRouteDependenciesEmitter.Receiver(dependencies, h.HandlerName, h.HandlerIsValueType)}};
             {{(h.ResultName == null ? "" : "response = ")}}await {{HandlerCall()}}.ConfigureAwait(false);
             """);
         else

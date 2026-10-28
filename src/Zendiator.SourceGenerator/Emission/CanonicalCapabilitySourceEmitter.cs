@@ -18,6 +18,7 @@ internal static class CanonicalCapabilitySourceEmitter
             }
             var r = c.Registration; var h = r.Handler; var async = c.Family == BoundDispatchFamily.SendAsync; var result = async ? (h.ResultName == null ? "global::System.Threading.Tasks.ValueTask" : "global::System.Threading.Tasks.ValueTask<" + h.ResultName + ">") : h.ResultName ?? "void";
             var typed = CanOptimizeAsync(c);
+            var dependencies = CanonicalRouteDependenciesEmitter.Plan(r, c.Family);
             b.AppendLine($$"""
                 namespace {{r.Namespace}} {
                 public interface IZendiator { {{result}} {{(async ? "SendAsync" : "Send")}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken=default); }
@@ -29,13 +30,15 @@ internal static class CanonicalCapabilitySourceEmitter
                     }
                     public {{result}} {{(async ? "SendAsync" : "Send")}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken=default){{{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}{{(async || h.ResultName != null ? "return " : "")}}{{(typed ? "new SendInvoker(_provider).InvokeAsync(request,cancellationToken)" : "Execute(request,cancellationToken)")}};}
                 """);
+            CanonicalRouteDependenciesEmitter.Emit(b, dependencies);
             if (typed)
                 b.AppendLine("private readonly struct SendInvoker { private readonly global::System.IServiceProvider _provider; internal SendInvoker(global::System.IServiceProvider provider) { _provider=provider; }");
             if (typed) b.AppendLine(PoolingBuilderAttribute);
             b.AppendLine($$"""
                     {{(typed ? "internal" : "private")}} {{(async ? "async " : "")}}{{result}} {{(typed ? "InvokeAsync" : "Execute")}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken){cancellationToken.ThrowIfCancellationRequested();
                 """);
-            if (h.ResultName != null) b.AppendLine(h.ResultName + " response;"); Scope(b, c, 0, "request", typed); if (h.ResultName != null) b.AppendLine("return response;"); b.AppendLine("}");
+            CanonicalRouteDependenciesEmitter.Acquire(b, dependencies);
+            if (h.ResultName != null) b.AppendLine(h.ResultName + " response;"); Scope(b, c, 0, "request", typed, dependencies); if (h.ResultName != null) b.AppendLine("return response;"); b.AppendLine("}");
             if (typed) { EmitTypedCalls(b, c); b.AppendLine("}"); }
             b.AppendLine("}"); CanonicalSyncSourceEmitter.EmitRegistrar(b, r, c.Family); b.AppendLine("}");
         }
@@ -51,16 +54,18 @@ internal static class CanonicalCapabilitySourceEmitter
     internal static string Await(string call, bool async) => async ? "await " + call + ".ConfigureAwait(false)" : call;
     internal static string RequestGuard(bool valueType, string guard) => valueType ? "" : guard;
     internal static string Call(CapabilityCallbackEmission cb, string receiver, string arguments) => Await("((" + cb.ContractName + ")" + receiver + ")." + cb.MethodName + "(" + arguments + ")", cb.Completion == BoundCompletionKind.ValueTask);
-    internal static void Acquire(StringBuilder b, BoundAsyncFactoryEmission? f, string type, string receiver, string request, bool receiverIsValueType)
-    { if (f == null) b.AppendLine($"var {receiver}={CanonicalServiceResolution.Emit(type, receiverIsValueType)};"); else b.AppendLine($"var {receiver}Factory={CanonicalServiceResolution.Emit(f.FactoryName, f.FactoryIsValueType)};{type}? {receiver}={Await("((" + f.ContractName + ")" + receiver + "Factory)." + f.MethodName + "(" + request + ",cancellationToken)", f.AwaitAcquire)}??throw new global::System.InvalidOperationException(\"A session factory must return a nonnull callback receiver.\");"); }
+    internal static void Acquire(StringBuilder b, BoundAsyncFactoryEmission? f, string type, string receiver, string request, bool receiverIsValueType,
+        CanonicalRouteDependenciesPlan? dependencies = null)
+    { if (f == null) b.AppendLine($"var {receiver}={CanonicalRouteDependenciesEmitter.Receiver(dependencies, type, receiverIsValueType)};"); else b.AppendLine($"var {receiver}Factory={CanonicalServiceResolution.Emit(f.FactoryName, f.FactoryIsValueType)};{type}? {receiver}={Await("((" + f.ContractName + ")" + receiver + "Factory)." + f.MethodName + "(" + request + ",cancellationToken)", f.AwaitAcquire)}??throw new global::System.InvalidOperationException(\"A session factory must return a nonnull callback receiver.\");"); }
     internal static void Cleanup(StringBuilder b, BoundAsyncFactoryEmission? f, string receiver, bool async)
     { if (f?.CleanupContractName != null) b.AppendLine($"}}finally{{var detached{receiver}={receiver};{receiver}=null;{Await("((" + f.CleanupContractName + ")detached" + receiver + ")." + (async ? "DisposeAsync" : "Dispose") + "()", async)};}}"); }
-    private static void Scope(StringBuilder b, CanonicalCapabilityCompositionEmission c, int index, string input, bool typed)
+    private static void Scope(StringBuilder b, CanonicalCapabilityCompositionEmission c, int index, string input, bool typed,
+        CanonicalRouteDependenciesPlan? dependencies = null)
     {
         var async = c.Family == BoundDispatchFamily.SendAsync; var h = c.Registration.Handler;
         if (index == c.Hooks.Count)
         {
-            Acquire(b, c.HandlerFactory, h.HandlerName, "handler", input, h.HandlerIsValueType); if (c.HandlerFactory?.CleanupContractName != null) b.AppendLine("try{");
+            Acquire(b, c.HandlerFactory, h.HandlerName, "handler", input, h.HandlerIsValueType, dependencies); if (c.HandlerFactory?.CleanupContractName != null) b.AppendLine("try{");
             var call = typed ? "Handle(handler," + input + ",cancellationToken)" : "((" + h.ContractName + ")handler)." + h.MethodName + "(" + input + ",cancellationToken)";
             b.AppendLine((h.ResultName == null ? "" : "response=") + Await(call, async) + ";"); Cleanup(b, c.HandlerFactory, "handler", async); return;
         }
@@ -68,11 +73,11 @@ internal static class CanonicalCapabilitySourceEmitter
         string Callback(string phase, CapabilityCallbackEmission callback, string arguments) => typed
             ? Await(phase + index + "(" + receiver + "," + arguments + ")", callback.Completion == BoundCompletionKind.ValueTask)
             : Call(callback, receiver, arguments);
-        Acquire(b, hook.Factory, hook.HookName, receiver, input, hook.HookIsValueType); if (hook.Factory?.CleanupContractName != null) b.AppendLine("try{");
+        Acquire(b, hook.Factory, hook.HookName, receiver, input, hook.HookIsValueType, dependencies); if (hook.Factory?.CleanupContractName != null) b.AppendLine("try{");
         b.AppendLine($"var {saved}={input};" + (hook.Finally == null ? "" : $"var {success}=false;global::System.Exception? {error}=null;") + "try{");
         if (hook.Before != null) b.AppendLine(saved + "=" + Callback("Before", hook.Before, saved + ",cancellationToken") + ";");
         b.AppendLine(RequestGuard(h.RequestIsValueType, $"global::System.ArgumentNullException.ThrowIfNull({saved},\"request\");") + "cancellationToken.ThrowIfCancellationRequested();");
-        Scope(b, c, index + 1, saved, typed);
+        Scope(b, c, index + 1, saved, typed, dependencies);
         if (hook.Success != null) b.AppendLine((h.ResultName == null ? "" : "response=") + Callback("After", hook.Success, saved + "," + (h.ResultName == null ? "" : "response,") + "cancellationToken") + ";");
         if (hook.Finally != null) b.AppendLine(success + "=true;");
         if (hook.Exception != null || hook.Finally != null)
