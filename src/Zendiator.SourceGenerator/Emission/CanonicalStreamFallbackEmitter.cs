@@ -113,6 +113,7 @@ internal static class CanonicalStreamFallbackEmitter
     {
         var h = model.Handler;
         var n = segment.Id;
+        var identityLeaseParent = CanonicalStreamIdentityLeaseEmitter.IsParent(model, n);
         var input = segment.SourceItemName ?? h.ItemName;
         var output = segment.OutputItemName ?? h.ItemName;
         var source = segment.Wrapper == null ? h.CursorName : "global::System.Collections.Generic.IAsyncEnumerator<" + input + ">";
@@ -159,6 +160,7 @@ internal static class CanonicalStreamFallbackEmitter
                                 else operation = EndAsync();
                             }
             """ : "else operation = ObserveMove(MoveCoreAsync());";
+        if (identityLeaseParent) repeatedMove = "else if (_identityLease is not null) return AdvanceIdentityLease();\n" + repeatedMove;
         b.AppendLine($$"""
                     private sealed class Cursor{{n}} : global::Zendiator.Streaming.StreamCursorState,
                         global::System.Collections.Generic.IAsyncEnumerator<{{output}}>{{(standalone ? ", global::System.Collections.Generic.IAsyncEnumerable<" + output + ">" : "")}}
@@ -181,7 +183,7 @@ internal static class CanonicalStreamFallbackEmitter
         b.AppendLine($$"""
                         public {{output}} Current
                         {
-                            get { ValidateCurrent(); return {{(segment.Hooks.Count == 0 ? "ReadSource(ref _source)" : "_current")}}; }
+                            get { ValidateCurrent(); return {{(identityLeaseParent ? "_identityLease is not null ? ReadIdentityLeaseCurrent() : ReadSource(ref _source)" : segment.Hooks.Count == 0 ? "ReadSource(ref _source)" : "_current")}}; }
                         }
                         public global::System.Threading.Tasks.ValueTask<bool> MoveNextAsync()
                         {
@@ -200,11 +202,11 @@ internal static class CanonicalStreamFallbackEmitter
                         {
                             try
                             {
-                                {{initialization}}
+                                {{initialization}}{{(identityLeaseParent ? "\nAttachIdentityLease();" : "")}}
                             }
                             catch (global::System.Exception error) { return await MoveFailed(error).ConfigureAwait(false); }
                             bool moved;
-                            try { moved = await MoveCoreAsync().ConfigureAwait(false); }
+                            try { moved = await {{(identityLeaseParent ? "(_identityLease is not null ? MoveIdentityLeaseRaw() : MoveCoreAsync())" : "MoveCoreAsync()")}}.ConfigureAwait(false); }
                             catch (global::System.Exception error) { return await MoveFailed(error).ConfigureAwait(false); }
                             return moved ? MoveSucceeded(true).GetAwaiter().GetResult() : await EndAsync().ConfigureAwait(false);
                         }
@@ -217,10 +219,10 @@ internal static class CanonicalStreamFallbackEmitter
                             }
                             catch (global::System.Exception error) { return MoveFailed(error); }
                         }
-            {{awaitMove}}{{CanonicalStreamPrivateAdvanceEmitter.Emit(model, n)}}{{CanonicalStreamGroupAdvanceEmitter.Emit(model, n)}}
+            {{awaitMove}}{{CanonicalStreamPrivateAdvanceEmitter.Emit(model, n)}}{{CanonicalStreamGroupAdvanceEmitter.Emit(model, n)}}{{CanonicalStreamIdentityLeaseEmitter.Emit(model, n)}}
                         private async global::System.Threading.Tasks.ValueTask<bool> EndAsync()
                         {
-                            await MoveSucceeded(false).ConfigureAwait(false);
+                            {{(identityLeaseParent ? "PrepareIdentityLeaseTermination(false, null);\n" : "")}}await MoveSucceeded(false).ConfigureAwait(false);
                             {{(standalone ? "" : "_normalEnd = true;")}}
                             return false;
                         }
@@ -281,9 +283,9 @@ internal static class CanonicalStreamFallbackEmitter
         b.AppendLine("private static " + input + " ReadSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.Current;");
         b.AppendLine("private static global::System.Threading.Tasks.ValueTask DisposeSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.DisposeAsync();");
         EmitMove(b, segment);
-        EmitCleanup(b, segment, factory, referenceSource, HasIdentitySource(model, n), standalone && segment.Hooks.Count == 0);
+        EmitCleanup(b, segment, factory, referenceSource, HasIdentitySource(model, n), standalone && segment.Hooks.Count == 0, identityLeaseParent);
         b.AppendLine("}");
-        if (segment.Upstream is { } upstream) EmitUpstream(b, h, segment, upstream, HasIdentitySource(model, n));
+        if (segment.Upstream is { } upstream) EmitUpstream(b, h, segment, upstream, HasIdentitySource(model, n) || CanonicalStreamIdentityLeaseEmitter.HasEdge(model, n));
     }
 
     private static void EmitInitialization(StringBuilder b, CanonicalStreamFallbackModel model,
@@ -372,15 +374,16 @@ internal static class CanonicalStreamFallbackEmitter
         return item;
     }
 
-    private static void EmitCleanup(StringBuilder b, CanonicalStreamFallbackSegment segment, BoundAsyncFactoryEmission? receiverFactory, bool referenceSource, bool privateIdentityParent, bool completionCell)
+    private static void EmitCleanup(StringBuilder b, CanonicalStreamFallbackSegment segment, BoundAsyncFactoryEmission? receiverFactory, bool referenceSource, bool privateIdentityParent, bool completionCell, bool identityLeaseParent)
     {
         b.AppendLine("protected override async global::System.Threading.Tasks.ValueTask DisposeCoreAsync() {");
         if (completionCell) b.AppendLine("_pendingTaskRunner = null;");
         if (segment.Hooks.Count != 0) b.AppendLine("_current = default!;");
         if (privateIdentityParent) b.AppendLine("_identitySource = null;");
+        var leaseCleanup = identityLeaseParent ? "var leaseError = await DisposeIdentityLeaseAsync().ConfigureAwait(false); if (leaseError is not null) global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(leaseError).Throw(); " : "";
         b.AppendLine(referenceSource
-            ? "try { var source = _source; if (source is not null) { _source = default!; await DisposeSource(ref source).ConfigureAwait(false); } }"
-            : "try { if (_acquired) { _acquired = false; var source = _source; _source = default!; await DisposeSource(ref source).ConfigureAwait(false); } }");
+            ? "try { " + leaseCleanup + "var source = _source; if (source is not null) { _source = default!; await DisposeSource(ref source).ConfigureAwait(false); } }"
+            : "try { " + leaseCleanup + "if (_acquired) { _acquired = false; var source = _source; _source = default!; await DisposeSource(ref source).ConfigureAwait(false); } }");
         b.AppendLine("finally {");
         var depth = 1;
         if (segment.Upstream != null)
@@ -406,6 +409,7 @@ internal static class CanonicalStreamFallbackEmitter
                         : global::Zendiator.IStreamUpstream<{{handler.RequestName}}, {{item}}>
                     {
                         private Cursor{{upstream}}? _active;{{(privateIdentityParent ? "\ninternal Cursor" + upstream + "? MatchIdentity(global::System.Collections.Generic.IAsyncEnumerator<" + item + "> source) { var active = _active; return global::System.Object.ReferenceEquals(source, active) ? active : null; }" : "")}}
+                        {{(privateIdentityParent ? "internal void DetachIdentity(Cursor" + upstream + " child) { if (global::System.Object.ReferenceEquals(_active, child)) _active = null; }" : "")}}
                         private int _opening;
                         public global::System.Threading.Tasks.ValueTask<global::System.Collections.Generic.IAsyncEnumerator<{{item}}>> OpenAsync(
                             {{handler.RequestName}} request, global::System.Threading.CancellationToken token)

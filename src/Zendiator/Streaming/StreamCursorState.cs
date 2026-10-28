@@ -335,6 +335,83 @@ public abstract class StreamCursorState : IAsyncDisposable
         return error is null ? new(false) : ThrowMoveAsync(error);
     }
 
+    /// <summary>Closes a claimed owner without releasing its gate or publishing disposal.</summary>
+    protected ValueTask<Exception?> CloseClaimedAsync(Exception? error, bool disposing)
+    {
+        if (Volatile.Read(ref _busy) != 1 || _closed || Volatile.Read(ref _cleanupComplete))
+            throw new InvalidOperationException("The Stream close requires a live claimed owner.");
+
+        var cleanupTransferred = false;
+        try
+        {
+            try
+            {
+                var cleanup = BeginClose();
+                if (!cleanup.IsCompleted)
+                {
+                    cleanupTransferred = true;
+                    return CompleteClaimedCloseAsync(cleanup, error, disposing);
+                }
+
+                cleanup.GetAwaiter().GetResult();
+            }
+            finally
+            {
+                if (!cleanupTransferred)
+                    DisposeLinkedToken();
+            }
+        }
+        catch (Exception cleanupError)
+        {
+            error = cleanupError;
+        }
+
+        return new(PrepareClaimedClose(error, disposing));
+    }
+
+    private async ValueTask<Exception?> CompleteClaimedCloseAsync(ValueTask cleanup, Exception? error, bool disposing)
+    {
+        try
+        {
+            try
+            {
+                await cleanup.ConfigureAwait(false);
+            }
+            finally
+            {
+                DisposeLinkedToken();
+            }
+        }
+        catch (Exception cleanupError)
+        {
+            error = cleanupError;
+        }
+
+        return PrepareClaimedClose(error, disposing);
+    }
+
+    private Exception? PrepareClaimedClose(Exception? error, bool disposing)
+    {
+        if (disposing)
+            _disposeError = error;
+        Volatile.Write(ref _cleanupComplete, true);
+        return error;
+    }
+
+    /// <summary>Releases a prepared close after generated lease state has retired.</summary>
+    protected void RetireClaimedClose()
+    {
+        if (!Volatile.Read(ref _closed) || !Volatile.Read(ref _cleanupComplete))
+            throw new InvalidOperationException("The Stream close has not finished cleanup.");
+
+        var completion = Volatile.Read(ref _disposeCompletion);
+        var error = _disposeError;
+        // Notification may reenter; the gate release is the final owner access.
+        if (Interlocked.CompareExchange(ref _busy, 0, 1) != 1)
+            throw new InvalidOperationException("The Stream close no longer owns its claim.");
+        completion?.Complete(error);
+    }
+
     private ValueTask BeginClose()
     {
         var wasClosed = _closed;
