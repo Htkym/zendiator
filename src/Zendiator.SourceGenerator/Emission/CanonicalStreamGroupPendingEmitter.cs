@@ -46,7 +46,7 @@ internal static class CanonicalStreamGroupPendingEmitter
                             var start = new {{groupStart}}(this, pending, depth, settled, {{arguments}});
                             var boundary = global::System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder<bool>.Create();
                             boundary.Start(ref start);
-                            return start.Result;
+                            return start.Completion is { } completion ? PublishMove(start.Result, completion) : start.Result;
                         }
                         private void DetachPendingTaskRunner({{runner}} runner)
                         {
@@ -97,17 +97,14 @@ internal static class CanonicalStreamGroupPendingEmitter
                             private readonly bool {{settledField}};
                             {{startFields}}
                             internal global::System.Threading.Tasks.ValueTask<bool> Result;
+                            internal global::Zendiator.Streaming.StreamCursorState.MoveCompletion? Completion;
                             internal {{groupStart}}(Cursor{{cursor}} owner, global::System.Threading.Tasks.ValueTask<bool> pending,
                                 int depth, bool settled, {{parameters}})
                             {
-                                _owner = owner; _pending = pending; {{depthField}} = depth; {{settledField}} = settled; Result = default;
+                                _owner = owner; _pending = pending; {{depthField}} = depth; {{settledField}} = settled; Result = default; Completion = null;
                                 {{assignments}}
                             }
-                            public void MoveNext()
-                            {
-                                try { Result = Start(); }
-                                catch (global::System.Exception error) { Result = Fault(error); }
-                            }
+                            public void MoveNext() { Result = Start(); }
                             private global::System.Threading.Tasks.ValueTask<bool> Start()
                             {
                                 var awaiter = _pending.ConfigureAwait(false).GetAwaiter();
@@ -121,11 +118,11 @@ internal static class CanonicalStreamGroupPendingEmitter
                                 catch (global::System.Exception error) { failure = error; }
                                 if (failure is not null || completed)
                                 {
-                                    if ({{depthField}} < 0 && {{settledField}}) return failure is null ? new(moved) : Fault(failure);
+                                    if ({{depthField}} < 0 && {{settledField}}) return _owner.PublishMove(failure is null ? new(moved) : Fault(failure));
                                     return _owner.CompleteGroupMove({{depthField}}, moved, failure, {{settledField}}, {{storedArguments}});
                                 }
                                 var runner = _owner._pendingTaskRunner ??= new {{runner}}();
-                                return new(runner.BeginGroup(_owner, awaiter, {{depthField}}, {{settledField}}, {{storedArguments}}));
+                                return runner.BeginGroup(_owner, awaiter, {{depthField}}, {{settledField}}, {{storedArguments}}, out Completion);
                             }
                             private static global::System.Threading.Tasks.ValueTask<bool> Fault(global::System.Exception error)
                             {
@@ -144,20 +141,48 @@ internal static class CanonicalStreamGroupPendingEmitter
                             private readonly global::System.Action _resume;
                             private global::System.Runtime.CompilerServices.ConfiguredValueTaskAwaitable<bool>.ConfiguredValueTaskAwaiter _awaiter;
                             private global::System.Runtime.CompilerServices.AsyncTaskMethodBuilder<bool> _promise;
+                            private global::Zendiator.Streaming.StreamCursorState.MoveCompletion? _firstCompletion, _secondCompletion, _completion;
                             private global::System.Threading.ExecutionContext? _context;
                             private int _phase;
                             private int {{depthField}};
                             internal {{runner}}() { _resume = Resume; }
                             internal global::System.Threading.Tasks.Task<bool> Begin(Cursor{{cursor}} owner,
-                                global::System.Runtime.CompilerServices.ConfiguredValueTaskAwaitable<bool>.ConfiguredValueTaskAwaiter awaiter) =>
-                                BeginGroup(owner, awaiter, -1, false, {{nullArguments}});
-                            internal global::System.Threading.Tasks.Task<bool> BeginGroup(Cursor{{cursor}} owner,
-                                global::System.Runtime.CompilerServices.ConfiguredValueTaskAwaitable<bool>.ConfiguredValueTaskAwaiter awaiter,
-                                int depth, bool settled, {{parameters}})
+                                global::System.Runtime.CompilerServices.ConfiguredValueTaskAwaitable<bool>.ConfiguredValueTaskAwaiter awaiter)
                             {
                                 if (_phase != Idle) throw new global::System.InvalidOperationException("The pending Stream runner is unavailable.");
                                 _promise = global::System.Runtime.CompilerServices.AsyncTaskMethodBuilder<bool>.Create();
                                 var task = _promise.Task;
+                                _completion = null;
+                                Initialize(owner, awaiter, -1, false, {{nullArguments}});
+                                return task;
+                            }
+                            internal global::System.Threading.Tasks.ValueTask<bool> BeginGroup(Cursor{{cursor}} owner,
+                                global::System.Runtime.CompilerServices.ConfiguredValueTaskAwaitable<bool>.ConfiguredValueTaskAwaiter awaiter,
+                                int depth, bool settled, {{parameters}},
+                                out global::Zendiator.Streaming.StreamCursorState.MoveCompletion completion)
+                            {
+                                if (_phase != Idle) throw new global::System.InvalidOperationException("The pending Stream runner is unavailable.");
+                                var first = _firstCompletion ??= new global::Zendiator.Streaming.StreamCursorState.MoveCompletion();
+                                if (first.TryPrepare(out var operation)) completion = first;
+                                else
+                                {
+                                    var second = _secondCompletion ??= new global::Zendiator.Streaming.StreamCursorState.MoveCompletion();
+                                    if (second.TryPrepare(out operation)) completion = second;
+                                    else
+                                    {
+                                        completion = new global::Zendiator.Streaming.StreamCursorState.MoveCompletion();
+                                        completion.TryPrepare(out operation);
+                                    }
+                                }
+                                _promise = default;
+                                _completion = completion;
+                                Initialize(owner, awaiter, depth, settled, {{arguments}});
+                                return operation;
+                            }
+                            private void Initialize(Cursor{{cursor}} owner,
+                                global::System.Runtime.CompilerServices.ConfiguredValueTaskAwaitable<bool>.ConfiguredValueTaskAwaiter awaiter,
+                                int depth, bool settled, {{parameters}})
+                            {
                                 _owner = owner;
                                 {{assignments}}
                                 {{depthField}} = depth;
@@ -165,7 +190,6 @@ internal static class CanonicalStreamGroupPendingEmitter
                                 _context = global::System.Threading.ExecutionContext.Capture();
                                 _phase = settled ? depth < 0 ? {{rootPhase}} : {{hiddenPhase}} : Raw;
                                 Register(awaiter);
-                                return task;
                             }
                             private void Register(global::System.Runtime.CompilerServices.ConfiguredValueTaskAwaitable<bool>.ConfiguredValueTaskAwaiter awaiter)
                             {
@@ -299,16 +323,19 @@ internal static class CanonicalStreamGroupPendingEmitter
                             private void Finish(bool result, global::System.Exception? error, bool closing)
                             {
                                 var promise = _promise;
+                                var completion = _completion;
                                 var owner = _owner!;
                                 _awaiter = default;
                                 _promise = default;
+                                _completion = null;
                                 _context = null;
                                 {{clear}}
                                 _owner = null;
                                 {{depthField}} = -1;
                                 _phase = Idle;
                                 if (closing) owner.DetachPendingTaskRunner(this);
-                                if (error is null) promise.SetResult(result);
+                                if (completion is not null) completion.Complete(result, error);
+                                else if (error is null) promise.SetResult(result);
                                 else promise.SetException(error);
                             }
                         }

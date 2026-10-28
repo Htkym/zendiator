@@ -143,7 +143,7 @@ internal static class CanonicalStreamFallbackEmitter
         var completionLocal = "moveCompletion";
         while (model.Generic?.Parameters.Contains(completionLocal) == true) completionLocal = "_" + completionLocal;
         var repeatedMove = CanonicalStreamGroupAdvanceEmitter.IsParent(model, n)
-            ? "else if (_identitySource is { } child) operation = AdvanceGroup(child); else operation = ObserveMove(MoveCoreAsync());"
+            ? "else if (_identitySource is { } child) return AdvanceGroup(child); else operation = ObserveMove(MoveCoreAsync());"
             : CanonicalStreamPrivateAdvanceEmitter.IsParent(model, n)
             ? "else if (_identitySource is { } child) operation = AdvanceIdentity(child); else operation = ObserveMove(MoveCoreAsync());"
             : standalone && segment.Hooks.Count == 0 ? $$"""

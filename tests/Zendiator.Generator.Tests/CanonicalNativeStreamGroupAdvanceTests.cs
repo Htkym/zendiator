@@ -27,6 +27,7 @@ public sealed partial class GeneratorTests
             public readonly Dictionary<int,Exception> CleanupErrors=new();
             public readonly Exception RawError=new FormatException("raw Move");
             public readonly Gate First,Later;public readonly InlineRace Race;
+            public readonly global::Zendiator.Generator.Tests.StreamHookRaceSource<bool> PublicFirst=new(true,"manual"),PublicSecond=new(true,"manual"),PublicRace=new(true,"before-registration"),PublicInline=new(true,"inside-registration");
             public readonly global::Zendiator.Generator.Tests.AsyncOnceGate<bool> Outer=new(true);
             public readonly global::Zendiator.Generator.Tests.AsyncOnceGate<int> Cleanup=new(0);
             public readonly TaskCompletionSource<bool> CleanupStarted=new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -78,7 +79,9 @@ public sealed partial class GeneratorTests
                 token.ThrowIfCancellationRequested();flow.RawMoves++;index++;flow.Moves.Add(Probe.Ambient.Value);
                 if(index==1)return new(true);
                 var mode=flow.Probe.Mode;
-                if(mode=="retirement"){
+                if(mode is "publication-reentry" or "publication-overflow"){
+                    return index switch{2=>flow.PublicFirst.Task,3=>flow.PublicSecond.Task,4=>flow.PublicRace.Task,5=>flow.PublicInline.Task,6=>new(false),_=>throw new InvalidOperationException("publication source pulled after EOF")};
+                }else if(mode=="retirement"){
                     if(index==2)return flow.First.Task;if(index==3)return new(true);if(index==4)return flow.Later.Task;
                     if(index==5){flow.Race.Enter();return flow.Race.Task;}if(index==6)return new(false);
                 }else if(mode=="opaque"){
@@ -222,6 +225,49 @@ public sealed partial class GeneratorTests
                 Probe.Ambient.Value="A-close";Check.That(!await root.MoveNextAsync()&&flow.RawMoves==6&&flow.Reads==3&&flow.CursorDisposals==1,"EOF closes once and no driver reads Current or prefetches");
                 await root.DisposeAsync();Check.That(!await root.MoveNextAsync()&&Enumerable.Range(0,6).All(role=>flow.Disposals(role)==1),"each G5 session and raw cursor closes once");
             }finally{Probe.AfterRelease=null;Probe.Ambient.Value=null;flow.CloseTokens();p.Cancellation.Dispose();p.ReopenToken.Dispose();}
+            foreach(var publicationMode in new[]{"publication-reentry","publication-overflow"}){
+                var pubProbe=new Probe(publicationMode);var pubServices=new ServiceCollection();pubServices.AddSingleton(pubProbe);Register(pubServices);
+                await using var pubProvider=pubServices.BuildServiceProvider();await using var pubScope=pubProvider.CreateAsyncScope();
+                var pubMediator=pubScope.ServiceProvider.GetRequiredService<global::NativeStream.Generated.Reads.IZendiator>();
+                var pubRoot=pubMediator.StreamAsync(new Items("publication")).GetAsyncEnumerator();var pubFlow=pubProbe.For(new Items("publication"));
+                try{
+                    Check.That(await pubRoot.MoveNextAsync()&&pubFlow.RawMoves==1&&pubFlow.Reads==0,"public group completion opens synchronously without reading Current");
+                    var pubFirst=pubRoot.MoveNextAsync();Check.That(!pubFirst.IsCompleted&&pubFlow.RawMoves==2,"the first root result owns one genuinely pending raw operation");
+                    if(publicationMode=="publication-reentry"){
+                        var pubAwaiter=pubFirst.ConfigureAwait(false).GetAwaiter();var pubFollowing=default(ValueTask<bool>);var pubInlineReentry=false;
+                        var pubReentered=new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                        pubAwaiter.UnsafeOnCompleted(()=>{
+                            try{
+                                Check.That(pubAwaiter.GetResult()&&pubRoot.Current==2,"the consuming root continuation observes its own published item");
+                                pubInlineReentry=pubFlow.PublicFirst.Completing;pubFollowing=pubRoot.MoveNextAsync();
+                                Check.That(!pubFollowing.IsCompleted&&pubFlow.RawMoves==3&&pubFlow.PublicSecond.Consumptions==0,"root consumption reenters another pending generation before the old raw callback retires");
+                                pubReentered.SetResult(true);
+                            }catch(Exception error){pubReentered.SetException(error);}
+                        });
+                        pubFlow.PublicFirst.Complete();await pubReentered.Task.ConfigureAwait(false);
+                        Check.That(pubInlineReentry&&pubFlow.PublicFirst.Consumptions==1,"root consumer and reentry run inside the first raw completion callback");
+                        var pubSavedTask=pubFollowing.AsTask();Check.That(!pubSavedTask.IsCompleted,"a saved Task belongs to the reentered generation");
+                        pubFlow.PublicSecond.Complete();Check.That(await pubSavedTask&&pubRoot.Current==3,"the reentered result keeps its lazy Current and one raw consumption");
+                        Check.That(await pubRoot.MoveNextAsync()&&pubFlow.PublicRace.Consumptions==1&&pubFlow.PublicRace.Registrations<=1,"completion after status observation consumes the third raw result once");
+                        Check.That(await pubRoot.MoveNextAsync()&&pubFlow.PublicInline.Registrations==1&&pubFlow.PublicInline.Consumptions==1,"completion inside registration publishes one fourth result");
+                        Check.That(!await pubRoot.MoveNextAsync()&&await pubSavedTask&&await pubSavedTask,"saved Task results survive later generations and EOF");
+                        Check.That(pubFlow.Reads==2,"root publication never reads an unrequested Current");
+                    }else{
+                        pubFlow.PublicFirst.Complete();Check.That(pubFirst.IsCompleted&&pubFlow.PublicFirst.Consumptions==1,"first public root result may remain unconsumed after raw completion");
+                        var pubSecond=pubRoot.MoveNextAsync();Check.That(!pubSecond.IsCompleted&&pubFlow.RawMoves==3,"a second root generation can start while the completed first result is retained");
+                        pubFlow.PublicSecond.Complete();Check.That(pubSecond.IsCompleted&&pubFlow.PublicSecond.Consumptions==1,"second public root result remains independently unconsumed");
+                        Check.That(await pubRoot.MoveNextAsync()&&pubFlow.PublicRace.Consumptions==1,"an already-completing source does not consume either retained root result");
+                        var pubOverflow=pubRoot.MoveNextAsync();
+                        Check.That(await pubOverflow&&pubFlow.PublicInline.Registrations==1&&pubFlow.PublicInline.Consumptions==1,"inline publication succeeds while both cached root generations remain unconsumed");
+                        Check.That(pubRoot.Current==5&&pubFlow.Reads==1,"the overflow result leaves Current lazy until the consumer reads it");
+                        Check.That(await pubFirst&&await pubSecond,"both retained root results survive the newer inline generation");
+                        Check.That(!await pubRoot.MoveNextAsync(),"overflow ownership reaches EOF after the retained results are consumed");
+                    }
+                    Check.That(pubFlow.RawMoves==6&&pubFlow.CursorDisposals==1&&Enumerable.Range(0,6).All(role=>pubFlow.Disposals(role)==1),"all public generations and cleanup settle once without another raw pull");
+                    Check.That(new[]{pubFlow.PublicFirst,pubFlow.PublicSecond,pubFlow.PublicRace,pubFlow.PublicInline}.All(gate=>gate.Consumptions==1),"each publication raw source is consumed exactly once");
+                    await pubRoot.DisposeAsync();await pubRoot.DisposeAsync();Check.That(!await pubRoot.MoveNextAsync(),"completed group disposal does not reopen the source");
+                }finally{await pubRoot.DisposeAsync();pubFlow.CloseTokens();pubProbe.Cancellation.Dispose();pubProbe.ReopenToken.Dispose();}
+            }
             """);
         var insertions = 0;
         await RunNativeStreamFixture("group-retired-generations", source, generatedTransform: generated =>

@@ -126,7 +126,7 @@ internal static class CanonicalStreamGroupAdvanceEmitter
         }
         b.AppendLine("default: throw new global::System.InvalidOperationException(\"The Stream group depth is invalid.\"); }");
         b.AppendLine("}");
-        b.AppendLine("return CompleteGroupResult(moved, failure);");
+        b.AppendLine("return PublishMove(CompleteGroupResult(moved, failure));");
         b.AppendLine("}");
     }
 }
