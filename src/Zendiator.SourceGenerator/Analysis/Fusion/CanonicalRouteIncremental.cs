@@ -35,6 +35,8 @@ internal static class CanonicalRouteIncremental
                 f.Anchor == handlerAnchor || f.Anchor.StartsWith(handlerAnchor + "/", StringComparison.Ordinal) ||
                 f.AdditionalAnchor == r.Anchor || (f.AdditionalAnchor?.StartsWith(r.Anchor + "/", StringComparison.Ordinal) ?? false) ||
                 f.AdditionalAnchor == handlerAnchor || (f.AdditionalAnchor?.StartsWith(handlerAnchor + "/", StringComparison.Ordinal) ?? false) ||
+                r.StreamBeforeAnchors.Any(anchor => f.Anchor == anchor || f.Anchor.StartsWith(anchor + "/", StringComparison.Ordinal) ||
+                    f.AdditionalAnchor == anchor || (f.AdditionalAnchor?.StartsWith(anchor + "/", StringComparison.Ordinal) ?? false)) ||
                 f.Anchor.StartsWith("catalog:", StringComparison.Ordinal));
             var members = new HashSet<string>(r.Handlers.Select(h => h.Type), StringComparer.Ordinal);
             var projected = c with

@@ -39,6 +39,10 @@ internal static class CanonicalStreamTypeClosure
                 "Zendiator.IAsyncStreamItemFilter`2", "Zendiator.IAsyncStreamItemMap`2",
                 "Zendiator.IStreamItemMap`3", "Zendiator.IAsyncStreamItemMap`3" }, compilation, open);
 
+    internal static Result Before(INamedTypeSymbol type, INamedTypeSymbol request,
+        Compilation compilation, CanonicalStreamOpenBinding? open = null) => Close(type, request, null,
+        new[] { "Zendiator.IAsyncStreamBefore`1" }, compilation, open, requestOnly: true);
+
     internal static Result Factory(INamedTypeSymbol type, INamedTypeSymbol request, INamedTypeSymbol receiver,
         Compilation compilation, CanonicalStreamOpenBinding? open = null) => Close(type, request, receiver,
         new[] { "Zendiator.IOwnedSessionFactory`2", "Zendiator.IBorrowedSessionFactory`2", "Zendiator.IAsyncOwnedSessionFactory`2", "Zendiator.IAsyncBorrowedSessionFactory`2" }, compilation, open);

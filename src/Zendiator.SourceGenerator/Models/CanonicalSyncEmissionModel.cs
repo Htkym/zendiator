@@ -29,6 +29,7 @@ internal sealed record CanonicalSyncCompositionEmission(int Index, string Namesp
     public EquatableArray<string> CatalogMarkerTypes { get; init; }
     public EquatableArray<BoundSyncHookEmission> Hooks { get; init; } = new(System.Array.Empty<BoundSyncHookEmission>());
     public EquatableArray<RegistrationStageEmission> RegistrationStages { get; init; } = new(System.Array.Empty<RegistrationStageEmission>());
+    public BoundStreamBeforeRegistration? StreamBeforeRegistration { get; init; }
 }
 internal sealed record CanonicalSyncEmissionModel(EquatableArray<CanonicalSyncCompositionEmission> Compositions);
 internal sealed record CanonicalSyncCallSite(string Namespace, string? MarkerName, int Version, string Data, bool ExtensionForm)

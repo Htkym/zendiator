@@ -11,7 +11,7 @@ using static Zendiator.SourceGenerator.MarkedHandlerDiscovery;
 namespace Zendiator.SourceGenerator;
 
 /// <summary>Literal ordered lists are frontend input. No execution sites are inferred here.</summary>
-internal sealed class CompositionListBinding
+internal sealed partial class CompositionListBinding
 {
     private sealed record Entry(INamedTypeSymbol Type, string Anchor, FusionStageKind Kind = FusionStageKind.Hook, INamedTypeSymbol? Factory = null);
     private sealed record Declaration(string Anchor, INamedTypeSymbol Request, BoundDispatchFamily? Family,
@@ -35,6 +35,11 @@ internal sealed class CompositionListBinding
 
     internal void Parse(InvocationExpressionSyntax call, IMethodSymbol method, int ordinal)
     {
+        if (method.Name == "StreamBefore")
+        {
+            ParseStreamBefore(call, method, ordinal);
+            return;
+        }
         var anchor = "list:" + ordinal;
         Sources.Add(anchor, call.GetLocation());
         var handlerList = method.Name == "Handlers";
@@ -185,6 +190,7 @@ internal sealed class CompositionListBinding
                 Key(d.Declaration.Request) == Key(declaration.Request)).Declaration;
             var before = Facts.Count;
             var request = declaration.Request;
+            var beforeDeclaration = FindStreamBefore(request, family, out var beforeAnchors);
             CanonicalStreamOpenBinding? open = null;
             string BoundName(ITypeSymbol type) => open?.Display(type) ?? Name(type);
             if (family == null)
@@ -494,6 +500,7 @@ internal sealed class CompositionListBinding
                     itemFlow = new(new(Identity(sourceItem), BoundName(sourceItem), sourceItem.IsValueType),
                         new(Identity(finalItem), BoundName(finalItem), finalItem.IsValueType), new(stages.Select(s => s.StreamItems!)));
             }
+            var beforeBinding = BindStreamBefore(beforeDeclaration, request, open);
             string? constraintError = null;
             var generic = open?.Emission(out constraintError);
             if (open != null && generic == null)
@@ -553,6 +560,8 @@ internal sealed class CompositionListBinding
                 SendGeneric = openSend ? generic : null,
                 SendOpenRegistration = openSend ? openRegistration : null,
                 StreamItemFlow = itemFlow,
+                StreamBefore = beforeBinding.Calls,
+                StreamBeforeRegistration = beforeBinding.Registration,
                 StreamDeclaredStages = declaration.StreamFinal == null ? default : new(declaration.Entries.Select(entry =>
                     new RegistrationStageEmission(Name(entry.Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated)), entry.Kind.ToString(),
                         entry.Factory == null ? null : Name(entry.Factory.WithNullableAnnotation(NullableAnnotation.NotAnnotated))))),
@@ -581,9 +590,11 @@ internal sealed class CompositionListBinding
                         request.TypeKind == TypeKind.Struct && !request.IsRefLikeType && !request.IsGenericType && !HasOpenShape(request) ?
                             BoundRequestShape.ClosedNonGenericValue : BoundRequestShape.Unsupported,
                     RequestRuntimeIdentity = Key(request),
-                    RequestIsGeneric = request.IsGenericType
+                    RequestIsGeneric = request.IsGenericType,
+                    StreamBeforeAnchors = beforeAnchors
                 };
         }
+        ReportUnusedStreamBefore(resolved);
         return new(output);
     }
 

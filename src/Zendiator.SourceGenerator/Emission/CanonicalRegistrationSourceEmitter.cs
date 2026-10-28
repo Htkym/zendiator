@@ -25,6 +25,11 @@ internal static class CanonicalRegistrationSourceEmitter
         foreach (var type in c.ExplicitHandlerTypes) b.AppendLine("            expected.AddHandler(typeof(" + type + "));");
         foreach (var route in plan.Routes.OrderBy(r => r.HandlerOrdinal)) Handler(b, route);
         foreach (var route in plan.Routes.OrderBy(r => r.PipelineOrdinal)) Pipeline(b, route);
+        foreach (var before in plan.Routes.Select(r => r.Registration.StreamBeforeRegistration)
+            .Where(before => before != null).GroupBy(before => before!.Ordinal)
+            .Select(group => group.First()).OrderBy(before => before!.Ordinal))
+            b.AppendLine("            expected.StreamBefore(typeof(" + before!.RequestName + ")" +
+                string.Concat(before.DeclaredTypes.Select(type => ", typeof(" + type + ")")) + ");");
         b.AppendLine("""
                         if (snapshot.GetFingerprint() != expected.Snapshot().GetFingerprint())
                             throw new global::System.InvalidOperationException("AddZendiator configuration does not match this generated composition.");
@@ -78,7 +83,7 @@ internal static class CanonicalRegistrationSourceEmitter
             var stages = open.Stages.Count == 0 ? "" : ", " + Stages(open.Stages);
             if (open.FinalDefinitionName != null)
                 b.AppendLine($$"""            expected.StreamPipeline(typeof({{open.RequestDefinitionName}}), typeof({{open.FinalDefinitionName}}){{stages}});""");
-            else if (open.Stages.Count != 0 || c.HasEmptyPipeline || route.Family is not (BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync))
+            else if (open.Stages.Count != 0 || c.HasEmptyPipeline)
                 b.AppendLine($$"""            expected.Pipeline(typeof({{open.RequestDefinitionName}}){{(c.PipelineFamily == null ? "" : ", global::Zendiator.DispatchFamily." + route.Family)}}{{stages}});""");
         }
         else if (c.Handler.RequestIsRefLike)

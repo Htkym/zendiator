@@ -26,6 +26,20 @@ public sealed class ZendiatorConfiguration
     private readonly List<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)> _pipelines = new();
     private readonly List<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)> _routeHandlers = new();
     private readonly List<(Type Request, Type Item)> _streamOutputs = new();
+    private readonly List<(Type Request, IReadOnlyList<Type> BeforeTypes)> _streamBefore = new();
+
+    /// <summary>Declares ordered callbacks before the first Move opens a Stream pipeline.</summary>
+    public void StreamBefore<TRequest>(params Type[] beforeTypes) => StreamBefore(typeof(TRequest), beforeTypes);
+
+    /// <summary>Declares ordered Stream preprocessing for a closed request or an open request definition.</summary>
+    public void StreamBefore(Type request, params Type[] beforeTypes)
+    {
+        ThrowIfFrozen();
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(beforeTypes);
+        if (beforeTypes.Any(static type => type == null)) throw new ArgumentException("Every Stream Before entry must name a type.", nameof(beforeTypes));
+        _streamBefore.Add((request, Array.AsReadOnly(beforeTypes.ToArray())));
+    }
 
     /// <summary>Declares an ordered Stream pipeline and its final item type. The request/handler contract retains the source item type.</summary>
     public void StreamPipeline<TRequest, TFinal>(params Stage[] stages)
@@ -220,7 +234,7 @@ public sealed class ZendiatorConfiguration
             _handlerOrders.OrderBy(static entry => entry.HandlerType, StringComparer.Ordinal).ToList(),
             _useLocalHandlers,
             _handlers.Select(static type => type.AssemblyQualifiedName ?? TypeName(type)).OrderBy(static name => name, StringComparer.Ordinal).ToList(),
-            _pipelines.ToList(), _routeHandlers.ToList(), _catalogMarkers.ToList(), _streamOutputs.ToList());
+            _pipelines.ToList(), _routeHandlers.ToList(), _catalogMarkers.ToList(), _streamOutputs.ToList(), _streamBefore.ToList());
     }
 
     private static string TypeName(Type type) => type.IsGenericTypeDefinition ? type.FullName ?? type.Name : type.ToString();

@@ -104,6 +104,13 @@ internal static class CanonicalStreamFallbackEmitter
             CanonicalAsyncCallEmitter.EmitCall(b, "OpenHandler", "global::System.Threading.Tasks.ValueTask<" + h.CursorName + ">",
                 h.HandlerIsValueType ? "object" : h.HandlerName, h.ContractName, h.MethodName, h.CallTarget,
                 new[] { h.RequestName, "global::System.Threading.CancellationToken" }, new[] { "request", "token" }, "", "");
+        for (var i = 0; i < model.StreamBefore.Count; i++)
+        {
+            var before = model.StreamBefore[i];
+            CanonicalAsyncCallEmitter.EmitCall(b, BeforeCallName(model, i), "global::System.Threading.Tasks.ValueTask",
+                Storage(before.ServiceName, before.IsValueType), before.ContractName, before.MethodName, before.CallTarget,
+                new[] { h.RequestName, "global::System.Threading.CancellationToken" }, new[] { "request", "token" });
+        }
         b.AppendLine("    }");
         b.AppendLine("}");
         return new(model.HintName, b.ToString());
@@ -293,6 +300,19 @@ internal static class CanonicalStreamFallbackEmitter
     {
         var h = model.Handler;
         b.AppendLine("_services.GetService(typeof(global::System.IServiceProvider));");
+        if (segment.Id == model.ConsumerSegment && model.StreamBefore.Count != 0)
+        {
+            for (var i = 0; i < model.StreamBefore.Count; i++)
+            {
+                var before = model.StreamBefore[i];
+                b.AppendLine("Token.ThrowIfCancellationRequested();");
+                if (i != 0) b.AppendLine("_services.GetService(typeof(global::System.IServiceProvider));");
+                b.AppendLine("await " + BeforeCallName(model, i) + "(" + Resolve("_services", before.ServiceName,
+                    Storage(before.ServiceName, before.IsValueType)) + ", _request, Token).ConfigureAwait(false);");
+                b.AppendLine("Token.ThrowIfCancellationRequested();");
+            }
+            b.AppendLine("_services.GetService(typeof(global::System.IServiceProvider));");
+        }
         for (var i = segment.Hooks.Count - 1; i >= 0; i--)
             if (segment.Hooks[i].Factory is { } hookFactory)
                 Acquire(b, hookFactory, Storage(segment.Hooks[i].HookName, segment.Hooks[i].HookIsValueType), "_hook" + i);
@@ -442,6 +462,12 @@ internal static class CanonicalStreamFallbackEmitter
     }
 
     private static string Storage(string type, bool valueType) => valueType ? "object" : type;
+    private static string BeforeCallName(CanonicalStreamFallbackModel model, int index)
+    {
+        var name = "InvokeStreamBefore" + index;
+        while (model.Generic?.Parameters.Contains(name) == true) name = "_" + name;
+        return name;
+    }
     private static string Resolve(string services, string type, string result) => "(" + result + ")global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService(" + services + ", typeof(" + type + "))";
     private static void Acquire(StringBuilder b, BoundAsyncFactoryEmission factory, string contract, string field)
     {

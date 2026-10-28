@@ -11,13 +11,14 @@ internal sealed record CanonicalRouteRegistration(CanonicalSyncCompositionEmissi
     string? FinalItemName, EquatableArray<RegistrationStageEmission> DeclaredStages)
 {
     public EquatableArray<CanonicalBranchRegistration> BranchHandlers { get; init; }
-    internal IEnumerable<string> ServiceTypes => Open != null
+    internal IEnumerable<string> ServiceTypes => (Open != null
         ? Open.Stages.Select(s => s.FactoryName ?? s.TypeName).Concat(Open.HandlerDefinitionNames.Count == 0
             ? new[] { Open.HandlerFactoryDefinitionName ?? Open.HandlerDefinitionName } : Open.HandlerDefinitionNames)
         : (Registration.RegistrationStages.Count == 0
             ? Registration.Hooks.Select(h => h.Factory?.FactoryName ?? h.HookName)
             : Registration.RegistrationStages.Select(s => s.FactoryName ?? s.TypeName))
-            .Concat(BranchHandlers.Count == 0 ? new[] { Registration.Factory?.FactoryName ?? Registration.Handler.HandlerName } : BranchHandlers.Select(h => h.FactoryName ?? h.HandlerName));
+            .Concat(BranchHandlers.Count == 0 ? new[] { Registration.Factory?.FactoryName ?? Registration.Handler.HandlerName } : BranchHandlers.Select(h => h.FactoryName ?? h.HandlerName)))
+        .Concat(Registration.StreamBeforeRegistration is { } before ? before.ServiceTypes : default);
 }
 
 internal sealed record CanonicalRegistrationPlan(CanonicalSyncCompositionEmission Composition, EquatableArray<CanonicalRouteRegistration> Routes)

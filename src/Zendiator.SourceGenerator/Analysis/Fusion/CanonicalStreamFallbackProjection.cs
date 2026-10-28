@@ -45,7 +45,12 @@ internal static class CanonicalStreamFallbackProjection
         var id = CanonicalSplitSourceEmitter.Id(c.Identity + "|Stream|" + route.Request);
         return new(c.GeneratedNamespace, "__ZendiatorStreamCanonical_" + id, "Zendiator.StreamCanonical." + id + ".g.cs",
             call, new(segments), segments.Count - 1)
-        { Generic = route.StreamGeneric, ItemFlow = route.StreamItemFlow, HandlerFactory = Factory(handler.Sessions) };
+        {
+            Generic = route.StreamGeneric,
+            ItemFlow = route.StreamItemFlow,
+            HandlerFactory = Factory(handler.Sessions),
+            StreamBefore = route.StreamBefore
+        };
 
         void Flush()
         {

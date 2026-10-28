@@ -67,6 +67,9 @@ internal sealed record BoundPipelineModel(string Anchor, string Request, string 
     public BoundStreamItemFlow? StreamItemFlow { get; init; }
     public BoundStreamOpenRegistration? StreamOpenRegistration { get; init; }
     public EquatableArray<RegistrationStageEmission> StreamDeclaredStages { get; init; }
+    public EquatableArray<BoundStreamBeforeEmission> StreamBefore { get; init; }
+    public BoundStreamBeforeRegistration? StreamBeforeRegistration { get; init; }
+    public EquatableArray<string> StreamBeforeAnchors { get; init; }
 }
 // Registration definitions are captured from frontend symbols, independently of execution patterns.
 internal sealed record BoundStreamOpenRegistration(string RequestDefinitionName, string HandlerDefinitionName,

@@ -56,6 +56,7 @@ internal static class CanonicalStreamPublicConnection
                 ExplicitHandlerTypes = c.ExplicitHandlerTypes,
                 CatalogMarkerTypes = c.CatalogMarkerTypes,
                 ExternAliases = c.ExternAliases,
+                StreamBeforeRegistration = route.StreamBeforeRegistration,
                 RegistrationStages = new(route.Stages.Select(stage => new RegistrationStageEmission(
                     stage.StreamEmission?.HookName ?? stage.StreamWrapperEmission!.WrapperName, stage.Kind.ToString(),
                     stage.Sessions.Count == 1 ? CanonicalCapabilityEmissionNormalizer.Factory(stage.Sessions[0], false)!.FactoryName : null)))
@@ -75,6 +76,8 @@ internal static class CanonicalStreamPublicConnection
 
     private static IEnumerable<string> Boxed(CanonicalStreamFallbackModel model)
     {
+        foreach (var before in model.StreamBefore)
+            if (before.IsValueType) yield return before.ServiceName;
         if (model.HandlerFactory is { } handlerFactory)
         { if (handlerFactory.FactoryIsValueType) yield return handlerFactory.FactoryName; }
         else if (model.Handler.HandlerIsValueType) yield return model.Handler.HandlerName;
@@ -110,7 +113,7 @@ internal static class CanonicalStreamPublicConnection
         return accepted == null ? null : accepted with { Registration = accepted.Registration with { Index = index } };
     }
 
-    internal static bool PlainZeroStageShape(CanonicalStreamFallbackModel model) => model.ItemFlow == null &&
+    internal static bool PlainZeroStageShape(CanonicalStreamFallbackModel model) => model.StreamBefore.Count == 0 && model.ItemFlow == null &&
         model.HandlerFactory == null && model.Segments.Count == 1 && model.ConsumerSegment == 0 &&
         model.Segments[0] is { Id: 0, Wrapper: null, Upstream: null, WrapperFactory: null } segment && segment.Hooks.Count == 0;
 

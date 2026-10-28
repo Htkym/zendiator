@@ -68,3 +68,57 @@ Select exactly one source contract for a route. A handler implementing both sour
 contracts for the same request is ambiguous and is rejected. Existing overlap,
 ValueTask consumption, middleware, exception precedence and context rules apply to
 both input forms. This input choice does not promise a speed or allocation result.
+
+## Run preprocessing once per enumeration
+
+Use `IAsyncStreamBefore<TRequest>` for preprocessing that does not need to wrap
+the cursor's lifetime. It works with both Stream handler source contracts.
+
+```csharp
+public sealed class ValidateReadNumbers : IAsyncStreamBefore<ReadNumbers>
+{
+    public ValueTask BeforeAsync(ReadNumbers request, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (request.Count < 0)
+            throw new ArgumentOutOfRangeException(nameof(request.Count));
+        return default;
+    }
+}
+```
+
+Update the existing registration to include `StreamBefore` inside its lambda:
+
+```csharp
+services.AddZendiator<App>(configuration =>
+{
+    configuration.Handlers<ReadNumbers>(DispatchFamily.Stream,
+        typeof(ReadNumbersHandler));
+    configuration.Pipeline<ReadNumbers>(DispatchFamily.Stream);
+    configuration.StreamBefore<ReadNumbers>(typeof(ValidateReadNumbers));
+});
+```
+
+Callbacks run in their declared order, once on the first public move, before the
+handler or middleware opens. Creating the source, acquiring an enumerator, or
+disposing it before its first move does not run them. Reopening an upstream from
+middleware does not repeat preprocessing or revalidate a replacement request.
+
+A callback has no `next` or cursor and cannot replace the request, return an
+empty Stream, or surround enumeration with paired cleanup. Use middleware when
+those capabilities are needed.
+
+While a callback is pending, its move remains pending and `DisposeAsync` is
+rejected. The route settles each already issued callback operation once. A
+callback failure is preserved if cancellation also occurs; after normal callback
+completion, the route checks cancellation again before continuing.
+
+Receivers are borrowed and cached per mediator, including receivers registered
+with a Transient lifetime. Support reuse and concurrent enumerations if the
+mediator is shared; do not keep per-enumeration state in receiver fields. DI owns
+receiver disposal. Keep the DI scope alive until enumeration and disposal finish.
+
+Synchronous ambient changes made by a callback may reach the remaining
+initialization and first source pull; the caller's context is restored on return.
+Later moves use their caller's context. Changes inside an asynchronous callback
+are not promised to flow back to its caller.

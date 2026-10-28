@@ -39,7 +39,7 @@ internal static class CompositionSelectionDiscovery
             // During migration, old nongeneric configuration remains the legacy adapter.
             var explicitDefault = method.Arity == 0 && lambda != null && lambda.DescendantNodes().OfType<InvocationExpressionSyntax>().Any(call =>
                 semantic.GetSymbolInfo(call, ct).Symbol is IMethodSymbol operation && Same(operation.ContainingType, configuration) &&
-                operation.Name is "UseLocalHandlers" or "UseCatalogFrom" or "AddHandler" or "Pipeline" or "StreamPipeline" or "Handlers");
+                operation.Name is "UseLocalHandlers" or "UseCatalogFrom" or "AddHandler" or "Pipeline" or "StreamPipeline" or "Handlers" or "StreamBefore");
             if (method.Arity == 0 && !explicitDefault) continue;
 
             var errors = new List<string>();
@@ -149,7 +149,7 @@ internal static class CompositionSelectionDiscovery
                         Select(type);
                     }
                 }
-                else if (operation.Name is "Pipeline" or "StreamPipeline" or "Handlers") lists.Parse(call, operation, ordinal);
+                else if (operation.Name is "Pipeline" or "StreamPipeline" or "Handlers" or "StreamBefore") lists.Parse(call, operation, ordinal);
                 else errors.Add($"Composition selection operation {operation.Name} is not connected yet.");
             }
             var pipelines = lists.Bind(selected.Keys);

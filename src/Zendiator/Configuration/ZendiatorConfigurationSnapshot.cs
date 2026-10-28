@@ -23,7 +23,8 @@ public sealed class ZendiatorConfigurationSnapshot
         List<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)>? pipelines = null,
         List<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)>? routeHandlers = null,
         List<Type>? catalogMarkers = null,
-        List<(Type Request, Type Item)>? streamOutputs = null)
+        List<(Type Request, Type Item)>? streamOutputs = null,
+        List<(Type Request, IReadOnlyList<Type> BeforeTypes)>? streamBefore = null)
     {
         Namespace = @namespace;
         ServiceLifetime = serviceLifetime;
@@ -39,6 +40,7 @@ public sealed class ZendiatorConfigurationSnapshot
         Pipelines = (pipelines ?? new()).AsReadOnly();
         RouteHandlers = (routeHandlers ?? new()).AsReadOnly();
         StreamOutputs = (streamOutputs ?? new()).AsReadOnly();
+        StreamBefore = (streamBefore ?? new()).AsReadOnly();
     }
 
     /// <summary>Gets the generation namespace, or null for the default.</summary>
@@ -79,6 +81,8 @@ public sealed class ZendiatorConfigurationSnapshot
     public IReadOnlyList<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)> RouteHandlers { get; }
     /// <summary>Gets explicit final item types for type-changing Stream pipelines.</summary>
     public IReadOnlyList<(Type Request, Type Item)> StreamOutputs { get; }
+    /// <summary>Gets root Stream preprocessing lists in declaration and callback order.</summary>
+    public IReadOnlyList<(Type Request, IReadOnlyList<Type> BeforeTypes)> StreamBefore { get; }
 
     /// <summary>Returns the normalized structural fingerprint. Equal configurations share one generated unit.</summary>
     public string GetFingerprint()
@@ -108,6 +112,9 @@ public sealed class ZendiatorConfigurationSnapshot
                     (entry.FactoryType == null ? "" : ":factory=" + entry.FactoryType.AssemblyQualifiedName))))));
         if (StreamOutputs.Count != 0)
             parts.Add("streamOutputs=" + string.Join("|", StreamOutputs.Select(static p => p.Request.AssemblyQualifiedName + ":" + p.Item.AssemblyQualifiedName)));
+        if (StreamBefore.Count != 0)
+            parts.Add("streamBefore=" + string.Join("|", StreamBefore.Select(static p => p.Request.AssemblyQualifiedName + ":" +
+                string.Join(",", p.BeforeTypes.Select(static type => type.AssemblyQualifiedName)))));
         return string.Join(";", parts);
     }
 }
