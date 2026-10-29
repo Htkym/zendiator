@@ -15,6 +15,13 @@ if (args.Length > 0 && args[0] == "--artifact-gate")
     return;
 }
 
+if (args.Length > 0 && args[0] == "--validate-native-pooling")
+{
+    if (args.Length != 2) throw new ArgumentException("--validate-native-pooling requires one output directory");
+    await NativePoolingGate.Run(Path.GetFullPath(args[1]));
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--validate-same-producer")
 {
     if (args.Length != 2) throw new ArgumentException("--validate-same-producer requires one output directory");
