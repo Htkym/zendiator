@@ -18,6 +18,14 @@ internal static class CanonicalStreamFallbackEmitter
         var constraints = model.Generic?.TypeConstraints ?? "";
         var item = model.ItemFlow?.Final.Name ?? h.ItemName;
         var standalone = IsStandalone(model);
+        var factoryEnumerable = h.ReturnsEnumerable && CanonicalStreamPublicConnection.PlainZeroStageShape(model);
+        var enumerableName = "Enumerable";
+        var acquisitionName = "EnumerableAcquisition";
+        if (factoryEnumerable)
+        {
+            while (model.Generic?.Parameters.Contains(enumerableName) == true) enumerableName = "_" + enumerableName;
+            while (model.Generic?.Parameters.Contains(acquisitionName) == true) acquisitionName = "_" + acquisitionName;
+        }
         var sink = "TSink";
         while (model.Generic?.Parameters.Contains(sink) == true) sink = "_" + sink;
         var b = new StringBuilder();
@@ -42,7 +50,7 @@ internal static class CanonicalStreamFallbackEmitter
                     { _services = services; _request = request; _api = api; }
                     internal static global::System.Collections.Generic.IAsyncEnumerable<{{item}}> CreateEnumerable(
                         global::System.IServiceProvider services, {{h.RequestName}} request, global::System.Threading.CancellationToken api) =>
-                        {{(standalone ? "new Cursor" + model.ConsumerSegment + "(services, request, api, default, reserveFirstEnumeration: true)" : "new Enumerable(new(services, request, api))")}};
+                        {{(factoryEnumerable ? "api.CanBeCanceled ? new Cursor" + model.ConsumerSegment + "(services, request, api, default, reserveFirstEnumeration: true) : new " + enumerableName + "(new(services, request, api))" : standalone ? "new Cursor" + model.ConsumerSegment + "(services, request, api, default, reserveFirstEnumeration: true)" : "new Enumerable(new(services, request, api))")}};
                     private Cursor{{model.ConsumerSegment}} CreateCursor(global::System.Threading.CancellationToken token)
                     {
                         if (_services is null) throw new global::System.InvalidOperationException("The Stream source is uninitialized.");
@@ -74,7 +82,49 @@ internal static class CanonicalStreamFallbackEmitter
                         }
                     }
             """);
-        if (!standalone)
+        if (factoryEnumerable)
+            b.AppendLine($$"""
+                    private sealed class {{enumerableName}} : global::System.Collections.Generic.IAsyncEnumerable<{{item}}>
+                    {
+                        private readonly {{source}}{{generic}} _plan;
+                        internal {{enumerableName}}({{source}}{{generic}} plan) => _plan = plan;
+                        public global::System.Collections.Generic.IAsyncEnumerator<{{item}}> GetAsyncEnumerator(
+                            global::System.Threading.CancellationToken cancellationToken = default)
+                        {
+                            if (_plan._api.CanBeCanceled || cancellationToken.CanBeCanceled)
+                                return _plan.CreateCursor(cancellationToken);
+                            var acquisition = new {{acquisitionName}} { Plan = _plan };
+                            global::System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder.Create().Start(ref acquisition);
+                            acquisition.Failure?.Throw();
+                            return acquisition.Result!;
+                        }
+                        private struct {{acquisitionName}} : global::System.Runtime.CompilerServices.IAsyncStateMachine
+                        {
+                            internal {{source}}{{generic}} Plan;
+                            internal global::System.Collections.Generic.IAsyncEnumerator<{{item}}>? Result;
+                            internal global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? Failure;
+                            public void MoveNext()
+                            {
+                                try
+                                {
+                                    var services = Plan._services;
+                                    if (services is null) throw new global::System.InvalidOperationException("The Stream source is uninitialized.");
+                                    services.GetService(typeof(global::System.IServiceProvider));
+                                    var enumerable = CreateHandlerEnumerable({{Resolve("services", h.HandlerName, h.HandlerIsValueType ? "object" : h.HandlerName)}}, Plan._request, Plan._api)
+                                        ?? throw new global::System.InvalidOperationException("A Stream handler returned a null enumerable.");
+                                    Result = enumerable.GetAsyncEnumerator(Plan._api)
+                                        ?? throw new global::System.InvalidOperationException("A Stream handler returned a null cursor.");
+                                }
+                                catch (global::System.Exception error)
+                                {
+                                    Failure = global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error);
+                                }
+                            }
+                            public void SetStateMachine(global::System.Runtime.CompilerServices.IAsyncStateMachine stateMachine) { }
+                        }
+                    }
+                """);
+        else if (!standalone)
             b.AppendLine($$"""
                     private sealed class Enumerable : global::System.Collections.Generic.IAsyncEnumerable<{{item}}>
                     {

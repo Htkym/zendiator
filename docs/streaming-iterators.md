@@ -50,24 +50,41 @@ Call `Registration.Configure`, resolve the generated
 `StreamAsync(new ReadNumbers(10), token)`. The same source
 can be returned from an HTTP action while its DI scope remains alive.
 
-Creating the source or acquiring its generated enumerator does not invoke the
-handler. On the first move the route resolves the handler, calls `Handle`, then
-calls `GetAsyncEnumerator` once. Both calls receive the effective token formed
-from the API and enumeration tokens. A synchronous throw from either call is
-observed by that move; a null enumerable or cursor fails the move. The route does
-not dispose a cursor whose acquisition failed.
+For a flat public `StreamAsync` route with no Before, hooks, middleware or owned
+session, two noncancelable tokens select a direct input cursor. Source creation
+remains lazy; each `GetAsyncEnumerator` resolves the borrowed receiver, calls
+`Handle` and acquires one cursor without moving it or reading `Current`.
+Acquisition failures are thrown by `GetAsyncEnumerator`. Disposing before the
+first move therefore closes an already acquired input.
 
-Each enumeration calls the handler again and owns its acquired cursor. The
-returned enumerable must provide an independent cursor for each enumeration.
-The route reads `Current` only when needed and performs required cleanup before
-publishing EOF or a failed move. Early disposal also closes the cursor once.
-The handler and other borrowed dependencies remain owned by DI. Keep their scope
-alive until enumeration and cleanup finish.
+For this direct path, use `await foreach`, `await using` or explicit awaited
+`DisposeAsync`. EOF or a failed move does not make Zendiator dispose the input
+automatically. Current validity, overlapping operations, repeated disposal,
+raw Task cancellation status and cleanup-failure precedence follow the producer
+and consumer. Do not assume an arbitrary enumerable has compiler iterator
+`finally` behavior. Acquisition restores the caller's ambient context, but the
+first pull runs later in its caller's context; subsequent raw operations are not
+surrounded by additional Zendiator context boundaries.
+
+Any cancelable API or enumeration token retains the guarded cursor, including
+when both tokens are equal. It acquires the handler and input on first Move,
+combines API/enumeration tokens, checks cancellation before input pulls and
+finishes required cleanup before publishing EOF or a failed move. A synchronous
+acquisition throw or null result fails that move. A late enumeration-only token
+requires a facade as well as the guarded cursor. No equal-cost promise is made.
+`StreamSource(...).ConsumeAsync(...)` and routes with Before, hooks, middleware
+or owned sessions keep their guarded behavior.
+
+Each enumeration calls the handler again; its DI receiver may remain cached,
+including a Transient receiver. The source must return independent cursors.
+The receiver remains owned by DI; keep its scope alive until enumeration and
+cleanup finish. Neither route reads Current ahead of an explicit consumer read.
 
 Select exactly one source contract for a route. A handler implementing both source
 contracts for the same request is ambiguous and is rejected. Existing overlap,
-ValueTask consumption, middleware, exception precedence and context rules apply to
-both input forms. This input choice does not promise a speed or allocation result.
+middleware and binding rules still apply. Direct enumerations use the producer's
+operation contract described above; guarded inputs retain Zendiator's completion,
+exception-precedence and context rules. This input choice does not promise a speed or allocation result.
 
 ## Run preprocessing once per enumeration
 

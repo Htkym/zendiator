@@ -111,21 +111,23 @@ public sealed partial class GeneratorTests
         await RunNativeStreamFixture("enumerable-acquisition-" + mode, source);
     }
 
-    [Fact]
-    public async Task Enumerable_stream_open_generic_explicit_value_handler_keeps_its_box_and_compiler_iterator_lifetime()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Enumerable_stream_open_generic_explicit_value_handler_keeps_its_box_and_compiler_iterator_lifetime(bool mapped)
     {
         var source = NativeStreamFixture("""
-            c.Handlers(typeof(Items<>),DispatchFamily.Stream,typeof(Handler<>));c.Pipeline(typeof(Items<>),DispatchFamily.Stream,Stage.Hook(typeof(Pass<>)));
-            """, """
+            c.Handlers(typeof(Items<,>),DispatchFamily.Stream,typeof(Handler<,>));c.Pipeline(typeof(Items<,>),DispatchFamily.Stream__MAP__);
+            """.Replace("__MAP__", mapped ? ",Stage.Hook(typeof(Pass<,>))" : ""), """
             public sealed class Tag;
-            public readonly record struct Items<T>(int Value):IStreamRequest<int> where T:class,new();
+            public readonly record struct Items<Enumerable,EnumerableAcquisition>(int Value):IStreamRequest<int> where Enumerable:class,new() where EnumerableAcquisition:class,new();
             public sealed class Probe{
                 public int Constructed,Finals,Maps;public readonly List<int> Calls=new(),DisposedCalls=new();
                 public readonly List<global::Zendiator.Generator.Tests.AsyncOnceGate<bool>> Gates=new();
             }
-            [ZendiatorHandler]internal struct Handler<T>:IStreamHandler<Items<T>,int>,IDisposable where T:class,new(){
+            [ZendiatorHandler]internal struct Handler<Enumerable,EnumerableAcquisition>:IStreamHandler<Items<Enumerable,EnumerableAcquisition>,int>,IDisposable where Enumerable:class,new() where EnumerableAcquisition:class,new(){
                 private readonly Probe p;private int calls;public Handler(Probe p){this.p=p;calls=0;p.Constructed++;}
-                IAsyncEnumerable<int> IStreamHandler<Items<T>,int>.Handle(Items<T> request,CancellationToken token){
+                IAsyncEnumerable<int> IStreamHandler<Items<Enumerable,EnumerableAcquisition>,int>.Handle(Items<Enumerable,EnumerableAcquisition> request,CancellationToken token){
                     p.Calls.Add(++calls);var gate=new global::Zendiator.Generator.Tests.AsyncOnceGate<bool>(true);p.Gates.Add(gate);return Produce(p,request.Value,token,gate);
                 }
                 private static async IAsyncEnumerable<int> Produce(Probe p,int value,[System.Runtime.CompilerServices.EnumeratorCancellation]CancellationToken token,global::Zendiator.Generator.Tests.AsyncOnceGate<bool> gate){
@@ -134,28 +136,33 @@ public sealed partial class GeneratorTests
                 }
                 public void Dispose()=>p.DisposedCalls.Add(calls);
             }
-            public sealed class Pass<T>(Probe p):IStreamItemMap<Items<T>,int> where T:class,new(){
-                public int Map(Items<T> request,int item,CancellationToken token){p.Maps++;return item;}
+            public sealed class Pass<Enumerable,EnumerableAcquisition>(Probe p):IStreamItemMap<Items<Enumerable,EnumerableAcquisition>,int> where Enumerable:class,new() where EnumerableAcquisition:class,new(){
+                public int Map(Items<Enumerable,EnumerableAcquisition> request,int item,CancellationToken token){p.Maps++;return item;}
             }
             public readonly struct StopSink(List<int> values):IStreamSink<int>{public ValueTask<bool> OnNextAsync(int item,CancellationToken token){values.Add(item);return new(false);}}
             """, """
             var p=new Probe();var services=new ServiceCollection();services.AddSingleton(p);Register(services);
             await using var provider=services.BuildServiceProvider();var scope=provider.CreateAsyncScope();
             var m=scope.ServiceProvider.GetRequiredService<global::NativeStream.Generated.Reads.IZendiator>();
-            var request=new Items<Tag>(7);IAsyncEnumerable<int> feed=m.StreamAsync(request);request=new(99);
+            var mapped=__MAPPED__;
+            var request=new Items<Tag,Tag>(7);IAsyncEnumerable<int> feed=m.StreamAsync(request);request=new(99);
             Check.That(p.Constructed==0&&p.Calls.Count==0,"open generic compiler iterator remains lazy");
-            var first=feed.GetAsyncEnumerator();Check.That(await first.MoveNextAsync()&&first.Current==7,"value request captured before later caller assignment");
+            var first=feed.GetAsyncEnumerator();
+            Check.That((first is global::Zendiator.Streaming.StreamCursorState)==mapped,"only the mapped route keeps a generated owner");
+            Check.That(mapped?p.Constructed==0&&p.Calls.Count==0:p.Constructed==1&&p.Calls.SequenceEqual(new[]{1}),
+                "mapped Get stays lazy while raw Get acquires through the mutable generic handler box");
+            Check.That(await first.MoveNextAsync()&&first.Current==7,"value request captured before later caller assignment");
             var pending=first.MoveNextAsync().AsTask();Check.That(!pending.IsCompleted&&p.Gates[0].Consumptions==0,"the compiler iterator is truly pending on its gate");
             p.Gates[0].Complete();Check.That(await pending&&first.Current==8&&p.Gates[0].Consumptions==1,"pending source operation consumed once");
             Check.That(!await first.MoveNextAsync()&&p.Finals==1,"compiler iterator finally runs at EOF");await first.DisposeAsync();
             var second=feed.GetAsyncEnumerator();Check.That(await second.MoveNextAsync()&&second.Current==7,"same enumerable opens an independent compiler iterator after EOF");
             await second.DisposeAsync();Check.That(p.Finals==2&&p.Gates[1].Consumptions==0,"early disposal closes without entering a later wait");
-            var values=new List<int>();await m.StreamSource(new Items<Tag>(20)).ConsumeAsync(new StopSink(values));
-            Check.That(values.SequenceEqual(new[]{20})&&p.Finals==3&&p.Maps==4&&p.Calls.SequenceEqual(new[]{1,2,3})&&p.Constructed==1,"typed terminal and public pull use the original captured handler box and the same generic hook");
+            var values=new List<int>();await m.StreamSource(new Items<Tag,Tag>(20)).ConsumeAsync(new StopSink(values));
+            Check.That(values.SequenceEqual(new[]{20})&&p.Finals==3&&p.Maps==(mapped?4:0)&&p.Calls.SequenceEqual(new[]{1,2,3})&&p.Constructed==1,"typed terminal and public pull use the original captured handler box and the selected generic pipeline");
             Check.That(p.DisposedCalls.Count==0,"operation never disposes the borrowed value handler");
             await scope.DisposeAsync();Check.That(p.DisposedCalls.SequenceEqual(new[]{3}),"DI disposes the original mutable handler box");
-            """);
-        await RunNativeStreamFixture("enumerable-open-generic", source);
+            """.Replace("__MAPPED__", mapped ? "true" : "false"));
+        await RunNativeStreamFixture("enumerable-open-generic-" + (mapped ? "mapped" : "raw"), source);
     }
 
     [Theory]
