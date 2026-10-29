@@ -172,6 +172,44 @@ public sealed class StreamCursorProtocolTests
     }
 
     [Theory]
+    [InlineData("move", false)]
+    [InlineData("move", true)]
+    [InlineData("dispose", false)]
+    [InlineData("dispose", true)]
+    [InlineData("cleanup", false)]
+    [InlineData("cleanup", true)]
+    public async Task Synchronous_failures_preserve_task_classification_and_exception_identity(string operation, bool cancellationError)
+    {
+        using var cancellation = new CancellationTokenSource();
+        Exception failure = cancellationError
+            ? new OperationCanceledException("synchronous cancellation", cancellation.Token)
+            : new ArithmeticException("synchronous failure");
+        var cursor = new ProtocolCursor(default)
+        {
+            Cleanup = operation == "move" ? null : () => throw failure,
+        };
+        Assert.True(await cursor.MoveNextAsync());
+        if (operation == "move") cursor.MoveError = failure;
+        else if (operation == "cleanup") cursor.MoveError = new FormatException("move before cleanup failure");
+
+        Task result = operation == "dispose" ? cursor.DisposeAsync().AsTask() : cursor.MoveNextAsync().AsTask();
+        Assert.True(result.IsCompleted);
+        Assert.Equal(cancellationError, result.IsCanceled);
+        Assert.Equal(!cancellationError, result.IsFaulted);
+        var observed = await Record.ExceptionAsync(() => result);
+        Assert.Same(failure, observed);
+        if (cancellationError)
+            Assert.Equal(cancellation.Token, Assert.IsType<OperationCanceledException>(observed).CancellationToken);
+        Assert.False(cancellation.IsCancellationRequested);
+        Assert.Throws<InvalidOperationException>(() => cursor.Current);
+
+        Assert.False(await cursor.MoveNextAsync());
+        await cursor.DisposeAsync();
+        Assert.Equal(1, cursor.Disposals);
+        Assert.Same(failure, await Record.ExceptionAsync(() => result));
+    }
+
+    [Theory]
     [InlineData("invoke")]
     [InlineData("status")]
     [InlineData("result")]

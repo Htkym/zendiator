@@ -300,7 +300,7 @@ public abstract class StreamCursorState : IAsyncDisposable
         {
             FinishClose(error, disposing: true);
             var shared = Volatile.Read(ref _disposeCompletion);
-            return shared is null ? ThrowDisposeAsync(error) : new(shared.Task);
+            return shared is null ? FaultedDispose(error) : new(shared.Task);
         }
     }
 
@@ -332,7 +332,7 @@ public abstract class StreamCursorState : IAsyncDisposable
         }
 
         FinishClose(error, disposing: false);
-        return error is null ? new(false) : ThrowMoveAsync(error);
+        return error is null ? new(false) : FaultedMove(error);
     }
 
     /// <summary>Closes a claimed owner without releasing its gate or publishing disposal.</summary>
@@ -502,17 +502,18 @@ public abstract class StreamCursorState : IAsyncDisposable
         _linked = null;
     }
 
-    private static async ValueTask<bool> ThrowMoveAsync(Exception error)
+    private static ValueTask<bool> FaultedMove(Exception error)
     {
-        await ValueTask.CompletedTask.ConfigureAwait(false);
-        ExceptionDispatchInfo.Capture(error).Throw();
-        return false;
+        var builder = AsyncTaskMethodBuilder<bool>.Create();
+        builder.SetException(error);
+        return new(builder.Task);
     }
 
-    private static async ValueTask ThrowDisposeAsync(Exception error)
+    private static ValueTask FaultedDispose(Exception error)
     {
-        await ValueTask.CompletedTask.ConfigureAwait(false);
-        ExceptionDispatchInfo.Capture(error).Throw();
+        var builder = AsyncTaskMethodBuilder.Create();
+        builder.SetException(error);
+        return new(builder.Task);
     }
 
     /// <summary>A single-consumption generation whose result survives until its caller consumes it.</summary>
