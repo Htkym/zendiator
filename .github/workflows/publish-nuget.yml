@@ -35,7 +35,7 @@ jobs:
             throw "tag must look like v<version>, e.g. v0.1.0-preview.1"
           }
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.ref }}
 
@@ -50,7 +50,7 @@ jobs:
           "commit=$(git rev-parse HEAD)" >> $env:GITHUB_OUTPUT
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -166,7 +166,7 @@ jobs:
           $manifest | ConvertTo-Json -Depth 6 | Set-Content artifacts/packages/manifest.json
 
       - name: Upload verified artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: nuget-packages
           path: |
@@ -183,7 +183,7 @@ jobs:
       id-token: write # Required for the GitHub OIDC token used by NuGet/login.
     steps:
       - name: Download verified artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8.0.2
         with:
           name: nuget-packages
           path: artifacts/packages
@@ -215,7 +215,7 @@ jobs:
       # one token yields one key). `user` is the nuget.org profile name.
       - name: NuGet login (OIDC)
         id: login
-        uses: NuGet/login@v1
+        uses: NuGet/login@v1.2.0
         with:
           user: ${{ vars.NUGET_USER }}
 
