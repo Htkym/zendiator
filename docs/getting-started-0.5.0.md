@@ -117,10 +117,13 @@ and these results do not establish a gain for all scopes.
 
 ## Stream execution
 
-For a compiler async iterator, use `IStreamHandler<TRequest,TItem>.Handle` returning
-`IAsyncEnumerable<TItem>`; see the [iterator example](streaming-iterators.md).
-It uses the same registration and pipeline, with Handle and cursor acquisition
-deferred until the first move.
+For ordinary asynchronous input, start with `IStreamHandler<TRequest,TItem>.Handle`
+returning an `IAsyncEnumerable<TItem>`, often a compiler async iterator. Choose
+`IStreamSourceHandler<TRequest,TItem,TCursor>` when a named class or struct cursor
+needs custom state or integration. Both support the same pipeline; select exactly
+one source contract for each route. This choice does not guarantee a performance
+result. See [input and lifetime choices](streaming-iterators.md#choose-an-input-contract)
+for both examples and the direct/guarded contract table.
 
 The sample opens a named NumberCursor through IStreamSourceHandler. Dedicated Filter/Map
 hooks use the typed pipeline. StreamAsync returns a class implementing standard
@@ -128,13 +131,25 @@ IAsyncEnumerable. This example uses `StreamSource(...).ConsumeAsync(...)`, a rea
 plan with a fresh private owner per consumption, and a readonly sink with a shared List
 result. The plan is not IAsyncEnumerable.
 
-The standard source object is allocated at the StreamAsync call; DI/Open are deferred
-until the first move. Await it before another move or disposal,
-consume each ValueTask once and keep the scope alive through cleanup. A sink's false
-is a normal stop; sink exceptions are not source middleware input. No Channel bridge
-or independent producer task is added. This example does not guarantee lower time or
-allocation. Evaluate standard enumeration, typed terminals and HTTP separately using
-the measured revision, conditions and results.
+The standard source object is allocated at the `StreamAsync` call. The guarded
+path defers DI/Open until the first move; a flat iterator route with two
+noncancelable tokens instead acquires the input at `GetAsyncEnumerator`. Its
+consumer must await `DisposeAsync` even after EOF or failure. Use `await foreach`
+for normal enumeration, consume each `ValueTask` once, and keep the DI scope alive
+through disposal. Forward API and enumeration cancellation tokens as required by
+your application, including HTTP `RequestAborted`, rather than dropping them to
+select the direct path. Custom enumerables must implement their cancellation and
+disposal contracts; they need not behave like compiler iterators.
+
+The typed terminal in this sample stays guarded. Await each move before another
+move or disposal. A sink's false is a normal stop; sink exceptions are not source
+middleware input. No Channel bridge or independent producer task is added. This
+example does not guarantee lower time or allocation.
+
+For once-per-enumeration preprocessing with no cursor or paired cleanup, use the
+existing [Before example](streaming-iterators.md#choose-before-or-middleware).
+Keep middleware when it replaces the request, returns an empty Stream normally,
+surrounds enumeration with cleanup, or performs work on each upstream reopening.
 
 See [migration, HTTP and the detailed contracts](streaming-0.5.0.ja.md).
 

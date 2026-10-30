@@ -139,11 +139,11 @@ hooks preserve typed item flow; `Stage.Wrapper` connects an explicit
 [named-cursor sample](samples/Zendiator.Sample.GettingStarted/Program.cs) includes a
 pending first move and an ordered Filter/Map pipeline.
 
-For an iterator handler, the generated route calls `Handle` and then
-`GetAsyncEnumerator` on its first move, passing the effective cancellation token to
-both. Each enumeration acquires its own cursor. Register the handler in the same
-composition as a typed source handler; selecting both contracts for one route is
-rejected. See the [iterator example](docs/streaming-iterators.md).
+Start with an iterator handler for ordinary asynchronous input. Use a named cursor
+when its custom state or integration is needed; neither representation is always
+faster. Select one source contract per route. The
+[input and lifetime guide](docs/streaming-iterators.md#choose-an-input-contract)
+compares acquisition, cancellation and disposal, with examples of both contracts.
 
 `StreamAsync(request, token)` returns a generated source implementing standard
 `IAsyncEnumerable<T>`. Consume it with `await foreach`, or return it naturally from
@@ -151,11 +151,16 @@ an ASP.NET Core action for the host's serializer. Keep the request's DI scope al
 until serialization and cleanup finish; do not create and dispose an action-local
 scope before returning the source.
 
-Each enumeration has an independent owner. DI resolution, opening, sessions and I/O
-start on its first move. Await a pending move before another move or disposal;
-overlap is rejected. Borrowed services are not disposed by the pipeline. Acquired
-cursors and owned sessions are cleaned up once, in reverse ownership order; cleanup
-exceptions follow ordinary `try/finally` precedence.
+Guarded enumerations resolve and open their input on the first move, reject
+overlapping operations and complete required cleanup before EOF or failure. A flat
+iterator route with two noncancelable tokens instead acquires its input in
+`GetAsyncEnumerator` and follows the producer's operation contract. For that direct
+path, the consumer must await disposal even after EOF or a failed move. Forward the
+real cancellation token, including `RequestAborted`; do not remove cancellation to
+select a path. Borrowed services remain owned by DI.
+
+For preprocessing that needs no request replacement or cursor lifetime, see
+[Before versus middleware](docs/streaming-iterators.md#choose-before-or-middleware).
 
 `StreamSource(...).ConsumeAsync(...)` is an optional terminal over the same pipeline.
 It creates a fresh private owner and awaits sink callbacks sequentially. A `false`

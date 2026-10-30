@@ -20,6 +20,7 @@
     <Project Path="samples/Zendiator.Sample.Host/Zendiator.Sample.Host.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Zendiator.BeforeRelayBenchmarks/Zendiator.BeforeRelayBenchmarks.csproj" />
     <Project Path="benchmarks/Zendiator.UseCaseBenchmarks/Zendiator.UseCaseBenchmarks.csproj" />
   </Folder>
 </Solution>

@@ -4,6 +4,36 @@ Use `IStreamHandler<TRequest,TItem>` when the input is an `IAsyncEnumerable<TIte
 Use `IStreamSourceHandler<TRequest,TItem,TCursor>` when the handler opens a named
 class or struct cursor. Both use the same generated Mediator and pipeline stages.
 
+## Choose an input contract
+
+For general asynchronous input, start with `IStreamHandler` and a compiler async
+iterator. Use a custom named cursor when an existing source or its state requires
+it. A cursor is not inherently slower: synchronous input can benefit from its own
+implementation. Avoid a separate async operation per move unless the source needs
+one. Pooling is an input implementation choice with its own consumption and
+lifetime requirements, not a default promise made by Zendiator.
+
+| Route | Input acquisition | Cancellation | EOF, failure and disposal |
+|---|---|---|---|
+| Flat public `StreamAsync` with an `IStreamHandler` and two noncancelable tokens | `GetAsyncEnumerator` resolves the receiver, calls `Handle` and acquires the cursor; no pull or `Current` read | The producer's contract applies | The consumer must await disposal, including after EOF or a failed move; Zendiator adds no automatic input cleanup |
+| `IStreamHandler` with a cancelable API or enumeration token, or a Before/hook/middleware/owned session | First public move | Zendiator combines API/enumeration tokens and checks cancellation before pulls; the input receives the effective token | Required cleanup finishes before move completion publishes EOF or failure |
+| `IStreamSourceHandler`, or `StreamSource(...).ConsumeAsync(...)` | First move of the guarded operation | The guarded operation's effective token | The guarded operation closes acquired cursors and owned sessions |
+
+Two noncancelable tokens means `CanBeCanceled` is false for both, not merely that
+neither has been canceled. Keep the cancellation your application requires.
+For HTTP, forward `HttpContext.RequestAborted`; an enumeration token passed with
+`WithCancellation` also participates. Do not remove a token to select the direct
+path. A custom enumerable must honor the token and disposal behavior its API
+promises; do not assume every enumerable has compiler-iterator `finally` semantics.
+
+Both contracts borrow their receiver from DI, and a Transient receiver can remain
+cached in the mediator. Each enumeration needs an independent cursor. Keep the
+scope alive through enumeration and awaited disposal, including serialization when
+returning a source from an HTTP action. Do not return a source from an already
+disposed action-local scope.
+
+## Compiler iterator example
+
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
 using Zendiator;
@@ -85,6 +115,36 @@ contracts for the same request is ambiguous and is rejected. Existing overlap,
 middleware and binding rules still apply. Direct enumerations use the producer's
 operation contract described above; guarded inputs retain Zendiator's completion,
 exception-precedence and context rules. This input choice does not promise a speed or allocation result.
+
+## Named cursor example
+
+The [GettingStarted sample](../samples/Zendiator.Sample.GettingStarted/Program.cs)
+uses `IStreamSourceHandler` with a named `NumberCursor`, a pending first move and
+typed Filter/Map hooks. Use that form for a source that already owns cursor state.
+The generated operation disposes the acquired cursor, while DI still owns the
+borrowed handler and hook services. Its guarded acquisition and cleanup rules
+apply even when its input completes synchronously.
+
+## Choose Before or middleware
+
+Use existing `IAsyncStreamBefore<TRequest>` for preprocessing that runs once per
+root enumeration without opening a cursor. The validation below leaves the
+request and input unchanged. Register several Before types in their required
+order with `StreamBefore<TRequest>(...)`.
+
+| Needed behavior | Use |
+|---|---|
+| Validate or prepare the unchanged request once before any input opens | `IAsyncStreamBefore` |
+| Replace the request or return an empty Stream as a normal result | Middleware |
+| Pair setup with cleanup around enumeration | Middleware |
+| Repeat work for each upstream reopening or validate a replacement request | Middleware |
+
+This is an explicit choice of capabilities, not an automatic conversion of
+middleware. Reuse the same work and input when comparing the two forms; results
+from a preprocessing-only example do not replace general middleware comparisons.
+
+The [runnable Before example and matched comparison](../benchmarks/Zendiator.BeforeRelayBenchmarks/README.md)
+keep the producer, preprocessing work and consumer the same for both forms.
 
 ## Run preprocessing once per enumeration
 

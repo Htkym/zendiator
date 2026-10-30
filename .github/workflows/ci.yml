@@ -30,6 +30,10 @@ jobs:
         working-directory: benchmarks/Zendiator.UseCaseBenchmarks
         run: dotnet ./bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll --validate-only
 
+      - name: Run Stream Before example
+        working-directory: benchmarks/Zendiator.BeforeRelayBenchmarks
+        run: dotnet ./bin/Release/net10.0/Zendiator.BeforeRelayBenchmarks.dll --example
+
       - name: Format check
         shell: pwsh
         run: |
@@ -47,7 +51,8 @@ jobs:
             "samples/Zendiator.Sample.Contracts/Zendiator.Sample.Contracts.csproj",
             "samples/Zendiator.Sample.Application/Zendiator.Sample.Application.csproj",
             "samples/Zendiator.Sample.Host/Zendiator.Sample.Host.csproj",
-            "benchmarks/Zendiator.UseCaseBenchmarks/Zendiator.UseCaseBenchmarks.csproj")) {
+            "benchmarks/Zendiator.UseCaseBenchmarks/Zendiator.UseCaseBenchmarks.csproj",
+            "benchmarks/Zendiator.BeforeRelayBenchmarks/Zendiator.BeforeRelayBenchmarks.csproj")) {
             dotnet format $p --verify-no-changes --no-restore
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
