@@ -75,6 +75,13 @@ when native DI must share its identity. DI owns every activation and disposal,
 including unused receivers and concurrent losing initializations; the set does not
 dispose borrowed services. Keep the owning scope alive until dispatch completes.
 
+For asynchronous Hooks, error callbacks receive the current failure. An error
+callback can replace it, and a failing cleanup callback takes precedence. Entered
+Hook scopes unwind from inner to outer before the returned `ValueTask` completes.
+Ordinary exceptions keep their original instance and throw origin unless a
+callback replaces them. Internal rethrow frames and `FirstChanceException` event
+counts are implementation details.
+
 ## Closed dependency storage
 
 Closed dependency slots are inline by default, at every composition size. This
