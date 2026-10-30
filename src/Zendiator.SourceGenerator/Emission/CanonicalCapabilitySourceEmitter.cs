@@ -38,7 +38,15 @@ internal static class CanonicalCapabilitySourceEmitter
                     {{(typed ? "internal" : "private")}} {{(async ? "async " : "")}}{{result}} {{(typed ? "InvokeAsync" : "Execute")}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken){cancellationToken.ThrowIfCancellationRequested();
                 """);
             CanonicalRouteDependenciesEmitter.Acquire(b, dependencies);
-            if (h.ResultName != null) b.AppendLine(h.ResultName + " response;"); Scope(b, c, 0, "request", typed, dependencies); if (h.ResultName != null) b.AppendLine("return response;"); b.AppendLine("}");
+            if (typed && dependencies != null)
+                CanonicalAsyncFailureDataEmitter.Emit(b, c, dependencies);
+            else
+            {
+                if (h.ResultName != null) b.AppendLine(h.ResultName + " response;");
+                Scope(b, c, 0, "request", typed, dependencies);
+                if (h.ResultName != null) b.AppendLine("return response;");
+            }
+            b.AppendLine("}");
             if (typed) { EmitTypedCalls(b, c); b.AppendLine("}"); }
             b.AppendLine("}"); CanonicalSyncSourceEmitter.EmitRegistrar(b, r, c.Family); b.AppendLine("}");
         }

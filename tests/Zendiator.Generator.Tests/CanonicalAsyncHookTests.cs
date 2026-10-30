@@ -19,12 +19,14 @@ public sealed class AsyncHookProbe
     public readonly List<object> Hooks = [], ReleasedHooks = [];
     public readonly List<IAsyncOnceGate> Gates = [];
     public string? Pending, NativePhase, CancelPhase;
+    public Action<IAsyncOnceGate>? VoidGateCreated;
     public bool NullBefore, NullFactory;
     public int HandlerDisposals, FactoryDisposals;
     public void CheckToken(CancellationToken token) => Assert.Equal(Cancellation.Token, token);
     public void HookConstruct(object hook, int id) { Trace.Add($"h{id}.construct"); Hooks.Add(hook); }
     public void HandlerConstruct() => Trace.Add("handler.construct");
     public void FactoryConstruct() => Trace.Add("factory.construct");
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private void Hit(string phase, object? request, Exception? error = null, SendExitInfo? exit = null)
     {
         Trace.Add(phase); Calls.Add((phase, request, error, exit, Ambient.Value)); Ambient.Value = phase;
@@ -44,7 +46,7 @@ public sealed class AsyncHookProbe
     {
         Hit(phase, request, error, exit);
         if (Pending != phase) return default;
-        var gate = new AsyncOnceGate<int>(0); Gates.Add(gate); return gate.Void;
+        var gate = new AsyncOnceGate<int>(0); Gates.Add(gate); VoidGateCreated?.Invoke(gate); return gate.Void;
     }
     public ValueTask<R> Before<R>(int id, R request, R next) where R : class => Step($"h{id}.before", request, NullBefore ? null! : next);
     public ValueTask<int> After(int id, object? request, int value) => Step($"h{id}.after", request, value + 1);
