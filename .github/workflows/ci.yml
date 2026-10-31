@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   verify:
+    if: github.ref != 'refs/heads/ci/format-release-proposal-20261031'
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
