@@ -7,6 +7,18 @@ $extraProjects = @($projects | Where-Object { $_ -notin $solutionProjects })
 $feed = Join-Path $env:RUNNER_TEMP 'format-local-feed'
 $packages = Join-Path $env:RUNNER_TEMP 'format-consumer-packages'
 New-Item -ItemType Directory -Force $feed, $packages | Out-Null
+$config = Join-Path $env:RUNNER_TEMP 'format.NuGet.Config'
+$escapedFeed = [System.Security.SecurityElement]::Escape($feed)
+@"
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="local" value="$escapedFeed" />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+  </packageSources>
+</configuration>
+"@ | Set-Content $config -Encoding UTF8
 # Local, unpublished packages preserve the samples' declared version and PackageReference usage.
 foreach ($packageProject in @('src/Zendiator.Abstractions/Zendiator.Abstractions.csproj', 'src/Zendiator/Zendiator.csproj')) {
     dotnet pack $packageProject -c Release --no-restore -o $feed
@@ -16,7 +28,7 @@ foreach ($project in $extraProjects) {
     [xml]$xml = Get-Content $project -Raw
     $consumesPackage = @($xml.SelectNodes('//PackageReference') | Where-Object { $_.Include -eq 'Zendiator' }).Count -gt 0
     if ($consumesPackage) {
-        dotnet restore $project --packages $packages --source $feed --source https://api.nuget.org/v3/index.json
+        dotnet restore $project --packages $packages --configfile $config
     } else {
         dotnet restore $project
     }
