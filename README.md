@@ -194,21 +194,78 @@ with 0.4.0 is not promised.
 
 ## Performance
 
-Completion pattern, pipeline depth, first use, DI lifetimes and consumer work all
-affect performance. General speed improvement and non-regression across all
-compositions are not established for the 0.5.0 candidate. Genuinely pending Full
-Stream enumeration has not established a speed advantage over all compared
-libraries. Early termination and new-scope workloads can remain unfavorable.
-Standard enumeration, typed terminals and HTTP serialization are different
-workloads; a result for one does not establish the performance of another.
+These observations are from the measured source snapshot below, completed on
+2026-10-31; they are not a new measurement of the current branch HEAD. Selected
+0.5.0 candidate workloads were compared on the same machine. Each cell shows
+**mean time / allocated bytes per operation (B/op)**. Time and memory are separate
+metrics, and this table does not cover every workload.
 
-The [historical benchmark snapshot](benchmarks/README.md#historical-040-results) and
-[unrounded selected data](benchmarks/results/20261008-1c41d2b-summary.csv) describe
-historical source `1c41d2b105073d2dc9be2c0e8684fdce2fa11f55` from 0.4.0. They are not a
-full comparison of this 0.5.0 candidate. The final public 0.5.0 comparison is not yet
-complete; results from different revisions are not presented as one release-wide
-ranking. Lightweight benchmark handlers also do not predict application startup,
-HTTP latency or asynchronous I/O latency.
+|Case|Zendiator candidate|Immediate.Handlers 4.2.0|MediatR 14.2.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
+|---|---:|---:|---:|---:|---:|---:|
+|Send / 0 behaviors|1.45 ns / 0 B|8.79 ns / 0 B|40.06 ns / 200 B|46.52 ns / 64 B|28.83 ns / 0 B|31.25 ns / 0 B|
+|Send / 5 behaviors|10.16 ns / 0 B|16.81 ns / 0 B|135.93 ns / 1,016 B|83.05 ns / 544 B|33.28 ns / 0 B|148.19 ns / 0 B|
+|Resolve again in the same scope + Send / 0 behaviors|27.30 ns / 0 B|40.73 ns / 0 B|71.09 ns / 200 B|83.82 ns / 64 B|56.91 ns / 0 B|68.67 ns / 0 B|
+|Resolve again in the same scope + Send / 5 behaviors|30.13 ns / 0 B|45.40 ns / 0 B|151.70 ns / 1,016 B|113.12 ns / 544 B|57.99 ns / 0 B|180.64 ns / 0 B|
+|New scope + 1 Send + dispose / 5 behaviors|151.47 ns / 704 B|117.48 ns / 568 B|202.87 ns / 1,400 B|178.18 ns / 920 B|633.17 ns / 1,712 B|412.67 ns / 856 B|
+|Notification / 16 subscribers / sync|111.33 ns / 0 B|N/A|918.50 ns / 4,784 B|183.21 ns / 0 B|159.29 ns / 0 B|692.02 ns / 0 B|
+|Stream 1024 items / 5 behaviors / sync|13.41 μs / 1,216 B|100.17 μs / 1,107 B|201.14 μs / 3,593 B|101.33 μs / 1,689 B|99.35 μs / 1,105 B|116.64 μs / 1,809 B|
+|Stream 1024 items / 5 behaviors / async|165.82 μs / 116,562 B|263.09 μs / 1,754 B|490.69 μs / 4,726 B|261.25 μs / 2,339 B|245.04 μs / 1,755 B|289.13 μs / 2,539 B|
+|Stream early break / 16-item input / 5 behaviors / sync|415.19 ns / 1,216 B|291.92 ns / 1,104 B|813.08 ns / 3,592 B|372.38 ns / 1,688 B|308.40 ns / 1,104 B|624.94 ns / 1,808 B|
+|Stream early break / 16-item input / 5 behaviors / async|1.81 μs / 1,656 B|1.96 μs / 1,752 B|2.99 μs / 4,720 B|2.08 μs / 2,336 B|1.92 μs / 1,752 B|2.37 μs / 2,536 B|
+|Behavior short-circuit / 3 stages / WarmDispatch|7.09 ns / 0 B|3.99 ns / 0 B|78.10 ns / 704 B|51.94 ns / 496 B|27.93 ns / 0 B|54.64 ns / 384 B|
+|H success / FirstSend|739.22 ns / 480 B|1.24 μs / 504 B|1.21 μs / 1,352 B|1.04 μs / 808 B|1.01 μs / 560 B|1.71 μs / 856 B|
+|H success / WarmSend|24.33 ns / 0 B|45.00 ns / 0 B|492.60 ns / 944 B|440.95 ns / 496 B|61.58 ns / 0 B|451.39 ns / 480 B|
+|H failure / ColdOuterFailure|6.54 μs / 2,520 B|8.09 μs / 3,809 B|6.55 μs / 3,448 B|5.87 μs / 3,216 B|6.00 μs / 2,968 B|9.57 μs / 4,872 B|
+
+The new-scope row includes creation, first resolution, Send and disposal. Stream
+figures cover the whole operation, including creation, consumption and cleanup,
+not one item. Early break consumes one item from a 16-item input. Sync/async
+separates the enumeration completion patterns. H measures successful and
+outer-failure asynchronous Hook paths; FirstSend, WarmSend and ColdOuterFailure
+have different measurement boundaries, so their differences are not simply the
+cost of throwing an exception. N/A means no applicable comparison result, not zero.
+
+### Interpreting the results
+
+- Some peers have lower time and allocation for new-scope and synchronous
+  early-termination workloads.
+- In the table's asynchronous Stream with 5 behaviors and 1024 items, Zendiator
+  has a lower observed mean, but allocates 116,562 B versus 1,754–4,726 B for peers.
+- Outside this table, **asynchronous Stream with 0 behaviors and 1024 items** is
+  unfavorable in both time and memory: Zendiator is 149.19 μs / 115,458 B, versus
+  53.90–92.56 μs / 393–865 B for peers.
+- **Asynchronous Relay with 5 stages and 1024 items** is 150.97 μs / 116,562 B for
+  Zendiator. Immediate, Mediator, DispatchR and Foundatio range from
+  51.94–53.65 μs / 393–937 B; MediatR is 246.09 μs / 3,323 B.
+- Synchronous Stream early break with 0 behaviors and a 16-item input is also
+  58.49 ns / 160 B for Zendiator versus 42.80 ns / 144 B for Immediate.
+  These observations do not establish general speed superiority or universal
+  performance improvement.
+
+### Measurement conditions
+
+Measured source: `927827653e229b01afdd8bb97c00b9093ad049ab` (0.5.0 candidate).
+Windows 11 x64, Intel Core Ultra 7 258V, SDK 10.0.403, .NET 10.0.14, DI 10.0.12,
+BenchmarkDotNet 0.15.8, Release, affinity mask 1, 20 warmups, 12 measurements,
+requested 500 ms iterations, and one launch per case.
+
+Measurements span two execution periods, before an interruption and after
+recovery. One launch does not establish independent-run reproducibility or a
+controlled before/after improvement. Differences of a few nanoseconds are also
+sensitive to benchmark overhead adjustment. Handlers are deliberately lightweight;
+API and DI registration shapes differ between libraries. These results do not
+predict application startup, HTTP or asynchronous I/O latency. Standard
+enumeration and typed terminals are separate workloads.
+
+Foundatio's rows here use its intercepted path, distinct from the native runtime
+path used in a separate open-generic comparison. Historical 0.4.0 results are not
+mixed into this table; this is not a release-wide ranking of all 0.5.0 compositions.
+
+See the [benchmark measurement boundaries](benchmarks/README.md#read-the-comparison)
+and [Stream comparison boundaries](benchmarks/README.md#stream-comparison-boundaries).
+Their historical 0.4.0 table and data are not the source of these numbers. Running
+the current fixture alone does not guarantee the pinned source, dependencies and
+execution order used here.
 
 ## Native AOT and limitations
 
@@ -220,3 +277,4 @@ See [known limitations](docs/release/known-limitations.md) before deploying.
 For migration from MediatR, use the
 [migration guide](docs/migrating-from-mediatr.md), together with the current
 [0.5.0 registration guide](docs/getting-started-0.5.0.md).
+
