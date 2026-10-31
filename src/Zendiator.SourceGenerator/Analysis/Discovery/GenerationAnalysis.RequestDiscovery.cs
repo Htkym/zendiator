@@ -10,7 +10,8 @@ internal sealed partial class GenerationAnalysis
 {
     private bool EnsureOpenRequest(INamedTypeSymbol reqDef)
     {
-        if (openRequests.ContainsKey(reqDef)) return true;
+        if (openRequests.ContainsKey(reqDef))
+            return true;
         if (!IsOpenDefinition(reqDef) || reqDef.IsRefLikeType)
         {
             Error(3, $"Request {Name(reqDef)} must be a public generic definition with exactly one response contract.", reqDef);
@@ -55,8 +56,10 @@ internal sealed partial class GenerationAnalysis
         var pfixed = new ITypeSymbol[pargs.Length];
         var h2d = new int[type.TypeParameters.Length];
         var hpos = new int[type.TypeParameters.Length];
-        for (var j = 0; j < h2d.Length; j++) h2d[j] = -1;
-        for (var j = 0; j < hpos.Length; j++) hpos[j] = -1;
+        for (var j = 0; j < h2d.Length; j++)
+            h2d[j] = -1;
+        for (var j = 0; j < hpos.Length; j++)
+            hpos[j] = -1;
         for (var i = 0; i < pargs.Length; i++)
         {
             if (pargs[i] is ITypeParameterSymbol hp && Same(hp.ContainingSymbol, type))
@@ -89,7 +92,8 @@ internal sealed partial class GenerationAnalysis
                 return;
             }
         }
-        if (!EnsureOpenRequest(reqDef)) return;
+        if (!EnsureOpenRequest(reqDef))
+            return;
         ITypeSymbol responsePattern = compilation.GetSpecialType(SpecialType.System_Void);
         if (!isVoid)
         {
@@ -118,7 +122,8 @@ internal sealed partial class GenerationAnalysis
         }
         var merged = reqDef.TypeParameters.Select(FromTypeParam).ToArray();
         var mapArgs = new ITypeSymbol[type.TypeParameters.Length];
-        for (var j = 0; j < mapArgs.Length; j++) mapArgs[j] = reqDef.TypeParameters[h2d[j]];
+        for (var j = 0; j < mapArgs.Length; j++)
+            mapArgs[j] = reqDef.TypeParameters[h2d[j]];
         for (var j = 0; j < type.TypeParameters.Length; j++)
         {
             if (!MergeHandlerParam(merged[h2d[j]], type.TypeParameters[j], type, mapArgs, compilation))

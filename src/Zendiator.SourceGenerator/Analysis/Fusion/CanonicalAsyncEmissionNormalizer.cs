@@ -1,0 +1,132 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+
+namespace Zendiator.SourceGenerator;
+
+internal static class CanonicalAsyncEmissionNormalizer
+{
+    internal static CanonicalAsyncEmissionModel Create(CompositionSelectionCatalog catalog, CanonicalExecutionGraphCatalog execution)
+    {
+        var output = new List<CanonicalAsyncCompositionEmission>();
+        for (var i = 0; i < catalog.Compositions.Count; i++)
+        {
+            var c = catalog.Compositions[i];
+            if (c.GeneratedNamespace == null || c.Errors.Count != 0 || c.CompilerOwnsHandlerError ||
+                c.Pipelines.Count != 1 || c.Facts.Count != 1 || c.Facts[0].Key != "IncompleteExecutionContract" ||
+                catalog.Compositions.Count(other => other.Identity == c.Identity || other.Key == c.Key || other.GeneratedNamespace == c.GeneratedNamespace) != 1)
+                continue;
+            var route = c.Pipelines[0];
+            var graph = execution.Compositions[i].SingleOrDefault(g => g.Contract.Anchor == route.Anchor);
+            if (graph?.IsValid != true || graph.Schedule == null || route.Family != BoundDispatchFamily.SendAsync || route.Stages.Count > 2 ||
+                route.Handlers.Count != 1 || !route.ExplicitHandlerOrder || route.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void))
+                continue;
+            var h = route.Handlers[0];
+            if (route.RequestShape == BoundRequestShape.OpenAsyncReference &&
+                (c.MarkerName == null || route.SendGeneric == null || route.SendOpenRegistration is not { } open ||
+                route.Stages.Count is not (0 or 1) && !(route.ResultKind == FusionResultKind.Response && route.Stages.Count == 2) ||
+                open.Stages.Count != route.Stages.Count || h.Sessions.Count != 0 ||
+                h.AsyncEmission is not { HandlerIsValueType: false, RequestIsValueType: false } ||
+                route.Stages.Any(s => s.Sessions.Count != 0 || s.AsyncEmission is not { HookIsValueType: false }) ||
+                c.Handlers.Any(member => !open.HandlerMembership.Contains(member.Identity))))
+                continue;
+            if (h.CompilerOwnsError || h.AsyncEmission == null || h.Callback?.Completion != BoundCompletionKind.ValueTask ||
+                !c.Handlers.Any(handler => handler.Identity == h.Type))
+                continue;
+            BoundAsyncFactoryEmission? factory = null;
+            var hooks = new List<BoundAsyncHookEmission>();
+            if (route.Stages.Count != 0)
+            {
+                // A Handler session is inside one Hook's observation and outer cleanup boundary.
+                if (h.Sessions.Count != 0 && route.Stages.Count != 1 ||
+                    h.Sessions.Count == 0 && h.ServiceOwnership != FusionOwnership.BorrowedService ||
+                    route.Stages.Any(s => s.CompilerOwnsError || s.Kind != FusionStageKind.Hook || s.AsyncEmission == null))
+                    continue;
+                if (route.Stages.Any(s => s.Sessions.Count != 0))
+                {
+                    var stage = route.Stages[0];
+                    if (route.Stages.Count != 1 || stage.Sessions.Count != 1 || stage.ServiceOwnership != stage.Sessions[0].Ownership ||
+                        AsyncFactory(stage.Sessions[0]) is not { } hookFactory)
+                        continue;
+                    hooks.Add(stage.AsyncEmission! with
+                    {
+                        Factory = hookFactory
+                    });
+                }
+                else
+                {
+                    if (route.Stages.Any(s => s.ServiceOwnership != FusionOwnership.BorrowedService))
+                        continue;
+                    hooks.AddRange(route.Stages.Select(s => s.AsyncEmission!));
+                }
+            }
+            if (h.Sessions.Count != 0)
+            {
+                if (h.Sessions.Count != 1)
+                    continue;
+                var session = h.Sessions[0];
+                factory = AsyncFactory(session);
+                if (factory is null)
+                    continue;
+            }
+            else if (h.ServiceOwnership != FusionOwnership.BorrowedService)
+                continue;
+            output.Add(new(i, c.GeneratedNamespace, c.MarkerName, c.UseLocalHandlers, h.AsyncEmission, factory,
+                route.HasEmptyPipeline, route.PipelineFamily, c.MicrosoftDiProviderName ?? "")
+            {
+                Generic = route.SendGeneric,
+                OpenRegistration = route.SendOpenRegistration,
+                Hooks = new(hooks),
+                ExplicitHandlerTypes = c.ExplicitHandlerTypes,
+                CatalogMarkerTypes = c.CatalogMarkerTypes,
+                ExternAliases = c.ExternAliases
+            });
+        }
+        return new(new(output));
+    }
+
+    internal static BoundAsyncFactoryEmission? AsyncFactory(BoundSessionModel session)
+    {
+        if (!session.SuppliesCallbackReceiver || session.AsyncEmission is not { } bound ||
+            session.Acquire.Completion is not (BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask) ||
+            session.Ownership is not (FusionOwnership.OwnedSession or FusionOwnership.BorrowedResource) ||
+            session.Ownership == FusionOwnership.OwnedSession && (session.Cleanup?.Completion != BoundCompletionKind.ValueTask || bound.CleanupContractName == null) ||
+            session.Ownership == FusionOwnership.BorrowedResource && (session.Cleanup != null || bound.CleanupContractName != null))
+            return null;
+        return bound;
+    }
+
+    // Registration and call-site binding only need callable names; no synchronous body is reused.
+    internal static CanonicalSyncCompositionEmission Registration(CanonicalAsyncCompositionEmission c) => new(c.Index, c.Namespace, c.MarkerName, c.UseLocalHandlers,
+        new(c.Handler.RequestName, c.Handler.HandlerName, c.Handler.ContractName, c.Handler.MethodName, c.Handler.ResultName)
+        {
+            RequestIsValueType = c.Handler.RequestIsValueType,
+            HandlerIsValueType = c.Handler.HandlerIsValueType
+        },
+        c.Factory == null ? null : new(c.Factory.FactoryName, c.Factory.ContractName, c.Factory.MethodName, c.Factory.CleanupContractName)
+        {
+            FactoryIsValueType = c.Factory.FactoryIsValueType
+        },
+        c.HasEmptyPipeline, c.PipelineFamily, c.MicrosoftDiProviderName ?? "")
+    {
+        Generic = c.Generic,
+        OpenRegistration = c.OpenRegistration,
+        ExplicitHandlerTypes = c.ExplicitHandlerTypes,
+        CatalogMarkerTypes = c.CatalogMarkerTypes,
+        ExternAliases = c.ExternAliases,
+        RouteDependencyTypes = c.Generic == null && c.OpenRegistration == null && c.Factory == null &&
+            !c.Handler.HandlerIsValueType && c.Hooks.Count != 0 && c.Hooks.All(h => !h.HookIsValueType && h.Factory == null)
+            ? new(c.Hooks.Select(h => h.HookName).Append(c.Handler.HandlerName).Distinct(System.StringComparer.Ordinal)) : default,
+        Hooks = new(c.Hooks.Select(h => new BoundSyncHookEmission(h.HookName,
+            new(h.Before.ContractName, h.Before.MethodName), new(h.Success.ContractName, h.Success.MethodName),
+            new(h.Exception.ContractName, h.Exception.MethodName), new(h.Finally.ContractName, h.Finally.MethodName))
+        {
+            HookIsValueType = h.HookIsValueType,
+            Factory = h.Factory == null ? null : new(h.Factory.FactoryName, h.Factory.ContractName, h.Factory.MethodName, h.Factory.CleanupContractName) { FactoryIsValueType = h.Factory.FactoryIsValueType }
+        }))
+    };
+
+    internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalAsyncEmissionModel model,
+        EquatableArray<CanonicalSyncCallSite?> current, CancellationToken token) =>
+        CanonicalSyncEmissionNormalizer.BindCallSites(model.Compositions.Select(c => c.Index), current, token);
+}

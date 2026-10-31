@@ -7,9 +7,10 @@ See also the [README](../README.md).
 Procedures for moving MediatR 12 code to Zendiator. Covers API correspondences,
 required rewrites, and unsupported features.
 
-This guide describes the current repository. Published packages may differ;
-check the release notes for the version you install before applying the lifetime
-and configuration guidance below.
+This guide targets published 0.4.0. For the unreleased 0.5.0 API, follow
+[getting started with 0.5.0](getting-started-0.5.0.md). Move 0.4.0
+`AddOpenBehavior`/`Order` registrations to each route's ordered `Pipeline` and
+explicit wrapper contract rather than copying the old configuration.
 
 The current preview uses standard DI construction and captures Handler/Behavior dependencies lazily per mediator instance, including Transient dependencies. Use a new scope for a new default Scoped mediator, or configure a Transient mediator when each resolution needs a fresh composition. Custom provider APIs were removed. The generated mediator does not implement `IDisposable`; DI owns dependency disposal. Keep the scope alive until sends and stream enumeration finish. See [construction and dispatch lifetime](optimized-dispatch.md).
 
@@ -527,51 +528,31 @@ reused across retries and subsequent sends, including Transient registrations.
   Restate any ordering that relied on MediatR registration order with `Order`.
 - DI constructor injection keeps working.
 - Void requests use one-argument `IPipelineBehavior<T>`.
-  Sync requests use `ISyncPipelineBehavior`. Streams use `IStreamPipelineBehavior`.
+  Sync requests use `ISyncPipelineBehavior`. Streams use `IStreamMiddleware`.
 - With multiple handlers, the pipeline applies to each handler branch.
 
 ## Rewriting streams
 
-MediatR `IStreamRequest<T>` / `IStreamRequestHandler<T, R>` map to Zendiator streams with lazy semantics.
+Keep standard IAsyncEnumerable consumers. A yield handler can implement marked
+`IStreamHandler<TRequest,TItem>` and return `IAsyncEnumerable<TItem>` from Handle.
+Handle and GetAsyncEnumerator run on the first move; see the
+[iterator example](streaming-iterators.md).
 
-```csharp
-// Before (MediatR)
-public sealed record GetNames(int Count) : IStreamRequest<string>;
-public sealed class GetNamesHandler : IStreamRequestHandler<GetNames, string>
-{
-    public async IEnumerable<string> Handle(GetNames request, CancellationToken ct)
-    {
-        for (var i = 0; i < request.Count; i++) yield return $"n-{i}";
-        await Task.CompletedTask;
-    }
-}
-await foreach (var name in mediator.CreateStream(new GetNames(3))) { }
-```
+For a named class or struct cursor, implement
+`IStreamSourceHandler<TRequest,TItem,TCursor>` and open it through OpenAsync.
+A private compiler iterator type cannot serve as that named cursor declaration.
+Select one source contract for each route.
 
-```csharp
-// After (Zendiator)
-public sealed record GetNames(int Count) : IStreamRequest<string>;
-public sealed class GetNamesHandler : IStreamRequestHandler<GetNames, string>
-{
-    public async IAsyncEnumerable<string> HandleAsync(GetNames request, CancellationToken ct)
-    {
-        for (var i = 0; i < request.Count; i++)
-        {
-            ct.ThrowIfCancellationRequested();
-            await Task.Yield();
-            yield return $"n-{i}";
-        }
-    }
-}
-await foreach (var name in zendiator.StreamAsync(new GetNames(3))) { }
-```
+StreamAsync returns a generated class implementing standard IAsyncEnumerable. Move
+typed terminals to `StreamSource(request, apiToken).ConsumeAsync(sink, enumerationToken)`.
+StreamSource returns a readonly plan and is not IAsyncEnumerable.
+Use explicit Handlers/Pipeline declarations: IStreamMiddleware with Stage.Wrapper
+for opaque stages, dedicated Filter/Map contracts with Stage.Hook for typed stages.
+The old global Stream Behavior, Validator and OwnsStream APIs are not the new protocol.
 
-Notes:
-
-- One stream request has exactly one handler. Fan-out streams are out of scope.
-- `StreamAsync` alone runs nothing. The handler starts on first `MoveNextAsync`.
-- Stream Behaviors implement `IStreamPipelineBehavior<TRequest, TItem>` and register with `AddOpenStreamBehavior`.
-- Either the API token or `WithCancellation` cancels. `ref struct` streams are diagnosed.
+See [named-cursor migration and execution contracts](streaming-0.5.0.ja.md), including
+HTTP and consumer-failure boundaries. Standard enumeration, typed terminal and HTTP
+performance are separate measurements; no improvement is claimed here.
 
 ## Unsupported features
 
@@ -600,8 +581,8 @@ Zendiator has no equivalents below. Decide replacements before migrating.
    `WithCancellation`, dispose with `await using`, and re-enumerate with a fresh call.
 8. Search for variables typed as `object` or `IRequest<T>`.
 9. Rewrite Behaviors for continuation calls and add `Order`
-   (sync: `ISyncPipelineBehavior`; streams: `IStreamPipelineBehavior` +
-   `AddOpenStreamBehavior`).
+   (sync: `ISyncPipelineBehavior`; streams: `IStreamMiddleware` +
+   `Stage.Wrapper`).
 10. Move notification subscribers to `INotificationHandler`, adding `HandlerOrder`
     where order matters.
 11. Mark fan-out requests with `IMultiRequest` and switch to `SendAllAsync`.

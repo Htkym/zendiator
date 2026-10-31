@@ -7,8 +7,7 @@
 MediatR 12 を使ったコードを Zendiator へ移す手順です。API の対応関係と、
 書き換えが必要な箇所、対応していない機能をまとめています。
 
-このガイドは現在のリポジトリを対象とします。公開済みパッケージとは異なる場合があるため、
-以下の有効期間や構成の説明を適用する前に、インストールする版のリリースノートを確認してください。
+このMediatR移行ガイドは公開版0.4.0を対象とします。開発中の0.5.0への移行は[0.5.0の利用手順](getting-started-0.5.0.ja.md)を参照してください。0.4.0の`AddOpenBehavior`と`Order`を0.5.0へそのまま移さず、各routeの順序付き`Pipeline`と明示的なwrapperへ移します。
 
 現在のプレビュー版は標準 DI で構築し、Transient を含む Handler・Behavior を Mediator 単位で遅延取得して再利用します。既定の Scoped Mediator で新しい構成が必要なら新しいスコープを作ります。解決するたびに新しい構成が必要な場合は Mediator を Transient に設定してください。独自 Provider API は削除しました。生成される Mediator は `IDisposable` を実装せず、依存サービスの破棄は DI が担当します。送信やストリーム列挙が終わるまでスコープを維持してください。詳細は [構築と有効期間](optimized-dispatch.md) を参照してください。
 
@@ -517,51 +516,16 @@ Transient として登録されている場合も同様です。
   MediatR での登録順に頼っていた順序は、`Order` で明示し直します。
 - DI コンストラクター注入はそのまま使えます。
 - 戻り値なし要求には 1 型引数の `IPipelineBehavior<T>` を使います。
-  同期要求には `ISyncPipelineBehavior`、ストリームには `IStreamPipelineBehavior` を使います。
+  同期要求には `ISyncPipelineBehavior`、ストリームには `IStreamMiddleware` を使います。
 - 複数配送では各ハンドラーの分岐に Pipeline が適用されます。
 
 ## ストリームの書き換え
 
-MediatR の `IStreamRequest<T>`／`IStreamRequestHandler<T, R>` は、遅延実行される Zendiator のストリームに置き換えます。
+消費側は標準IAsyncEnumerableのまま使えます。Handlerは名前付きcursorを開くIStreamSourceHandlerへ移し、ZendiatorHandler属性とHandlers/Pipelineで明示します。yield本体の状態、実I/O、取消し、finallyの所有資源の破棄をcursorへ移してください。private compiler iterator型を公開cursor型には使えません。
 
-```csharp
-// 移行前 (MediatR)
-public sealed record GetNames(int Count) : IStreamRequest<string>;
-public sealed class GetNamesHandler : IStreamRequestHandler<GetNames, string>
-{
-    public async IEnumerable<string> Handle(GetNames request, CancellationToken ct)
-    {
-        for (var i = 0; i < request.Count; i++) yield return $"n-{i}";
-        await Task.CompletedTask;
-    }
-}
-await foreach (var name in mediator.CreateStream(new GetNames(3))) { }
-```
+StreamAsyncは標準IAsyncEnumerableを実装するsource classを返します。typed terminalはStreamSource(request, apiToken).ConsumeAsync(sink, enumerationToken)へ移してください。StreamSourceはreadonlyの計画値であり、IAsyncEnumerableではありません。任意middlewareはIStreamMiddlewareとStage.Wrapper、専用Filter/MapはStage.Hookを使います。旧Stream Behavior登録・Validator・OwnsStreamは使用しません。
 
-```csharp
-// 移行後 (Zendiator)
-public sealed record GetNames(int Count) : IStreamRequest<string>;
-public sealed class GetNamesHandler : IStreamRequestHandler<GetNames, string>
-{
-    public async IAsyncEnumerable<string> HandleAsync(GetNames request, CancellationToken ct)
-    {
-        for (var i = 0; i < request.Count; i++)
-        {
-            ct.ThrowIfCancellationRequested();
-            await Task.Yield();
-            yield return $"n-{i}";
-        }
-    }
-}
-await foreach (var name in zendiator.StreamAsync(new GetNames(3))) { }
-```
-
-主な注意点は次のとおりです。
-
-- 1 つのストリーム要求に対応するハンドラーは 1 つだけです。複数ハンドラーへのファンアウトには対応していません。
-- `StreamAsync` を呼び出した時点では何も実行されません。ハンドラーは最初の `MoveNextAsync` で開始します。
-- ストリーム用 Behavior は `IStreamPipelineBehavior<TRequest, TItem>` を実装し、`AddOpenStreamBehavior` で登録します。
-- API トークンと `WithCancellation` のどちらでもキャンセルできます。`ref struct` のストリームは診断エラーになります。
+[移行例と実行契約](streaming-0.5.0.ja.md)にnamed cursor、shared sink、HTTP、pending操作、部分retry、所有権をまとめています。標準列挙、typed terminal、HTTPの性能は別々に検証します。
 
 ## 対応していない機能
 
@@ -589,7 +553,7 @@ await foreach (var name in zendiator.StreamAsync(new GetNames(3))) { }
    `await using` で破棄し、再列挙は呼び直す。
 8. 変数が `object` や `IRequest<T>` 型になっていないか探す。
 9. Behavior を継続呼び出しに書き換え、`Order` を付ける
-   （同期は `ISyncPipelineBehavior`、ストリームは `IStreamPipelineBehavior`＋`AddOpenStreamBehavior`）。
+   （同期は `ISyncPipelineBehavior`、ストリームは `IStreamMiddleware`＋`Stage.Wrapper`）。
 10. 通知の購読者を `INotificationHandler` に直し、順序が必要なら `HandlerOrder` を付ける。
 11. 複数配送が必要な要求に `IMultiRequest` を付け、`SendAllAsync` に直す。
 12. `ref struct` 要求を同期契約（`ISyncRequest` + `SendSync`）に直す。

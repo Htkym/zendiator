@@ -14,25 +14,101 @@ public sealed class ScaleAndAllocationTests
             services.Add(descriptor);
         }
 
-        Add<Val0Handler>(sp => { Interlocked.Increment(ref Val0Handler.FactoryCalls); return new Val0Handler(); });
-        Add<Guid0Handler>(sp => { Interlocked.Increment(ref Guid0Handler.FactoryCalls); return new Guid0Handler(); });
-        Add<ProbeHandler>(sp => { Interlocked.Increment(ref ProbeHandler.FactoryCalls); return new ProbeHandler(); });
-        Add<PipeHandler>(sp => { Interlocked.Increment(ref PipeHandler.FactoryCalls); return new PipeHandler(); });
-        Add<PipeB0>(sp => { Interlocked.Increment(ref PipeB0.FactoryCalls); return new PipeB0(); });
-        Add<PipeB1>(sp => { Interlocked.Increment(ref PipeB1.FactoryCalls); return new PipeB1(); });
-        Add<PipeB2>(sp => { Interlocked.Increment(ref PipeB2.FactoryCalls); return new PipeB2(); });
-        Add<GateHandler>(sp => { Interlocked.Increment(ref GateHandler.FactoryCalls); return new GateHandler(); });
-        Add<RetryHandler>(sp => { Interlocked.Increment(ref RetryHandler.FactoryCalls); return new RetryHandler(); });
-        Add<TokHandler>(sp => { Interlocked.Increment(ref TokHandler.FactoryCalls); return new TokHandler(); });
-        Add<AddHandler>(sp => { Interlocked.Increment(ref AddHandler.FactoryCalls); return new AddHandler(); });
-        Add<RefHandler>(sp => { Interlocked.Increment(ref RefHandler.FactoryCalls); return new RefHandler(); });
-        Add<ExpHandler>(sp => { Interlocked.Increment(ref ExpHandler.FactoryCalls); return new ExpHandler(); });
-        Add<ExpPipeHandler>(sp => { Interlocked.Increment(ref ExpPipeHandler.FactoryCalls); return new ExpPipeHandler(); });
-        Add<SuspHandler>(sp => { Interlocked.Increment(ref SuspHandler.FactoryCalls); return new SuspHandler(); });
-        Add<SuspPipeHandler>(sp => { Interlocked.Increment(ref SuspPipeHandler.FactoryCalls); return new SuspPipeHandler(); });
-        Add<FailHandler>(sp => { Interlocked.Increment(ref FailHandler.FactoryCalls); return new FailHandler(); });
-        Add<DispHandler>(sp => { Interlocked.Increment(ref DispHandler.FactoryCalls); return new DispHandler(); });
-        Add<ReHandler>(sp => { Interlocked.Increment(ref ReHandler.FactoryCalls); return new ReHandler(); });
+        Add<Val0Handler>(sp =>
+        {
+            Interlocked.Increment(ref Val0Handler.FactoryCalls);
+            return new Val0Handler();
+        });
+        Add<Guid0Handler>(sp =>
+        {
+            Interlocked.Increment(ref Guid0Handler.FactoryCalls);
+            return new Guid0Handler();
+        });
+        Add<ProbeHandler>(sp =>
+        {
+            Interlocked.Increment(ref ProbeHandler.FactoryCalls);
+            return new ProbeHandler();
+        });
+        Add<PipeHandler>(sp =>
+        {
+            Interlocked.Increment(ref PipeHandler.FactoryCalls);
+            return new PipeHandler();
+        });
+        Add<PipeB0>(sp =>
+        {
+            Interlocked.Increment(ref PipeB0.FactoryCalls);
+            return new PipeB0();
+        });
+        Add<PipeB1>(sp =>
+        {
+            Interlocked.Increment(ref PipeB1.FactoryCalls);
+            return new PipeB1();
+        });
+        Add<PipeB2>(sp =>
+        {
+            Interlocked.Increment(ref PipeB2.FactoryCalls);
+            return new PipeB2();
+        });
+        Add<GateHandler>(sp =>
+        {
+            Interlocked.Increment(ref GateHandler.FactoryCalls);
+            return new GateHandler();
+        });
+        Add<RetryHandler>(sp =>
+        {
+            Interlocked.Increment(ref RetryHandler.FactoryCalls);
+            return new RetryHandler();
+        });
+        Add<TokHandler>(sp =>
+        {
+            Interlocked.Increment(ref TokHandler.FactoryCalls);
+            return new TokHandler();
+        });
+        Add<AddHandler>(sp =>
+        {
+            Interlocked.Increment(ref AddHandler.FactoryCalls);
+            return new AddHandler();
+        });
+        Add<RefHandler>(sp =>
+        {
+            Interlocked.Increment(ref RefHandler.FactoryCalls);
+            return new RefHandler();
+        });
+        Add<ExpHandler>(sp =>
+        {
+            Interlocked.Increment(ref ExpHandler.FactoryCalls);
+            return new ExpHandler();
+        });
+        Add<ExpPipeHandler>(sp =>
+        {
+            Interlocked.Increment(ref ExpPipeHandler.FactoryCalls);
+            return new ExpPipeHandler();
+        });
+        Add<SuspHandler>(sp =>
+        {
+            Interlocked.Increment(ref SuspHandler.FactoryCalls);
+            return new SuspHandler();
+        });
+        Add<SuspPipeHandler>(sp =>
+        {
+            Interlocked.Increment(ref SuspPipeHandler.FactoryCalls);
+            return new SuspPipeHandler();
+        });
+        Add<FailHandler>(sp =>
+        {
+            Interlocked.Increment(ref FailHandler.FactoryCalls);
+            return new FailHandler();
+        });
+        Add<DispHandler>(sp =>
+        {
+            Interlocked.Increment(ref DispHandler.FactoryCalls);
+            return new DispHandler();
+        });
+        Add<ReHandler>(sp =>
+        {
+            Interlocked.Increment(ref ReHandler.FactoryCalls);
+            return new ReHandler();
+        });
     }
 
     [Fact]

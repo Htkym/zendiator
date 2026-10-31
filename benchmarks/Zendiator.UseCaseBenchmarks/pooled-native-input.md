@@ -1,0 +1,11 @@
+# Pooled native input fixture
+
+`PooledWorkStreamCursor` is a separate native producer example. Its cursor instances remain fresh for every enumeration. The private asynchronous Move helper opts into .NET's `PoolingAsyncValueTaskMethodBuilder<bool>`; synchronous moves, token checks, values and terminal cleanup retain the ordinary producer's implementation. No product owner, completion protocol or legacy input is replaced.
+
+Consume every returned ValueTask once before the next operation. Await an outstanding Move even when cancelling or stopping, then dispose the cursor. Do not repeatedly await a raw ValueTask, inspect it after consumption, call GetResult on an incomplete operation or use a stale copy. Version tokens are not a comprehensive misuse detector. Converting once with AsTask produces a durable Task, but can add bridge allocation; direct-await allocation results do not apply automatically to that usage.
+
+Pooling applies to the asynchronous method's backing state, not cursor objects. A box may be unavailable or still in use, and caches retain memory. Lower steady-state allocation is a hypothesis to measure, not a guarantee of zero B/op or improved latency. The [Microsoft builder explanation](https://devblogs.microsoft.com/dotnet/how-async-await-really-works/) and [API reference](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.compilerservices.poolingasyncvaluetaskmethodbuilder-1?view=net-10.0) describe this opt-in mechanism.
+
+The `native-producer-pooling-v1` diagnostic family keeps ordinary and pooled inputs in one separate registration graph. Raw paths are input diagnostics; mediated paths use the normal native Stream API. Its common consumer includes creation, Move, Current and Dispose. Provider/scope setup is outside timing. The old native family and shared compiler-iterator family remain separate and unchanged. Task.Yield is synthetic and does not ensure that every public Move is observed pending.
+
+After a normal build, `--validate-native-pooling <output-directory>` selects only the new fixture's semantic gate. Timing requires an explicitly fixed case list and the corresponding actual-child binding checks. Adding this fixture alone establishes no performance result or competitor ranking.

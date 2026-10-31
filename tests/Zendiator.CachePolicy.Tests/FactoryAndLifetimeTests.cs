@@ -22,7 +22,8 @@ public sealed class FactoryAndLifetimeTests
         services.AddTransient<Guid0Handler>();
         using var second = services.BuildServiceProvider();
         using var secondScope = second.CreateScope();
-        if (restoreDescriptors) services.RemoveAt(services.Count - 1);
+        if (restoreDescriptors)
+            services.RemoveAt(services.Count - 1);
         var secondMediator = secondScope.ServiceProvider.GetRequiredService<IZendiator>();
         var secondA = await secondMediator.SendAsync(new Guid0());
         var secondB = await secondMediator.SendAsync(new Guid0());
@@ -31,7 +32,8 @@ public sealed class FactoryAndLifetimeTests
         Assert.NotSame(firstScope.ServiceProvider.GetRequiredService<Guid0Handler>(), firstScope.ServiceProvider.GetRequiredService<Guid0Handler>());
         var firstA = await firstMediator.SendAsync(new Guid0());
         Assert.Equal(firstA, await firstMediator.SendAsync(new Guid0()));
-        if (original.HasValue) Assert.Equal(original.Value, firstA);
+        if (original.HasValue)
+            Assert.Equal(original.Value, firstA);
     }
 
     private static ServiceCollection BaseServices()

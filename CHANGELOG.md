@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.5.0 (unreleased)
+
+- Add explicit handler markers, named compositions and ordered handler/pipeline declarations. Dedicated hooks can be generated together; arbitrary wrappers retain their own execution boundaries.
+- Replace the previous Stream handler contract with `IStreamHandler<TRequest, TItem>` returning `IAsyncEnumerable<TItem>`, or `IStreamSourceHandler<TRequest, TItem, TCursor>` opening a named cursor through `OpenAsync`. Guarded paths acquire input on the first move; eligible flat iterator routes with noncancelable tokens acquire input at `GetAsyncEnumerator` and require consumer disposal after EOF or failure. `StreamAsync` returns standard `IAsyncEnumerable<T>` for normal enumeration and HTTP serialization. `StreamSource(...).ConsumeAsync(...)` provides a separate typed terminal without a performance guarantee.
+- Give guarded Stream enumerations independent ownership, lazy activation, sequential operation guards and deterministic cleanup. Callers must retain their DI scope and consume each returned `ValueTask` once. Internal helpers do not guarantee ambient-context isolation or return to a UI context.
+- Fuse completion forwarding across eligible Stream middleware that return the exact upstream cursor. Other cursor shapes retain their execution boundaries. Full enumeration can benefit, while extra fixed state can increase allocation and early-stop cost.
+- Combine source waits and asynchronous Filter/Map processing in one Stream move loop. This changes ambient-context flow into subsequent source pulls and outer cleanup, and can retain rejected item references during a later source wait. See the known limitations before migrating ambient-dependent stages.
+- Let eligible plain `SendAsync` routes return the handler's original `ValueTask`. Dependency resolution and synchronous callback failures, including cancellation, can now throw during the call; synchronous ambient changes can be visible to the caller.
+- Register one Scoped `IZendiator` entry and Transient defaults for user dependencies. Each Mediator reuses captured dependencies. Eligible closed asynchronous Hook routes acquire a route-local receiver set before the first Hook, including receivers left unused by an outer failure. Transient captures can differ across routes; construction exceptions can occur earlier. Native DI retains activation and disposal ownership. Use after scope disposal is unsupported.
+- Keep closed dependency storage inline by default, with explicit `ClosedServiceCacheMode.LazyBlocks` for suitable sparse compositions. Open generic captures use a small cache before dictionary promotion. Neither layout guarantees faster dispatch for every workload.
+- Add the separately installed `Zendiator.CodeFixes` package for the missing-handler-marker fix and document-scoped Fix All. It does not automate semantic migration.
+
+See [getting started and migration](docs/getting-started-0.5.0.md) and
+[known limitations](docs/release/known-limitations.md). These are breaking APIs. The
+[0.5.0 release notes](docs/release/0.5.0-release-notes.md) describe migration and
+package availability. The README contains selected results from the measured
+0.5.0 candidate, including unfavorable time and allocation results. Historical
+0.4.0 tables remain separate. No universal non-regression or performance lead is
+established.
+
 ## 0.4.0
 
 - 同期のStream入力Validatorを明示登録するAPIを追加しました。検証は入口で1回実行し、HandlerとBehaviorは列挙時に開始します。

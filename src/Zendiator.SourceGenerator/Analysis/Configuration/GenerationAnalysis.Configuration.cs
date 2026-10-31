@@ -18,7 +18,6 @@ internal sealed partial class GenerationAnalysis
     private string? diNamespace;
     private readonly HashSet<IAssemblySymbol> diAssemblies = new HashSet<IAssemblySymbol>(SymbolEqualityComparer.Default);
     private readonly List<(INamedTypeSymbol Type, int Order, bool IsOpenBehavior)> diPipelines = new List<(INamedTypeSymbol Type, int Order, bool IsOpenBehavior)>();
-    private readonly List<(INamedTypeSymbol Type, int Order, Location Location)> diStreamValidators = new();
     private readonly List<INamedTypeSymbol> diNotifications = new List<INamedTypeSymbol>();
     private readonly List<INamedTypeSymbol> diOpenNotifications = new List<INamedTypeSymbol>();
     private readonly Dictionary<string, (int Order, Location Location)> diHandlerOrders = new Dictionary<string, (int Order, Location Location)>(StringComparer.Ordinal);
@@ -66,20 +65,31 @@ internal sealed partial class GenerationAnalysis
                         m.ContainingType.ContainingNamespace?.ToDisplayString() == "Zendiator.DependencyInjection" &&
                         Same(m.ContainingAssembly, diConfigAssembly)))
                     {
+                        // A type-argument error inside a named composition belongs to the compiler.
+                        var typeArgumentLambda = invocation.ArgumentList?.Arguments.LastOrDefault()?.Expression as LambdaExpressionSyntax;
+                        if (invocation.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax } && typeArgumentLambda != null &&
+                            model.GetDiagnostics(typeArgumentLambda.Span, ct).Any(d => d.Severity == DiagnosticSeverity.Error &&
+                                typeArgumentLambda.DescendantNodes().OfType<GenericNameSyntax>().Any(n => n.Span.Contains(d.Location.SourceSpan))))
+                            continue;
                         hasLambdaDiCall = true;
-                        if (firstLambdaLocation == Location.None) firstLambdaLocation = invocation.GetLocation();
+                        if (firstLambdaLocation == Location.None)
+                            firstLambdaLocation = invocation.GetLocation();
                         ErrorAt(17, "AddZendiator call does not match a supported configuration shape. Fix the lambda and its statements, then use direct recorder calls with constant values.", invocation.GetLocation());
                     }
                     continue;
                 }
                 var original = method.OriginalDefinition;
-                if (original.ContainingType?.Name != "ZendiatorServiceCollectionExtensions") continue;
-                if (original.ContainingType.ContainingNamespace?.ToDisplayString() != "Zendiator.DependencyInjection") continue;
-                if (!Same(original.ContainingAssembly, diConfigAssembly)) continue;
+                if (original.ContainingType?.Name != "ZendiatorServiceCollectionExtensions")
+                    continue;
+                if (original.ContainingType.ContainingNamespace?.ToDisplayString() != "Zendiator.DependencyInjection")
+                    continue;
+                if (!Same(original.ContainingAssembly, diConfigAssembly))
+                    continue;
                 // Shape is read from the bound (possibly reduced) method: extension
                 // invocations drop `this`, explicit static calls keep it.
                 var unreduced = original.Parameters;
-                if (unreduced.Length < 1 || unreduced.Length > 2) continue;
+                if (unreduced.Length < 1 || unreduced.Length > 2)
+                    continue;
                 if (unreduced.Length == 2 &&
                     (unreduced[1].Type is not INamedTypeSymbol unbound ||
                      unbound.OriginalDefinition.ToDisplayString() != "System.Action<T>" ||
@@ -95,7 +105,8 @@ internal sealed partial class GenerationAnalysis
                 if (!isLambdaForm)
                 {
                     hasBareDiCall = true;
-                    if (firstBareLocation == Location.None) firstBareLocation = invocation.GetLocation();
+                    if (firstBareLocation == Location.None)
+                        firstBareLocation = invocation.GetLocation();
                     boundDiCalls.Add((invocation, null, method.ReducedFrom != null));
                     continue;
                 }
@@ -104,12 +115,14 @@ internal sealed partial class GenerationAnalysis
                     literal.RawKind == (int)SyntaxKind.NullLiteralExpression)
                 {
                     hasLambdaDiCall = true;
-                    if (firstLambdaLocation == Location.None) firstLambdaLocation = invocation.GetLocation();
+                    if (firstLambdaLocation == Location.None)
+                        firstLambdaLocation = invocation.GetLocation();
                     ErrorAt(17, "AddZendiator configuration does not accept null. Omit the argument for the default configuration or pass a lambda.", lambdaArg.GetLocation());
                     continue;
                 }
                 hasLambdaDiCall = true;
-                if (firstLambdaLocation == Location.None) firstLambdaLocation = invocation.GetLocation();
+                if (firstLambdaLocation == Location.None)
+                    firstLambdaLocation = invocation.GetLocation();
                 if (lambdaArg?.Expression is not LambdaExpressionSyntax lambda)
                 {
                     ErrorAt(17, "AddZendiator configuration must be a lambda with supported calls. Write static configuration => { ... } with direct recorder calls.", lambdaArg?.GetLocation() ?? invocation.GetLocation());
@@ -118,7 +131,8 @@ internal sealed partial class GenerationAnalysis
                 boundDiCalls.Add((invocation, lambda, method.ReducedFrom != null));
             }
         }
-        if (declarations.Length == 0 && assemblyGen == null && !hasBareDiCall && !hasLambdaDiCall) return new GenerationResult(null, null, errors);
+        if (declarations.Length == 0 && assemblyGen == null && !hasBareDiCall && !hasLambdaDiCall)
+            return new GenerationResult(null, null, errors);
         if (declarations.Length != 0 && assemblyGen != null)
         {
             Error(6, "Cannot combine class-level [GenerateZendiator] with assembly-level [GenerateZendiator]. Keep one configuration mode.", assemblyGen.AttributeClass);
@@ -139,7 +153,8 @@ internal sealed partial class GenerationAnalysis
         if (assemblyMode)
         {
             assemblyNamespace = ResolveAssemblyNamespace(assemblyGen!, compilation, errors);
-            if (assemblyNamespace == null) return new GenerationResult(null, null, errors);
+            if (assemblyNamespace == null)
+                return new GenerationResult(null, null, errors);
         }
         else if (declarations.Length != 0)
         {
@@ -170,9 +185,11 @@ internal sealed partial class GenerationAnalysis
             foreach (var (invocation, lambda, _) in boundDiCalls)
             {
                 ct.ThrowIfCancellationRequested();
-                if (lambda == null) continue;
+                if (lambda == null)
+                    continue;
                 var setting = AnalyzeDiLambda(invocation, lambda, compilation.GetSemanticModel(invocation.SyntaxTree));
-                if (setting != null) diSettings.Add(setting);
+                if (setting != null)
+                    diSettings.Add(setting);
             }
         }
         if (hasAttributeConfig && hasLambdaDiCall)
@@ -197,8 +214,6 @@ internal sealed partial class GenerationAnalysis
             }
         }
 
-        // DI backend inputs. Built from the single analyzed structure; the shared
-        // discovery, route, and emit machinery below runs unchanged afterwards.
         diMode = !hasAttributeConfig && (hasBareDiCall || hasLambdaDiCall);
 
         diNamespace = null;
@@ -221,13 +236,14 @@ internal sealed partial class GenerationAnalysis
             foreach (var attribute in compilation.Assembly.GetAttributes())
             {
                 var name = attribute.AttributeClass?.ToDisplayString();
-                if (name is "Zendiator.IncludeAssemblyAttribute" or "Zendiator.PipelineBehaviorAttribute" or "Zendiator.NotificationAttribute" or "Zendiator.StreamRequestValidatorAttribute")
+                if (name is "Zendiator.IncludeAssemblyAttribute" or "Zendiator.PipelineBehaviorAttribute" or "Zendiator.NotificationAttribute")
                 {
                     ErrorAt(15, $"Conflicting configuration sources: assembly-level {name} cannot be combined with AddZendiator configuration. Move the setting into the lambda.", attribute.ApplicationSyntaxReference?.GetSyntax(ct).GetLocation() ?? Location.None);
                 }
             }
             var representative = diSettings.OrderBy(static setting => setting.StructureKey(), StringComparer.Ordinal).FirstOrDefault();
-            if (representative != null) diFingerprint = representative.StructureKey();
+            if (representative != null)
+                diFingerprint = representative.StructureKey();
             if (representative != null)
             {
                 foreach (var entry in representative.Markers)
@@ -246,8 +262,6 @@ internal sealed partial class GenerationAnalysis
                 }
                 foreach (var entry in representative.Behaviors)
                     diPipelines.Add((entry.Type, entry.Order, entry.IsOpen));
-                foreach (var entry in representative.StreamValidators)
-                    diStreamValidators.Add((entry.Type, entry.Order, entry.Location));
                 foreach (var entry in representative.Notifications)
                 {
                     var notification = entry.Type;
@@ -268,8 +282,10 @@ internal sealed partial class GenerationAnalysis
                         ErrorAt(13, $"Notification {name} must be public.", representative.CallLocation);
                         continue;
                     }
-                    if (IsOpenDefinition(notification)) diOpenNotifications.Add(notification);
-                    else diNotifications.Add(notification);
+                    if (IsOpenDefinition(notification))
+                        diOpenNotifications.Add(notification);
+                    else
+                        diNotifications.Add(notification);
                 }
                 foreach (var entry in representative.HandlerOrders)
                 {
@@ -311,7 +327,8 @@ internal sealed partial class GenerationAnalysis
             else
             {
                 diNamespace = DefaultGeneratedNamespace(compilation.AssemblyName);
-                if (diNamespace == null || !IsValidNamespace(diNamespace)) diNamespace = null;
+                if (diNamespace == null || !IsValidNamespace(diNamespace))
+                    diNamespace = null;
             }
             if (diNamespace == null && errors.Count == 0)
             {

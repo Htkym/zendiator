@@ -2,6 +2,7 @@ using Di.Generated;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Zendiator.DependencyInjection;
+using NativeMediator = global::Zendiator.DiConfiguration.Tests.Generated.NativeDiStreams.IZendiator;
 
 namespace Zendiator.DiConfiguration.Tests;
 
@@ -26,11 +27,6 @@ public sealed class DiRuntimeTests
                 configuration.AddOpenBehavior(typeof(global::Zendiator.DiConfiguration.Tests.DiBehavior<,>), order: 0);
                 configuration.AddOpenBehavior(typeof(DiVoidBehavior<>), order: 1);
                 configuration.AddOpenBehavior(typeof(DiSyncBehavior<,>), order: 2);
-                configuration.AddOpenStreamBehavior(typeof(DiStreamBehavior<,>), order: 3);
-                configuration.AddOpenStreamBehavior(typeof(ValidatedStreamBehavior), order: 6);
-                configuration.AddStreamRequestValidator(typeof(SharedStreamValidator), order: 0);
-                configuration.AddStreamRequestValidator(typeof(EntryValidators<int>.Middle), order: 1);
-                configuration.AddStreamRequestValidator(typeof(ValidatedStreamHandler), order: 2);
                 configuration.AddOpenBehavior(typeof(NewResponseBehavior<,>), order: 4);
                 configuration.AddOpenBehavior(typeof(ClosedBehavior<Add, int>), order: 5);
                 configuration.AddNotification<Lonely>();
@@ -48,11 +44,6 @@ public sealed class DiRuntimeTests
                 configuration.AddOpenBehavior(typeof(DiBehavior<,>), order: 0);
                 configuration.AddOpenBehavior(typeof(DiVoidBehavior<>), order: 1);
                 configuration.AddOpenBehavior(typeof(DiSyncBehavior<,>), order: 2);
-                configuration.AddOpenStreamBehavior(typeof(DiStreamBehavior<,>), order: 3);
-                configuration.AddOpenStreamBehavior(typeof(ValidatedStreamBehavior), order: 6);
-                configuration.AddStreamRequestValidator(typeof(SharedStreamValidator), order: 0);
-                configuration.AddStreamRequestValidator(typeof(EntryValidators<int>.Middle), order: 1);
-                configuration.AddStreamRequestValidator(typeof(ValidatedStreamHandler), order: 2);
                 configuration.AddOpenBehavior(typeof(NewResponseBehavior<,>), order: 4);
                 configuration.AddOpenBehavior(typeof(ClosedBehavior<Add, int>), order: 5);
                 configuration.AddNotification<Lonely>();
@@ -63,6 +54,24 @@ public sealed class DiRuntimeTests
                 configuration.DependencyLifetime = dependencyLifetime;
             });
         }
+        services.AddZendiator<NativeDiStreams>(configuration =>
+        {
+            configuration.Handlers<DiNumbers>(DispatchFamily.Stream, typeof(DiNumbersHandler));
+            configuration.Pipeline<DiNumbers>(DispatchFamily.Stream, Stage.Wrapper<DiStreamBehavior<DiNumbers, int>>());
+            configuration.Handlers<ValidatedStream>(DispatchFamily.Stream, typeof(ValidatedStreamHandler));
+            // Stages run from source to consumer; the last wrapper opens first and guards upstream activation.
+            configuration.Pipeline<ValidatedStream>(DispatchFamily.Stream,
+                Stage.Wrapper<ValidatedStreamBehavior>(), Stage.Wrapper<EntryValidators<int>.Middle>(), Stage.Wrapper<SharedStreamValidator>());
+            configuration.Handlers<OtherValidatedStream>(DispatchFamily.Stream, typeof(OtherValidatedStreamHandler));
+            configuration.Pipeline<OtherValidatedStream>(DispatchFamily.Stream, Stage.Wrapper<SharedStreamValidator>());
+            configuration.Handlers<ValidationLookup>(DispatchFamily.SendAsync, typeof(SharedStreamValidator));
+            configuration.Handlers<MixedFirst>(DispatchFamily.SendAsync, typeof(MixedHandler));
+            configuration.Handlers<MixedSecond>(DispatchFamily.SendAsync, typeof(MixedHandler));
+            configuration.Handlers<MixedSyncFirst>(DispatchFamily.SendSync, typeof(MixedHandler));
+            configuration.Handlers<MixedSyncSecond>(DispatchFamily.SendSync, typeof(MixedHandler));
+            configuration.Handlers<MixedStreamFirst>(DispatchFamily.Stream, typeof(MixedHandler));
+            configuration.Handlers<MixedStreamSecond>(DispatchFamily.Stream, typeof(MixedHandler));
+        });
         return services;
     }
 
@@ -130,11 +139,6 @@ public sealed class DiRuntimeTests
             configuration.AddOpenBehavior(typeof(DiBehavior<,>), order: 0);
             configuration.AddOpenBehavior(typeof(DiVoidBehavior<>), order: 1);
             configuration.AddOpenBehavior(typeof(DiSyncBehavior<,>), order: 2);
-            configuration.AddOpenStreamBehavior(typeof(DiStreamBehavior<,>), order: 3);
-            configuration.AddOpenStreamBehavior(typeof(ValidatedStreamBehavior), order: 6);
-            configuration.AddStreamRequestValidator(typeof(SharedStreamValidator), order: 0);
-            configuration.AddStreamRequestValidator(typeof(EntryValidators<int>.Middle), order: 1);
-            configuration.AddStreamRequestValidator(typeof(ValidatedStreamHandler), order: 2);
             configuration.AddOpenBehavior(typeof(NewResponseBehavior<,>), order: 4);
             configuration.AddOpenBehavior(typeof(ClosedBehavior<Add, int>), order: 5);
             configuration.AddNotification<Lonely>();
@@ -215,16 +219,22 @@ public sealed class DiRuntimeTests
         DiStreamBehavior<DiNumbers, int>.Calls = 0;
         await using var provider = CreateServices().BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
         await using var scope = provider.CreateAsyncScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        var mediator = scope.ServiceProvider.GetRequiredService<NativeMediator>();
         var stream = mediator.StreamAsync(new DiNumbers(4));
         Assert.Equal(0, DiNumbersHandler.Calls);
         var items = new List<int>();
-        await foreach (var i in stream) items.Add(i);
+        await foreach (var i in stream)
+            items.Add(i);
         Assert.Equal([0, 1, 2, 3], items);
         Assert.Equal(1, DiNumbersHandler.Calls);
         Assert.Equal(1, DiStreamBehavior<DiNumbers, int>.Calls);
         // Second enumeration re-resolves (no static leakage, per-enumeration pipeline).
-        await foreach (var _ in mediator.StreamAsync(new DiNumbers(1))) { }
+        await foreach (var _ in mediator.StreamAsync(new DiNumbers(1)))
+        {
+        }
         Assert.Equal(2, DiNumbersHandler.Calls);
     }
 }
+
+[ZendiatorComposition("NativeDiStreams")]
+public sealed class NativeDiStreams;

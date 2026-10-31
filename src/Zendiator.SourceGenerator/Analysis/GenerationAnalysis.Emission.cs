@@ -8,9 +8,13 @@ internal sealed partial class GenerationAnalysis
 {
     private GenerationResult EmitResult()
     {
-        if (errors.Count != 0) return new GenerationResult(null, null, errors);
+        if (errors.Count != 0)
+            return new GenerationResult(null, null, errors);
         var target = CreateGenerationTarget();
-        var model = new GenerationModel(target with { CallSites = default }, CreateGenerationRoutes());
+        var model = new GenerationModel(target with
+        {
+            CallSites = default
+        }, CreateGenerationRoutes());
 
         return new GenerationResult(model, target, errors);
     }
@@ -36,13 +40,11 @@ internal sealed partial class GenerationAnalysis
         return new GenerationRoutes(
             new RequestRoutes(new(routes.Select(factory.Request)), new(multiRoutes.Select(factory.Multiple))),
             new RequestRoutes(new(syncRoutes.Select(factory.Request)), new(syncMultiRoutes.Select(factory.Multiple))),
-            new(notifications.Select(factory.Notification)),
-            new(streamRoutes.Select(factory.Stream)));
+            new(notifications.Select(factory.Notification)));
     }
 
     private GenerationContracts CreateGenerationContracts() => new(
         new RequestContracts(handlerDefinition, behaviorDefinition, voidHandlerDefinition, voidBehaviorDefinition),
         new RequestContracts(syncHandlerDefinition, syncBehaviorDefinition, syncVoidHandlerDefinition, syncVoidBehaviorDefinition),
-        new PipelineContracts(streamHandlerDefinition, streamBehaviorDefinition),
-        notificationHandlerDefinition, streamValidatorDefinition);
+        notificationHandlerDefinition);
 }

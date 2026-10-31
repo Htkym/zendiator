@@ -2,12 +2,26 @@ using Zendiator;
 
 namespace Zendiator.Allocation.Tests;
 
-public sealed class AllocStreamHandler : IStreamRequestHandler<AllocStream, int>
+[ZendiatorHandler]
+public sealed class AllocStreamHandler : IStreamSourceHandler<AllocStream, int, AllocCursor>
 {
-    public async IAsyncEnumerable<int> HandleAsync(AllocStream request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    public ValueTask<AllocCursor> OpenAsync(AllocStream request, CancellationToken cancellationToken) => new(new AllocCursor(request.Count, cancellationToken));
+}
+
+public struct AllocCursor(int count, CancellationToken token) : IAsyncEnumerator<int>
+{
+    private int _next;
+    public int Current
     {
-        for (var i = 0; i < request.Count; i++)
-            yield return i;
-        await Task.CompletedTask;
+        get; private set;
     }
+    public ValueTask<bool> MoveNextAsync()
+    {
+        token.ThrowIfCancellationRequested();
+        if (_next == count)
+            return new(false);
+        Current = _next++;
+        return new(true);
+    }
+    public ValueTask DisposeAsync() => default;
 }

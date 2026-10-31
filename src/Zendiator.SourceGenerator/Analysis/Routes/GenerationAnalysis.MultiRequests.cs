@@ -66,26 +66,31 @@ internal sealed partial class GenerationAnalysis
         var pool = isVoid ? openVoidHandlers : openHandlers;
         foreach (var binding in pool)
         {
-            if (!Same(binding.RequestDefinition, request.OriginalDefinition) && !Same(binding.RequestDefinition, request)) continue;
-            if (!Covers(binding, request)) continue;
+            if (!Same(binding.RequestDefinition, request.OriginalDefinition) && !Same(binding.RequestDefinition, request))
+                continue;
+            if (!Covers(binding, request))
+                continue;
             var hArgs = new string[binding.Definition.TypeParameters.Length];
             for (var j = 0; j < hArgs.Length; j++)
                 hArgs[j] = Name(request.TypeArguments[binding.HandlerPosition[j]]);
             var display = ClosedGenericName(binding.Definition, hArgs);
             var mapArgs = new ITypeSymbol[binding.Definition.TypeParameters.Length];
-            for (var j = 0; j < mapArgs.Length; j++) mapArgs[j] = request.TypeArguments[binding.HandlerPosition[j]];
+            for (var j = 0; j < mapArgs.Length; j++)
+                mapArgs[j] = request.TypeArguments[binding.HandlerPosition[j]];
             var respDisplay = isVoid ? "" : Name(Substitute(binding.ResponsePattern, binding.Definition, mapArgs, compilation));
             var reqDisplay = Name(request);
             var contractDisplay = isVoid
                 ? $"global::Zendiator.IRequestHandler<{reqDisplay}>"
                 : $"global::Zendiator.IRequestHandler<{reqDisplay}, {respDisplay}>";
-            if (route.Branches.Any(b => Same(b.Handler, binding.Definition))) continue;
+            if (route.Branches.Any(b => Same(b.Handler, binding.Definition)))
+                continue;
             AddMultiBranch(route, binding.Definition, handlerIsOpen: true, display, contractDisplay);
         }
         route.Branches.Sort(static (a, b) =>
         {
             var order = a.Order.CompareTo(b.Order);
-            if (order != 0) return order;
+            if (order != 0)
+                return order;
             var assembly = string.Compare(a.AssemblyId, b.AssemblyId, StringComparison.Ordinal);
             return assembly != 0 ? assembly : string.Compare(a.FullName, b.FullName, StringComparison.Ordinal);
         });
@@ -125,7 +130,8 @@ internal sealed partial class GenerationAnalysis
         foreach (var binding in ordered)
         {
             var mapArgs = new ITypeSymbol[binding.Definition.TypeParameters.Length];
-            for (var j = 0; j < mapArgs.Length; j++) mapArgs[j] = def.TypeParameters[binding.HandlerToDef[j]];
+            for (var j = 0; j < mapArgs.Length; j++)
+                mapArgs[j] = def.TypeParameters[binding.HandlerToDef[j]];
             for (var j = 0; j < binding.Definition.TypeParameters.Length; j++)
             {
                 if (!MergeHandlerParam(merged[binding.HandlerToDef[j]], binding.Definition.TypeParameters[j], binding.Definition, mapArgs, compilation))
@@ -142,7 +148,8 @@ internal sealed partial class GenerationAnalysis
             }
             var display = ClosedGenericName(binding.Definition, hArgs);
             string respDisplay = "";
-            if (!isVoid) respDisplay = Name(Substitute(binding.ResponsePattern, binding.Definition, mapArgs, compilation));
+            if (!isVoid)
+                respDisplay = Name(Substitute(binding.ResponsePattern, binding.Definition, mapArgs, compilation));
             var contractDisplay = isVoid
                 ? $"global::Zendiator.IRequestHandler<{reqDisplay}>"
                 : $"global::Zendiator.IRequestHandler<{reqDisplay}, {respDisplay}>";
@@ -158,7 +165,8 @@ internal sealed partial class GenerationAnalysis
         {
             var first = binds[0];
             var firstMap = new ITypeSymbol[first.Definition.TypeParameters.Length];
-            for (var j = 0; j < firstMap.Length; j++) firstMap[j] = def.TypeParameters[first.HandlerToDef[j]];
+            for (var j = 0; j < firstMap.Length; j++)
+                firstMap[j] = def.TypeParameters[first.HandlerToDef[j]];
             route.ResponseDisplay = Name(Substitute(first.ResponsePattern, first.Definition, firstMap, compilation));
         }
         multiRoutes.Add(route);
@@ -168,14 +176,17 @@ internal sealed partial class GenerationAnalysis
     {
         foreach (var pair in requests.OrderBy(p => Name(p.Key), StringComparer.Ordinal))
         {
-            if (IsResponseMulti(pair.Key)) BuildClosedMulti(pair.Key, pair.Value, isVoid: false);
-            else if (IsVoidMulti(pair.Key)) BuildClosedMulti(pair.Key, pair.Value, isVoid: true);
+            if (IsResponseMulti(pair.Key))
+                BuildClosedMulti(pair.Key, pair.Value, isVoid: false);
+            else if (IsVoidMulti(pair.Key))
+                BuildClosedMulti(pair.Key, pair.Value, isVoid: true);
         }
         foreach (var def in openRequests.Keys.OrderBy(Name, StringComparer.Ordinal))
         {
             var isResp = IsResponseMulti(def);
             var isVoid = IsVoidMulti(def);
-            if (!isResp && !isVoid) continue;
+            if (!isResp && !isVoid)
+                continue;
             var template = openRequests[def];
             if (isResp)
             {
@@ -183,9 +194,11 @@ internal sealed partial class GenerationAnalysis
                 var hasClosed = handlers.Keys.Any(k => k.IsGenericType && Same(k.OriginalDefinition, def));
                 if (binds.Count == 0)
                 {
-                    if (!hasClosed) Error(1, $"No handler found for {Name(def)}. Include its assembly.", def);
+                    if (!hasClosed)
+                        Error(1, $"No handler found for {Name(def)}. Include its assembly.", def);
                 }
-                else BuildOpenMulti(def, template, binds, isVoid: false);
+                else
+                    BuildOpenMulti(def, template, binds, isVoid: false);
             }
             else
             {
@@ -193,9 +206,11 @@ internal sealed partial class GenerationAnalysis
                 var hasClosed = voidHandlers.Keys.Any(k => k.IsGenericType && Same(k.OriginalDefinition, def));
                 if (binds.Count == 0)
                 {
-                    if (!hasClosed) Error(1, $"No handler found for {Name(def)}. Include its assembly.", def);
+                    if (!hasClosed)
+                        Error(1, $"No handler found for {Name(def)}. Include its assembly.", def);
                 }
-                else BuildOpenMulti(def, template, binds, isVoid: true);
+                else
+                    BuildOpenMulti(def, template, binds, isVoid: true);
             }
         }
     }

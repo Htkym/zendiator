@@ -23,11 +23,12 @@ internal sealed partial class SourceEmitter
         var routes = model.Routes;
         if (!model.Target.InheritServiceResolver || (routes.Requests.Single.Count == 0 && routes.Synchronous.Single.Count == 0)
             || routes.Requests.Multiple.Count != 0
-            || routes.Synchronous.Multiple.Count != 0 || routes.Notifications.Count != 0 || routes.Streams.Count != 0)
+            || routes.Synchronous.Multiple.Count != 0 || routes.Notifications.Count != 0)
             return null;
         var handler = routes.Requests.Single.Count != 0 ? routes.Requests.Single[0].Handler : routes.Synchronous.Single[0].Handler;
         // The generated public mediator cannot expose an internal type in its generic base.
-        if (!handler.IsReferenceType || !handler.IsPublic) return null;
+        if (!handler.IsReferenceType || !handler.IsPublic)
+            return null;
         foreach (var route in routes.Requests.Single)
             if (route.IsOpen || route.Behaviors.Count != 0 || route.Handler.Name != handler.Name)
                 return null;
@@ -40,7 +41,8 @@ internal sealed partial class SourceEmitter
     // An async method records cancellation as canceled and other failures as faulted, as the replaced publish method did.
     private void EmitFaulted(StringBuilder b)
     {
-        if (!_model.Routes.Notifications.Any(static n => n.Subscribers.Count == 1 && !n.IsOpen)) return;
+        if (!_model.Routes.Notifications.Any(static n => n.Subscribers.Count == 1 && !n.IsOpen))
+            return;
         b.AppendLine("""
             #pragma warning disable CS1998
                 private static async global::System.Threading.Tasks.ValueTask Faulted(global::System.Runtime.ExceptionServices.ExceptionDispatchInfo failure) => failure.Throw();
@@ -53,7 +55,8 @@ internal sealed partial class SourceEmitter
     private int InitialPageCapacity()
     {
         var routes = AllRouteServices(_model);
-        if (routes.Any(static route => route.IsOpen)) return 32;
+        if (routes.Any(static route => route.IsOpen))
+            return 32;
         var owned = new HashSet<string>(_dependencySets.Values.SelectMany(static set => set.Types).Select(static type => type.Name), StringComparer.Ordinal);
         var slots = _dependencySets.Count + routes.SelectMany(static route => route.Types).Select(static type => type.Name)
             .Where(name => !owned.Contains(name)).Distinct(StringComparer.Ordinal).Count();
@@ -117,8 +120,6 @@ internal sealed partial class SourceEmitter
         EmitMulti(b);
         EmitSyncRoutes(b);
         EmitSyncMulti(b);
-        EmitStreams(b);
-        EmitStreamTokenMerge(b);
         EmitFaulted(b);
         EmitDependencySets(b);
         b.AppendLine("""}""");

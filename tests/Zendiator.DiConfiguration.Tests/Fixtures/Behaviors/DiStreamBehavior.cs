@@ -3,15 +3,13 @@ using Zendiator.DependencyInjection;
 
 namespace Zendiator.DiConfiguration.Tests;
 
-public sealed class DiStreamBehavior<TRequest, TItem> : IStreamPipelineBehavior<TRequest, TItem>
+public sealed class DiStreamBehavior<TRequest, TItem> : IStreamMiddleware<TRequest, TItem>
     where TRequest : IStreamRequest<TItem>
 {
     public static int Calls;
-    public async IAsyncEnumerable<TItem> HandleAsync<TNext>(TRequest request, TNext next, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
-        where TNext : struct, IStreamContinuation<TRequest, TItem>
+    public ValueTask<IAsyncEnumerator<TItem>> OpenAsync(TRequest request, IStreamUpstream<TRequest, TItem> upstream, CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref Calls);
-        await foreach (var item in next.InvokeAsync(request, cancellationToken).WithCancellation(cancellationToken))
-            yield return item;
+        return upstream.OpenAsync(request, cancellationToken);
     }
 }

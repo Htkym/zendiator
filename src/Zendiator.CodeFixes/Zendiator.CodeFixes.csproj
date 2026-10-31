@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <Description>Optional C# code fixes for explicit Zendiator handler registrations.</Description>
+    <PackageReleaseNotes>Optional Zendiator 0.5.0 code fixes: add a missing handler marker and apply Fix All in the current document. Use matching package versions; pipeline and lifetime migration remains manual.</PackageReleaseNotes>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <NoWarn>$(NoWarn);RS2008</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.14.0" PrivateAssets="all" />
+    <Compile Include="../Zendiator.SourceGenerator/Diagnostics/MissingHandlerAttribute.cs" Link="MissingHandlerAttribute.cs" />
+    <None Include="$(TargetPath)" Pack="true" PackagePath="analyzers/dotnet/cs" />
+    <None Update="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

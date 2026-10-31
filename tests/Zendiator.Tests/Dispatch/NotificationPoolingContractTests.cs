@@ -116,7 +116,8 @@ public sealed class NotificationPoolingContractTests
                 Assert.False(tasks[i].IsCompleted);
             }
             Assert.Equal("caller", context.Value);
-            for (var i = sources.Length - 1; i >= 0; i--) sources[i].Complete(failures[i]);
+            for (var i = sources.Length - 1; i >= 0; i--)
+                sources[i].Complete(failures[i]);
             for (var i = 0; i < tasks.Length; i++)
             {
                 if (failures[i] is OperationCanceledException)
@@ -132,10 +133,13 @@ public sealed class NotificationPoolingContractTests
                         () => tasks[i].WaitAsync(TimeSpan.FromSeconds(10))));
                     Assert.True(tasks[i].IsFaulted);
                 }
-                else await tasks[i].WaitAsync(TimeSpan.FromSeconds(10));
+                else
+                    await tasks[i].WaitAsync(TimeSpan.FromSeconds(10));
                 Assert.Equal(1, sources[i].Consumptions);
-                if (multipleSubscribers && failures[i] is null) Assert.Equal([i], deliveries[i]);
-                else Assert.Empty(deliveries[i]);
+                if (multipleSubscribers && failures[i] is null)
+                    Assert.Equal([i], deliveries[i]);
+                else
+                    Assert.Empty(deliveries[i]);
             }
             Assert.Equal("caller", context.Value);
         }

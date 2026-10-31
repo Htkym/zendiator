@@ -33,9 +33,21 @@ public sealed class RouteDependencySetTests
     {
         TestCounters.ResetAll();
         var services = new ServiceCollection();
-        services.AddTransient(_ => { Interlocked.Increment(ref PipeB0.FactoryCalls); return new PipeB0(); });
-        services.AddTransient(_ => { Interlocked.Increment(ref PipeB2.FactoryCalls); return new PipeB2(); });
-        services.AddTransient(_ => { Interlocked.Increment(ref PipeHandler.FactoryCalls); return new PipeHandler(); });
+        services.AddTransient(_ =>
+        {
+            Interlocked.Increment(ref PipeB0.FactoryCalls);
+            return new PipeB0();
+        });
+        services.AddTransient(_ =>
+        {
+            Interlocked.Increment(ref PipeB2.FactoryCalls);
+            return new PipeB2();
+        });
+        services.AddTransient(_ =>
+        {
+            Interlocked.Increment(ref PipeHandler.FactoryCalls);
+            return new PipeHandler();
+        });
         services.AddZendiator();
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         await using var scope = provider.CreateAsyncScope();
@@ -66,7 +78,8 @@ public sealed class RouteDependencySetTests
             if (Interlocked.Increment(ref PipeB1.FactoryCalls) == 1)
             {
                 entered.SetResult();
-                if (!release.Wait(TimeSpan.FromSeconds(30))) throw new TimeoutException();
+                if (!release.Wait(TimeSpan.FromSeconds(30)))
+                    throw new TimeoutException();
                 throw new FormatException("activation");
             }
             return new PipeB1();
@@ -82,7 +95,8 @@ public sealed class RouteDependencySetTests
         var started = 0;
         var waiters = Enumerable.Range(0, 8).Select(_ => Task.Factory.StartNew(() =>
         {
-            if (Interlocked.Increment(ref started) == 8) ready.SetResult();
+            if (Interlocked.Increment(ref started) == 8)
+                ready.SetResult();
             return mediator.SendAsync(new PipeReq(1)).AsTask().GetAwaiter().GetResult();
         }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default)).ToArray();
         try
@@ -112,7 +126,8 @@ public sealed class RouteDependencySetTests
             if (Interlocked.Increment(ref PipeB0.FactoryCalls) == 1)
             {
                 entered.SetResult();
-                if (!release.Wait(TimeSpan.FromSeconds(30))) throw new TimeoutException();
+                if (!release.Wait(TimeSpan.FromSeconds(30)))
+                    throw new TimeoutException();
                 throw new FormatException("activation");
             }
             return new PipeB0();
@@ -128,7 +143,8 @@ public sealed class RouteDependencySetTests
         var started = 0;
         var waiters = Enumerable.Range(0, 8).Select(_ => Task.Factory.StartNew(() =>
         {
-            if (Interlocked.Increment(ref started) == 8) ready.SetResult();
+            if (Interlocked.Increment(ref started) == 8)
+                ready.SetResult();
             return mediator.SendAsync(new PipeReq(1)).AsTask().GetAwaiter().GetResult();
         }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default)).ToArray();
         try
@@ -237,7 +253,8 @@ public sealed class RouteDependencySetTests
             if (Interlocked.Increment(ref calls) == 1)
             {
                 entered.SetResult();
-                if (!release.Wait(TimeSpan.FromSeconds(30))) throw new TimeoutException();
+                if (!release.Wait(TimeSpan.FromSeconds(30)))
+                    throw new TimeoutException();
                 throw new FormatException("activation");
             }
             return new Slow();

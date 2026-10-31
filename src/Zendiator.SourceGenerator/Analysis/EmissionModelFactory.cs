@@ -14,7 +14,8 @@ internal sealed class EmissionModelFactory(GenerationContracts contracts, Func<I
 
     private EmissionType Type(ITypeSymbol symbol)
     {
-        if (_types.TryGetValue(symbol, out var type)) return type;
+        if (_types.TryGetValue(symbol, out var type))
+            return type;
         var name = nameOf(symbol);
         var openName = name;
         if (symbol is INamedTypeSymbol { Arity: > 0 } named)
@@ -35,7 +36,10 @@ internal sealed class EmissionModelFactory(GenerationContracts contracts, Func<I
     private EmissionType Service(INamedTypeSymbol symbol, INamedTypeSymbol contract, string method)
     {
         var type = Type(symbol);
-        return UseDirectCall(symbol, contract, method) ? type with { DirectCall = true } : type;
+        return UseDirectCall(symbol, contract, method) ? type with
+        {
+            DirectCall = true
+        } : type;
     }
 
     internal EmissionRoute Request(Route route) => Route(route, route.IsSync ? contracts.Synchronous : contracts.Requests);
@@ -43,8 +47,6 @@ internal sealed class EmissionModelFactory(GenerationContracts contracts, Func<I
     private EmissionRoute Route(Route route, RequestContracts family) => Route(route,
         route.IsVoid ? family.VoidHandler : family.Handler,
         route.IsVoid ? family.VoidBehavior : family.Behavior);
-
-    internal EmissionRoute Stream(Route route) => Route(route, contracts.Streams.Handler, contracts.Streams.Behavior);
 
     private EmissionRoute Route(Route route, INamedTypeSymbol handler, INamedTypeSymbol behavior)
     {
@@ -64,7 +66,6 @@ internal sealed class EmissionModelFactory(GenerationContracts contracts, Func<I
             HandlerDisplay = route.HandlerDisplay,
             HandlerContractDisplay = route.HandlerContractDisplay,
             Behaviors = new(route.Behaviors.Select(b => Service(b, behavior, method))),
-            Validators = new(route.Validators.Select(v => Service(v, contracts.StreamValidator, "Validate"))),
             BehaviorDisplays = new(route.BehaviorDisplays),
             BehaviorContractDisplays = new(route.BehaviorContractDisplays)
         };

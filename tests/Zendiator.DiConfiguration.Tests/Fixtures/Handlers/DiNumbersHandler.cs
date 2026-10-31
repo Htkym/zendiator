@@ -3,17 +3,37 @@ using Zendiator.DependencyInjection;
 
 namespace Zendiator.DiConfiguration.Tests;
 
-public sealed class DiNumbersHandler : IStreamRequestHandler<DiNumbers, int>
+[ZendiatorHandler]
+public sealed class DiNumbersHandler : IStreamSourceHandler<DiNumbers, int, DiNumbersCursor>
 {
     public static int Calls;
-    public async IAsyncEnumerable<int> HandleAsync(DiNumbers request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    public ValueTask<DiNumbersCursor> OpenAsync(DiNumbers request, CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref Calls);
-        for (var i = 0; i < request.Count; i++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            await Task.Yield();
-            yield return i;
-        }
+        return new(new DiNumbersCursor(request.Count, cancellationToken));
+    }
+}
+
+public sealed class DiNumbersCursor(int count, CancellationToken token, Action? onDispose = null) : IAsyncEnumerator<int>
+{
+    private int _next;
+    public int Current
+    {
+        get; private set;
+    }
+    public async ValueTask<bool> MoveNextAsync()
+    {
+        token.ThrowIfCancellationRequested();
+        if (_next == count)
+            return false;
+        await Task.Yield();
+        token.ThrowIfCancellationRequested();
+        Current = _next++;
+        return true;
+    }
+    public ValueTask DisposeAsync()
+    {
+        onDispose?.Invoke();
+        return default;
     }
 }
