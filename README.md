@@ -194,11 +194,12 @@ with 0.4.0 is not promised.
 
 ## Performance
 
-These observations are from the measured source snapshot below, completed on
-2026-10-31; they are not a new measurement of the current branch HEAD. Selected
-0.5.0 candidate workloads were compared on the same machine. Each cell shows
-**mean time / allocated bytes per operation (B/op)**. Time and memory are separate
-metrics, and this table does not cover every workload.
+These observations are from the measurement completed on 2026-10-31 for the
+source snapshot below; they are not a new measurement of the current branch
+HEAD. Selected 0.5.0 candidate workloads were compared on the same machine. Each
+cell shows **mean time / allocated bytes per operation (B/op)**. Time and memory
+are separate metrics. Results vary by workload for every library, and this table
+does not cover every workload.
 
 |Case|Zendiator candidate|Immediate.Handlers 4.2.0|MediatR 14.2.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
 |---|---:|---:|---:|---:|---:|---:|
@@ -218,29 +219,32 @@ metrics, and this table does not cover every workload.
 |H failure / ColdOuterFailure|6.54 μs / 2,520 B|8.09 μs / 3,809 B|6.55 μs / 3,448 B|5.87 μs / 3,216 B|6.00 μs / 2,968 B|9.57 μs / 4,872 B|
 
 The new-scope row includes creation, first resolution, Send and disposal. Stream
-figures cover the whole operation, including creation, consumption and cleanup,
-not one item. Early break consumes one item from a 16-item input. Sync/async
-separates the enumeration completion patterns. H measures successful and
-outer-failure asynchronous Hook paths; FirstSend, WarmSend and ColdOuterFailure
-have different measurement boundaries, so their differences are not simply the
-cost of throwing an exception. N/A means no applicable comparison result, not zero.
+figures cover the whole operation rather than one item, including creation,
+consumption and cleanup. Early break consumes one item from a 16-item input.
+Sync/async separates the enumeration completion patterns. H measures successful
+and outer-failure asynchronous Hook paths. FirstSend, WarmSend and
+ColdOuterFailure have different measurement boundaries, so their differences are
+not simply the cost of throwing an exception. N/A means no applicable comparison
+result, not zero.
 
 ### Interpreting the results
 
 - Some peers have lower time and allocation for new-scope and synchronous
   early-termination workloads.
 - In the table's asynchronous Stream with 5 behaviors and 1024 items, Zendiator
-  has a lower observed mean, but allocates 116,562 B versus 1,754–4,726 B for peers.
+  has a lower observed mean time, but allocates 116,562 B versus 1,754–4,726 B
+  for peers.
 - Outside this table, **asynchronous Stream with 0 behaviors and 1024 items** is
   unfavorable in both time and memory: Zendiator is 149.19 μs / 115,458 B, versus
   53.90–92.56 μs / 393–865 B for peers.
-- **Asynchronous Relay with 5 stages and 1024 items** is 150.97 μs / 116,562 B for
-  Zendiator. Immediate, Mediator, DispatchR and Foundatio range from
-  51.94–53.65 μs / 393–937 B; MediatR is 246.09 μs / 3,323 B.
-- Synchronous Stream early break with 0 behaviors and a 16-item input is also
-  58.49 ns / 160 B for Zendiator versus 42.80 ns / 144 B for Immediate.
-  These observations do not establish general speed superiority or universal
-  performance improvement.
+- **Asynchronous Relay with 5 stages and 1024 items**, also outside this table,
+  is 150.97 μs / 116,562 B for Zendiator. Immediate, Mediator, DispatchR and
+  Foundatio are 51.94–53.65 μs / 393–937 B; MediatR is 246.09 μs / 3,323 B.
+- In synchronous Stream early break with 0 behaviors and a 16-item input as well,
+  Zendiator is 58.49 ns / 160 B versus 42.80 ns / 144 B for Immediate.
+
+These observations, including the results outside this table, do not establish
+general speed superiority or universal performance improvement.
 
 ### Measurement conditions
 
@@ -254,18 +258,19 @@ recovery. One launch does not establish independent-run reproducibility or a
 controlled before/after improvement. Differences of a few nanoseconds are also
 sensitive to benchmark overhead adjustment. Handlers are deliberately lightweight;
 API and DI registration shapes differ between libraries. These results do not
-predict application startup, HTTP or asynchronous I/O latency. Standard
-enumeration and typed terminals are separate workloads.
+predict application startup time, HTTP latency or asynchronous I/O latency.
+Standard enumeration and typed terminals are separate workloads.
 
-Foundatio's rows here use its intercepted path, distinct from the native runtime
-path used in a separate open-generic comparison. Historical 0.4.0 results are not
-mixed into this table; this is not a release-wide ranking of all 0.5.0 compositions.
+Foundatio's results in this table use its intercepted path, distinct from the
+native runtime path used in a separate open-generic comparison. Historical 0.4.0
+results are not mixed into this table, and this table is not a release-wide
+ranking of all 0.5.0 candidate compositions.
 
 See the [benchmark measurement boundaries](benchmarks/README.md#read-the-comparison)
 and [Stream comparison boundaries](benchmarks/README.md#stream-comparison-boundaries).
-Their historical 0.4.0 table and data are not the source of these numbers. Running
-the current fixture alone does not guarantee the pinned source, dependencies and
-execution order used here.
+The historical 0.4.0 table and data there are not the source of these numbers.
+Running the current fixture alone does not guarantee matching the pinned source,
+dependencies and execution order used here.
 
 ## Native AOT and limitations
 
