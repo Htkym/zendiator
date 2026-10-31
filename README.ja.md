@@ -97,5 +97,3 @@ Windows 11 x64、Intel Core Ultra 7 258V、.NET 10.0.14、BenchmarkDotNet 0.15.8
 - [0.4.0リリースノート](docs/release/0.4.0-release-notes.ja.md)
 - [公開済み0.4.0の使い方](https://github.com/Htkym/zendiator/blob/v0.4.0/README.ja.md)
 - [MediatRからの移行](docs/migrating-from-mediatr.ja.md)
-
-

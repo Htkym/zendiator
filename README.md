@@ -244,12 +244,10 @@ See [workload boundaries](benchmarks/README.md#read-the-comparison) and [Stream 
 
 ## Native AOT and limitations
 
-Native AOT has been verified on win-x64. Open-generic DI closures over value types
+Native AOT has been verified for package-based consumers on win-x64. Open-generic DI closures over value types
 have a known Native AOT limitation; other RIDs are unverified.
 See [known limitations](docs/release/known-limitations.md) before deploying.
 
 For migration from MediatR, use the
 [migration guide](docs/migrating-from-mediatr.md), together with the current
 [0.5.0 registration guide](docs/getting-started-0.5.0.md).
-
-
