@@ -26,6 +26,8 @@ dotnet format style src/Zendiator.SourceGenerator/Zendiator.SourceGenerator.cspr
 if ($LASTEXITCODE -ne 0) { throw 'IDE2001 pilot failed' }
 if ($pilotBefore -eq (Get-FileHash $pilot -Algorithm SHA256).Hash) { throw 'Pilot did not change: IDE2001 effectiveness not established' }
 Check-Tokens 'pilot-token-check'
+$nonPilot = 'src/Zendiator.SourceGenerator/Symbols/GenericConstraints.cs'
+$nonPilotBefore = (Get-FileHash $nonPilot -Algorithm SHA256).Hash
 [xml]$solution = Get-Content 'Zendiator.slnx' -Raw
 $projects = @($solution.SelectNodes('//Project') | ForEach-Object { $_.Path } | Where-Object { $_ -like '*.csproj' })
 if ($projects.Count -eq 0) { throw 'No C# projects in solution' }
@@ -33,12 +35,13 @@ foreach ($project in $projects) {
     if (-not (Test-Path $project)) { throw "Missing solution project: $project" }
 }
 foreach ($project in $projects) {
-    dotnet format style $project --diagnostics IDE2001 --include . --no-restore --verbosity normal
+    dotnet format style $project --diagnostics IDE2001 --no-restore --verbosity normal
     if ($LASTEXITCODE -ne 0) { throw "IDE2001 formatting failed: $project" }
 }
+if ($nonPilotBefore -eq (Get-FileHash $nonPilot -Algorithm SHA256).Hash) { throw 'Known non-pilot inline statements were not formatted' }
 Check-Tokens 'all-source-token-check'
 foreach ($project in $projects) {
-    dotnet format style $project --diagnostics IDE2001 --include . --no-restore --verify-no-changes
+    dotnet format style $project --diagnostics IDE2001 --no-restore --verify-no-changes
     if ($LASTEXITCODE -ne 0) { throw "IDE2001 verification failed: $project" }
 }
 $changed = @(git diff --name-only)
