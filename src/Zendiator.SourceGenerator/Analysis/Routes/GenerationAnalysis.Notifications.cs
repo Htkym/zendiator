@@ -15,31 +15,40 @@ internal sealed partial class GenerationAnalysis
     {
         foreach (var pair in attribute.NamedArguments)
         {
-            if (pair.Key == "Order" && pair.Value.Value is int named) return named;
+            if (pair.Key == "Order" && pair.Value.Value is int named)
+                return named;
         }
-        if (attribute.ConstructorArguments.FirstOrDefault().Value is int constructed) return constructed;
+        if (attribute.ConstructorArguments.FirstOrDefault().Value is int constructed)
+            return constructed;
         return 0;
     }
 
     private int SubscriberOrder(INamedTypeSymbol handler)
     {
-        if (FullNameOf(handler) is string key && diHandlerOrders.TryGetValue(key, out var configured)) return configured.Order;
+        if (FullNameOf(handler) is string key && diHandlerOrders.TryGetValue(key, out var configured))
+            return configured.Order;
         if (handler.IsGenericType && FullNameOf(handler.OriginalDefinition) is string definition &&
-            diHandlerOrders.TryGetValue(definition, out var configuredDefinition)) return configuredDefinition.Order;
+            diHandlerOrders.TryGetValue(definition, out var configuredDefinition))
+            return configuredDefinition.Order;
         var attr = handler.GetAttributes().FirstOrDefault(static a => a.AttributeClass?.ToDisplayString() == "Zendiator.HandlerOrderAttribute");
-        if (attr == null) return 0;
+        if (attr == null)
+            return 0;
         foreach (var pair in attr.NamedArguments)
         {
-            if (pair.Key == "Order" && pair.Value.Value is int named) return named;
+            if (pair.Key == "Order" && pair.Value.Value is int named)
+                return named;
         }
-        if (attr.ConstructorArguments.FirstOrDefault().Value is int constructed) return constructed;
+        if (attr.ConstructorArguments.FirstOrDefault().Value is int constructed)
+            return constructed;
         return 0;
     }
 
     private void AddSubscriber(INamedTypeSymbol notification, INamedTypeSymbol handler)
     {
-        if (!subscribers.TryGetValue(notification, out var list)) subscribers[notification] = list = new();
-        if (list.Any(s => Same(s.Handler, handler))) return;
+        if (!subscribers.TryGetValue(notification, out var list))
+            subscribers[notification] = list = new();
+        if (list.Any(s => Same(s.Handler, handler)))
+            return;
         list.Add(new Subscriber(handler, SubscriberOrder(handler), handler.ContainingAssembly.Identity.ToString(), Name(handler)));
     }
 
@@ -47,7 +56,8 @@ internal sealed partial class GenerationAnalysis
     {
         foreach (var attribute in compilation.Assembly.GetAttributes())
         {
-            if (attribute.AttributeClass?.ToDisplayString() != "Zendiator.NotificationAttribute") continue;
+            if (attribute.AttributeClass?.ToDisplayString() != "Zendiator.NotificationAttribute")
+                continue;
             if (attribute.ConstructorArguments.FirstOrDefault().Value is not INamedTypeSymbol declared)
             {
                 Error(13, "Notification requires a notification type.");
@@ -67,18 +77,22 @@ internal sealed partial class GenerationAnalysis
             {
                 if (!IsPublicDefinition(declared))
                     Error(13, $"Notification {Name(declared)} must be public.", declared);
-                else openNotifications.Add(declared);
+                else
+                    openNotifications.Add(declared);
             }
             else if (declared.IsAbstract || declared.TypeKind == TypeKind.Interface || HasOpenArguments(declared) || !Public(declared))
             {
                 Error(13, $"Notification {Name(declared)} must be a public concrete type. Declare the notification or include its assembly.", declared);
             }
-            else knownNotifications.Add(declared);
+            else
+                knownNotifications.Add(declared);
         }
         if (diMode)
         {
-            foreach (var notification in diNotifications) knownNotifications.Add(notification);
-            foreach (var def in diOpenNotifications) openNotifications.Add(def);
+            foreach (var notification in diNotifications)
+                knownNotifications.Add(notification);
+            foreach (var def in diOpenNotifications)
+                openNotifications.Add(def);
         }
         foreach (var notification in knownNotifications.OrderBy(Name, StringComparer.Ordinal))
         {
@@ -106,23 +120,28 @@ internal sealed partial class GenerationAnalysis
             foreach (var binding in binds)
             {
                 var mapArgs = new ITypeSymbol[binding.Definition.TypeParameters.Length];
-                for (var j = 0; j < mapArgs.Length; j++) mapArgs[j] = def.TypeParameters[binding.HandlerToDef[j]];
+                for (var j = 0; j < mapArgs.Length; j++)
+                    mapArgs[j] = def.TypeParameters[binding.HandlerToDef[j]];
                 for (var j = 0; j < binding.Definition.TypeParameters.Length; j++)
                     MergeHandlerParam(merged[binding.HandlerToDef[j]], binding.Definition.TypeParameters[j], binding.Definition, mapArgs, compilation);
                 var hArgs = new string[binding.Definition.TypeParameters.Length];
-                for (var j = 0; j < hArgs.Length; j++) hArgs[j] = def.TypeParameters[binding.HandlerToDef[j]].Name;
+                for (var j = 0; j < hArgs.Length; j++)
+                    hArgs[j] = def.TypeParameters[binding.HandlerToDef[j]].Name;
                 route.Subscribers.Add(new Subscriber(binding.Definition, SubscriberOrder(binding.Definition), binding.Definition.ContainingAssembly.Identity.ToString(), Name(binding.Definition)));
                 route.HandlerDisplays.Add(ClosedGenericName(binding.Definition, hArgs));
                 route.HandlerContractDisplays.Add($"global::Zendiator.INotificationHandler<{Name(def)}>");
             }
-            foreach (var p in def.TypeParameters) route.OpenTypeParams.Add(p.Name);
-            foreach (var m in merged) route.MethodConstraints.Add(RenderConstraints(m));
+            foreach (var p in def.TypeParameters)
+                route.OpenTypeParams.Add(p.Name);
+            foreach (var m in merged)
+                route.MethodConstraints.Add(RenderConstraints(m));
             route.NotificationDisplay = Name(def);
             notifications.Add(route);
         }
         foreach (var route in notifications)
         {
-            if (route.IsOpen || !route.Notification.IsGenericType) continue;
+            if (route.IsOpen || !route.Notification.IsGenericType)
+                continue;
             foreach (var binding in openSubscribers)
             {
                 if (Covers(binding, route.Notification))

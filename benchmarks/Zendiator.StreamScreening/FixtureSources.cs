@@ -6,7 +6,12 @@ internal static class FixtureSources
 {
     internal static readonly string[] Shapes = ["completed", "suspended", "open-session", "large-middleware-session", "zero-hook-sentinel"];
     internal static long Expected(string shape) => shape switch
-    { "open-session" => 7, "large-middleware-session" => 701, "zero-hook-sentinel" => 1, _ => 2 };
+    {
+        "open-session" => 7,
+        "large-middleware-session" => 701,
+        "zero-hook-sentinel" => 1,
+        _ => 2
+    };
 
     // One template per shape; only /*C:n*/ instrumentation and gate type differ
     // between the preflight and measured copies. No counter-mode branch exists
@@ -27,7 +32,8 @@ internal static class FixtureSources
                 .Replace("@GATE@", count ? "CountedCompletionGate" : "CompletionGate");
             return Regex.Replace(text, @"/\*C:(\d+)\*/", m =>
             {
-                if (!count) return "_ = p;";
+                if (!count)
+                    return "_ = p;";
                 var slot = int.Parse(m.Groups[1].Value);
                 var verify = slot is 0 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 24 ? "p.Verify(r!,c);" : slot == 1 ? "p.VerifyToken(token);" : "";
                 return verify + "p.Counts[" + slot + "]++;";
@@ -38,9 +44,19 @@ internal static class FixtureSources
 
     internal static string Bridge(string shape)
     {
-        var item = shape switch { "open-session" => "Final<Payload>", "large-middleware-session" => "LargeItem", _ => "int" };
+        var item = shape switch
+        {
+            "open-session" => "Final<Payload>",
+            "large-middleware-session" => "LargeItem",
+            _ => "int"
+        };
         var request = shape == "open-session" ? "Request<Payload>" : "Request";
-        var value = shape switch { "open-session" => "item.Value.Value", "large-middleware-session" => "item.Value", _ => "item" };
+        var value = shape switch
+        {
+            "open-session" => "item.Value.Value",
+            "large-middleware-session" => "item.Value",
+            _ => "item"
+        };
         string Copy(string mode) => $$"""
             namespace App.{{mode}} {
                 public static partial class Consumer {
@@ -355,12 +371,12 @@ internal static class FixtureSources
     internal static string ExpandFactories(string source)
     {
         var roles = new[] { "H", "A", "W", "B" };
-        return source.Replace("@FACTORIES@", string.Concat(roles.Select((role,i)=>$$"""
+        return source.Replace("@FACTORIES@", string.Concat(roles.Select((role, i) => $$"""
             public sealed class {{role}}F:IOwnedSessionFactory<Request,{{role}}>,IDisposable {
                 private readonly Context p;
-                public {{role}}F(Context context) {p=context; /*C:{{20+i}}*/}
-                public {{role}} Create(Request r,CancellationToken c) { /*C:{{8+i}}*/ return new(p); }
-                public void Dispose() { /*C:{{16+i}}*/ }
+                public {{role}}F(Context context) {p=context; /*C:{{20 + i}}*/}
+                public {{role}} Create(Request r,CancellationToken c) { /*C:{{8 + i}}*/ return new(p); }
+                public void Dispose() { /*C:{{16 + i}}*/ }
             }
             """)));
     }

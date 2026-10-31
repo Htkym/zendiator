@@ -61,12 +61,16 @@ public sealed partial class GeneratorTests
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         void Save(string name, string input, GeneratorDriver driver, Compilation output, IEnumerable<Diagnostic> diagnostics, byte[]? dll = null)
         {
-            if (string.IsNullOrEmpty(evidence)) return;
-            var folder = Path.Combine(evidence, "closed-composition", name); Directory.CreateDirectory(folder);
+            if (string.IsNullOrEmpty(evidence))
+                return;
+            var folder = Path.Combine(evidence, "closed-composition", name);
+            Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, "input.cs"), input);
             var files = driver.GetRunResult().Results.Single().GeneratedSources;
-            foreach (var file in files) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
-            if (dll != null) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), dll);
+            foreach (var file in files)
+                File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
+            if (dll != null)
+                File.WriteAllBytes(Path.Combine(folder, "generated.dll"), dll);
             File.WriteAllText(Path.Combine(folder, "compile.json"), JsonSerializer.Serialize(new
             {
                 sources = files.Select(f => f.HintName),
@@ -93,11 +97,17 @@ public sealed partial class GeneratorTests
         static void Ordered(string text, params string[] tokens)
         {
             var prior = -1;
-            foreach (var token in tokens) { var position = text.IndexOf(token, StringComparison.Ordinal); Assert.True(position > prior, token); prior = position; }
+            foreach (var token in tokens)
+            {
+                var position = text.IndexOf(token, StringComparison.Ordinal);
+                Assert.True(position > prior, token);
+                prior = position;
+            }
         }
         Ordered(shared, Handler("Plain.Items"), Handler("Command.Ping"), Handler("Typed.ChangeRequest"), Handler("Query.Ping"));
         Ordered(shared, Pipeline("Query.Ping"), Pipeline("Typed.ChangeRequest", true), Pipeline("Command.Ping"), Pipeline("Plain.Items"));
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes);
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
         Save("accepted", source, driver, output, diagnostics, bytes.ToArray());
 
@@ -120,13 +130,15 @@ public sealed partial class GeneratorTests
         var updated = driver.GetRunResult().Results.Single().GeneratedSources;
         var stable = files.Where(IsCanonicalRoute).ToArray();
         Assert.Equal(4, stable.Length);
-        foreach (var file in stable) Assert.Equal(file.SourceText.ToString(), Assert.Single(updated, f => f.HintName == file.HintName).SourceText.ToString());
+        foreach (var file in stable)
+            Assert.Equal(file.SourceText.ToString(), Assert.Single(updated, f => f.HintName == file.HintName).SourceText.ToString());
         var reordered = CanonicalCompositionSource(updated);
         Assert.NotEqual(shared, reordered);
         Ordered(reordered, Handler("Plain.Items"), Handler("Command.Ping"), Handler("Typed.ChangeRequest"), Handler("Query.Ping"));
         Ordered(reordered, Pipeline("Plain.Items"), Pipeline("Command.Ping"), Pipeline("Typed.ChangeRequest", true), Pipeline("Query.Ping"));
 
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var bridge = assembly.GetType("Closed.Bridge")!;
         Type Type(string name) => assembly.GetType("Closed." + name)!;
         var register = bridge.GetMethod("Register")!.CreateDelegate<Func<IServiceCollection, IServiceCollection>>();
@@ -136,39 +148,66 @@ public sealed partial class GeneratorTests
         var plain = bridge.GetMethod("Plain")!.CreateDelegate<Func<IServiceProvider, object, IAsyncEnumerable<int>>>();
         var typedRequest = Activator.CreateInstance(Type("Typed.ChangeRequest"))!;
         var typedProbe = new CanonicalStreamTypeChangeProbe { Request = typedRequest };
-        var commandProbe = new CapabilityIntegrationProbe(); var queryProbe = new ManagedShapeProbe { Pending = true };
+        var commandProbe = new CapabilityIntegrationProbe();
+        var queryProbe = new ManagedShapeProbe { Pending = true };
         var plainProbe = Activator.CreateInstance(Type("Plain.Probe"))!;
-        IServiceCollection services = new ServiceCollection(); services.AddSingleton(typedProbe); services.AddSingleton(commandProbe); services.AddSingleton(queryProbe);
-        services.AddSingleton(Type("Plain.Probe"), plainProbe); services.AddSingleton(Type("Command.HFactory")); register(services);
+        IServiceCollection services = new ServiceCollection();
+        services.AddSingleton(typedProbe);
+        services.AddSingleton(commandProbe);
+        services.AddSingleton(queryProbe);
+        services.AddSingleton(Type("Plain.Probe"), plainProbe);
+        services.AddSingleton(Type("Command.HFactory"));
+        register(services);
         Assert.All(services.GroupBy(d => d.ServiceType), group => Assert.Single(group));
         Assert.Equal(ServiceLifetime.Singleton, Assert.Single(services, d => d.ServiceType == Type("Command.HFactory")).Lifetime);
         var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
-        long typedValue; int[] response; var plainValues = new List<int>();
+        long typedValue;
+        int[] response;
+        var plainValues = new List<int>();
         using (var scope = provider.CreateScope())
         {
             Assert.Same(scope.ServiceProvider.GetRequiredService(Type("Generated.Reads.IZendiator")), scope.ServiceProvider.GetRequiredService(Type("Generated.Reads.IZendiator")));
             var typedSequence = typed(scope.ServiceProvider, typedRequest);
             var plainSequence = plain(scope.ServiceProvider, Activator.CreateInstance(Type("Plain.Items"))!);
-            Assert.Empty(typedProbe.Trace); Assert.Empty(commandProbe.Trace); Assert.Empty(queryProbe.Trace);
+            Assert.Empty(typedProbe.Trace);
+            Assert.Empty(commandProbe.Trace);
+            Assert.Empty(queryProbe.Trace);
             send(scope.ServiceProvider, Activator.CreateInstance(Type("Command.Ping"), 5)!, commandProbe.Cancellation.Token);
-            Assert.Single(commandProbe.CreatedHandlers); Assert.Single(commandProbe.ReleasedHandlers);
+            Assert.Single(commandProbe.CreatedHandlers);
+            Assert.Single(commandProbe.ReleasedHandlers);
             Assert.Equal(new[] { "handler.factory", "handler", "handler.cleanup", "h0.finally" }, commandProbe.Trace);
-            Assert.Empty(typedProbe.Trace); Assert.Empty(queryProbe.Trace);
+            Assert.Empty(typedProbe.Trace);
+            Assert.Empty(queryProbe.Trace);
             var pending = query(scope.ServiceProvider, Activator.CreateInstance(Type("Query.Ping"), 10)!, queryProbe.Token.Token);
-            Assert.False(pending.IsCompleted); var gate = Assert.Single(queryProbe.Gates); Assert.Equal(0, gate.Consumptions);
-            Assert.Empty(typedProbe.Trace); gate.Complete(); response = await pending;
-            Assert.Equal(new[] { 22 }, response); Assert.Equal(1, gate.Consumptions);
-            Assert.Single(queryProbe.Created); Assert.Single(queryProbe.Released);
-            Assert.Same(queryProbe.HandlerResponse, queryProbe.AfterInput); Assert.Same(queryProbe.AfterOutput, response);
+            Assert.False(pending.IsCompleted);
+            var gate = Assert.Single(queryProbe.Gates);
+            Assert.Equal(0, gate.Consumptions);
+            Assert.Empty(typedProbe.Trace);
+            gate.Complete();
+            response = await pending;
+            Assert.Equal(new[] { 22 }, response);
+            Assert.Equal(1, gate.Consumptions);
+            Assert.Single(queryProbe.Created);
+            Assert.Single(queryProbe.Released);
+            Assert.Same(queryProbe.HandlerResponse, queryProbe.AfterInput);
+            Assert.Same(queryProbe.AfterOutput, response);
             Assert.Equal(new[] { "before", "factory", "body", "dispose", "after", "finally" }, queryProbe.Trace);
             await using (var cursor = typedSequence.GetAsyncEnumerator())
             {
-                var move = cursor.MoveNextAsync(); await typedProbe.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-                Assert.False(move.IsCompleted); typedProbe.Gate.Complete(70L); Assert.True(await move);
-                typedValue = cursor.Current; Assert.Equal(70L, typedValue); Assert.False(await cursor.MoveNextAsync());
+                var move = cursor.MoveNextAsync();
+                await typedProbe.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.False(move.IsCompleted);
+                typedProbe.Gate.Complete(70L);
+                Assert.True(await move);
+                typedValue = cursor.Current;
+                Assert.Equal(70L, typedValue);
+                Assert.False(await cursor.MoveNextAsync());
             }
-            Assert.Equal(1, typedProbe.Starts); Assert.Equal(1, typedProbe.Disposals); Assert.Equal(1, typedProbe.Gate.Consumptions);
-            await foreach (var item in plainSequence) plainValues.Add(item);
+            Assert.Equal(1, typedProbe.Starts);
+            Assert.Equal(1, typedProbe.Disposals);
+            Assert.Equal(1, typedProbe.Gate.Consumptions);
+            await foreach (var item in plainSequence)
+                plainValues.Add(item);
             Assert.Equal(new[] { 2, 4 }, plainValues);
             Assert.Equal(0, commandProbe.HandlerFactoryDisposals);
             Assert.Empty((List<string>)Type("Plain.Probe").GetField("Ended")!.GetValue(plainProbe)!);
@@ -176,24 +215,26 @@ public sealed partial class GeneratorTests
         var plainResolved = (List<string>)Type("Plain.Probe").GetField("Resolved")!.GetValue(plainProbe)!;
         Assert.Equal(new[] { "F1", "F2", "H", "M" }, plainResolved.Order());
         Assert.Equal(plainResolved.AsEnumerable().Reverse(), (List<string>)Type("Plain.Probe").GetField("Ended")!.GetValue(plainProbe)!);
-        provider.Dispose(); Assert.Equal(1, commandProbe.HandlerFactoryDisposals);
-        if (!string.IsNullOrEmpty(evidence)) File.WriteAllText(Path.Combine(evidence, "closed-composition", "accepted", "runtime.json"), JsonSerializer.Serialize(new
-        {
-            typedValue,
-            plainValues,
-            response,
-            queryConsumptions = queryProbe.Gates.Single().Consumptions,
-            typedConsumptions = typedProbe.Gate.Consumptions,
-            typedProbe.Starts,
-            typedProbe.Disposals,
-            commandProbe.Trace,
-            commandCreated = commandProbe.CreatedHandlers.Count,
-            commandReleased = commandProbe.ReleasedHandlers.Count,
-            commandProbe.HandlerFactoryDisposals,
-            queryTrace = queryProbe.Trace,
-            queryCreated = queryProbe.Created.Count,
-            queryReleased = queryProbe.Released.Count,
-            plainEnds = (List<string>)Type("Plain.Probe").GetField("Ended")!.GetValue(plainProbe)!
-        }));
+        provider.Dispose();
+        Assert.Equal(1, commandProbe.HandlerFactoryDisposals);
+        if (!string.IsNullOrEmpty(evidence))
+            File.WriteAllText(Path.Combine(evidence, "closed-composition", "accepted", "runtime.json"), JsonSerializer.Serialize(new
+            {
+                typedValue,
+                plainValues,
+                response,
+                queryConsumptions = queryProbe.Gates.Single().Consumptions,
+                typedConsumptions = typedProbe.Gate.Consumptions,
+                typedProbe.Starts,
+                typedProbe.Disposals,
+                commandProbe.Trace,
+                commandCreated = commandProbe.CreatedHandlers.Count,
+                commandReleased = commandProbe.ReleasedHandlers.Count,
+                commandProbe.HandlerFactoryDisposals,
+                queryTrace = queryProbe.Trace,
+                queryCreated = queryProbe.Created.Count,
+                queryReleased = queryProbe.Released.Count,
+                plainEnds = (List<string>)Type("Plain.Probe").GetField("Ended")!.GetValue(plainProbe)!
+            }));
     }
 }

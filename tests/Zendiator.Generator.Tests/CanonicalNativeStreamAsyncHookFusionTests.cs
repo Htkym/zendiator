@@ -10,24 +10,32 @@ public sealed class StreamHookRaceSource<T>(T value, string completion) : IValue
     private bool _completed;
     private readonly TaskCompletionSource<bool> _registered = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public int Registrations, Consumptions, InlineCallbacks;
-    public bool Completing { get; private set; }
+    public bool Completing
+    {
+        get; private set;
+    }
     public ValueTask<T> Task => new(this, 0);
     public Task Registered => _registered.Task;
     public ValueTaskSourceStatus GetStatus(short token)
     {
-        if (_completed) return ValueTaskSourceStatus.Succeeded;
-        if (completion == "before-registration") _completed = true;
+        if (_completed)
+            return ValueTaskSourceStatus.Succeeded;
+        if (completion == "before-registration")
+            _completed = true;
         return ValueTaskSourceStatus.Pending;
     }
     public T GetResult(short token)
     {
-        if (!_completed || ++Consumptions != 1) throw new InvalidOperationException("Raw result must settle and be consumed once.");
+        if (!_completed || ++Consumptions != 1)
+            throw new InvalidOperationException("Raw result must settle and be consumed once.");
         return value;
     }
     public void OnCompleted(Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags)
     {
-        if (++Registrations != 1 || _continuation is not null) throw new InvalidOperationException("One continuation per raw operation.");
-        if (flags.HasFlag(ValueTaskSourceOnCompletedFlags.UseSchedulingContext)) throw new InvalidOperationException("ConfigureAwait(false) expected.");
+        if (++Registrations != 1 || _continuation is not null)
+            throw new InvalidOperationException("One continuation per raw operation.");
+        if (flags.HasFlag(ValueTaskSourceOnCompletedFlags.UseSchedulingContext))
+            throw new InvalidOperationException("ConfigureAwait(false) expected.");
         if (_completed)
         {
             _registered.SetResult(true);
@@ -38,19 +46,28 @@ public sealed class StreamHookRaceSource<T>(T value, string completion) : IValue
         _continuation = continuation;
         _state = state;
         _registered.SetResult(true);
-        if (completion == "inside-registration") Complete();
+        if (completion == "inside-registration")
+            Complete();
     }
     public void Complete()
     {
-        if (_completed || _continuation is null) throw new InvalidOperationException("Complete one registered pending operation.");
+        if (_completed || _continuation is null)
+            throw new InvalidOperationException("Complete one registered pending operation.");
         _completed = true;
         var continuation = _continuation;
         var state = _state;
         _continuation = null;
         _state = null;
         Completing = true;
-        try { InlineCallbacks++; continuation(state); }
-        finally { Completing = false; }
+        try
+        {
+            InlineCallbacks++;
+            continuation(state);
+        }
+        finally
+        {
+            Completing = false;
+        }
     }
 }
 

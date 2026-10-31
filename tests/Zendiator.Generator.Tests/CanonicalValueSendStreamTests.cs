@@ -131,10 +131,13 @@ public sealed partial class GeneratorTests
 
     private static void SaveValueSendStream(string? folder, string source, GeneratorDriver driver, Compilation output, IEnumerable<Diagnostic> diagnostics)
     {
-        if (folder == null) return;
-        Directory.CreateDirectory(folder); File.WriteAllText(Path.Combine(folder, "input.cs"), source);
+        if (folder == null)
+            return;
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "input.cs"), source);
         var files = driver.GetRunResult().Results.Single().GeneratedSources;
-        foreach (var file in files) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
+        foreach (var file in files)
+            File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
         File.WriteAllText(Path.Combine(folder, "compile.json"), JsonSerializer.Serialize(new
         {
             sources = files.Select(f => f.HintName),
@@ -145,13 +148,18 @@ public sealed partial class GeneratorTests
 
     private static void AssertValueSendStreamContract(Compilation output)
     {
-        var contract = output.GetTypeByMetadataName("ValueSendMix.Generated.Many.IZendiator"); Assert.NotNull(contract);
+        var contract = output.GetTypeByMetadataName("ValueSendMix.Generated.Many.IZendiator");
+        Assert.NotNull(contract);
         foreach (var (method, request) in new[] { ("StreamAsync", "ValueStream.Items"), ("Send", "ValueSync.Ping"), ("Send", "ValueSyncVoid.Ping"), ("SendAsync", "ValueAsync.Ping"), ("SendAsync", "ValueAsyncVoid.Ping") })
         {
-            var type = output.GetTypeByMetadataName("Closed." + request); Assert.NotNull(type); Assert.True(type.IsValueType);
+            var type = output.GetTypeByMetadataName("Closed." + request);
+            Assert.NotNull(type);
+            Assert.True(type.IsValueType);
             Assert.Single(contract.GetMembers(method).OfType<IMethodSymbol>(), m => SymbolEqualityComparer.Default.Equals(m.Parameters[0].Type, type));
         }
-        Assert.Single(contract.GetMembers("StreamAsync")); Assert.Equal(2, contract.GetMembers("Send").Length); Assert.Equal(2, contract.GetMembers("SendAsync").Length);
+        Assert.Single(contract.GetMembers("StreamAsync"));
+        Assert.Equal(2, contract.GetMembers("Send").Length);
+        Assert.Equal(2, contract.GetMembers("SendAsync").Length);
     }
 
     [Fact]
@@ -181,27 +189,49 @@ public sealed partial class GeneratorTests
         AssertComposedProfile(output, "ValueSendMix.Generated.GenericSingle", ("Send", 1));
         var files = driver.GetRunResult().Results.Single().GeneratedSources;
         Assert.Contains(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains("ValueSendMix.Generated.Many.ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
-        foreach (var name in new[] { "GenericMix", "GenericSingle" }) Assert.Contains(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains("ValueSendMix.Generated." + name + ".ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-        if (folder != null) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        foreach (var name in new[] { "GenericMix", "GenericSingle" })
+            Assert.Contains(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains("ValueSendMix.Generated." + name + ".ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var requestType = assembly.GetType("ValueSendMix.GenericSend`1")!.MakeGenericType(typeof(int));
         var request = Activator.CreateInstance(requestType, [17])!;
         var handlerType = assembly.GetType("ValueSendMix.GenericHandler")!;
         var expected = (int)handlerType.GetMethod("Handle")!.Invoke(Activator.CreateInstance(handlerType), [request, CancellationToken.None])!;
         Assert.Equal(17, expected);
-        var probe = new PublicValueRequestProbe(); IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe);
+        var probe = new PublicValueRequestProbe();
+        IServiceCollection services = new ServiceCollection();
+        services.AddSingleton(probe);
         assembly.GetType("ValueSendMix.GenericSingleBridge")!.GetMethod("RegisterSingle")!.Invoke(null, [services]);
         assembly.GetType("ValueSendMix.GenericMixBridge")!.GetMethod("RegisterGenericMix")!.Invoke(null, [services]);
-        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }); using var scope = provider.CreateScope();
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+        using var scope = provider.CreateScope();
         var results = new List<int>();
         foreach (var name in new[] { "GenericSingle", "GenericMix" })
         {
             var api = scope.ServiceProvider.GetRequiredService(assembly.GetType("ValueSendMix.Generated." + name + ".IZendiator")!);
             results.Add((int)api.GetType().GetMethod("Send", [requestType, typeof(CancellationToken)])!.Invoke(api, [request, CancellationToken.None])!);
         }
-        Assert.All(results, value => Assert.Equal(expected, value)); Assert.Equal(0, probe.Starts); Assert.Empty(probe.Resolved);
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, generatedDispatches = 2, referenceCalls = 1, acceptedRoutes = 8, reference = expected, single = results[0], mixed = results[1], streamStarts = probe.Starts, backendFilesChanged = false }));
+        Assert.All(results, value => Assert.Equal(expected, value));
+        Assert.Equal(0, probe.Starts);
+        Assert.Empty(probe.Resolved);
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new
+            {
+                generatorInputs = 1,
+                generatedDispatches = 2,
+                referenceCalls = 1,
+                acceptedRoutes = 8,
+                reference = expected,
+                single = results[0],
+                mixed = results[1],
+                streamStarts = probe.Starts,
+                backendFilesChanged = false
+            }));
     }
 
     [Fact]
@@ -218,17 +248,25 @@ public sealed partial class GeneratorTests
                 File.WriteAllText(Path.Combine(folder, "void-class-reference-" + async + ".txt"), CapabilityIntegrationSource(async, true, "---s", "direct", "owned", false));
                 File.WriteAllText(Path.Combine(folder, "void-value-source-" + async + ".txt"), ValueVoidSource(async));
             }
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         AssertValueSendStreamContract(output);
         Assert.Equal(5, driver.GetRunResult().Results.Single().GeneratedSources.Count(f => IsCanonicalRoute(f)));
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-        if (folder != null) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var run = assembly.GetType("ValueSendMix.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>();
         var result = await run().WaitAsync(TimeSpan.FromSeconds(15));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
-        using var observed = JsonDocument.Parse(result); var value = observed.RootElement;
-        Assert.Equal(5, value.GetProperty("runtimeOperations").GetInt32()); Assert.Equal(12, value.GetProperty("syncValue").GetInt32());
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
+        using var observed = JsonDocument.Parse(result);
+        var value = observed.RootElement;
+        Assert.Equal(5, value.GetProperty("runtimeOperations").GetInt32());
+        Assert.Equal(12, value.GetProperty("syncValue").GetInt32());
         Assert.Equal(new[] { 22 }, value.GetProperty("response").EnumerateArray().Select(x => x.GetInt32()));
         Assert.Equal(new[] { 2, 4 }, value.GetProperty("values").EnumerateArray().Select(x => x.GetInt32()));
         Assert.Equal(1, value.GetProperty("pendingConsumptions").GetInt32());

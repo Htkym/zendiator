@@ -202,10 +202,13 @@ public sealed partial class GeneratorTests
 
     private static void SaveSendAllSync(string? folder, string source, GeneratorDriver driver, Compilation output, IEnumerable<Diagnostic> diagnostics)
     {
-        if (folder == null) return;
-        Directory.CreateDirectory(folder); File.WriteAllText(Path.Combine(folder, "input.cs"), source);
+        if (folder == null)
+            return;
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "input.cs"), source);
         var files = driver.GetRunResult().Results.Single().GeneratedSources;
-        foreach (var file in files) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
+        foreach (var file in files)
+            File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
         File.WriteAllText(Path.Combine(folder, "compile.json"), JsonSerializer.Serialize(new
         {
             sources = files.Select(f => f.HintName),
@@ -216,11 +219,14 @@ public sealed partial class GeneratorTests
 
     private static void AssertSendAllSyncContract(Compilation output)
     {
-        var response = output.GetTypeByMetadataName("AllSync.Generated.Responses.IZendiator"); Assert.NotNull(response);
-        var methods = response.GetMembers("SendAll").OfType<IMethodSymbol>().ToArray(); Assert.Equal(2, methods.Length);
+        var response = output.GetTypeByMetadataName("AllSync.Generated.Responses.IZendiator");
+        Assert.NotNull(response);
+        var methods = response.GetMembers("SendAll").OfType<IMethodSymbol>().ToArray();
+        Assert.Equal(2, methods.Length);
         Assert.Contains(methods, m => m.ReturnType is IArrayTypeSymbol a && a.ElementType.SpecialType == SpecialType.System_Int32);
         Assert.Contains(methods, m => m.ReturnType.SpecialType == SpecialType.System_Int32 && m.Parameters[1].Type.Name == "Span");
-        var command = output.GetTypeByMetadataName("AllSync.Generated.Commands.IZendiator"); Assert.NotNull(command);
+        var command = output.GetTypeByMetadataName("AllSync.Generated.Commands.IZendiator");
+        Assert.NotNull(command);
         Assert.True(Assert.Single(command.GetMembers("SendAll").OfType<IMethodSymbol>()).ReturnsVoid);
     }
 
@@ -236,8 +242,14 @@ public sealed partial class GeneratorTests
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         AssertSendAllSyncContract(output);
         var files = driver.GetRunResult().Results.Single().GeneratedSources;
-        var routes = files.Where(f => IsCanonicalRoute(f)).ToArray(); Assert.Equal(3, routes.Length);
-        Assert.All(routes, f => { Assert.DoesNotContain("ValueTask", f.SourceText.ToString()); Assert.DoesNotContain("global::System.Threading.Tasks.Task", f.SourceText.ToString()); Assert.DoesNotContain("Unit", f.SourceText.ToString()); });
+        var routes = files.Where(f => IsCanonicalRoute(f)).ToArray();
+        Assert.Equal(3, routes.Length);
+        Assert.All(routes, f =>
+        {
+            Assert.DoesNotContain("ValueTask", f.SourceText.ToString());
+            Assert.DoesNotContain("global::System.Threading.Tasks.Task", f.SourceText.ToString());
+            Assert.DoesNotContain("Unit", f.SourceText.ToString());
+        });
         foreach (var name in new[] { "Responses", "Commands", "Wrappers" })
         {
             var ns = "AllSync.Generated." + name;
@@ -248,10 +260,18 @@ public sealed partial class GeneratorTests
         foreach (var name in new[] { "BadAsync" })
         {
             var ns = "AllSync.Generated." + name;
-            Assert.Null(output.GetTypeByMetadataName(ns + ".IZendiator")); Assert.Null(output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar"));
+            Assert.Null(output.GetTypeByMetadataName(ns + ".IZendiator"));
+            Assert.Null(output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar"));
             Assert.DoesNotContain(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains(ns + ".ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
         }
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, runtimeOperations = 0, accepted = new[] { "Responses", "Commands", "Wrappers" }, rejected = new[] { "BadAsync" } }));
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new
+            {
+                generatorInputs = 1,
+                runtimeOperations = 0,
+                accepted = new[] { "Responses", "Commands", "Wrappers" },
+                rejected = new[] { "BadAsync" }
+            }));
     }
 
     [Fact]
@@ -262,14 +282,23 @@ public sealed partial class GeneratorTests
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         var folder = string.IsNullOrEmpty(evidence) ? null : Path.Combine(evidence, "sendall-sync-runtime");
         SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         AssertSendAllSyncContract(output);
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-        if (folder != null) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var run = assembly.GetType("AllSync.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<string>>();
-        var result = run(); if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
-        using var observed = JsonDocument.Parse(result); Assert.Equal(9, observed.RootElement.GetProperty("scenarios").GetInt32()); Assert.Equal(18, observed.RootElement.GetProperty("dispatchCalls").GetInt32());
+        var result = run();
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
+        using var observed = JsonDocument.Parse(result);
+        Assert.Equal(9, observed.RootElement.GetProperty("scenarios").GetInt32());
+        Assert.Equal(18, observed.RootElement.GetProperty("dispatchCalls").GetInt32());
     }
 
     [Fact]
@@ -280,19 +309,29 @@ public sealed partial class GeneratorTests
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         var folder = string.IsNullOrEmpty(evidence) ? null : Path.Combine(evidence, "sendall-sync-guard");
         SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-        if (folder != null) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var run = assembly.GetType("AllSync.Bridge")!.GetMethod("GuardCompetition")!.CreateDelegate<Func<string>>();
-        var result = run(); if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
-        using var observed = JsonDocument.Parse(result); var rows = observed.RootElement.GetProperty("rows").EnumerateArray().ToArray();
+        var result = run();
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
+        using var observed = JsonDocument.Parse(result);
+        var rows = observed.RootElement.GetProperty("rows").EnumerateArray().ToArray();
         Assert.Equal(2, rows.Length);
         Assert.All(rows, row =>
         {
-            Assert.Equal("ArgumentNullException", row.GetProperty("error").GetString()); Assert.Equal("request", row.GetProperty("parameter").GetString());
+            Assert.Equal("ArgumentNullException", row.GetProperty("error").GetString());
+            Assert.Equal("request", row.GetProperty("parameter").GetString());
             Assert.Equal(new[] { 41, 42, 43, 44 }, row.GetProperty("destination").EnumerateArray().Select(x => x.GetInt32()));
-            foreach (var name in new[] { "handlerCalls", "resolved", "trace" }) Assert.Equal(0, row.GetProperty(name).GetInt32());
+            foreach (var name in new[] { "handlerCalls", "resolved", "trace" })
+                Assert.Equal(0, row.GetProperty(name).GetInt32());
         });
     }
 }

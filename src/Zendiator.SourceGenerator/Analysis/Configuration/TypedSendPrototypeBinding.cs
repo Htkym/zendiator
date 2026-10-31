@@ -17,13 +17,20 @@ internal static class TypedSendPrototypeBinding
         Result Reject(DiagnosticDescriptor descriptor, string message) => new(null, Diagnostic.Create(descriptor, anchor, message), false);
         var routeDefinition = compilation.GetTypeByMetadataName(Protocol + "IRoute`7");
         var routes = declaration.AllInterfaces.Where(i => Same(i.OriginalDefinition, routeDefinition)).ToArray();
-        if (routes.Length != 1) return Reject(GeneratorDiagnostics.StageContractMismatch, "A prototype declaration requires one explicit seven-port route contract.");
+        if (routes.Length != 1)
+            return Reject(GeneratorDiagnostics.StageContractMismatch, "A prototype declaration requires one explicit seven-port route contract.");
         var args = routes[0].TypeArguments;
-        if (args.Any(Error)) return new(null, null, true); // Roslyn owns unresolved source types, including nested arguments.
-        var outer = args[0]; var inner = args[1]; var response = args[2]; var published = args[3];
+        if (args.Any(Error))
+            return new(null, null, true); // Roslyn owns unresolved source types, including nested arguments.
+        var outer = args[0];
+        var inner = args[1];
+        var response = args[2];
+        var published = args[3];
         if (args.Skip(4).Any(t => t is not INamedTypeSymbol))
             return Reject(GeneratorDiagnostics.UnsupportedGenerationShape, "Prototype receivers must be named class services.");
-        var handler = (INamedTypeSymbol)args[4]; var requestMap = (INamedTypeSymbol)args[5]; var responseMap = (INamedTypeSymbol)args[6];
+        var handler = (INamedTypeSymbol)args[4];
+        var requestMap = (INamedTypeSymbol)args[5];
+        var responseMap = (INamedTypeSymbol)args[6];
         var assembly = compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly;
         INamedTypeSymbol[] Contracts(INamedTypeSymbol type, string name, bool framework = false)
         {
@@ -35,7 +42,9 @@ internal static class TypedSendPrototypeBinding
         var responses = Contracts(responseMap, "IResponseMap`3");
         if (handlers.Length != 1 || requests.Length != 1 || responses.Length != 1)
             return Reject(GeneratorDiagnostics.StageContractMismatch, "Prototype services require one synchronous handler, request-map and response-map contract each.");
-        var h = handlers[0]; var before = requests[0]; var after = responses[0];
+        var h = handlers[0];
+        var before = requests[0];
+        var after = responses[0];
         bool Equal(ITypeSymbol a, ITypeSymbol b) => SymbolEqualityComparer.IncludeNullability.Equals(a, b);
         if (!Equal(h.TypeArguments[0], inner) || !Equal(h.TypeArguments[1], response))
             return Reject(GeneratorDiagnostics.StageTypeMismatch, "The explicit inner handler request/response ports do not match the handler contract, including nullability.");
@@ -81,7 +90,10 @@ internal static class TypedSendPrototypeBinding
         TypedSendPort Port(ITypeSymbol t) => new(Name(t) + "|assembly=" + t.ContainingAssembly?.Identity + "|nullable=" + t.NullableAnnotation,
             Name(t), t.NullableAnnotation.ToString(), t.IsReferenceType);
         TypedSendCall Call(INamedTypeSymbol contract) => new(Name(contract), contract.GetMembers().OfType<IMethodSymbol>().Single().Name);
-        var external = Port(outer); var internalRequest = Port(inner); var handlerResult = Port(response); var publicResult = Port(published);
+        var external = Port(outer);
+        var internalRequest = Port(inner);
+        var handlerResult = Port(response);
+        var publicResult = Port(published);
         return new(new("__ZendiatorTypedSend_" + declaration.Name, external, publicResult, internalRequest, handlerResult,
             Name(handler), Call(h), new(Name(requestMap), external, external, internalRequest, Call(before), Call(outerException), Call(outerFinally)),
             new(Name(responseMap), internalRequest, handlerResult, publicResult, Call(after), Call(innerException), Call(innerFinally))), null, false);

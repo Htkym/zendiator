@@ -24,7 +24,14 @@ public static class Correctness
         object b = first.ServiceProvider.GetRequiredService(handlerType);
         object c = second.ServiceProvider.GetRequiredService(handlerType);
         Require(ReferenceEquals(a, b) == (expected != "Transient") && ReferenceEquals(a, c) == (expected == "Singleton"), $"{library}: lifetime {lifetime}");
-        Results.Add(new { library, suite = "LifetimeIdentity", lifetime, expected, status = "Passed" });
+        Results.Add(new
+        {
+            library,
+            suite = "LifetimeIdentity",
+            lifetime,
+            expected,
+            status = "Passed"
+        });
     }
     public static List<object> Results { get; } = [];
     private static void Require(bool value, string message)
@@ -56,14 +63,23 @@ public static class Correctness
         }
         catch (OperationCanceledException) { }
         Require(probe.Handlers == 0, "Cancelled send executed handler");
-        probe = new() { Fail = true };
+        probe = new()
+        {
+            Fail = true
+        };
         try
         {
             await send(probe, default);
             throw new InvalidOperationException($"{library}: exception not propagated");
         }
         catch (ArithmeticException) { }
-        Results.Add(new { library, suite = "Send", behaviors, status = "Passed" });
+        Results.Add(new
+        {
+            library,
+            suite = "Send",
+            behaviors,
+            status = "Passed"
+        });
     }
 
     public static async Task Stream(string library, int behaviors,
@@ -118,7 +134,9 @@ public static class Correctness
         var failing = new Probe { Fail = true };
         try
         {
-            await foreach (int item in stream(16, true, failing, default)) { }
+            await foreach (int item in stream(16, true, failing, default))
+            {
+            }
             throw new InvalidOperationException($"{library}: stream exception not propagated");
         }
         catch (ArithmeticException) { }
@@ -130,7 +148,9 @@ public static class Correctness
             try
             {
                 var sequence = stream(16, true, probe, enumerationToken ? default : cancelled.Token);
-                await foreach (var item in sequence.WithCancellation(enumerationToken ? cancelled.Token : default)) { }
+                await foreach (var item in sequence.WithCancellation(enumerationToken ? cancelled.Token : default))
+                {
+                }
                 throw new InvalidOperationException($"{library}: precancelled stream token was ignored (enumeration={enumerationToken})");
             }
             catch (OperationCanceledException) { }
@@ -207,14 +227,27 @@ public static class Correctness
                 await move;
                 stage = "none";
             }
-            finally { await e.DisposeAsync(); }
+            finally
+            {
+                await e.DisposeAsync();
+            }
         }
         catch (ArithmeticException) { }
         Require(stage != "none", $"{library}: relay failure not propagated");
         Require(failing.Handlers == 0, $"{library}: relay failure started the handler");
         if (library == "Zendiator")
             Require(atCreation == 0 && atEnumerator == 0 && stage is ("move-call" or "move-await"), "Zendiator: relay pre-processing must start on the first move");
-        Results.Add(new { library, suite = "RelayTiming", behaviors, eventsAtCreation = atCreation, eventsAtEnumerator = atEnumerator, eventsAtFirstMove = atFirstMove, failureStage = stage, status = "Passed" });
+        Results.Add(new
+        {
+            library,
+            suite = "RelayTiming",
+            behaviors,
+            eventsAtCreation = atCreation,
+            eventsAtEnumerator = atEnumerator,
+            eventsAtFirstMove = atFirstMove,
+            failureStage = stage,
+            status = "Passed"
+        });
     }
 
     public static void Save(string directory)
@@ -241,21 +274,41 @@ public static class Correctness
     {
         foreach (bool asynchronous in new[] { false, true })
         {
-            var counter = new Counter(); var probe = new Probe();
+            var counter = new Counter();
+            var probe = new Probe();
             await publish(counter, probe, asynchronous, default);
             Require(counter.Value == handlers && probe.Handlers == handlers && counter.Active == 0, $"{library}: notification count");
             Require(probe.Events.Where(x => x != 100).Order().SequenceEqual(Enumerable.Range(1, handlers)), $"{library}: notification exactly once");
             if (handlers > 0)
             {
-                using var cts = new CancellationTokenSource(); cts.Cancel();
-                try { await publish(new(), new(), asynchronous, cts.Token); throw new InvalidOperationException("Notification cancellation"); }
+                using var cts = new CancellationTokenSource();
+                cts.Cancel();
+                try
+                {
+                    await publish(new(), new(), asynchronous, cts.Token);
+                    throw new InvalidOperationException("Notification cancellation");
+                }
                 catch (OperationCanceledException) { }
                 catch (AggregateException e) when (library == "Mediator" && e.InnerExceptions.Count == handlers && e.InnerExceptions.All(x => x is OperationCanceledException)) { }
-                try { await publish(new(), new() { Fail = true }, asynchronous, default); throw new InvalidOperationException("Notification exception"); }
+                try
+                {
+                    await publish(new(), new()
+                    {
+                        Fail = true
+                    }, asynchronous, default);
+                    throw new InvalidOperationException("Notification exception");
+                }
                 catch (ArithmeticException) { }
                 catch (AggregateException e) when (library == "Mediator" && e.InnerExceptions.Count == handlers && e.InnerExceptions.All(x => x is ArithmeticException)) { }
             }
-            Results.Add(new { library, suite = "Notification", handlers, asynchronous, status = "Passed" });
+            Results.Add(new
+            {
+                library,
+                suite = "Notification",
+                handlers,
+                asynchronous,
+                status = "Passed"
+            });
         }
     }
 }

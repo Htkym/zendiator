@@ -97,8 +97,12 @@ public sealed partial class GeneratorTests
 
     private static string OpenSendAllSyncNegative()
     {
-        const string request = "OpenAll.Request<,>"; const string first = "OpenAll.ZHandler<,>"; const string second = "OpenAll.AHandler<,>"; const string hook = "OpenAll.Hook<,>";
-        var declarations = new List<string>(); var registrations = new List<string>();
+        const string request = "OpenAll.Request<,>";
+        const string first = "OpenAll.ZHandler<,>";
+        const string second = "OpenAll.AHandler<,>";
+        const string hook = "OpenAll.Hook<,>";
+        var declarations = new List<string>();
+        var registrations = new List<string>();
         void Reject(string name, string handlers, string stage, string extra = "", string r = request)
         {
             declarations.Add($"[ZendiatorComposition(\"{name}\")]public sealed class {name};");
@@ -138,67 +142,144 @@ public sealed partial class GeneratorTests
     private static string? OpenSendAllSyncFolder(string name)
     {
         var root = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
-        if (string.IsNullOrEmpty(root)) return null;
-        var folder = Path.Combine(root, "open-sendall-sync-" + name); Directory.CreateDirectory(folder); return folder;
+        if (string.IsNullOrEmpty(root))
+            return null;
+        var folder = Path.Combine(root, "open-sendall-sync-" + name);
+        Directory.CreateDirectory(folder);
+        return folder;
     }
 
     private static void AssertOpenSendAllSyncOutput(Compilation output, GeneratorDriver driver)
     {
-        AssertOpenSendAsyncOutput(output, driver); AssertSendAllSyncContract(output);
+        AssertOpenSendAsyncOutput(output, driver);
+        AssertSendAllSyncContract(output);
         var catalog = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single().TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
-        var route = Assert.Single(Assert.Single(catalog.Compositions, c => c.Key == "openAll").Pipelines); Assert.Equal(BoundRequestShape.OpenAllSyncReference, route.RequestShape);
-        Assert.Equal(2, route.Handlers.Count); Assert.Contains("ZHandler", route.Handlers[0].Name); Assert.Contains("AHandler", route.Handlers[1].Name);
+        var route = Assert.Single(Assert.Single(catalog.Compositions, c => c.Key == "openAll").Pipelines);
+        Assert.Equal(BoundRequestShape.OpenAllSyncReference, route.RequestShape);
+        Assert.Equal(2, route.Handlers.Count);
+        Assert.Contains("ZHandler", route.Handlers[0].Name);
+        Assert.Contains("AHandler", route.Handlers[1].Name);
         var model = CanonicalSendAllSyncEmissionNormalizer.Create(catalog, CanonicalExecutionGraphNormalizer.Create(catalog));
-        var emission = Assert.Single(model.Compositions, c => c.Registration.Namespace == "OpenAll.Generated.Composition"); Assert.Equal(2, emission.Branches.Count);
-        Assert.All(emission.Branches, b => { Assert.Equal(route.SendGeneric, b.Generic); Assert.Equal(route.SendOpenRegistration, b.OpenRegistration); });
-        var plan = CanonicalRegistrationPlan.SendAllSync(emission); var registration = Assert.Single(plan.Routes); var open = Assert.IsType<BoundStreamOpenRegistration>(registration.Open);
+        var emission = Assert.Single(model.Compositions, c => c.Registration.Namespace == "OpenAll.Generated.Composition");
+        Assert.Equal(2, emission.Branches.Count);
+        Assert.All(emission.Branches, b =>
+        {
+            Assert.Equal(route.SendGeneric, b.Generic);
+            Assert.Equal(route.SendOpenRegistration, b.OpenRegistration);
+        });
+        var plan = CanonicalRegistrationPlan.SendAllSync(emission);
+        var registration = Assert.Single(plan.Routes);
+        var open = Assert.IsType<BoundStreamOpenRegistration>(registration.Open);
         Assert.Equal(new[] { "global::OpenAll.ZHandler<,>", "global::OpenAll.AHandler<,>" }, open.HandlerDefinitionNames);
         Assert.Equal(new[] { "global::OpenAll.Hook<,>", "global::OpenAll.ZHandler<,>", "global::OpenAll.AHandler<,>" }, registration.ServiceTypes);
-        var api = output.GetTypeByMetadataName("OpenAll.Generated.Composition.IZendiator")!; Assert.NotNull(api); Assert.False(api.IsGenericType);
-        var mediator = output.GetTypeByMetadataName("OpenAll.Generated.Composition.Zendiator")!; Assert.NotNull(mediator); Assert.False(mediator.IsGenericType);
-        var publicApi = api.GetMembers("SendAll").OfType<IMethodSymbol>().ToArray(); Assert.Equal(2, publicApi.Length);
-        var publicImplementation = mediator.GetMembers("SendAll").OfType<IMethodSymbol>().ToArray(); Assert.Equal(2, publicImplementation.Length);
+        var api = output.GetTypeByMetadataName("OpenAll.Generated.Composition.IZendiator")!;
+        Assert.NotNull(api);
+        Assert.False(api.IsGenericType);
+        var mediator = output.GetTypeByMetadataName("OpenAll.Generated.Composition.Zendiator")!;
+        Assert.NotNull(mediator);
+        Assert.False(mediator.IsGenericType);
+        var publicApi = api.GetMembers("SendAll").OfType<IMethodSymbol>().ToArray();
+        Assert.Equal(2, publicApi.Length);
+        var publicImplementation = mediator.GetMembers("SendAll").OfType<IMethodSymbol>().ToArray();
+        Assert.Equal(2, publicImplementation.Length);
         var methods = publicApi.Concat(publicImplementation).Concat(publicImplementation.Select(m => CanonicalRouteEntry(output, m))).ToArray();
-        Assert.All(methods, m => { Assert.Equal(2, m.Arity); Assert.All(m.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); }); Assert.Contains(m.TypeParameters, p => p.ConstraintTypes.Any(t => t.Name == "ISecond")); Assert.Contains(m.TypeParameters, p => p.ConstraintTypes.Any(t => t.Name == "IHook")); });
+        Assert.All(methods, m =>
+        {
+            Assert.Equal(2, m.Arity);
+            Assert.All(m.TypeParameters, p =>
+            {
+                Assert.True(p.HasReferenceTypeConstraint);
+                Assert.True(p.HasConstructorConstraint);
+            });
+            Assert.Contains(m.TypeParameters, p => p.ConstraintTypes.Any(t => t.Name == "ISecond"));
+            Assert.Contains(m.TypeParameters, p => p.ConstraintTypes.Any(t => t.Name == "IHook"));
+        });
         Assert.All(methods, method => Assert.Equal(CanonicalConstraintClauses(methods[0]), CanonicalConstraintClauses(method)));
     }
 
     [Fact]
     public void OpenSendAllSync_two_definitions_inferred_constraints_order_atomic_Span_and_failure_match_reference()
     {
-        var source = OpenSendAllSyncSource(); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "OpenSendAllSync_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        var folder = OpenSendAllSyncFolder("runtime"); SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); AssertOpenSendAllSyncOutput(output, driver);
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); if (folder != null) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); bytes.Position = 0;
-        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var result = assembly.GetType("OpenAllFixture.Entry")!.GetMethod("Run")!.CreateDelegate<Func<string>>()(); if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
-        using var json = JsonDocument.Parse(result); Assert.Equal(3, json.RootElement.GetProperty("pairs").GetInt32()); Assert.Equal(6, json.RootElement.GetProperty("dispatches").GetInt32());
+        var source = OpenSendAllSyncSource();
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "OpenSendAllSync_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        var folder = OpenSendAllSyncFolder("runtime");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        AssertOpenSendAllSyncOutput(output, driver);
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var result = assembly.GetType("OpenAllFixture.Entry")!.GetMethod("Run")!.CreateDelegate<Func<string>>()();
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
+        using var json = JsonDocument.Parse(result);
+        Assert.Equal(3, json.RootElement.GetProperty("pairs").GetInt32());
+        Assert.Equal(6, json.RootElement.GetProperty("dispatches").GetInt32());
     }
 
     [Fact]
     public void OpenSendAllSync_rejects_independent_unproved_branches_and_preserves_compiler_where_and_sentinels()
     {
-        var source = OpenSendAllSyncNegative(); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "OpenSendAllSyncNegative_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        var folder = OpenSendAllSyncFolder("negative"); SaveSendAllSync(folder, source, driver, output, diagnostics); AssertOpenSendAllSyncOutput(output, driver);
+        var source = OpenSendAllSyncNegative();
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "OpenSendAllSyncNegative_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        var folder = OpenSendAllSyncFolder("negative");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
+        AssertOpenSendAllSyncOutput(output, driver);
         AssertComposedProfile(output, "OpenAllRejected.Generated.Multiple", ("SendAll", 4));
         foreach (var name in new[] { "Undetermined", "ConstraintConflict", "PatternMismatch", "Wrapper", "HookSession", "HandlerSession", "Overlap", "Three" })
         {
-            var ns = "OpenAllRejected.Generated." + name; Assert.Null(output.GetTypeByMetadataName(ns + ".IZendiator")); Assert.Null(output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar"));
-            var start = source.IndexOf("public static IServiceCollection " + name + "(", StringComparison.Ordinal); var end = source.IndexOf("});", start, StringComparison.Ordinal) + 3;
+            var ns = "OpenAllRejected.Generated." + name;
+            Assert.Null(output.GetTypeByMetadataName(ns + ".IZendiator"));
+            Assert.Null(output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar"));
+            var start = source.IndexOf("public static IServiceCollection " + name + "(", StringComparison.Ordinal);
+            var end = source.IndexOf("});", start, StringComparison.Ordinal) + 3;
             Assert.Contains(diagnostics, d => d.Location.IsInSource && d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.End <= end && d.Id == (name == "Overlap" ? "ZEN0028" : "ZEN0035"));
-            foreach (var interceptor in driver.GetRunResult().Results.Single().GeneratedSources.Where(f => f.SourceText.ToString().Contains("InterceptsLocation", StringComparison.Ordinal))) Assert.DoesNotContain("typeof(global::OpenAllRejected." + name + ")", interceptor.SourceText.ToString(), StringComparison.Ordinal);
+            foreach (var interceptor in driver.GetRunResult().Results.Single().GeneratedSources.Where(f => f.SourceText.ToString().Contains("InterceptsLocation", StringComparison.Ordinal)))
+                Assert.DoesNotContain("typeof(global::OpenAllRejected." + name + ")", interceptor.SourceText.ToString(), StringComparison.Ordinal);
         }
-        var acceptedVoid = output.GetTypeByMetadataName("OpenAllRejected.Generated.Void.IZendiator"); Assert.NotNull(acceptedVoid);
-        var voidMethod = Assert.Single(acceptedVoid.GetMembers("SendAll").OfType<IMethodSymbol>()); Assert.True(voidMethod.ReturnsVoid); Assert.Equal(1, voidMethod.Arity);
+        var acceptedVoid = output.GetTypeByMetadataName("OpenAllRejected.Generated.Void.IZendiator");
+        Assert.NotNull(acceptedVoid);
+        var voidMethod = Assert.Single(acceptedVoid.GetMembers("SendAll").OfType<IMethodSymbol>());
+        Assert.True(voidMethod.ReturnsVoid);
+        Assert.Equal(1, voidMethod.Arity);
         Assert.NotNull(output.GetTypeByMetadataName("OpenAllRejected.Generated.Void.ZendiatorGeneratedRegistrar"));
         foreach (var name in new[] { "Undetermined", "ConstraintConflict", "PatternMismatch", "HandlerSession" })
         {
-            var start = source.IndexOf("public static IServiceCollection " + name + "(", StringComparison.Ordinal); var end = source.IndexOf("});", start, StringComparison.Ordinal) + 3;
+            var start = source.IndexOf("public static IServiceCollection " + name + "(", StringComparison.Ordinal);
+            var end = source.IndexOf("});", start, StringComparison.Ordinal) + 3;
             var entry = Assert.Single(diagnostics, d => d.Id == "ZEN0035" && d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.End <= end && (source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length).StartsWith("typeof(", StringComparison.Ordinal) || source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length).StartsWith("HandlerEntry.Session", StringComparison.Ordinal)));
             Assert.Empty(entry.AdditionalLocations);
         }
-        var overlap = Assert.Single(diagnostics, d => d.Id == "ZEN0028"); Assert.Contains("Pipeline<OpenAll.Request<", source.Substring(overlap.Location.SourceSpan.Start, overlap.Location.SourceSpan.Length));
-        var additional = Assert.Single(overlap.AdditionalLocations); Assert.True(additional.IsInSource); Assert.Contains("Pipeline(typeof(OpenAll.Request<,>)", source.Substring(additional.SourceSpan.Start, additional.SourceSpan.Length)); Assert.True(additional.SourceSpan.Start < overlap.Location.SourceSpan.Start);
-        var errors = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray(); Assert.NotEmpty(errors); Assert.All(errors, d => { Assert.Equal("CS0310", d.Id); Assert.Contains("SendAll", source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length)); Assert.Contains("NoDefault", d.GetMessage()); });
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "negative-result.json"), JsonSerializer.Serialize(new { logicalInputs = 1, drivers = 1, dispatches = 0, validGeneratedCompositions = 13, newlyComposedProfiles = new[] { "Multiple" }, rejectedCompositions = 8, compiler = errors.Select(d => new { d.Id, message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }), generator = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), primary = d.Location.SourceSpan.ToString(), additional = d.AdditionalLocations.Select(l => l.SourceSpan.ToString()) }) }));
+        var overlap = Assert.Single(diagnostics, d => d.Id == "ZEN0028");
+        Assert.Contains("Pipeline<OpenAll.Request<", source.Substring(overlap.Location.SourceSpan.Start, overlap.Location.SourceSpan.Length));
+        var additional = Assert.Single(overlap.AdditionalLocations);
+        Assert.True(additional.IsInSource);
+        Assert.Contains("Pipeline(typeof(OpenAll.Request<,>)", source.Substring(additional.SourceSpan.Start, additional.SourceSpan.Length));
+        Assert.True(additional.SourceSpan.Start < overlap.Location.SourceSpan.Start);
+        var errors = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
+        Assert.NotEmpty(errors);
+        Assert.All(errors, d =>
+        {
+            Assert.Equal("CS0310", d.Id);
+            Assert.Contains("SendAll", source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length));
+            Assert.Contains("NoDefault", d.GetMessage());
+        });
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "negative-result.json"), JsonSerializer.Serialize(new
+            {
+                logicalInputs = 1,
+                drivers = 1,
+                dispatches = 0,
+                validGeneratedCompositions = 13,
+                newlyComposedProfiles = new[] { "Multiple" },
+                rejectedCompositions = 8,
+                compiler = errors.Select(d => new { d.Id, message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }),
+                generator = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), primary = d.Location.SourceSpan.ToString(), additional = d.AdditionalLocations.Select(l => l.SourceSpan.ToString()) })
+            }));
     }
 }

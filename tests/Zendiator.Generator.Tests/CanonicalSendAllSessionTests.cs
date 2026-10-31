@@ -14,22 +14,39 @@ public static class AllSessionReference
     public static object? Branch(string profile, int id, Type request, Type hook, Type handler, Type hookFactory, Type? handlerFactory,
         IServiceProvider provider, object value, CancellationToken token)
     {
-        var args = new List<Type> { request }; var response = profile.EndsWith('R'); if (response) args.Add(typeof(int)); args.Add(hook); args.Add(handler);
-        Type owner; string name;
+        var args = new List<Type> { request };
+        var response = profile.EndsWith('R');
+        if (response)
+            args.Add(typeof(int));
+        args.Add(hook);
+        args.Add(handler);
+        Type owner;
+        string name;
         if (profile.StartsWith('S'))
         {
             owner = typeof(CanonicalSendSyncReference);
             name = profile == "SV" ? "SendBorrowedHookBorrowedHandlerVoid" : id == 2 ? "SendOwnedHookResponse" : id == 1 ? "SendOwnedHookOwnedHandlerResponse" : "SendOwnedHookBorrowedHandlerResponse";
-            args.Add(hookFactory); if (handlerFactory != null) args.Add(handlerFactory);
+            args.Add(hookFactory);
+            if (handlerFactory != null)
+                args.Add(handlerFactory);
         }
         else
         {
-            owner = typeof(CanonicalAsyncMixedReference); name = response ? "SendResponse" : "SendVoid";
+            owner = typeof(CanonicalAsyncMixedReference);
+            name = response ? "SendResponse" : "SendVoid";
             var lease = profile == "AR" ? typeof(AsyncOwnedReferenceLease<,,>) : typeof(OwnedReferenceLease<,,>);
-            args.Add(lease.MakeGenericType(request, hook, hookFactory)); args.Add(lease.MakeGenericType(request, handler, handlerFactory!));
+            args.Add(lease.MakeGenericType(request, hook, hookFactory));
+            args.Add(lease.MakeGenericType(request, handler, handlerFactory!));
         }
-        try { return owner.GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)!.MakeGenericMethod(args.ToArray()).Invoke(null, [provider, value, token]); }
-        catch (TargetInvocationException error) when (error.InnerException != null) { ExceptionDispatchInfo.Capture(error.InnerException).Throw(); throw; }
+        try
+        {
+            return owner.GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)!.MakeGenericMethod(args.ToArray()).Invoke(null, [provider, value, token]);
+        }
+        catch (TargetInvocationException error) when (error.InnerException != null)
+        {
+            ExceptionDispatchInfo.Capture(error.InnerException).Throw();
+            throw;
+        }
     }
 }
 
@@ -37,8 +54,13 @@ public sealed partial class GeneratorTests
 {
     private static string AllSessionModule(string profile)
     {
-        var async = profile[0] == 'A'; var isVoid = profile[1] == 'V'; var borrowed = profile == "SV"; var mixed = profile == "SR"; var asyncFactory = profile == "AR";
-        var value = isVoid ? "void" : "int"; var ret = async ? isVoid ? "ValueTask" : "ValueTask<int>" : value;
+        var async = profile[0] == 'A';
+        var isVoid = profile[1] == 'V';
+        var borrowed = profile == "SV";
+        var mixed = profile == "SR";
+        var asyncFactory = profile == "AR";
+        var value = isVoid ? "void" : "int";
+        var ret = async ? isVoid ? "ValueTask" : "ValueTask<int>" : value;
         var allRet = async ? isVoid ? "ValueTask" : "ValueTask<int[]>" : isVoid ? "void" : "int[]";
         var factoryRole = "I" + (asyncFactory ? "Async" : "") + (borrowed ? "Borrowed" : "Owned") + "SessionFactory";
         var factoryMethod = asyncFactory ? "CreateAsync" : "Create";
@@ -136,7 +158,8 @@ public sealed partial class GeneratorTests
 
     private static string AllSessionSource(bool gate)
     {
-        var source = SendAllCompositionSource(false); source = source[..source.IndexOf("namespace AllMix {", StringComparison.Ordinal)];
+        var source = SendAllCompositionSource(false);
+        source = source[..source.IndexOf("namespace AllMix {", StringComparison.Ordinal)];
         var config = """
             c.Handlers<T.Ping>(DispatchFamily.SendAllSync,typeof(T.H2),HandlerEntry.Session<T.H1,T.F1>(),HandlerEntry.Session<T.H3,T.F3>());
             c.Handlers<A.Ping>(DispatchFamily.SendAsync,HandlerEntry.Session<A.Handler,A.Factory>());
@@ -244,18 +267,24 @@ public sealed partial class GeneratorTests
 
     private static object AssertAllSessionComposition(Compilation output)
     {
-        var api = output.GetTypeByMetadataName("AllMix.Generated.Many.IZendiator"); Assert.NotNull(api);
-        Assert.Equal(3, api.GetMembers("SendAll").Length); Assert.Equal(2, api.GetMembers("SendAllAsync").Length);
-        foreach (var name in new[] { "Send", "SendAsync", "StreamAsync" }) Assert.Single(api.GetMembers(name));
-        var classes = output.SyntaxTrees.SelectMany(t => t.GetRoot().DescendantNodes().OfType<ClassDeclarationSyntax>()).ToArray(); var registrar = Assert.Single(classes, t => t.Identifier.ValueText == "ZendiatorGeneratedRegistrar");
+        var api = output.GetTypeByMetadataName("AllMix.Generated.Many.IZendiator");
+        Assert.NotNull(api);
+        Assert.Equal(3, api.GetMembers("SendAll").Length);
+        Assert.Equal(2, api.GetMembers("SendAllAsync").Length);
+        foreach (var name in new[] { "Send", "SendAsync", "StreamAsync" })
+            Assert.Single(api.GetMembers(name));
+        var classes = output.SyntaxTrees.SelectMany(t => t.GetRoot().DescendantNodes().OfType<ClassDeclarationSyntax>()).ToArray();
+        var registrar = Assert.Single(classes, t => t.Identifier.ValueText == "ZendiatorGeneratedRegistrar");
         var calls = registrar.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(c => c.Expression is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "expected" }, Name: GenericNameSyntax }).ToArray();
         string Request(InvocationExpressionSyntax c) => ((GenericNameSyntax)((MemberAccessExpressionSyntax)c.Expression).Name).TypeArgumentList.Arguments[0].ToString();
-        var handlers = calls.Where(c => ((MemberAccessExpressionSyntax)c.Expression).Name.Identifier.ValueText == "Handlers").ToArray(); var pipelines = calls.Where(c => ((MemberAccessExpressionSyntax)c.Expression).Name.Identifier.ValueText == "Pipeline").ToArray();
+        var handlers = calls.Where(c => ((MemberAccessExpressionSyntax)c.Expression).Name.Identifier.ValueText == "Handlers").ToArray();
+        var pipelines = calls.Where(c => ((MemberAccessExpressionSyntax)c.Expression).Name.Identifier.ValueText == "Pipeline").ToArray();
         Assert.Equal(new[] { "global::SessionCases.SR.Ping", "global::Closed.AllMixAsync.Ping", "global::Closed.AllMixStream.Items", "global::SessionCases.SV.Ping", "global::Closed.AllMixSync.Ping", "global::SessionCases.AR.Ping", "global::SessionCases.AV.Ping" }, handlers.Select(Request));
         Assert.Equal(new[] { "global::SessionCases.AV.Ping", "global::Closed.AllMixStream.Items", "global::SessionCases.SV.Ping", "global::Closed.AllMixSync.Ping", "global::SessionCases.SR.Ping", "global::Closed.AllMixAsync.Ping", "global::SessionCases.AR.Ping" }, pipelines.Select(Request));
         foreach (var profile in new[] { "SR", "SV", "AR", "AV" })
         {
-            var call = Assert.Single(handlers, c => Request(c) == "global::SessionCases." + profile + ".Ping"); var entries = call.ArgumentList.Arguments.Skip(1).Select(a => a.ToString()).ToArray();
+            var call = Assert.Single(handlers, c => Request(c) == "global::SessionCases." + profile + ".Ping");
+            var entries = call.ArgumentList.Arguments.Skip(1).Select(a => a.ToString()).ToArray();
             foreach (var (id, index) in new[] { (2, 0), (1, 1), (3, 2) })
                 Assert.Equal(profile == "SR" && id == 2 ? "typeof(global::SessionCases.SR.H2)" : "global::Zendiator.HandlerEntry.Session<global::SessionCases." + profile + ".H" + id + ", global::SessionCases." + profile + ".F" + id + ">()", entries[index]);
         }
@@ -265,38 +294,80 @@ public sealed partial class GeneratorTests
         foreach (var entry in mediator.GetMembers("SendAll").Concat(mediator.GetMembers("SendAllAsync")).OfType<IMethodSymbol>())
         {
             var implementation = CanonicalRouteEntry(output, entry);
-            if (!seen.Add(CanonicalEntrySuffix(implementation))) continue;
+            if (!seen.Add(CanonicalEntrySuffix(implementation)))
+                continue;
             var selected = Assert.Single(handlers, c => Request(c) == entry.Parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
             var branches = CanonicalEntryMethods(implementation, "Branch").ToArray();
             Assert.Equal(selected.ArgumentList.Arguments.Count - 1, branches.Length);
             Assert.Equal(branches.Length, branches.Select(m => m.Name).Distinct(StringComparer.Ordinal).Count());
             names.AddRange(branches.Select(m => m.ToDisplayString()));
         }
-        return new { handlerOrder = handlers.Select(Request), pipelineOrder = pipelines.Select(Request), branchNames = names };
+        return new
+        {
+            handlerOrder = handlers.Select(Request),
+            pipelineOrder = pipelines.Select(Request),
+            branchNames = names
+        };
     }
 
     [Fact]
     public void AllSession_gate_preserves_factory_entries_and_rejects_async_factory_on_sync_composition_as_a_whole()
     {
-        var source = AllSessionSource(true); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllSessionGate_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        var e = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR"); var folder = string.IsNullOrEmpty(e) ? null : Path.Combine(e, "all-session-gate"); SaveSendAllSync(folder, source, driver, output, diagnostics);
+        var source = AllSessionSource(true);
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllSessionGate_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        var e = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
+        var folder = string.IsNullOrEmpty(e) ? null : Path.Combine(e, "all-session-gate");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
         Assert.Contains(diagnostics, d => d.GetMessage().Contains("asynchronous session factory cannot run on a synchronous route", StringComparison.Ordinal));
-        var start = source.IndexOf("public static IServiceCollection RegisterRejected(", StringComparison.Ordinal); var end = source.IndexOf("/* rejected end */", start, StringComparison.Ordinal); Assert.All(diagnostics, d => Assert.InRange(d.Location.SourceSpan.Start, start, end));
-        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); var registration = AssertAllSessionComposition(output);
-        Assert.Null(output.GetTypeByMetadataName("AllMix.Generated.Rejected.IZendiator")); Assert.Null(output.GetTypeByMetadataName("AllMix.Generated.Rejected.ZendiatorGeneratedRegistrar"));
-        var files = driver.GetRunResult().Results.Single().GeneratedSources; Assert.DoesNotContain(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains("AllMix.Generated.Rejected.ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, dispatches = 0, acceptedRoutes = 7, invalidFactoryWholeCompositionRejected = true, diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }), registration }));
+        var start = source.IndexOf("public static IServiceCollection RegisterRejected(", StringComparison.Ordinal);
+        var end = source.IndexOf("/* rejected end */", start, StringComparison.Ordinal);
+        Assert.All(diagnostics, d => Assert.InRange(d.Location.SourceSpan.Start, start, end));
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var registration = AssertAllSessionComposition(output);
+        Assert.Null(output.GetTypeByMetadataName("AllMix.Generated.Rejected.IZendiator"));
+        Assert.Null(output.GetTypeByMetadataName("AllMix.Generated.Rejected.ZendiatorGeneratedRegistrar"));
+        var files = driver.GetRunResult().Results.Single().GeneratedSources;
+        Assert.DoesNotContain(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains("AllMix.Generated.Rejected.ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new
+            {
+                generatorInputs = 1,
+                dispatches = 0,
+                acceptedRoutes = 7,
+                invalidFactoryWholeCompositionRejected = true,
+                diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }),
+                registration
+            }));
     }
 
     [Fact]
     public async Task AllSession_eight_cases_and_two_interleaves_preserve_acquisition_cleanup_context_and_ownership()
     {
-        var source = AllSessionSource(false); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllSessionRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        var e = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR"); var folder = string.IsNullOrEmpty(e) ? null : Path.Combine(e, "all-session-runtime"); SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); var registration = AssertAllSessionComposition(output);
-        Assert.Equal(7, driver.GetRunResult().Results.Single().GeneratedSources.Count(f => IsCanonicalRoute(f))); using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-        if (folder != null) { File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); File.WriteAllText(Path.Combine(folder, "registration.json"), JsonSerializer.Serialize(registration)); }
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var run = assembly.GetType("AllMix.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>(); var result = await run().WaitAsync(TimeSpan.FromSeconds(20));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result); using var json = JsonDocument.Parse(result); Assert.Equal(8, json.RootElement.GetProperty("scenarios").GetInt32()); Assert.Equal(18, json.RootElement.GetProperty("dispatches").GetInt32());
+        var source = AllSessionSource(false);
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllSessionRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        var e = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
+        var folder = string.IsNullOrEmpty(e) ? null : Path.Combine(e, "all-session-runtime");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var registration = AssertAllSessionComposition(output);
+        Assert.Equal(7, driver.GetRunResult().Results.Single().GeneratedSources.Count(f => IsCanonicalRoute(f)));
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+        {
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+            File.WriteAllText(Path.Combine(folder, "registration.json"), JsonSerializer.Serialize(registration));
+        }
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var run = assembly.GetType("AllMix.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>();
+        var result = await run().WaitAsync(TimeSpan.FromSeconds(20));
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
+        using var json = JsonDocument.Parse(result);
+        Assert.Equal(8, json.RootElement.GetProperty("scenarios").GetInt32());
+        Assert.Equal(18, json.RootElement.GetProperty("dispatches").GetInt32());
     }
 }

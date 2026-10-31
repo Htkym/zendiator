@@ -35,13 +35,28 @@ public sealed class AllWrapperProbe
     }
     public void Hit(string phase, object request, CancellationToken token, Exception? error = null, SendExitInfo? exit = null)
     {
-        if (phase == Profile + ".k0.before") Branch++;
-        Context(phase); Core.Hit(phase, request, token, error, exit);
-        if (Case == "propagate" && phase == Profile + ".h1.body") throw Failure;
+        if (phase == Profile + ".k0.before")
+            Branch++;
+        Context(phase);
+        Core.Hit(phase, request, token, error, exit);
+        if (Case == "propagate" && phase == Profile + ".h1.body")
+            throw Failure;
     }
     public bool FailBody(string id) => Retry && id == Profile + ".h1" && FailedBodies++ == 0;
-    public ValueTask<int> FailedResponse() { var gate = new AsyncOnceGate<int>(0); BodyGates.Add(gate); gate.Fail(Failure); return gate.Task; }
-    public ValueTask FailedVoid() { var gate = new AsyncOnceGate<int>(0); BodyGates.Add(gate); gate.Fail(Failure); return gate.Void; }
+    public ValueTask<int> FailedResponse()
+    {
+        var gate = new AsyncOnceGate<int>(0);
+        BodyGates.Add(gate);
+        gate.Fail(Failure);
+        return gate.Task;
+    }
+    public ValueTask FailedVoid()
+    {
+        var gate = new AsyncOnceGate<int>(0);
+        BodyGates.Add(gate);
+        gate.Fail(Failure);
+        return gate.Void;
+    }
     public void Construct(string id, object receiver)
     {
         Core.Construct(id, receiver);
@@ -50,15 +65,32 @@ public sealed class AllWrapperProbe
     private void Pending(string point)
     {
         var pending = Branch == 2 && point == Profile + ".w0." + (Case == "acquire-wait" ? "acquire" : Case == "cleanup-wait" ? "cleanup" : "");
-        Core.Pending = pending ? point : null; if (pending) PendingPoint = point;
+        Core.Pending = pending ? point : null;
+        if (pending)
+            PendingPoint = point;
     }
     public T Create<T>(string id, object request, CancellationToken token, Func<T> make) where T : class
-    { Context(id + ".acquire"); return Core.Create(id, request, token, make); }
+    {
+        Context(id + ".acquire");
+        return Core.Create(id, request, token, make);
+    }
     public ValueTask<T> CreateAsync<T>(string id, object request, CancellationToken token, Func<T> make) where T : class
-    { Context(id + ".acquire"); Pending(id + ".acquire"); return Core.CreateAsync(id, request, token, make); }
-    public void Release(string id, object receiver) { Context(id + ".cleanup"); Core.Release(id, receiver); }
+    {
+        Context(id + ".acquire");
+        Pending(id + ".acquire");
+        return Core.CreateAsync(id, request, token, make);
+    }
+    public void Release(string id, object receiver)
+    {
+        Context(id + ".cleanup");
+        Core.Release(id, receiver);
+    }
     public ValueTask ReleaseAsync(string id, object receiver)
-    { Context(id + ".cleanup"); Pending(id + ".cleanup"); return Core.ReleaseAsync(id, receiver); }
+    {
+        Context(id + ".cleanup");
+        Pending(id + ".cleanup");
+        return Core.ReleaseAsync(id, receiver);
+    }
     public void DisposeFactory(string id) => Core.DisposeFactory(id);
 }
 
@@ -71,7 +103,9 @@ public sealed partial class GeneratorTests
         profile == "AR" ? "async-owned" : profile == "SR" ? "owned" : "borrowed";
     private static string AllWrapperFactory(string profile, int id)
     {
-        var mode = HandlerMode(profile, id); if (mode == "direct") return "";
+        var mode = HandlerMode(profile, id);
+        if (mode == "direct")
+            return "";
         var async = mode.StartsWith("async-", StringComparison.Ordinal);
         return $$"""
             public sealed class F{{id}}:I{{(async ? "Async" : "")}}{{(mode.EndsWith("owned", StringComparison.Ordinal) ? "Owned" : "Borrowed")}}SessionFactory<Ping,H{{id}}>,IDisposable {
@@ -83,8 +117,10 @@ public sealed partial class GeneratorTests
     }
     private static string AllWrapperModule(string profile)
     {
-        var async = profile[0] == 'A'; var isVoid = profile[1] == 'V';
-        var roles = WrapperHookRoles(async, false, WrapperProfile(profile)); var patterns = WrapperHookPatterns(async, false);
+        var async = profile[0] == 'A';
+        var isVoid = profile[1] == 'V';
+        var roles = WrapperHookRoles(async, false, WrapperProfile(profile));
+        var patterns = WrapperHookPatterns(async, false);
         var original = WrapperHookSource(async, isVoid, false, WrapperProfile(profile));
         var root = CSharpSyntaxTree.ParseText(original).GetCompilationUnitRoot();
         var ns = root.Members.OfType<NamespaceDeclarationSyntax>().ToArray();
@@ -96,30 +132,37 @@ public sealed partial class GeneratorTests
             text += n.WithName(SyntaxFactory.ParseName("WrapCases." + profile)).WithUsings(root.Usings).WithMembers(SyntaxFactory.List(kept)).NormalizeWhitespace().ToFullString();
         }
         text = text.Replace("global::Zendiator.Generator.Tests.NestedWrapperProbe", "global::Zendiator.Generator.Tests.AllWrapperProbe", StringComparison.Ordinal);
-        var call = async ? "InvokeAsync" : "Invoke"; var awaitCall = async ? "await " : ""; var cfg = async ? ".ConfigureAwait(false)" : "";
+        var call = async ? "InvokeAsync" : "Invoke";
+        var awaitCall = async ? "await " : "";
+        var cfg = async ? ".ConfigureAwait(false)" : "";
         var next = awaitCall + "next." + call + "(_p.NullNext==\"w0\"?null!:r,token)" + cfg;
         // Both engines call this same user wrapper, including a caught failure and a changed retry request.
         var parsed = CSharpSyntaxTree.ParseText(text).GetCompilationUnitRoot();
         var wrapper = parsed.DescendantNodes().OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "W0");
-        var old = wrapper.ToFullString(); var compact = Regex.Replace(old, @"\s+", "");
+        var old = wrapper.ToFullString();
+        var compact = Regex.Replace(old, @"\s+", "");
         var one = (isVoid ? "" : "value=") + next + ";";
         var retry = "try{" + one + "}catch(Exception failure)when(_p.Retry&&ReferenceEquals(failure,_p.Failure)){_p.Hit(\"w0.caught\",r,t,failure);" +
             (isVoid ? "" : "value=") + awaitCall + "next." + call + "(new Ping(r.Value+20),token)" + cfg + ";}";
-        var expected = Regex.Replace(one, @"\s+", ""); Assert.Contains(expected, compact);
+        var expected = Regex.Replace(one, @"\s+", "");
+        Assert.Contains(expected, compact);
         var branch = wrapper.DescendantNodes().OfType<ElseClauseSyntax>().Single();
         var replacement = wrapper.ReplaceNode(branch.Statement, SyntaxFactory.ParseStatement("{" + retry + "}")).ToFullString();
-        Assert.NotEqual(old, replacement); text = text.Replace(old, replacement, StringComparison.Ordinal);
+        Assert.NotEqual(old, replacement);
+        text = text.Replace(old, replacement, StringComparison.Ordinal);
         var members = "";
         foreach (var id in new[] { 2, 1, 3 })
         {
             var h = Regex.Replace(handler, @"\bHandler\b", "H" + id).Replace("\"h", "\"h" + id, StringComparison.Ordinal).Replace("r.Value", "(r.Value+" + id + ")", StringComparison.Ordinal);
             var hit = "_p.Hit(\"h" + id + ".body\",r,t);";
             var fail = "if(_p.FailBody(\"h" + id + "\"))" + (async ? "return _p." + (isVoid ? "FailedVoid" : "FailedResponse") + "();" : "throw _p.Failure;");
-            h = h.Replace(hit, hit + fail, StringComparison.Ordinal); Assert.Contains(fail, h);
+            h = h.Replace(hit, hit + fail, StringComparison.Ordinal);
+            Assert.Contains(fail, h);
             members += h + AllWrapperFactory(profile, id);
             var reference = CanonicalWrapperHookSessionReference.Source(async, isVoid, false, roles.W0, roles.W1, HandlerMode(profile, id), roles.Modes, patterns);
             reference = Regex.Replace(reference, @"\bOracle\b", "Reference" + id);
-            reference = Regex.Replace(reference, @"\bHandler\b", "H" + id); reference = Regex.Replace(reference, @"\bHF\b", "F" + id);
+            reference = Regex.Replace(reference, @"\bHandler\b", "H" + id);
+            reference = Regex.Replace(reference, @"\bHF\b", "F" + id);
             text += reference.Replace("namespace App", "namespace WrapCases." + profile, StringComparison.Ordinal);
         }
         var result = async ? isVoid ? "ValueTask" : "ValueTask<int[]>" : isVoid ? "void" : "int[]";
@@ -127,7 +170,8 @@ public sealed partial class GeneratorTests
         members += "public static class ReferenceAll{public static " + result + " Run(IServiceProvider p,Ping r,CancellationToken t){ArgumentNullException.ThrowIfNull(r);" +
             (async ? "return Execute(p,r,t); }private static async " + result + " Execute(IServiceProvider p,Ping r,CancellationToken t){" : "") +
             "t.ThrowIfCancellationRequested();" + (isVoid ? "" : "var values=new int[3];") + invocations + (isVoid ? "" : "return values;") + "}}";
-        if (profile == "SV") members += """
+        if (profile == "SV")
+            members += """
             public readonly struct ValueWrapper:ISendWrapper<Ping>{public void Invoke<N>(Ping r,N n,CancellationToken t)where N:ISendContinuation<Ping> => n.Invoke(r,t);}
             public readonly struct ValueFactory:IOwnedSessionFactory<Ping,H1>{public H1 Create(Ping r,CancellationToken t)=>throw new NotSupportedException();}
             """;
@@ -138,10 +182,13 @@ public sealed partial class GeneratorTests
     }
     private static string AllWrapperConfig()
     {
-        var handlers = new List<string>(); var pipelines = new List<string>();
+        var handlers = new List<string>();
+        var pipelines = new List<string>();
         foreach (var (profile, alias) in AllWrapperProfiles.Zip(new[] { "T", "U", "V", "W" }))
         {
-            var async = profile[0] == 'A'; var family = async ? "SendAllAsync" : "SendAllSync"; var roles = WrapperHookRoles(async, false, WrapperProfile(profile));
+            var async = profile[0] == 'A';
+            var family = async ? "SendAllAsync" : "SendAllSync";
+            var roles = WrapperHookRoles(async, false, WrapperProfile(profile));
             var entries = new[] { 2, 1, 3 }.Select(id => HandlerMode(profile, id) == "direct" ? $"typeof({alias}.H{id})" : $"HandlerEntry.Session<{alias}.H{id},{alias}.F{id}>()");
             handlers.Add($"c.Handlers<{alias}.Ping>(DispatchFamily.{family},{string.Join(",", entries)});");
             string Hook(int i) => $"Stage.Hook<{alias}.K{i}{(roles.Modes[i] == "direct" ? "" : "," + alias + ".KF" + i)}>()";
@@ -153,7 +200,8 @@ public sealed partial class GeneratorTests
     }
     private static string AllWrapperSource(bool gate)
     {
-        var common = SendAllCompositionSource(false); common = common[..common.IndexOf("namespace AllMix {", StringComparison.Ordinal)];
+        var common = SendAllCompositionSource(false);
+        common = common[..common.IndexOf("namespace AllMix {", StringComparison.Ordinal)];
         var config = AllWrapperConfig();
         var negatives = gate ? string.Join("", new[] {
             ("Two",config.Replace("Stage.Wrapper<T.W0,T.WF0>()","Stage.Wrapper<T.W0,T.WF0>(),Stage.Wrapper<T.W0,T.WF0>()",StringComparison.Ordinal)),
@@ -193,13 +241,15 @@ public sealed partial class GeneratorTests
     }
     private static object AssertAllWrapperRegistration(Compilation output)
     {
-        var registrar = output.GetTypeByMetadataName("AllWrap.Generated.Many.ZendiatorGeneratedRegistrar")!; Assert.NotNull(registrar);
+        var registrar = output.GetTypeByMetadataName("AllWrap.Generated.Many.ZendiatorGeneratedRegistrar")!;
+        Assert.NotNull(registrar);
         var declaration = registrar.DeclaringSyntaxReferences.Single().GetSyntax();
         var text = declaration.ToFullString();
         foreach (var profile in AllWrapperProfiles)
             foreach (var id in new[] { 2, 1, 3 })
                 Assert.Contains(HandlerMode(profile, id) == "direct" ? $"typeof(global::WrapCases.{profile}.H{id})" : $"global::Zendiator.HandlerEntry.Session<global::WrapCases.{profile}.H{id}, global::WrapCases.{profile}.F{id}>()", text);
-        var mediator = output.GetTypeByMetadataName("AllWrap.Generated.Many.Zendiator")!; Assert.NotNull(mediator);
+        var mediator = output.GetTypeByMetadataName("AllWrap.Generated.Many.Zendiator")!;
+        Assert.NotNull(mediator);
         var handlers = declaration.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(c => c.Expression is
             MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "expected" }, Name: GenericNameSyntax { Identifier.ValueText: "Handlers" } }).ToArray();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -207,7 +257,8 @@ public sealed partial class GeneratorTests
         foreach (var entry in mediator.GetMembers("SendAll").Concat(mediator.GetMembers("SendAllAsync")).OfType<IMethodSymbol>())
         {
             var implementation = CanonicalRouteEntry(output, entry);
-            if (!seen.Add(CanonicalEntrySuffix(implementation))) continue;
+            if (!seen.Add(CanonicalEntrySuffix(implementation)))
+                continue;
             var request = entry.Parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var selected = Assert.Single(handlers, c => ((GenericNameSyntax)((MemberAccessExpressionSyntax)c.Expression).Name).TypeArgumentList.Arguments[0].ToString() == request);
             var continuations = CanonicalEntryTypes(implementation, "WrapperNext").Where(t => t.TypeKind == TypeKind.Struct).ToArray();
@@ -215,13 +266,19 @@ public sealed partial class GeneratorTests
             Assert.Equal(continuations.Length, continuations.Select(t => t.Name).Distinct(StringComparer.Ordinal).Count());
             names.AddRange(continuations.Select(t => t.ToDisplayString()));
         }
-        return new { continuationNames = names, wholeCompositionRoutes = 7 };
+        return new
+        {
+            continuationNames = names,
+            wholeCompositionRoutes = 7
+        };
     }
     [Fact]
     public void AllWrapper_gate_enforces_the_single_class_wrapper_boundary_and_whole_composition_rejection()
     {
-        var source = AllWrapperSource(true); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllWrapperGate_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        var folder = AllWrapperFolder("gate"); SaveSendAllSync(folder, source, driver, output, diagnostics);
+        var source = AllWrapperSource(true);
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllWrapperGate_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        var folder = AllWrapperFolder("gate");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         var registration = AssertAllWrapperRegistration(output);
         foreach (var name in new[] { "Two", "Value", "Factory", "Async" })
@@ -232,79 +289,194 @@ public sealed partial class GeneratorTests
             Assert.Null(output.GetTypeByMetadataName("AllWrap.Generated.Rejected" + name + ".IZendiator"));
             Assert.Null(output.GetTypeByMetadataName("AllWrap.Generated.Rejected" + name + ".ZendiatorGeneratedRegistrar"));
         }
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { registration, generatorInputs = 1, dispatches = 0, diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }) }));
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new
+            {
+                registration,
+                generatorInputs = 1,
+                dispatches = 0,
+                diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() })
+            }));
     }
     private static string? AllWrapperFolder(string name)
     {
-        var root = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR"); if (string.IsNullOrEmpty(root)) return null;
-        var path = Path.Combine(root, "all-wrapper-" + name); Directory.CreateDirectory(path); return path;
+        var root = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
+        if (string.IsNullOrEmpty(root))
+            return null;
+        var path = Path.Combine(root, "all-wrapper-" + name);
+        Directory.CreateDirectory(path);
+        return path;
     }
     private sealed class AllWrapperEntryContext : SynchronizationContext;
     private static async Task<(string Snapshot, string? Interleave)> ObserveAllWrapper(Assembly a, string profile, string scenario, bool generated)
     {
-        var oldContext = SynchronizationContext.Current; SynchronizationContext.SetSynchronizationContext(new AllWrapperEntryContext());
-        var p = new AllWrapperProbe { Profile = profile, Case = scenario }; var sync = new ManagedShapeProbe(); var stream = new PublicValueRequestProbe();
+        var oldContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new AllWrapperEntryContext());
+        var p = new AllWrapperProbe { Profile = profile, Case = scenario };
+        var sync = new ManagedShapeProbe();
+        var stream = new PublicValueRequestProbe();
         try
         {
-            if (scenario == "cancel") p.Core.Foreign.Cancel();
-            var bridge = a.GetType("AllWrap.Bridge")!; var ns = "WrapCases." + profile + "."; var requestType = a.GetType(ns + "Ping")!;
+            if (scenario == "cancel")
+                p.Core.Foreign.Cancel();
+            var bridge = a.GetType("AllWrap.Bridge")!;
+            var ns = "WrapCases." + profile + ".";
+            var requestType = a.GetType(ns + "Ping")!;
             var request = Activator.CreateInstance(requestType, [1])!;
-            IServiceCollection services = new ServiceCollection(); services.AddSingleton(p); services.AddSingleton(sync); services.AddSingleton(stream); bridge.GetMethod("Register")!.Invoke(null, [services]);
+            IServiceCollection services = new ServiceCollection();
+            services.AddSingleton(p);
+            services.AddSingleton(sync);
+            services.AddSingleton(stream);
+            bridge.GetMethod("Register")!.Invoke(null, [services]);
             var roles = WrapperHookRoles(profile[0] == 'A', false, WrapperProfile(profile));
-            var modes = Enumerable.Range(0, 4).ToDictionary(i => profile + ".k" + i, i => roles.Modes[i]); modes.Add(profile + ".w0", roles.W0);
-            foreach (var id in new[] { 2, 1, 3 }) modes.Add(profile + ".h" + id, HandlerMode(profile, id));
+            var modes = Enumerable.Range(0, 4).ToDictionary(i => profile + ".k" + i, i => roles.Modes[i]);
+            modes.Add(profile + ".w0", roles.W0);
+            foreach (var id in new[] { 2, 1, 3 })
+                modes.Add(profile + ".h" + id, HandlerMode(profile, id));
             foreach (var (id, mode) in modes)
             {
-                var suffix = id[(profile.Length + 1)..]; var type = a.GetType(ns + (suffix[0] == 'h' ? "H" + suffix[1..] : suffix[0] == 'k' ? "K" + suffix[1..] : "W0"))!;
+                var suffix = id[(profile.Length + 1)..];
+                var type = a.GetType(ns + (suffix[0] == 'h' ? "H" + suffix[1..] : suffix[0] == 'k' ? "K" + suffix[1..] : "W0"))!;
                 var factory = a.GetType(ns + (suffix[0] == 'h' ? "F" + suffix[1..] : suffix[0] == 'k' ? "KF" + suffix[1..] : "WF0"));
-                var service = mode == "direct" ? type : factory!; var d = Assert.Single(services, d => d.ServiceType == service); Assert.Equal(ServiceLifetime.Transient, d.Lifetime); Assert.Equal(service, d.ImplementationType);
-                if (mode != "direct") Assert.DoesNotContain(services, d => d.ServiceType == type);
+                var service = mode == "direct" ? type : factory!;
+                var d = Assert.Single(services, d => d.ServiceType == service);
+                Assert.Equal(ServiceLifetime.Transient, d.Lifetime);
+                Assert.Equal(service, d.ImplementationType);
+                if (mode != "direct")
+                    Assert.DoesNotContain(services, d => d.ServiceType == type);
                 // The native reference resolves shared roles per branch; keep both engines on one DI-owned instance.
-                services.Remove(d); services.AddScoped(service, service);
+                services.Remove(d);
+                services.AddScoped(service, service);
             }
             bridge.GetMethod("Register")!.Invoke(null, [services]);
-            await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }); await using var scope = provider.CreateAsyncScope(); var sp = scope.ServiceProvider;
-            var mediator = sp.GetRequiredService(a.GetType("AllWrap.Generated.Many.IZendiator")!); Assert.Same(mediator, sp.GetRequiredService(a.GetType("AllWrap.Generated.Many.IZendiator")!));
+            await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+            await using var scope = provider.CreateAsyncScope();
+            var sp = scope.ServiceProvider;
+            var mediator = sp.GetRequiredService(a.GetType("AllWrap.Generated.Many.IZendiator")!);
+            Assert.Same(mediator, sp.GetRequiredService(a.GetType("AllWrap.Generated.Many.IZendiator")!));
             object? Invoke()
             {
-                try { return generated ? bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, profile, request, p.Core.Token.Token, profile == "SR" && scenario is "retry" or "propagate"]) : a.GetType(ns + "ReferenceAll")!.GetMethod("Run")!.Invoke(null, [sp, request, p.Core.Token.Token]); }
-                catch (TargetInvocationException e) when (e.InnerException != null) { ExceptionDispatchInfo.Capture(e.InnerException).Throw(); throw; }
+                try
+                {
+                    return generated ? bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, profile, request, p.Core.Token.Token, profile == "SR" && scenario is "retry" or "propagate"]) : a.GetType(ns + "ReferenceAll")!.GetMethod("Run")!.Invoke(null, [sp, request, p.Core.Token.Token]);
+                }
+                catch (TargetInvocationException e) when (e.InnerException != null)
+                {
+                    ExceptionDispatchInfo.Capture(e.InnerException).Throw();
+                    throw;
+                }
             }
-            AllWrapperProbe.Ambient.Value = "caller"; object? value = null; Exception? error = null; var syncThrow = false; var initial = "Success"; var final = "Success"; object? waiting = null; string? interleave = null;
-            ValueTask<int[]> response = default; ValueTask command = default; var returned = false;
-            try { var call = Invoke(); if (profile == "AR") response = (ValueTask<int[]>)call!; else if (profile == "AV") command = (ValueTask)call!; else value = call; returned = true; }
-            catch (Exception e) { error = e; syncThrow = true; initial = final = "sync-throw"; }
-            if (returned && profile[0] == 'A') initial = profile == "AR" ? response.IsCompletedSuccessfully ? "Success" : response.IsFaulted ? "Faulted" : response.IsCanceled ? "Canceled" : "Pending" : command.IsCompletedSuccessfully ? "Success" : command.IsFaulted ? "Faulted" : command.IsCanceled ? "Canceled" : "Pending";
+            AllWrapperProbe.Ambient.Value = "caller";
+            object? value = null;
+            Exception? error = null;
+            var syncThrow = false;
+            var initial = "Success";
+            var final = "Success";
+            object? waiting = null;
+            string? interleave = null;
+            ValueTask<int[]> response = default;
+            ValueTask command = default;
+            var returned = false;
+            try
+            {
+                var call = Invoke();
+                if (profile == "AR")
+                    response = (ValueTask<int[]>)call!;
+                else if (profile == "AV")
+                    command = (ValueTask)call!;
+                else
+                    value = call;
+                returned = true;
+            }
+            catch (Exception e)
+            {
+                error = e;
+                syncThrow = true;
+                initial = final = "sync-throw";
+            }
+            if (returned && profile[0] == 'A')
+                initial = profile == "AR" ? response.IsCompletedSuccessfully ? "Success" : response.IsFaulted ? "Faulted" : response.IsCanceled ? "Canceled" : "Pending" : command.IsCompletedSuccessfully ? "Success" : command.IsFaulted ? "Faulted" : command.IsCanceled ? "Canceled" : "Pending";
             var ambientAtReturn = AllWrapperProbe.Ambient.Value;
-            if (profile[0] == 'A') Assert.Equal("caller", ambientAtReturn);
+            if (profile[0] == 'A')
+                Assert.Equal("caller", ambientAtReturn);
             if (scenario is "acquire-wait" or "cleanup-wait")
             {
-                var gate = p.Core.Gate!; Assert.NotNull(gate); Assert.Equal("Pending", initial); Assert.Equal(2, p.Branch); Assert.Equal(0, gate.Consumptions);
+                var gate = p.Core.Gate!;
+                Assert.NotNull(gate);
+                Assert.Equal("Pending", initial);
+                Assert.Equal(2, p.Branch);
+                Assert.Equal(0, gate.Consumptions);
                 Assert.DoesNotContain(p.Core.Created.Values, v => v == profile + ".h3");
-                waiting = new { p.Branch, p.PendingPoint, trace = p.Core.Trace.ToArray(), contexts = p.Contexts.ToArray(), consumptions = gate.Consumptions };
+                waiting = new
+                {
+                    p.Branch,
+                    p.PendingPoint,
+                    trace = p.Core.Trace.ToArray(),
+                    contexts = p.Contexts.ToArray(),
+                    consumptions = gate.Consumptions
+                };
                 if (generated && scenario == "acquire-wait")
                 {
                     interleave = await (Task<string>)bridge.GetMethod("Interleave")!.Invoke(null, [mediator, sync, stream])!;
-                    Assert.Equal("12:2,4", interleave); Assert.Equal(2, p.Branch); Assert.Equal(0, gate.Consumptions); Assert.False(response.IsCompleted);
+                    Assert.Equal("12:2,4", interleave);
+                    Assert.Equal(2, p.Branch);
+                    Assert.Equal(0, gate.Consumptions);
+                    Assert.False(response.IsCompleted);
                 }
-                AllWrapperProbe.Ambient.Value = "completer"; gate.Complete(); AllWrapperProbe.Ambient.Value = "caller";
+                AllWrapperProbe.Ambient.Value = "completer";
+                gate.Complete();
+                AllWrapperProbe.Ambient.Value = "caller";
             }
-            if (returned && profile[0] == 'A') try { if (profile == "AR") value = await response; else await command; } catch (Exception e) { error = e; }
-            if (returned && profile[0] == 'A') final = profile == "AR" ? response.IsCompletedSuccessfully ? "Success" : response.IsCanceled ? "Canceled" : "Faulted" : command.IsCompletedSuccessfully ? "Success" : command.IsCanceled ? "Canceled" : "Faulted";
+            if (returned && profile[0] == 'A')
+                try
+                {
+                    if (profile == "AR")
+                        value = await response;
+                    else
+                        await command;
+                }
+                catch (Exception e)
+                {
+                    error = e;
+                }
+            if (returned && profile[0] == 'A')
+                final = profile == "AR" ? response.IsCompletedSuccessfully ? "Success" : response.IsCanceled ? "Canceled" : "Faulted" : command.IsCompletedSuccessfully ? "Success" : command.IsCanceled ? "Canceled" : "Faulted";
             string Error(Exception? e) => e == null ? "none" : ReferenceEquals(e, p.Failure) ? "sentinel" : e is OperationCanceledException c && c.CancellationToken == p.Core.Foreign.Token ? "foreign-cancel" : e.GetType().Name;
             var failed = scenario is "propagate" or "cancel";
             Assert.Equal(failed ? 2 : 3, p.Branch);
-            if (scenario == "propagate") Assert.Same(p.Failure, error); else if (scenario == "cancel") Assert.Equal(p.Core.Foreign.Token, Assert.IsAssignableFrom<OperationCanceledException>(error).CancellationToken); else Assert.Null(error);
-            if (failed) Assert.DoesNotContain(p.Core.Created.Values, id => id == profile + ".h3");
-            if (scenario == "retry") { Assert.Equal(2, p.Core.Calls.Count(c => c.Phase == profile + ".h1.body")); Assert.Single(p.Core.Calls, c => c.Phase == profile + ".w0.caught"); if (profile == "AR") Assert.Equal(1, Assert.Single(p.BodyGates).Consumptions); }
-            if (scenario == "skip") Assert.DoesNotContain(p.Core.Calls, c => c.Phase == profile + ".h1.body");
-            if (p.Core.Gate != null) Assert.Equal(1, p.Core.Gate.Consumptions);
+            if (scenario == "propagate")
+                Assert.Same(p.Failure, error);
+            else if (scenario == "cancel")
+                Assert.Equal(p.Core.Foreign.Token, Assert.IsAssignableFrom<OperationCanceledException>(error).CancellationToken);
+            else
+                Assert.Null(error);
+            if (failed)
+                Assert.DoesNotContain(p.Core.Created.Values, id => id == profile + ".h3");
+            if (scenario == "retry")
+            {
+                Assert.Equal(2, p.Core.Calls.Count(c => c.Phase == profile + ".h1.body"));
+                Assert.Single(p.Core.Calls, c => c.Phase == profile + ".w0.caught");
+                if (profile == "AR")
+                    Assert.Equal(1, Assert.Single(p.BodyGates).Consumptions);
+            }
+            if (scenario == "skip")
+                Assert.DoesNotContain(p.Core.Calls, c => c.Phase == profile + ".h1.body");
+            if (p.Core.Gate != null)
+                Assert.Equal(1, p.Core.Gate.Consumptions);
             Assert.All(p.BodyGates, g => Assert.Equal(1, g.Consumptions));
-            foreach (var receiver in p.Core.Created) Assert.Equal(modes[receiver.Value].EndsWith("owned", StringComparison.Ordinal), p.Core.Released.Contains(receiver.Key));
+            foreach (var receiver in p.Core.Created)
+                Assert.Equal(modes[receiver.Value].EndsWith("owned", StringComparison.Ordinal), p.Core.Released.Contains(receiver.Key));
             Assert.Empty(p.Core.FactoryDisposals);
-            var beforeScope = new { released = p.Core.Released.Select(r => p.Core.Created[r]).ToArray(), ambient = AllWrapperProbe.Ambient.Value };
-            p.Case = ""; p.Core.Pending = null; await scope.DisposeAsync();
-            foreach (var receiver in p.Core.Created) Assert.Equal(modes[receiver.Value] == "direct" || modes[receiver.Value].EndsWith("owned", StringComparison.Ordinal), p.Core.Released.Contains(receiver.Key));
+            var beforeScope = new
+            {
+                released = p.Core.Released.Select(r => p.Core.Created[r]).ToArray(),
+                ambient = AllWrapperProbe.Ambient.Value
+            };
+            p.Case = "";
+            p.Core.Pending = null;
+            await scope.DisposeAsync();
+            foreach (var receiver in p.Core.Created)
+                Assert.Equal(modes[receiver.Value] == "direct" || modes[receiver.Value].EndsWith("owned", StringComparison.Ordinal), p.Core.Released.Contains(receiver.Key));
             Assert.All(p.Core.FactoryDisposals, d => Assert.Equal(1, d.Value));
             var snapshot = JsonSerializer.Serialize(new
             {
@@ -329,28 +501,73 @@ public sealed partial class GeneratorTests
                 consumptions = p.Core.Gate?.Consumptions ?? 0,
                 failedNextConsumptions = p.BodyGates.Select(g => g.Consumptions).ToArray()
             });
-            var folder = AllWrapperFolder("runtime"); if (folder != null) File.WriteAllText(Path.Combine(folder, profile + "-" + scenario + "-" + generated + ".json"), snapshot);
-            foreach (var receiver in p.Core.Created.Keys.Where(r => !p.Core.Released.Contains(r)).ToArray()) { if (profile[0] == 'A') await ((IAsyncDisposable)receiver).DisposeAsync(); else ((IDisposable)receiver).Dispose(); }
+            var folder = AllWrapperFolder("runtime");
+            if (folder != null)
+                File.WriteAllText(Path.Combine(folder, profile + "-" + scenario + "-" + generated + ".json"), snapshot);
+            foreach (var receiver in p.Core.Created.Keys.Where(r => !p.Core.Released.Contains(r)).ToArray())
+            {
+                if (profile[0] == 'A')
+                    await ((IAsyncDisposable)receiver).DisposeAsync();
+                else
+                    ((IDisposable)receiver).Dispose();
+            }
             Assert.Equal(p.Core.Created.Count, p.Core.Released.Count);
             return (snapshot, interleave);
         }
-        finally { p.Core.Token.Dispose(); p.Core.Foreign.Dispose(); sync.Token.Dispose(); AllWrapperProbe.Ambient.Value = null; SynchronizationContext.SetSynchronizationContext(oldContext); }
+        finally
+        {
+            p.Core.Token.Dispose();
+            p.Core.Foreign.Dispose();
+            sync.Token.Dispose();
+            AllWrapperProbe.Ambient.Value = null;
+            SynchronizationContext.SetSynchronizationContext(oldContext);
+        }
     }
     [Fact]
     public async Task AllWrapper_runtime_preserves_retry_short_circuit_propagation_waits_and_ownership()
     {
-        var source = AllWrapperSource(false); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllWrapperRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        var folder = AllWrapperFolder("runtime"); SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); var registration = AssertAllWrapperRegistration(output);
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-        if (folder != null) { File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); File.WriteAllText(Path.Combine(folder, "registration.json"), JsonSerializer.Serialize(registration)); }
-        bytes.Position = 0; var a = AssemblyLoadContext.Default.LoadFromStream(bytes); var rows = new List<object>(); string? interleave = null;
+        var source = AllWrapperSource(false);
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllWrapperRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        var folder = AllWrapperFolder("runtime");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var registration = AssertAllWrapperRegistration(output);
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+        {
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+            File.WriteAllText(Path.Combine(folder, "registration.json"), JsonSerializer.Serialize(registration));
+        }
+        bytes.Position = 0;
+        var a = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var rows = new List<object>();
+        string? interleave = null;
         foreach (var (profile, scenario) in new[] { ("SR", "retry"), ("SV", "skip"), ("AR", "acquire-wait"), ("AV", "success"), ("AR", "retry"), ("AV", "skip"), ("SR", "propagate"), ("AR", "propagate"), ("AV", "cancel"), ("AR", "cleanup-wait") })
         {
-            var generated = await ObserveAllWrapper(a, profile, scenario, true); var reference = await ObserveAllWrapper(a, profile, scenario, false);
-            rows.Add(new { profile, scenario, generated = JsonDocument.Parse(generated.Snapshot).RootElement.Clone(), reference = JsonDocument.Parse(reference.Snapshot).RootElement.Clone() });
-            if (generated.Interleave != null) interleave = generated.Interleave;
-            if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), JsonSerializer.Serialize(new { generatorInputs = 1, completedPairedScenarios = rows.Count, pairedDispatches = rows.Count * 2, interleaveDispatches = interleave == null ? 0 : 2, rows, interleave }));
+            var generated = await ObserveAllWrapper(a, profile, scenario, true);
+            var reference = await ObserveAllWrapper(a, profile, scenario, false);
+            rows.Add(new
+            {
+                profile,
+                scenario,
+                generated = JsonDocument.Parse(generated.Snapshot).RootElement.Clone(),
+                reference = JsonDocument.Parse(reference.Snapshot).RootElement.Clone()
+            });
+            if (generated.Interleave != null)
+                interleave = generated.Interleave;
+            if (folder != null)
+                File.WriteAllText(Path.Combine(folder, "runtime.json"), JsonSerializer.Serialize(new
+                {
+                    generatorInputs = 1,
+                    completedPairedScenarios = rows.Count,
+                    pairedDispatches = rows.Count * 2,
+                    interleaveDispatches = interleave == null ? 0 : 2,
+                    rows,
+                    interleave
+                }));
             Assert.Equal(reference.Snapshot, generated.Snapshot);
         }
     }

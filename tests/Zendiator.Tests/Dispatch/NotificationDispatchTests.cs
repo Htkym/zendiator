@@ -26,7 +26,8 @@ public sealed class NotificationDispatchTests
         };
         var completion = new NotificationCompletion();
         var context = new AsyncLocal<string?> { Value = "caller" };
-        if (!suspend) completion.Complete(error);
+        if (!suspend)
+            completion.Complete(error);
         var pending = mediator.PublishAsync(new ControlledNotification(completion, completion.Version, context));
         Assert.Equal("caller", context.Value);
         if (suspend)
@@ -35,13 +36,15 @@ public sealed class NotificationDispatchTests
             Assert.Equal(0, completion.Consumptions);
             completion.Complete(error);
         }
-        if (error is null) await pending;
+        if (error is null)
+            await pending;
         else if (error is OperationCanceledException)
         {
             var observed = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
             Assert.Equal(cancellation.Token, observed.CancellationToken);
         }
-        else Assert.Same(error, await Assert.ThrowsAsync<InvalidOperationException>(async () => await pending));
+        else
+            Assert.Same(error, await Assert.ThrowsAsync<InvalidOperationException>(async () => await pending));
         Assert.Equal(1, completion.Consumptions);
         Assert.Equal("caller", context.Value);
     }
@@ -189,14 +192,16 @@ public sealed class NotificationDispatchTests
             .PublishAsync(new SharedLeadingNote(completion, completion.Version), cancellation.Token);
         Assert.False(pending.IsCompleted);
         Assert.Equal(0, constructions);
-        if (cancel) cancellation.Cancel();
+        if (cancel)
+            cancellation.Cancel();
         completion.Complete(cancel ? null : failure);
         if (cancel)
         {
             var observed = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
             Assert.Equal(cancellation.Token, observed.CancellationToken);
         }
-        else Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(async () => await pending));
+        else
+            Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(async () => await pending));
         Assert.Equal(0, constructions);
         Assert.Equal(1, completion.Consumptions);
     }

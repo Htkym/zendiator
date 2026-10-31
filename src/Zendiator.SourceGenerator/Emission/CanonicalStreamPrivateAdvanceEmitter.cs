@@ -6,7 +6,8 @@ internal static class CanonicalStreamPrivateAdvanceEmitter
 {
     internal static CanonicalStreamFallbackSegment? Inner(CanonicalStreamFallbackModel model)
     {
-        if (model.Segments.Count != 2) return null;
+        if (model.Segments.Count != 2)
+            return null;
         var inner = model.Segments.SingleOrDefault(s => s.Wrapper == null && s.Upstream == null && s.Hooks.Count == 0);
         var outer = model.Segments.Single(s => s.Id == model.ConsumerSegment);
         return inner != null && outer.Wrapper != null && outer.Upstream == inner.Id && outer.Hooks.Count == 0
@@ -20,7 +21,8 @@ internal static class CanonicalStreamPrivateAdvanceEmitter
     internal static string Emit(CanonicalStreamFallbackModel model, int cursor)
     {
         var inner = Inner(model);
-        if (inner == null) return "";
+        if (inner == null)
+            return "";
         if (cursor == inner.Id)
             return """
                         internal bool TryBeginPrivateMove() => TryBeginMove();
@@ -33,9 +35,11 @@ internal static class CanonicalStreamPrivateAdvanceEmitter
                             error is not null ? MoveFailed(error) : moved ? MoveSucceeded(true) : EndAsync();
                         internal void ReleasePrivateMove() => ReleasePrivateMoveClaim();
                 """;
-        if (!IsParent(model, cursor)) return "";
+        if (!IsParent(model, cursor))
+            return "";
         var runner = "PendingTaskRunner";
-        while (model.Generic?.Parameters.Contains(runner) == true) runner = "_" + runner;
+        while (model.Generic?.Parameters.Contains(runner) == true)
+            runner = "_" + runner;
         return $$"""
                         private Cursor{{inner.Id}}? _identitySource;
                         private global::System.Threading.Tasks.ValueTask<bool> AdvanceIdentity(Cursor{{inner.Id}} child)

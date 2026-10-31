@@ -47,7 +47,8 @@ public sealed partial class GeneratorTests
 
     private static string OpenSendZeroDefinition(string profile)
     {
-        var async = profile.StartsWith('A'); var isVoid = profile.EndsWith('V');
+        var async = profile.StartsWith('A');
+        var isVoid = profile.EndsWith('V');
         var family = async ? "SendAsync" : "SendSync";
         var method = async ? "HandleAsync" : "Handle";
         var request = async ? isVoid ? "IRequest" : "IRequest<int>" : isVoid ? "ISyncRequest" : "ISyncRequest<int>";
@@ -79,7 +80,8 @@ public sealed partial class GeneratorTests
 
     private static string OpenSendZeroConsumer(string profile)
     {
-        var async = profile.StartsWith('A'); var isVoid = profile.EndsWith('V');
+        var async = profile.StartsWith('A');
+        var isVoid = profile.EndsWith('V');
         var family = async ? "SendAsync" : "SendSync";
         var methodName = async ? "SendAsync" : "Send";
         var result = async ? isVoid ? "ValueTask" : "ValueTask<int>" : isVoid ? "void" : "int";
@@ -184,8 +186,11 @@ public sealed partial class GeneratorTests
     private static string? OpenSendZeroFolder(string name)
     {
         var root = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
-        if (string.IsNullOrEmpty(root)) return null;
-        var path = Path.Combine(root, "open-send-zero-" + name); Directory.CreateDirectory(path); return path;
+        if (string.IsNullOrEmpty(root))
+            return null;
+        var path = Path.Combine(root, "open-send-zero-" + name);
+        Directory.CreateDirectory(path);
+        return path;
     }
 
     [Fact]
@@ -194,53 +199,97 @@ public sealed partial class GeneratorTests
         var profiles = new[] { "SR", "SV", "AR", "AV" };
         var source = OpenSendZeroCommon + string.Concat(profiles.Select(p => OpenSendZeroDefinition(p) + OpenSendZeroConsumer(p))) + OpenSendZeroRunner;
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "OpenSendZero_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        var folder = OpenSendZeroFolder("runtime"); SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var folder = OpenSendZeroFolder("runtime");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         var catalog = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single().TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
         var execution = CanonicalExecutionGraphNormalizer.Create(catalog);
-        var sync = CanonicalSyncEmissionNormalizer.Create(catalog, execution); var async = CanonicalAsyncEmissionNormalizer.Create(catalog, execution);
-        Assert.Equal(4, sync.Compositions.Count); Assert.Equal(4, async.Compositions.Count);
+        var sync = CanonicalSyncEmissionNormalizer.Create(catalog, execution);
+        var async = CanonicalAsyncEmissionNormalizer.Create(catalog, execution);
+        Assert.Equal(4, sync.Compositions.Count);
+        Assert.Equal(4, async.Compositions.Count);
         foreach (var profile in profiles)
         {
-            var isAsync = profile.StartsWith('A'); var isVoid = profile.EndsWith('V'); var methodName = isAsync ? "SendAsync" : "Send";
+            var isAsync = profile.StartsWith('A');
+            var isVoid = profile.EndsWith('V');
+            var methodName = isAsync ? "SendAsync" : "Send";
             foreach (var form in new[] { "Omitted", "Empty" })
             {
                 var ns = "OpenZero." + profile + ".Generated." + form;
-                var composition = Assert.Single(catalog.Compositions, c => c.GeneratedNamespace == ns); var route = Assert.Single(composition.Pipelines);
-                Assert.Equal(form == "Empty", route.HasEmptyPipeline); Assert.Empty(route.Stages); Assert.Single(route.Handlers);
-                Assert.Empty(route.Handlers[0].Sessions); Assert.Equal(FusionOwnership.BorrowedService, route.Handlers[0].ServiceOwnership);
+                var composition = Assert.Single(catalog.Compositions, c => c.GeneratedNamespace == ns);
+                var route = Assert.Single(composition.Pipelines);
+                Assert.Equal(form == "Empty", route.HasEmptyPipeline);
+                Assert.Empty(route.Stages);
+                Assert.Single(route.Handlers);
+                Assert.Empty(route.Handlers[0].Sessions);
+                Assert.Equal(FusionOwnership.BorrowedService, route.Handlers[0].ServiceOwnership);
                 Assert.Equal(isAsync ? BoundRequestShape.OpenAsyncReference : BoundRequestShape.OpenSyncReference, route.RequestShape);
                 Assert.Equal(isVoid ? FusionResultKind.Void : FusionResultKind.Response, route.ResultKind);
-                Assert.NotNull(route.SendGeneric); Assert.NotNull(route.SendOpenRegistration); Assert.Empty(route.SendOpenRegistration.Stages);
+                Assert.NotNull(route.SendGeneric);
+                Assert.NotNull(route.SendOpenRegistration);
+                Assert.Empty(route.SendOpenRegistration.Stages);
                 CanonicalSyncCompositionEmission normalized;
                 if (isAsync)
                 {
-                    var value = Assert.Single(async.Compositions, c => c.Namespace == ns); Assert.Null(value.Factory); Assert.Empty(value.Hooks);
+                    var value = Assert.Single(async.Compositions, c => c.Namespace == ns);
+                    Assert.Null(value.Factory);
+                    Assert.Empty(value.Hooks);
                     normalized = CanonicalAsyncEmissionNormalizer.Registration(value);
                 }
-                else normalized = Assert.Single(sync.Compositions, c => c.Namespace == ns);
-                Assert.Empty(normalized.Hooks); Assert.Null(normalized.Factory); Assert.Equal(route.SendGeneric, normalized.Generic); Assert.Equal(route.SendOpenRegistration, normalized.OpenRegistration);
-                var api = output.GetTypeByMetadataName(ns + ".IZendiator")!; var mediator = output.GetTypeByMetadataName(ns + ".Zendiator")!;
-                Assert.NotNull(api); Assert.False(api.IsGenericType); Assert.NotNull(mediator); Assert.False(mediator.IsGenericType);
-                var publicMethod = Assert.Single(mediator.GetMembers(methodName).OfType<IMethodSymbol>()); Assert.False(publicMethod.IsAsync);
+                else
+                    normalized = Assert.Single(sync.Compositions, c => c.Namespace == ns);
+                Assert.Empty(normalized.Hooks);
+                Assert.Null(normalized.Factory);
+                Assert.Equal(route.SendGeneric, normalized.Generic);
+                Assert.Equal(route.SendOpenRegistration, normalized.OpenRegistration);
+                var api = output.GetTypeByMetadataName(ns + ".IZendiator")!;
+                var mediator = output.GetTypeByMetadataName(ns + ".Zendiator")!;
+                Assert.NotNull(api);
+                Assert.False(api.IsGenericType);
+                Assert.NotNull(mediator);
+                Assert.False(mediator.IsGenericType);
+                var publicMethod = Assert.Single(mediator.GetMembers(methodName).OfType<IMethodSymbol>());
+                Assert.False(publicMethod.IsAsync);
                 var execute = isAsync ? CanonicalRouteEntry(output, publicMethod) : Assert.Single(CanonicalEntryMethods(publicMethod, "Execute"));
                 Assert.False(execute.IsAsync);
                 foreach (var method in new[] { Assert.Single(api.GetMembers(methodName).OfType<IMethodSymbol>()), publicMethod, execute })
                 {
-                    Assert.Equal(2, method.Arity); Assert.Equal(2, method.Parameters.Length);
-                    Assert.All(method.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); });
-                    Assert.Contains(method.TypeParameters[0].ConstraintTypes, t => t.Name == "IRight"); Assert.Contains(method.TypeParameters[1].ConstraintTypes, t => t.Name == "ILeft");
-                    if (isAsync) { var result = Assert.IsAssignableFrom<INamedTypeSymbol>(method.ReturnType); Assert.Equal("ValueTask", result.Name); Assert.Equal(isVoid ? 0 : 1, result.Arity); }
-                    else if (isVoid) Assert.True(method.ReturnsVoid); else Assert.Equal(SpecialType.System_Int32, method.ReturnType.SpecialType);
+                    Assert.Equal(2, method.Arity);
+                    Assert.Equal(2, method.Parameters.Length);
+                    Assert.All(method.TypeParameters, p =>
+                    {
+                        Assert.True(p.HasReferenceTypeConstraint);
+                        Assert.True(p.HasConstructorConstraint);
+                    });
+                    Assert.Contains(method.TypeParameters[0].ConstraintTypes, t => t.Name == "IRight");
+                    Assert.Contains(method.TypeParameters[1].ConstraintTypes, t => t.Name == "ILeft");
+                    if (isAsync)
+                    {
+                        var result = Assert.IsAssignableFrom<INamedTypeSymbol>(method.ReturnType);
+                        Assert.Equal("ValueTask", result.Name);
+                        Assert.Equal(isVoid ? 0 : 1, result.Arity);
+                    }
+                    else if (isVoid)
+                        Assert.True(method.ReturnsVoid);
+                    else
+                        Assert.Equal(SpecialType.System_Int32, method.ReturnType.SpecialType);
                 }
             }
         }
-        using var bytes = new MemoryStream(); var emit = output.Emit(bytes); Assert.True(emit.Success, string.Join("\n", emit.Diagnostics));
-        if (folder != null) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); bytes.Position = 0;
+        using var bytes = new MemoryStream();
+        var emit = output.Emit(bytes);
+        Assert.True(emit.Success, string.Join("\n", emit.Diagnostics));
+        if (folder != null)
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+        bytes.Position = 0;
         var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var runtime = await assembly.GetType("OpenZero.Entry")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime);
-        using var json = JsonDocument.Parse(runtime); Assert.Equal(18, json.RootElement.GetProperty("pairs").GetInt32()); Assert.Equal(36, json.RootElement.GetProperty("dispatches").GetInt32());
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime);
+        using var json = JsonDocument.Parse(runtime);
+        Assert.Equal(18, json.RootElement.GetProperty("pairs").GetInt32());
+        Assert.Equal(36, json.RootElement.GetProperty("dispatches").GetInt32());
     }
 
     [Fact]
@@ -269,15 +318,22 @@ public sealed partial class GeneratorTests
         {
             var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(invalid, "OpenSendZeroRejected_" + name + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
             SaveSendAllSync(OpenSendZeroFolder(name), invalid, driver, output, diagnostics);
-            Assert.NotEmpty(diagnostics); Assert.All(diagnostics, d => Assert.Equal("ZEN0035", d.Id));
+            Assert.NotEmpty(diagnostics);
+            Assert.All(diagnostics, d => Assert.Equal("ZEN0035", d.Id));
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-            foreach (var form in new[] { "Omitted", "Empty" }) { Assert.Null(output.GetTypeByMetadataName("OpenZero.SR.Generated." + form + ".IZendiator")); Assert.Null(output.GetTypeByMetadataName("OpenZero.SR.Generated." + form + ".ZendiatorGeneratedRegistrar")); }
+            foreach (var form in new[] { "Omitted", "Empty" })
+            {
+                Assert.Null(output.GetTypeByMetadataName("OpenZero.SR.Generated." + form + ".IZendiator"));
+                Assert.Null(output.GetTypeByMetadataName("OpenZero.SR.Generated." + form + ".ZendiatorGeneratedRegistrar"));
+            }
         }
         var multiSource = source.Replace(handlers, handlers + "c.Handlers(typeof(OtherQuery<,>),DispatchFamily.SendSync,typeof(OtherHandler<,>));");
         var multiDriver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(multiSource, "OpenSendZeroMultiple_" + Guid.NewGuid().ToString("N")), out var multiOutput, out var multiDiagnostics);
         SaveSendAllSync(OpenSendZeroFolder("multiple-routes"), multiSource, multiDriver, multiOutput, multiDiagnostics);
-        Assert.Empty(multiDiagnostics); Assert.Empty(multiOutput.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        foreach (var form in new[] { "Omitted", "Empty" }) AssertComposedProfile(multiOutput, "OpenZero.SR.Generated." + form, ("Send", 2));
+        Assert.Empty(multiDiagnostics);
+        Assert.Empty(multiOutput.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        foreach (var form in new[] { "Omitted", "Empty" })
+            AssertComposedProfile(multiOutput, "OpenZero.SR.Generated." + form, ("Send", 2));
         var constraints = OpenSendZeroCommon + string.Concat(new[] { "SR", "SV", "AR", "AV" }.Select(OpenSendZeroDefinition)) + """
             namespace OpenZero {
             public sealed class NoDefault:ILeft {public NoDefault(int value){}}
@@ -290,9 +346,19 @@ public sealed partial class GeneratorTests
             }
             """;
         var accepted = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(constraints, "OpenSendZeroCompiler_" + Guid.NewGuid().ToString("N")), out var compilerOutput, out var generatorDiagnostics);
-        SaveSendAllSync(OpenSendZeroFolder("compiler-constraints"), constraints, accepted, compilerOutput, generatorDiagnostics); Assert.Empty(generatorDiagnostics);
-        var errors = compilerOutput.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray(); Assert.Equal(4, errors.Length);
-        Assert.All(errors, d => { Assert.Equal("CS0310", d.Id); Assert.Contains("NoDefault", d.GetMessage()); Assert.True(d.Location.IsInSource); Assert.Contains(constraints.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length), new[] { "Send", "SendAsync" }); });
-        foreach (var profile in new[] { "SR", "SV", "AR", "AV" }) foreach (var form in new[] { "Omitted", "Empty" }) Assert.NotNull(compilerOutput.GetTypeByMetadataName("OpenZero." + profile + ".Generated." + form + ".IZendiator"));
+        SaveSendAllSync(OpenSendZeroFolder("compiler-constraints"), constraints, accepted, compilerOutput, generatorDiagnostics);
+        Assert.Empty(generatorDiagnostics);
+        var errors = compilerOutput.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
+        Assert.Equal(4, errors.Length);
+        Assert.All(errors, d =>
+        {
+            Assert.Equal("CS0310", d.Id);
+            Assert.Contains("NoDefault", d.GetMessage());
+            Assert.True(d.Location.IsInSource);
+            Assert.Contains(constraints.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length), new[] { "Send", "SendAsync" });
+        });
+        foreach (var profile in new[] { "SR", "SV", "AR", "AV" })
+            foreach (var form in new[] { "Omitted", "Empty" })
+                Assert.NotNull(compilerOutput.GetTypeByMetadataName("OpenZero." + profile + ".Generated." + form + ".IZendiator"));
     }
 }

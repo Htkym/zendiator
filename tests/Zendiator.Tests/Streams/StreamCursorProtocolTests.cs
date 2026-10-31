@@ -72,7 +72,10 @@ public sealed class StreamCursorProtocolTests
             Assert.Equal(1, probe.HandlerConstructions);
             Assert.Equal(0, probe.HandlerDisposals);
         }
-        finally { await scope.DisposeAsync(); }
+        finally
+        {
+            await scope.DisposeAsync();
+        }
         Assert.Equal(1, probe.HandlerDisposals);
     }
 
@@ -133,8 +136,10 @@ public sealed class StreamCursorProtocolTests
             cursor.Publication.Complete(hasValue);
             Assert.Equal(hasValue, await pending);
             Assert.Equal(1, cursor.Publication.Consumptions);
-            if (hasValue) Assert.Equal(7, cursor.Current);
-            else Assert.True(cursor.CanReopen);
+            if (hasValue)
+                Assert.Equal(7, cursor.Current);
+            else
+                Assert.True(cursor.CanReopen);
             await cursor.DisposeAsync();
             Assert.Equal(1, cursor.Disposals);
             Assert.False(await cursor.MoveNextAsync());
@@ -189,8 +194,10 @@ public sealed class StreamCursorProtocolTests
             Cleanup = operation == "move" ? null : () => throw failure,
         };
         Assert.True(await cursor.MoveNextAsync());
-        if (operation == "move") cursor.MoveError = failure;
-        else if (operation == "cleanup") cursor.MoveError = new FormatException("move before cleanup failure");
+        if (operation == "move")
+            cursor.MoveError = failure;
+        else if (operation == "cleanup")
+            cursor.MoveError = new FormatException("move before cleanup failure");
 
         Task result = operation == "dispose" ? cursor.DisposeAsync().AsTask() : cursor.MoveNextAsync().AsTask();
         Assert.True(result.IsCompleted);
@@ -438,8 +445,14 @@ public sealed class StreamCursorProtocolTests
         await using var scope = provider.CreateAsyncScope();
         var stream = scope.ServiceProvider.GetRequiredService<StreamMediator>().StreamSource(new WrappedStreamRequest(3));
         Exception? observed = null;
-        try { await stream.ConsumeAsync(new FailingSink(sinkError)); }
-        catch (Exception error) { observed = error; }
+        try
+        {
+            await stream.ConsumeAsync(new FailingSink(sinkError));
+        }
+        catch (Exception error)
+        {
+            observed = error;
+        }
         Assert.Same(cleanupFails ? cleanupError : sinkError, observed);
         Assert.Equal(1, probe.Moves);
         Assert.Equal(1, probe.SourceDisposals);
@@ -463,32 +476,54 @@ public sealed class StreamCursorProtocolTests
 
     private static Task CompleteOutsideRequestContext(Action complete)
     {
-        using (ExecutionContext.SuppressFlow()) return Task.Run(complete);
+        using (ExecutionContext.SuppressFlow())
+            return Task.Run(complete);
     }
 
     private sealed class ProtocolCursor(CancellationToken apiToken, CancellationToken enumerationToken = default,
         bool reserveFirstEnumeration = false)
         : global::Zendiator.Streaming.StreamCursorState(apiToken, enumerationToken, reserveFirstEnumeration), IAsyncEnumerator<int>
     {
-        public Func<ValueTask>? Cleanup { get; init; }
-        public Exception? MoveError { get; set; }
-        public int Disposals { get; private set; }
+        public Func<ValueTask>? Cleanup
+        {
+            get; init;
+        }
+        public Exception? MoveError
+        {
+            get; set;
+        }
+        public int Disposals
+        {
+            get; private set;
+        }
         public CancellationToken ApiToken => OriginalApiToken;
         public bool HasPending => HasPendingOperation;
         public bool Claim(CancellationToken token) => TryClaimFirstEnumeration(token);
-        public int Current { get { ValidateCurrent(); return 7; } }
+        public int Current
+        {
+            get
+            {
+                ValidateCurrent();
+                return 7;
+            }
+        }
 
         public ValueTask<bool> MoveNextAsync()
         {
-            if (!TryBeginMove()) return new(false);
+            if (!TryBeginMove())
+                return new(false);
             ValueTask<bool> operation;
             try
             {
                 _ = TryStart();
-                if (MoveError is { } error) throw error;
+                if (MoveError is { } error)
+                    throw error;
                 operation = MoveSucceeded(true);
             }
-            catch (Exception error) { operation = MoveFailed(error); }
+            catch (Exception error)
+            {
+                operation = MoveFailed(error);
+            }
             return PublishMove(operation);
         }
 
@@ -502,22 +537,32 @@ public sealed class StreamCursorProtocolTests
     private sealed class CleanupSource : IValueTaskSource
     {
         private ManualResetValueTaskSourceCore<bool> _source = new() { RunContinuationsAsynchronously = true };
-        public Exception? StatusError { get; init; }
-        public Exception? ResultError { get; init; }
+        public Exception? StatusError
+        {
+            get; init;
+        }
+        public Exception? ResultError
+        {
+            get; init;
+        }
         public int Consumptions;
         public ValueTask Operation => new(this, _source.Version);
 
         public void Complete(Exception? error = null)
         {
-            if (error is null) _source.SetResult(true);
-            else _source.SetException(error);
+            if (error is null)
+                _source.SetResult(true);
+            else
+                _source.SetException(error);
         }
 
         public void GetResult(short token)
         {
-            if (Interlocked.Increment(ref Consumptions) != 1) throw new InvalidOperationException("Cleanup was consumed twice.");
+            if (Interlocked.Increment(ref Consumptions) != 1)
+                throw new InvalidOperationException("Cleanup was consumed twice.");
             _ = _source.GetResult(token);
-            if (ResultError is { } error) throw error;
+            if (ResultError is { } error)
+                throw error;
         }
 
         public ValueTaskSourceStatus GetStatus(short token) =>
@@ -531,14 +576,28 @@ public sealed class StreamCursorProtocolTests
     {
         private bool _normalEnd;
         public OnceSource<bool> Publication { get; } = new();
-        public bool CoreCompleted { get; private set; }
+        public bool CoreCompleted
+        {
+            get; private set;
+        }
         public bool CanReopen => _normalEnd && !HasPendingOperation;
-        public int Disposals { get; private set; }
-        public int Current { get { ValidateCurrent(); return 7; } }
+        public int Disposals
+        {
+            get; private set;
+        }
+        public int Current
+        {
+            get
+            {
+                ValidateCurrent();
+                return 7;
+            }
+        }
 
         public ValueTask<bool> MoveNextAsync()
         {
-            if (!TryBeginMove()) return new(false);
+            if (!TryBeginMove())
+                return new(false);
             _ = TryStart();
             _normalEnd = !MoveSucceeded(hasValue).GetAwaiter().GetResult();
             CoreCompleted = true;
@@ -585,7 +644,8 @@ public sealed class StreamCursorProtocolTests
         public override int Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => reader.GetInt32();
         public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options)
         {
-            if (value == 1) throw error;
+            if (value == 1)
+                throw error;
             writer.WriteNumberValue(value);
         }
     }
@@ -619,7 +679,8 @@ public sealed class OnceSource<T> : IValueTaskSource<T>
     public void Complete(T value) => _source.SetResult(value);
     public T GetResult(short token)
     {
-        if (Interlocked.Increment(ref Consumptions) != 1) throw new InvalidOperationException("The source was consumed twice.");
+        if (Interlocked.Increment(ref Consumptions) != 1)
+            throw new InvalidOperationException("The source was consumed twice.");
         var value = _source.GetResult(token);
         Token.ThrowIfCancellationRequested();
         return value;
@@ -634,7 +695,11 @@ public sealed class StreamHandler : IStreamSourceHandler<StreamRequest, int, Nat
     IStreamSourceHandler<WrappedStreamRequest, int, NativeCursor>, IDisposable
 {
     private readonly StreamProbe _probe;
-    public StreamHandler(StreamProbe probe) { _probe = probe; probe.HandlerConstructions++; }
+    public StreamHandler(StreamProbe probe)
+    {
+        _probe = probe;
+        probe.HandlerConstructions++;
+    }
     public ValueTask<NativeCursor> OpenAsync(StreamRequest request, CancellationToken cancellationToken)
     {
         _probe.Opened++;
@@ -660,10 +725,12 @@ public sealed class NativeCursor(StreamProbe probe, int count, CancellationToken
         probe.Contexts.Add(probe.Ambient.Value);
         _valid = false;
         token.ThrowIfCancellationRequested();
-        if (_next == count) return new(false);
+        if (_next == count)
+            return new(false);
         _current = _next++;
         _valid = true;
-        if (_current != 1 || !probe.WaitForSecondMove) return new(true);
+        if (_current != 1 || !probe.WaitForSecondMove)
+            return new(true);
         probe.MiddleStarted.TrySetResult();
         return probe.Read.Operation;
     }
@@ -671,7 +738,8 @@ public sealed class NativeCursor(StreamProbe probe, int count, CancellationToken
     {
         _valid = false;
         probe.SourceDisposals++;
-        if (probe.DisposalError is { } error) return ValueTask.FromException(error);
+        if (probe.DisposalError is { } error)
+            return ValueTask.FromException(error);
         return probe.WaitForDispose ? new(probe.Disposal.Task) : default;
     }
 }
@@ -680,7 +748,14 @@ public sealed class ProbeMiddleware(StreamProbe probe) : IStreamMiddleware<Wrapp
 {
     public async ValueTask<IAsyncEnumerator<int>> OpenAsync(WrappedStreamRequest request, IStreamUpstream<WrappedStreamRequest, int> upstream, CancellationToken cancellationToken)
     {
-        try { return await upstream.OpenAsync(request, cancellationToken); }
-        catch { probe.MiddlewareFailures++; throw; }
+        try
+        {
+            return await upstream.OpenAsync(request, cancellationToken);
+        }
+        catch
+        {
+            probe.MiddlewareFailures++;
+            throw;
+        }
     }
 }

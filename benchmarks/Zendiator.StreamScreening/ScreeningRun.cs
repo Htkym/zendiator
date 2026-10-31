@@ -11,7 +11,10 @@ public sealed record Raw(string Shape, int Launch, string Backend, string Order,
 public static class ScreeningRun
 {
     public const int Warmup = 2048, BatchSize = 512, TimingPairs = 8, AllocationPairs = 4;
-    public static Action<Raw>? RawSink { get; set; }
+    public static Action<Raw>? RawSink
+    {
+        get; set;
+    }
     private static bool _helpersInitialized;
 
     // Zero enumerations: initialize both nullable Raw schemas through the actual
@@ -23,7 +26,9 @@ public static class ScreeningRun
         var frequency = Stopwatch.Frequency;
         var start = Stopwatch.GetTimestamp();
         var ticks = Stopwatch.GetTimestamp() - start;
-        var g0 = GC.CollectionCount(0); var g1 = GC.CollectionCount(1); var g2 = GC.CollectionCount(2);
+        var g0 = GC.CollectionCount(0);
+        var g1 = GC.CollectionCount(1);
+        var g2 = GC.CollectionCount(2);
         var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
         var allocatedAfter = GC.GetTotalAllocatedBytes(precise: true);
         save(new Raw("initialization", 0, "init", "none", "initialize-timing", -1, 0,
@@ -39,7 +44,8 @@ public static class ScreeningRun
         Func<int, Task<Outcome>> a, Func<int, Task<Outcome>> b, Action drainA, Action drainB,
         object preflight)
     {
-        if (!_helpersInitialized) throw new InvalidOperationException("Measurement helpers have not been initialized.");
+        if (!_helpersInitialized)
+            throw new InvalidOperationException("Measurement helpers have not been initialized.");
         var rows = new Raw[2 * (TimingPairs + AllocationPairs)];
         var slot = 0;
         var firstA = launch != 2;
@@ -62,7 +68,9 @@ public static class ScreeningRun
                     var consume = reference ? a : b;
                     var drain = reference ? drainA : drainB;
                     drain();
-                    var g0 = GC.CollectionCount(0); var g1 = GC.CollectionCount(1); var g2 = GC.CollectionCount(2);
+                    var g0 = GC.CollectionCount(0);
+                    var g1 = GC.CollectionCount(1);
+                    var g2 = GC.CollectionCount(2);
                     long? allocatedBefore = pass == 1 ? GC.GetTotalAllocatedBytes(precise: true) : null;
                     var start = pass == 0 ? Stopwatch.GetTimestamp() : 0;
                     var result = await consume(BatchSize).ConfigureAwait(false);
@@ -72,8 +80,8 @@ public static class ScreeningRun
                     Check(result, BatchSize, expected);
                     var row = new Raw(shape, launch, reference ? "A" : "B", ab ? "AB" : "BA",
                         pass == 0 ? "timing" : "allocation", pair, BatchSize, ticks, allocatedBefore, allocatedAfter,
-                        ticks is {} elapsed ? elapsed * 1_000_000_000.0 / Stopwatch.Frequency / BatchSize : null,
-                        allocatedAfter is {} end && allocatedBefore is {} begin ? (end - begin) / (double)BatchSize : null,
+                        ticks is { } elapsed ? elapsed * 1_000_000_000.0 / Stopwatch.Frequency / BatchSize : null,
+                        allocatedAfter is { } end && allocatedBefore is { } begin ? (end - begin) / (double)BatchSize : null,
                         result, GC.CollectionCount(0) - g0, GC.CollectionCount(1) - g1, GC.CollectionCount(2) - g2);
                     rows[slot++] = row;
                     // Endpoint exclusion does not eliminate effects on the next
@@ -82,10 +90,17 @@ public static class ScreeningRun
                 }
             }
         }
-        drainA(); drainB();
+        drainA();
+        drainB();
         return JsonSerializer.Serialize(new
         {
-            shape, launch, inputLength = 1, productionEnabled = false, streamProtocol = "native-typed-pull-v1", preflight, rows,
+            shape,
+            launch,
+            inputLength = 1,
+            productionEnabled = false,
+            streamProtocol = "native-typed-pull-v1",
+            preflight,
+            rows,
             stopwatchFrequency = Stopwatch.Frequency,
             measurementHelpersInitialized = true,
             comparisonScope = "new native-pull protocol: handwritten enumerable reference versus generated public Mediator source;whole operation including reference plumbing;not old-protocol or isolated native instruction timing",

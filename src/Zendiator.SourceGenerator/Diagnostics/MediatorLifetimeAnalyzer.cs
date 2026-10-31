@@ -45,11 +45,18 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
         TypeSyntax? target = null;
         switch (context.Node)
         {
-            case CastExpressionSyntax cast: expression = cast.Expression; target = cast.Type; break;
-            case BinaryExpressionSyntax binary: expression = binary.Left; target = binary.Right as TypeSyntax; break;
+            case CastExpressionSyntax cast:
+                expression = cast.Expression;
+                target = cast.Type;
+                break;
+            case BinaryExpressionSyntax binary:
+                expression = binary.Left;
+                target = binary.Right as TypeSyntax;
+                break;
             case IsPatternExpressionSyntax pattern:
                 var inner = pattern.Pattern;
-                while (inner is UnaryPatternSyntax unary) inner = unary.Pattern;
+                while (inner is UnaryPatternSyntax unary)
+                    inner = unary.Pattern;
                 expression = pattern.Expression;
                 target = inner switch
                 {
@@ -64,7 +71,8 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
         var disposableType = target is null ? null : context.SemanticModel.GetTypeInfo(target, context.CancellationToken).Type;
         if (expression is null || disposableType is not INamedTypeSymbol { Name: "IDisposable" } namedDisposable ||
             namedDisposable.ContainingNamespace.ToDisplayString() != "System" ||
-            !IsMediator(context.SemanticModel.GetTypeInfo(expression, context.CancellationToken).Type, canonical)) return;
+            !IsMediator(context.SemanticModel.GetTypeInfo(expression, context.CancellationToken).Type, canonical))
+            return;
         context.ReportDiagnostic(Diagnostic.Create(Disposable, context.Node.GetLocation()));
     }
 
@@ -72,7 +80,8 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
     {
         var statement = (ReturnStatementSyntax)context.Node;
         if (statement.Expression is null || statement.Ancestors().Any(a =>
-            a is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax)) return;
+            a is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax))
+            return;
         var expression = Unwrap(statement.Expression);
         ILocalSymbol? scope = null;
         if (expression is IdentifierNameSyntax identifier &&
@@ -85,7 +94,8 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
         else if (TryResolutionScope(expression, context.SemanticModel, canonical, out var directScope))
             scope = directScope;
 
-        if (scope is null || !UsingScopeContains(scope, statement)) return;
+        if (scope is null || !UsingScopeContains(scope, statement))
+            return;
         context.ReportDiagnostic(Diagnostic.Create(EscapesScope, statement.GetLocation()));
     }
 
@@ -105,11 +115,14 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
 
         foreach (var statement in block.Statements)
         {
-            if (statement.SpanStart >= sendStatement.SpanStart) break;
+            if (statement.SpanStart >= sendStatement.SpanStart)
+                break;
             if (statement is not ExpressionStatementSyntax expression ||
-                !IsDisposeCall(expression.Expression, scope, context.SemanticModel)) continue;
+                !IsDisposeCall(expression.Expression, scope, context.SemanticModel))
+                continue;
             if (WasReassigned(mediator, statement.Span.End, send.SpanStart, block, context.SemanticModel) ||
-                WasReassigned(scope, statement.Span.End, send.SpanStart, block, context.SemanticModel)) continue;
+                WasReassigned(scope, statement.Span.End, send.SpanStart, block, context.SemanticModel))
+                continue;
             context.ReportDiagnostic(Diagnostic.Create(SendAfterDispose, send.GetLocation()));
             return;
         }
@@ -118,7 +131,8 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
     private static bool IsDisposeCall(ExpressionSyntax expression, ILocalSymbol scope, SemanticModel model)
     {
         var awaitedDispose = expression is AwaitExpressionSyntax;
-        if (expression is AwaitExpressionSyntax awaited) expression = awaited.Expression;
+        if (expression is AwaitExpressionSyntax awaited)
+            expression = awaited.Expression;
         return expression is InvocationExpressionSyntax
         {
             Expression: MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax receiver } access
@@ -150,7 +164,8 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
             model.GetSymbolInfo(invocation).Symbol is not IMethodSymbol method ||
             method.Name is not ("GetRequiredService" or "GetService") ||
             !SymbolEqualityComparer.Default.Equals(method.ContainingType, model.Compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions")) ||
-            !IsMediator(model.GetTypeInfo(invocation).Type, canonical) || !IsScope(local, model)) return false;
+            !IsMediator(model.GetTypeInfo(invocation).Type, canonical) || !IsScope(local, model))
+            return false;
         scope = local;
         return true;
     }
@@ -167,10 +182,12 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
 
     private static bool UsingScopeContains(ILocalSymbol scope, ReturnStatementSyntax statement)
     {
-        if (scope.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is not VariableDeclaratorSyntax declarator) return false;
+        if (scope.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is not VariableDeclaratorSyntax declarator)
+            return false;
         if (declarator.Parent?.Parent is LocalDeclarationStatementSyntax declaration &&
             declaration.UsingKeyword != default && declaration.Parent is BlockSyntax block &&
-            declaration.SpanStart < statement.SpanStart && block.Span.Contains(statement.Span)) return true;
+            declaration.SpanStart < statement.SpanStart && block.Span.Contains(statement.Span))
+            return true;
         return declarator.Parent?.Parent is UsingStatementSyntax usingStatement &&
             usingStatement.Statement.Span.Contains(statement.Span);
     }
@@ -186,18 +203,26 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
         {
             switch (expression)
             {
-                case ParenthesizedExpressionSyntax parenthesized: expression = parenthesized.Expression; break;
-                case CastExpressionSyntax cast: expression = cast.Expression; break;
-                default: return expression;
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    break;
+                case CastExpressionSyntax cast:
+                    expression = cast.Expression;
+                    break;
+                default:
+                    return expression;
             }
         }
     }
 
     private static bool IsMediator(ITypeSymbol? type, ImmutableHashSet<ITypeSymbol> canonical)
     {
-        if (type is not INamedTypeSymbol named) return false;
-        if (canonical.Contains(type)) return true;
-        if (named.Name is not ("Zendiator" or "IZendiator")) return false;
+        if (type is not INamedTypeSymbol named)
+            return false;
+        if (canonical.Contains(type))
+            return true;
+        if (named.Name is not ("Zendiator" or "IZendiator"))
+            return false;
         return named.GetAttributes().Any(attribute =>
             attribute.AttributeClass?.ToDisplayString() == "System.CodeDom.Compiler.GeneratedCodeAttribute" &&
             attribute.ConstructorArguments.Length == 2 &&

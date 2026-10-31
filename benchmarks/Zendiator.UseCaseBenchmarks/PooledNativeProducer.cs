@@ -9,19 +9,32 @@ public sealed class PooledWorkStreamCursor(int count, bool asynchronous, Probe? 
     private int _index;
     private bool _started;
     private bool _finished;
-    public int Current { get; private set; }
+    public int Current
+    {
+        get; private set;
+    }
 
     public ValueTask<bool> MoveNextAsync()
     {
-        if (_finished) return new(false);
+        if (_finished)
+            return new(false);
         if (!_started)
         {
             token.ThrowIfCancellationRequested();
             _started = true;
-            if (probe is not null) { probe.Handlers++; probe.Events.Add(100); }
+            if (probe is not null)
+            {
+                probe.Handlers++;
+                probe.Events.Add(100);
+            }
         }
-        if (_index >= count) { Finish(); return new(false); }
-        if (asynchronous) return MovePendingAsync();
+        if (_index >= count)
+        {
+            Finish();
+            return new(false);
+        }
+        if (asynchronous)
+            return MovePendingAsync();
         try
         {
             // Preserve Work.Stream's checks on both sides of its optional suspension.
@@ -29,7 +42,11 @@ public sealed class PooledWorkStreamCursor(int count, bool asynchronous, Probe? 
             token.ThrowIfCancellationRequested();
             return new(Publish());
         }
-        catch { Finish(); throw; }
+        catch
+        {
+            Finish();
+            throw;
+        }
     }
 
     [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
@@ -42,14 +59,19 @@ public sealed class PooledWorkStreamCursor(int count, bool asynchronous, Probe? 
             token.ThrowIfCancellationRequested();
             return Publish();
         }
-        catch { Finish(); throw; }
+        catch
+        {
+            Finish();
+            throw;
+        }
     }
 
     private bool Publish()
     {
         if (probe is not null)
         {
-            if (probe.Fail) throw new ArithmeticException("Expected correctness sentinel");
+            if (probe.Fail)
+                throw new ArithmeticException("Expected correctness sentinel");
             probe.Items++;
         }
         Current = _index++;
@@ -58,10 +80,16 @@ public sealed class PooledWorkStreamCursor(int count, bool asynchronous, Probe? 
 
     private void Finish()
     {
-        if (_finished) return;
+        if (_finished)
+            return;
         _finished = true;
-        if (_started && probe is not null) probe.Disposals++;
+        if (_started && probe is not null)
+            probe.Disposals++;
     }
 
-    public ValueTask DisposeAsync() { Finish(); return default; }
+    public ValueTask DisposeAsync()
+    {
+        Finish();
+        return default;
+    }
 }

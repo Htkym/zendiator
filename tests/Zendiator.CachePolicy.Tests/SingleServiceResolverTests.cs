@@ -34,7 +34,11 @@ public sealed class SingleServiceResolverTests
     {
         var services = Services();
         var calls = 0;
-        services.Add(ServiceDescriptor.Describe(typeof(Probe), _ => { calls++; return new Probe(41); }, lifetime));
+        services.Add(ServiceDescriptor.Describe(typeof(Probe), _ =>
+        {
+            calls++;
+            return new Probe(41);
+        }, lifetime));
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
         var capture = Resolve(scope.ServiceProvider, specialized);
@@ -62,7 +66,8 @@ public sealed class SingleServiceResolverTests
         services.AddTransient<Probe>(_ =>
         {
             var id = ++calls;
-            if (id == 1) inner = get!();
+            if (id == 1)
+                inner = get!();
             return new Probe(id);
         });
         using var provider = services.BuildServiceProvider();
@@ -111,7 +116,8 @@ public sealed class SingleServiceResolverTests
             if (id == 1)
             {
                 entered.SetResult();
-                if (!release.Wait(TimeSpan.FromSeconds(30))) throw new TimeoutException();
+                if (!release.Wait(TimeSpan.FromSeconds(30)))
+                    throw new TimeoutException();
                 throw new FormatException("activation");
             }
             return new Probe(id);
@@ -126,7 +132,8 @@ public sealed class SingleServiceResolverTests
         var started = 0;
         var waiters = Enumerable.Range(0, 8).Select(_ => Task.Factory.StartNew(() =>
         {
-            if (Interlocked.Increment(ref started) == 8) ready.SetResult();
+            if (Interlocked.Increment(ref started) == 8)
+                ready.SetResult();
             return capture.GetRequiredService();
         }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default)).ToArray();
         try
@@ -154,8 +161,10 @@ public sealed class SingleServiceResolverTests
         services.AddTransient<Probe>(_ =>
         {
             var id = Interlocked.Increment(ref entered);
-            if (id == 2) bothEntered.SetResult();
-            if (!release.Wait(TimeSpan.FromSeconds(30))) throw new TimeoutException();
+            if (id == 2)
+                bothEntered.SetResult();
+            if (!release.Wait(TimeSpan.FromSeconds(30)))
+                throw new TimeoutException();
             return new Probe(id);
         });
         using var provider = services.BuildServiceProvider();
@@ -195,11 +204,15 @@ public sealed class SingleServiceResolverTests
             lock (capture.Resolver)
             {
                 entered.SetResult();
-                if (!release.Wait(TimeSpan.FromSeconds(30))) throw new TimeoutException("Initialization used the public monitor.");
+                if (!release.Wait(TimeSpan.FromSeconds(30)))
+                    throw new TimeoutException("Initialization used the public monitor.");
             }
         }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        try { Assert.Equal(41, capture.Get().Id); }
+        try
+        {
+            Assert.Equal(41, capture.Get().Id);
+        }
         finally
         {
             release.Set();
@@ -214,7 +227,8 @@ public sealed class SingleServiceResolverTests
         var retained = new ZendiatorSingleServiceResolver<Probe>[1024];
         _ = new ZendiatorSingleServiceResolver<Probe>(provider);
         var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < retained.Length; i++) retained[i] = new(provider);
+        for (var i = 0; i < retained.Length; i++)
+            retained[i] = new(provider);
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Assert.InRange(allocated, 1, 72L * retained.Length);
         GC.KeepAlive(retained);
@@ -231,10 +245,12 @@ public sealed class SingleServiceResolverTests
         using var scope = provider.CreateScope();
         var capture = Resolve(scope.ServiceProvider, specialized);
         var first = capture.Get();
-        for (var i = 0; i < 1024; i++) capture.Get();
+        for (var i = 0; i < 1024; i++)
+            capture.Get();
         Probe? last = null;
         var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < 1024; i++) last = capture.Get();
+        for (var i = 0; i < 1024; i++)
+            last = capture.Get();
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Assert.Same(first, last);
         Assert.Equal(0, allocated);

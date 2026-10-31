@@ -14,7 +14,8 @@ internal sealed class EmissionModelFactory(GenerationContracts contracts, Func<I
 
     private EmissionType Type(ITypeSymbol symbol)
     {
-        if (_types.TryGetValue(symbol, out var type)) return type;
+        if (_types.TryGetValue(symbol, out var type))
+            return type;
         var name = nameOf(symbol);
         var openName = name;
         if (symbol is INamedTypeSymbol { Arity: > 0 } named)
@@ -35,7 +36,10 @@ internal sealed class EmissionModelFactory(GenerationContracts contracts, Func<I
     private EmissionType Service(INamedTypeSymbol symbol, INamedTypeSymbol contract, string method)
     {
         var type = Type(symbol);
-        return UseDirectCall(symbol, contract, method) ? type with { DirectCall = true } : type;
+        return UseDirectCall(symbol, contract, method) ? type with
+        {
+            DirectCall = true
+        } : type;
     }
 
     internal EmissionRoute Request(Route route) => Route(route, route.IsSync ? contracts.Synchronous : contracts.Requests);

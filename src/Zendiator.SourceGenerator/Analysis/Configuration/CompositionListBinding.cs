@@ -56,9 +56,13 @@ internal sealed partial class CompositionListBinding
             Reject("UnsupportedGenerationShape", anchor, "The request must be a known type argument or literal typeof request definition.");
             return;
         }
-        if (request.IsUnboundGenericType) request = request.OriginalDefinition;
+        if (request.IsUnboundGenericType)
+            request = request.OriginalDefinition;
         if (typedStream && streamFinal == null)
-        { Reject("UnsupportedGenerationShape", anchor, "StreamPipeline requires an explicit final type argument or literal typeof final pattern."); return; }
+        {
+            Reject("UnsupportedGenerationShape", anchor, "StreamPipeline requires an explicit final type argument or literal typeof final pattern.");
+            return;
+        }
         if (arguments.Any(a => a.NameColon != null || a.RefKindKeyword != default))
         {
             Reject("UnsupportedGenerationShape", anchor, "Ordered lists require direct positional arguments.");
@@ -115,7 +119,10 @@ internal sealed partial class CompositionListBinding
                     handlerFactory.ArgumentList.Arguments[1].Expression is TypeOfExpressionSyntax literalFactory)
                     factoryType = _semantic.GetTypeInfo(literalFactory.Type, _ct).Type as INamedTypeSymbol;
                 if (handlerMethod.Name == "Session" && factoryType == null)
-                { Reject("UnsupportedGenerationShape", entryAnchor, "A handler factory requires one known type argument or literal typeof definition."); continue; }
+                {
+                    Reject("UnsupportedGenerationShape", entryAnchor, "A handler factory requires one known type argument or literal typeof definition.");
+                    continue;
+                }
             }
             else if (!handlerList && expression is InvocationExpressionSyntax factory &&
                 _semantic.GetSymbolInfo(factory, _ct).Symbol is IMethodSymbol factoryMethod && Same(factoryMethod.ContainingType, stage) &&
@@ -139,7 +146,10 @@ internal sealed partial class CompositionListBinding
                     factory.ArgumentList.Arguments[1].Expression is TypeOfExpressionSyntax literalFactory)
                     factoryType = _semantic.GetTypeInfo(literalFactory.Type, _ct).Type as INamedTypeSymbol;
                 if (factory.ArgumentList.Arguments.Count == 2 && factoryType == null)
-                { Reject("UnsupportedGenerationShape", entryAnchor, "A stage factory requires a literal typeof definition."); continue; }
+                {
+                    Reject("UnsupportedGenerationShape", entryAnchor, "A stage factory requires a literal typeof definition.");
+                    continue;
+                }
             }
             if (type == null)
             {
@@ -149,10 +159,12 @@ internal sealed partial class CompositionListBinding
                 continue;
             }
             var prior = entries.FirstOrDefault(e => Key(e.Type) == Key(type));
-            if (prior != null) Reject("UnsupportedGenerationShape", entryAnchor,
+            if (prior != null)
+                Reject("UnsupportedGenerationShape", entryAnchor,
                 $"Type {Name(type)} occurs more than once in this ordered list. Stage tags do not create separate registrations.", prior.Anchor);
             entries.Add(new(type, entryAnchor, kind, factoryType));
-            if (handlerList && (_marked.Any(c => Same(c.Symbol, type.OriginalDefinition)) || BindExplicitMetadata(_compilation, type, _ct) != null)) _select(type);
+            if (handlerList && (_marked.Any(c => Same(c.Symbol, type.OriginalDefinition)) || BindExplicitMetadata(_compilation, type, _ct) != null))
+                _select(type);
         }
         _declarations.Add(new(anchor, request, family, handlerList, entries.ToImmutable(), streamFinal));
     }
@@ -172,12 +184,15 @@ internal sealed partial class CompositionListBinding
                     .Select(d => d.Family!.Value).Distinct().ToArray();
                 var candidates = explicitFamilies.Length != 0 ? explicitFamilies : selectedTypes
                     .SelectMany(t => AvailableFamilies(t, declaration.Request)).Distinct().ToArray();
-                if (candidates.Length == 1) family = candidates[0];
-                else Reject("UnsupportedDispatchFamily", declaration.Anchor, "Pipeline family is absent or ambiguous; declare the dispatch family explicitly.");
+                if (candidates.Length == 1)
+                    family = candidates[0];
+                else
+                    Reject("UnsupportedDispatchFamily", declaration.Anchor, "Pipeline family is absent or ambiguous; declare the dispatch family explicitly.");
             }
             var prior = resolved.FirstOrDefault(d => d.Declaration.HandlerList == declaration.HandlerList &&
                 Key(d.Declaration.Request) == Key(declaration.Request) && d.Family == family);
-            if (prior.Declaration != null) Reject("AmbiguousPipelineOrder", declaration.Anchor,
+            if (prior.Declaration != null)
+                Reject("AmbiguousPipelineOrder", declaration.Anchor,
                 "Each route requires one authoritative Pipeline list and one authoritative Handlers list.", prior.Declaration.Anchor);
             resolved.Add((declaration, family));
         }
@@ -255,20 +270,36 @@ internal sealed partial class CompositionListBinding
                 if (openSend)
                 {
                     if (entry.Factory != null)
-                    { Reject("UnsupportedGenerationShape", entry.Anchor, "Open Send handler sessions require a separate ownership proof."); continue; }
+                    {
+                        Reject("UnsupportedGenerationShape", entry.Anchor, "Open Send handler sessions require a separate ownership proof.");
+                        continue;
+                    }
                     var closure = CanonicalStreamTypeClosure.SendHandler(entry.Type, request, _compilation, open!, asyncSend);
                     if (closure.Type == null)
-                    { Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!); continue; }
-                    entry = entry with { Type = closure.Type };
+                    {
+                        Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!);
+                        continue;
+                    }
+                    entry = entry with
+                    {
+                        Type = closure.Type
+                    };
                 }
                 if (family == BoundDispatchFamily.Stream)
                 {
                     var closure = CanonicalStreamTypeClosure.Handler(entry.Type, request, _compilation, open);
                     if (closure.Type == null)
-                    { Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!); continue; }
-                    entry = entry with { Type = closure.Type };
+                    {
+                        Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!);
+                        continue;
+                    }
+                    entry = entry with
+                    {
+                        Type = closure.Type
+                    };
                 }
-                if (!Eligible(entry.Type, entry.Anchor, "Handler", open: open)) continue;
+                if (!Eligible(entry.Type, entry.Anchor, "Handler", open: open))
+                    continue;
                 var candidate = _marked.FirstOrDefault(c => Same(c.Symbol, entry.Type.OriginalDefinition)) ?? BindExplicitMetadata(_compilation, entry.Type, _ct);
                 if (candidate == null)
                 {
@@ -288,8 +319,10 @@ internal sealed partial class CompositionListBinding
                     }
                     continue;
                 }
-                if (candidate.Model.CompilerOwnsMarkerError) continue;
-                if (openSend) _select(entry.Type);
+                if (candidate.Model.CompilerOwnsMarkerError)
+                    continue;
+                if (openSend)
+                    _select(entry.Type);
                 if (family == BoundDispatchFamily.Stream)
                 {
                     var closedKey = Key(entry.Type);
@@ -372,7 +405,11 @@ internal sealed partial class CompositionListBinding
                         {
                             SyncEmission = new(BoundName(request), BoundName(entry.Type),
                             BoundName(contract), member.Name, nextResult == null ? null : BoundName(nextResult))
-                            { RequestIsValueType = request.IsValueType, RequestIsRefLike = request.IsRefLikeType, HandlerIsValueType = entry.Type.IsValueType }
+                            {
+                                RequestIsValueType = request.IsValueType,
+                                RequestIsRefLike = request.IsRefLikeType,
+                                HandlerIsValueType = entry.Type.IsValueType
+                            }
                         };
                     else
                         handlerModel = handlerModel with
@@ -406,8 +443,15 @@ internal sealed partial class CompositionListBinding
                     if (family == BoundDispatchFamily.Stream)
                     {
                         var closure = CanonicalStreamTypeClosure.Factory(entry.Factory, request, entry.Type, _compilation, open);
-                        if (closure.Type == null) { Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!); continue; }
-                        entry = entry with { Factory = closure.Type };
+                        if (closure.Type == null)
+                        {
+                            Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!);
+                            continue;
+                        }
+                        entry = entry with
+                        {
+                            Factory = closure.Type
+                        };
                     }
                     var binding = SessionFactoryContractBinding.Bind(entry.Factory, entry.Type, request, family.Value,
                         entry.Anchor, _compilation, Facts, open);
@@ -438,20 +482,35 @@ internal sealed partial class CompositionListBinding
                             family is (BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllSync) &&
                             resultKind is (FusionResultKind.Response or FusionResultKind.Void);
                         if (entry.Kind != FusionStageKind.Hook && !sendWrapper || entry.Factory != null)
-                        { Reject("UnsupportedGenerationShape", entry.Anchor, "Open Send supports borrowed full hooks and supported SendSync/SendAsync/SendAllSync wrappers; sessions require separate proofs."); continue; }
+                        {
+                            Reject("UnsupportedGenerationShape", entry.Anchor, "Open Send supports borrowed full hooks and supported SendSync/SendAsync/SendAllSync wrappers; sessions require separate proofs.");
+                            continue;
+                        }
                         var closure = sendWrapper
                             ? CanonicalStreamTypeClosure.SendWrapper(entry.Type, request, result, _compilation, open!, asyncSend)
                             : CanonicalStreamTypeClosure.SendHook(entry.Type, request, _compilation, open!, asyncSend);
                         if (closure.Type == null)
-                        { Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!); continue; }
-                        entry = entry with { Type = closure.Type };
+                        {
+                            Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!);
+                            continue;
+                        }
+                        entry = entry with
+                        {
+                            Type = closure.Type
+                        };
                     }
                     if (family == BoundDispatchFamily.Stream && result != null)
                     {
                         var closure = CanonicalStreamTypeClosure.Stage(entry.Type, request, result, entry.Kind, _compilation, open);
                         if (closure.Type == null)
-                        { Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!); continue; }
-                        entry = entry with { Type = closure.Type };
+                        {
+                            Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!);
+                            continue;
+                        }
+                        entry = entry with
+                        {
+                            Type = closure.Type
+                        };
                         var closedKey = Key(entry.Type);
                         if (closedStages.TryGetValue(closedKey, out var original))
                         {
@@ -468,8 +527,15 @@ internal sealed partial class CompositionListBinding
                         if (family == BoundDispatchFamily.Stream)
                         {
                             var closure = CanonicalStreamTypeClosure.Factory(entry.Factory, request, entry.Type, _compilation, open);
-                            if (closure.Type == null) { Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!); continue; }
-                            entry = entry with { Factory = closure.Type };
+                            if (closure.Type == null)
+                            {
+                                Reject("UnsupportedGenerationShape", entry.Anchor, closure.Error!);
+                                continue;
+                            }
+                            entry = entry with
+                            {
+                                Factory = closure.Type
+                            };
                         }
                         var binding = SessionFactoryContractBinding.Bind(entry.Factory, entry.Type, request, family.Value,
                             entry.Anchor, _compilation, Facts, open);
@@ -604,25 +670,38 @@ internal sealed partial class CompositionListBinding
 
     private bool Eligible(INamedTypeSymbol type, string anchor, string role, bool concrete = true, CanonicalStreamOpenBinding? open = null, bool scopedRequest = false)
     {
-        if (type.TypeKind == TypeKind.Error) return false; // Compiler owns unresolved types.
-        if (type.IsRefLikeType && !scopedRequest) { Reject("RefLikeCapture", anchor, $"{role} {Name(type)} cannot be captured in a DI route."); return false; }
+        if (type.TypeKind == TypeKind.Error)
+            return false; // Compiler owns unresolved types.
+        if (type.IsRefLikeType && !scopedRequest)
+        {
+            Reject("RefLikeCapture", anchor, $"{role} {Name(type)} cannot be captured in a DI route.");
+            return false;
+        }
         if (type.IsUnboundGenericType || HasOpenShape(type) && (open == null || !open.Contains(type)) ||
             type.TypeKind is not (TypeKind.Class or TypeKind.Struct) || (concrete && (type.IsAbstract || type.IsStatic)))
         {
             Reject("UnsupportedGenerationShape", anchor, $"{role} {Name(type)} requires a closed class or struct" +
-            (concrete ? " with a concrete implementation." : ".") + " Open binding is pending."); return false;
+            (concrete ? " with a concrete implementation." : ".") + " Open binding is pending.");
+            return false;
         }
         if (!_compilation.IsSymbolAccessibleWithin(type, _compilation.Assembly))
-        { Reject("UnsupportedGenerationShape", anchor, $"{role} {Name(type)} is inaccessible to generated code."); return false; }
+        {
+            Reject("UnsupportedGenerationShape", anchor, $"{role} {Name(type)} is inaccessible to generated code.");
+            return false;
+        }
         if (role == "Request" && !(open?.Public(type) ?? Public(type)))
-        { Reject("UnsupportedGenerationShape", anchor, "Public route signatures require a public request type, including containing types and generic arguments."); return false; }
+        {
+            Reject("UnsupportedGenerationShape", anchor, "Public route signatures require a public request type, including containing types and generic arguments.");
+            return false;
+        }
         return true;
     }
 
     private bool HasResponseContract(INamedTypeSymbol request, ITypeSymbol result, BoundDispatchFamily family)
     {
         if (result is not (INamedTypeSymbol or IArrayTypeSymbol) || result.IsRefLikeType ||
-            HasOpenShape(result) || !Public(result)) return false;
+            HasOpenShape(result) || !Public(result))
+            return false;
         var contract = _compilation.GetTypeByMetadataName(family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync ? ContractNames.SyncRequest : ContractNames.Request);
         var responses = request.AllInterfaces.Where(i => Same(i.OriginalDefinition, contract)).ToArray();
         return responses.Length == 1 && SymbolEqualityComparer.IncludeNullability.Equals(responses[0].TypeArguments[0], result);
@@ -631,9 +710,11 @@ internal sealed partial class CompositionListBinding
     private IEnumerable<BoundDispatchFamily> AvailableFamilies(INamedTypeSymbol handler, INamedTypeSymbol request)
     {
         foreach (var family in new[] { BoundDispatchFamily.SendAsync, BoundDispatchFamily.SendSync, BoundDispatchFamily.Stream, BoundDispatchFamily.Notification })
-            if (Contracts(handler, request, family).Any()) yield return family;
+            if (Contracts(handler, request, family).Any())
+                yield return family;
             else if (family == BoundDispatchFamily.Stream && CanonicalStreamTypeClosure.Handler(handler, request, _compilation).Type is { } closed &&
-                Contracts(closed, request, family).Any()) yield return family;
+                Contracts(closed, request, family).Any())
+                yield return family;
     }
 
     private IEnumerable<INamedTypeSymbol> Contracts(INamedTypeSymbol handler, INamedTypeSymbol request, BoundDispatchFamily family)

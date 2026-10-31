@@ -17,49 +17,84 @@ public sealed class Handler : IStreamHandler<Items, int>
 
 public sealed class Before1 : IAsyncStreamBefore<Items>
 {
-    public ValueTask BeforeAsync(Items request, CancellationToken token) { Work.Relay(request, 1); return default; }
+    public ValueTask BeforeAsync(Items request, CancellationToken token)
+    {
+        Work.Relay(request, 1);
+        return default;
+    }
 }
 public sealed class Before2 : IAsyncStreamBefore<Items>
 {
-    public ValueTask BeforeAsync(Items request, CancellationToken token) { Work.Relay(request, 2); return default; }
+    public ValueTask BeforeAsync(Items request, CancellationToken token)
+    {
+        Work.Relay(request, 2);
+        return default;
+    }
 }
 public sealed class Before3 : IAsyncStreamBefore<Items>
 {
-    public ValueTask BeforeAsync(Items request, CancellationToken token) { Work.Relay(request, 3); return default; }
+    public ValueTask BeforeAsync(Items request, CancellationToken token)
+    {
+        Work.Relay(request, 3);
+        return default;
+    }
 }
 public sealed class Before4 : IAsyncStreamBefore<Items>
 {
-    public ValueTask BeforeAsync(Items request, CancellationToken token) { Work.Relay(request, 4); return default; }
+    public ValueTask BeforeAsync(Items request, CancellationToken token)
+    {
+        Work.Relay(request, 4);
+        return default;
+    }
 }
 public sealed class Before5 : IAsyncStreamBefore<Items>
 {
-    public ValueTask BeforeAsync(Items request, CancellationToken token) { Work.Relay(request, 5); return default; }
+    public ValueTask BeforeAsync(Items request, CancellationToken token)
+    {
+        Work.Relay(request, 5);
+        return default;
+    }
 }
 
 public sealed class Relay1 : IStreamMiddleware<Items, int>
 {
     public ValueTask<IAsyncEnumerator<int>> OpenAsync(Items request, IStreamUpstream<Items, int> next, CancellationToken token)
-    { Work.Relay(request, 1); return next.OpenAsync(request, token); }
+    {
+        Work.Relay(request, 1);
+        return next.OpenAsync(request, token);
+    }
 }
 public sealed class Relay2 : IStreamMiddleware<Items, int>
 {
     public ValueTask<IAsyncEnumerator<int>> OpenAsync(Items request, IStreamUpstream<Items, int> next, CancellationToken token)
-    { Work.Relay(request, 2); return next.OpenAsync(request, token); }
+    {
+        Work.Relay(request, 2);
+        return next.OpenAsync(request, token);
+    }
 }
 public sealed class Relay3 : IStreamMiddleware<Items, int>
 {
     public ValueTask<IAsyncEnumerator<int>> OpenAsync(Items request, IStreamUpstream<Items, int> next, CancellationToken token)
-    { Work.Relay(request, 3); return next.OpenAsync(request, token); }
+    {
+        Work.Relay(request, 3);
+        return next.OpenAsync(request, token);
+    }
 }
 public sealed class Relay4 : IStreamMiddleware<Items, int>
 {
     public ValueTask<IAsyncEnumerator<int>> OpenAsync(Items request, IStreamUpstream<Items, int> next, CancellationToken token)
-    { Work.Relay(request, 4); return next.OpenAsync(request, token); }
+    {
+        Work.Relay(request, 4);
+        return next.OpenAsync(request, token);
+    }
 }
 public sealed class Relay5 : IStreamMiddleware<Items, int>
 {
     public ValueTask<IAsyncEnumerator<int>> OpenAsync(Items request, IStreamUpstream<Items, int> next, CancellationToken token)
-    { Work.Relay(request, 5); return next.OpenAsync(request, token); }
+    {
+        Work.Relay(request, 5);
+        return next.OpenAsync(request, token);
+    }
 }
 
 [ZendiatorComposition("matchedBefore")]
@@ -68,7 +103,10 @@ public sealed class BeforeApp;
 [ZendiatorComposition("matchedRelay")]
 public sealed class RelayApp;
 
-public enum Route { Before, Relay }
+public enum Route
+{
+    Before, Relay
+}
 
 internal static class Registration
 {
@@ -102,7 +140,10 @@ internal sealed class Fixture : IDisposable
     private readonly ServiceProvider provider;
     private readonly IServiceScope scope;
     private readonly CancellationTokenSource cancellation = new();
-    internal Func<Items, CancellationToken, IAsyncEnumerable<int>> Invoke { get; }
+    internal Func<Items, CancellationToken, IAsyncEnumerable<int>> Invoke
+    {
+        get;
+    }
     internal CancellationToken Token => cancellation.Token;
 
     internal Fixture(Route route)
@@ -121,7 +162,12 @@ internal sealed class Fixture : IDisposable
         }
     }
 
-    public void Dispose() { scope.Dispose(); provider.Dispose(); cancellation.Dispose(); }
+    public void Dispose()
+    {
+        scope.Dispose();
+        provider.Dispose();
+        cancellation.Dispose();
+    }
 }
 
 internal static class Consumer
@@ -129,13 +175,15 @@ internal static class Consumer
     internal static async ValueTask<int> Full(IAsyncEnumerable<int> source)
     {
         var sum = 0;
-        await foreach (var item in source.ConfigureAwait(false)) sum += item;
+        await foreach (var item in source.ConfigureAwait(false))
+            sum += item;
         return sum;
     }
 
     internal static async ValueTask<int> Early(IAsyncEnumerable<int> source)
     {
-        await foreach (var item in source.ConfigureAwait(false)) return item;
+        await foreach (var item in source.ConfigureAwait(false))
+            return item;
         return -1;
     }
 }

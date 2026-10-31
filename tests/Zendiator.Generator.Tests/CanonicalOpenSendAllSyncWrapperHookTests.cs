@@ -160,51 +160,79 @@ public sealed partial class GeneratorTests
     public void OpenSendAllSync_wrapper_then_hook_preserves_opaque_branches_atomic_Span_and_registration()
     {
         var source = OpenAllSyncWrapperHookSource + OpenAllSyncWrapperHookConsumer;
-        var closedAll = AllWrapperSource(true); closedAll = closedAll[closedAll.IndexOf("namespace Closed.", StringComparison.Ordinal)..];
+        var closedAll = AllWrapperSource(true);
+        closedAll = closedAll[closedAll.IndexOf("namespace Closed.", StringComparison.Ordinal)..];
         var compilation = SyncCompilation(source, "OpenAllWrapper_" + Guid.NewGuid().ToString("N"))
             .AddSyntaxTrees(new[] { OpenSendAllSyncSource(), OpenSendAllSyncVoidSource, OpenSyncWrapperHookSource() + OpenSyncWrapperHookConsumer(), closedAll }.Select(s => CSharpSyntaxTree.ParseText(s, SyncParseOptions)));
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(compilation, out var output, out var diagnostics);
-        var folder = OpenSendAllSyncFolder("wrapper-hook"); SaveSendAllSync(folder, source, driver, output, diagnostics);
+        var folder = OpenSendAllSyncFolder("wrapper-hook");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
         Assert.DoesNotContain(diagnostics, d => d.Location.SourceTree == compilation.SyntaxTrees.First());
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        AssertOpenSendAllSyncOutput(output, driver); Assert.NotNull(output.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.IZendiator"));
-        Assert.NotNull(output.GetTypeByMetadataName("OpenSyncWrapperHook.Generated.Mixed.IZendiator")); AssertAllWrapperRegistration(output);
-        var api = output.GetTypeByMetadataName("OpenAllWrapper.Generated.Composition.IZendiator")!; Assert.NotNull(api); Assert.False(api.IsGenericType);
+        AssertOpenSendAllSyncOutput(output, driver);
+        Assert.NotNull(output.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.IZendiator"));
+        Assert.NotNull(output.GetTypeByMetadataName("OpenSyncWrapperHook.Generated.Mixed.IZendiator"));
+        AssertAllWrapperRegistration(output);
+        var api = output.GetTypeByMetadataName("OpenAllWrapper.Generated.Composition.IZendiator")!;
+        Assert.NotNull(api);
+        Assert.False(api.IsGenericType);
         var mediator = output.GetTypeByMetadataName("OpenAllWrapper.Generated.Composition.Zendiator")!;
-        var methods = api.GetMembers("SendAll").OfType<IMethodSymbol>().ToArray(); Assert.Equal(2, methods.Length);
+        var methods = api.GetMembers("SendAll").OfType<IMethodSymbol>().ToArray();
+        Assert.Equal(2, methods.Length);
         Assert.Single(methods, m => m.ReturnType is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_Int32 });
         Assert.Single(methods, m => m.ReturnType.SpecialType == SpecialType.System_Int32 && m.Parameters[1].Type.Name == "Span");
         var publicMethod = Assert.Single(mediator.GetMembers("SendAll").OfType<IMethodSymbol>(), m => m.ReturnType is IArrayTypeSymbol);
         var implementation = CanonicalRouteEntry(output, publicMethod);
-        var branches = CanonicalEntryMethods(implementation, "Branch").ToArray(); Assert.Equal(2, branches.Length);
+        var branches = CanonicalEntryMethods(implementation, "Branch").ToArray();
+        Assert.Equal(2, branches.Length);
         foreach (var method in methods.Concat(branches))
         {
-            Assert.False(method.IsAsync); Assert.Equal(2, method.Arity); Assert.All(method.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); });
-            foreach (var name in new[] { "ILeft", "IRight", "IWrap" }) Assert.Contains(method.TypeParameters, p => p.ConstraintTypes.Any(t => t.Name == name));
+            Assert.False(method.IsAsync);
+            Assert.Equal(2, method.Arity);
+            Assert.All(method.TypeParameters, p =>
+            {
+                Assert.True(p.HasReferenceTypeConstraint);
+                Assert.True(p.HasConstructorConstraint);
+            });
+            foreach (var name in new[] { "ILeft", "IRight", "IWrap" })
+                Assert.Contains(method.TypeParameters, p => p.ConstraintTypes.Any(t => t.Name == name));
         }
         var catalog = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single().TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
         var route = Assert.Single(Assert.Single(catalog.Compositions, c => c.Key == "openAllWrapper").Pipelines);
         var emission = Assert.Single(CanonicalSendAllSyncEmissionNormalizer.Create(catalog, CanonicalExecutionGraphNormalizer.Create(catalog)).Compositions, c => c.Registration.Namespace == "OpenAllWrapper.Generated.Composition");
-        Assert.Equal(2, emission.Wrappers.Count); Assert.Equal(2, emission.Branches.Count);
-        Assert.All(emission.Wrappers, b => { Assert.Equal(BoundDispatchFamily.SendSync, b.Family); Assert.Equal(route.SendGeneric, b.Registration.Generic); Assert.Equal(route.SendOpenRegistration, b.Registration.OpenRegistration); });
+        Assert.Equal(2, emission.Wrappers.Count);
+        Assert.Equal(2, emission.Branches.Count);
+        Assert.All(emission.Wrappers, b =>
+        {
+            Assert.Equal(BoundDispatchFamily.SendSync, b.Family);
+            Assert.Equal(route.SendGeneric, b.Registration.Generic);
+            Assert.Equal(route.SendOpenRegistration, b.Registration.OpenRegistration);
+        });
         Assert.Equal(new[] { "global::OpenAllWrapper.ZHandler<,>", "global::OpenAllWrapper.AHandler<,>" }, route.SendOpenRegistration!.HandlerDefinitionNames);
         Assert.Equal(new[] { "Wrapper", "Hook" }, route.SendOpenRegistration.Stages.Select(s => s.Kind));
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
         if (folder != null)
         {
             File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
-            for (var i = 0; i < compilation.SyntaxTrees.Count(); i++) File.WriteAllText(Path.Combine(folder, "input-" + i + ".cs"), compilation.SyntaxTrees.ElementAt(i).ToString());
+            for (var i = 0; i < compilation.SyntaxTrees.Count(); i++)
+                File.WriteAllText(Path.Combine(folder, "input-" + i + ".cs"), compilation.SyntaxTrees.ElementAt(i).ToString());
         }
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var runtime = assembly.GetType("OpenAllWrapper.Entry")!.GetMethod("Run")!.CreateDelegate<Func<string>>()();
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime);
-        using var json = JsonDocument.Parse(runtime); Assert.Equal(12, json.RootElement.GetProperty("dispatches").GetInt32());
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime);
+        using var json = JsonDocument.Parse(runtime);
+        Assert.Equal(12, json.RootElement.GetProperty("dispatches").GetInt32());
     }
 
     [Fact]
     public void OpenSendAllSync_wrapper_then_hook_rejects_unproved_bindings_shapes_and_ownership()
     {
-        const string wrapper = "Stage.Wrapper(typeof(Logging<,>))"; const string hook = "Stage.Hook(typeof(Hook<,>))";
+        const string wrapper = "Stage.Wrapper(typeof(Logging<,>))";
+        const string hook = "Stage.Hook(typeof(Hook<,>))";
         var source = OpenAllSyncWrapperHookSource + """
             namespace OpenAllWrapper {
             public sealed class Unbound<X,Y,Unused>:ISendWrapper<Request<X,Y>,int>{public int Invoke<N>(Request<X,Y> r,N next,CancellationToken t) where N:ISendContinuation<Request<X,Y>,int> =>next.Invoke(r,t);}
@@ -238,20 +266,25 @@ public sealed partial class GeneratorTests
         {
             var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(invalid, "OpenAllWrapperRejected_" + name + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
             SaveSendAllSync(OpenSendAllSyncFolder("wrapper-hook-" + name), invalid, driver, output, diagnostics);
-            Assert.NotEmpty(diagnostics); Assert.All(diagnostics, d => Assert.Equal("ZEN0035", d.Id));
+            Assert.NotEmpty(diagnostics);
+            Assert.All(diagnostics, d => Assert.Equal("ZEN0035", d.Id));
             if (name is "unbound-wrapper" or "unbound-handler")
             {
                 var anchor = name == "unbound-wrapper" ? "Stage.Wrapper(typeof(Unbound<,,>))" : "typeof(Missing<,,>)";
-                var error = Assert.Single(diagnostics, d => invalid.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length) == anchor); Assert.Empty(error.AdditionalLocations);
+                var error = Assert.Single(diagnostics, d => invalid.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length) == anchor);
+                Assert.Empty(error.AdditionalLocations);
             }
-            Assert.Null(output.GetTypeByMetadataName("OpenAllWrapper.Generated.Composition.IZendiator")); Assert.Null(output.GetTypeByMetadataName("OpenAllWrapper.Generated.Composition.ZendiatorGeneratedRegistrar"));
+            Assert.Null(output.GetTypeByMetadataName("OpenAllWrapper.Generated.Composition.IZendiator"));
+            Assert.Null(output.GetTypeByMetadataName("OpenAllWrapper.Generated.Composition.ZendiatorGeneratedRegistrar"));
             Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal));
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         }
         var accepted = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(voidSource, "OpenAllWrapperVoidAccepted_" + Guid.NewGuid().ToString("N")), out var voidOutput, out var voidDiagnostics);
         SaveSendAllSync(OpenSendAllSyncFolder("wrapper-hook-native-void"), voidSource, accepted, voidOutput, voidDiagnostics);
-        Assert.Empty(voidDiagnostics); Assert.Empty(voidOutput.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        var api = voidOutput.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.IZendiator"); Assert.NotNull(api);
+        Assert.Empty(voidDiagnostics);
+        Assert.Empty(voidOutput.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var api = voidOutput.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.IZendiator");
+        Assert.NotNull(api);
         Assert.True(Assert.Single(api.GetMembers("SendAll").OfType<IMethodSymbol>()).ReturnsVoid);
         Assert.NotNull(voidOutput.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.ZendiatorGeneratedRegistrar"));
     }

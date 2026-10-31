@@ -82,8 +82,10 @@ internal sealed partial class GenerationAnalysis
         var assemblies = new HashSet<IAssemblySymbol>(SymbolEqualityComparer.Default) { compilation.Assembly };
         if (diMode)
         {
-            foreach (var assembly in diAssemblies) assemblies.Add(assembly);
-            foreach (var pipeline in diPipelines) pipelines.Add(pipeline);
+            foreach (var assembly in diAssemblies)
+                assemblies.Add(assembly);
+            foreach (var pipeline in diPipelines)
+                pipelines.Add(pipeline);
         }
         accessContext = assemblyMode || diMode ? compilation.Assembly : mediator!;
 
@@ -98,9 +100,11 @@ internal sealed partial class GenerationAnalysis
             {
                 if (attribute.ConstructorArguments.FirstOrDefault().Value is INamedTypeSymbol marker)
                     assemblies.Add(marker.ContainingAssembly);
-                else Error(5, "IncludeAssembly requires a marker type.", mediator);
+                else
+                    Error(5, "IncludeAssembly requires a marker type.", mediator);
             }
-            if (name != "Zendiator.PipelineBehaviorAttribute") continue;
+            if (name != "Zendiator.PipelineBehaviorAttribute")
+                continue;
             if (attribute.ConstructorArguments.FirstOrDefault().Value is not INamedTypeSymbol type)
             {
                 Error(4, "PipelineBehavior requires an implementation type.", mediator);
@@ -149,13 +153,15 @@ internal sealed partial class GenerationAnalysis
                         Error(3, $"Request {Name(type)} must be a public generic definition with exactly one response contract over public or type-parameter types.", type);
                     else if (type.TypeParameters.Any(static p => p.AllowsRefLikeType))
                         Error(12, $"Request {Name(type)} has ref-like type parameters. Async dispatch cannot accept ref-like arguments; use synchronous dispatch (SendSync).", type);
-                    else openRequests[type] = contracts[0].TypeArguments[0];
+                    else
+                        openRequests[type] = contracts[0].TypeArguments[0];
                 }
                 else if (type.IsRefLikeType)
                     Error(12, $"Request {Name(type)} is a ref struct. Ref struct requests require synchronous dispatch (SendSync).", type);
                 else if (contracts.Length != 1 || HasParameters(type) || !Public(type) || !Public(contracts[0].TypeArguments[0]))
                     Error(3, $"Request {Name(type)} must be public, non-generic and have exactly one public response contract.", type);
-                else requests[type] = contracts[0].TypeArguments[0];
+                else
+                    requests[type] = contracts[0].TypeArguments[0];
             }
             foreach (var contract in GetContracts(type, handlerDefinition))
             {
@@ -182,8 +188,10 @@ internal sealed partial class GenerationAnalysis
                     Error(12, $"Handler {Name(type)} targets ref struct request {Name(request)}. Ref struct requests require synchronous dispatch (SendSync).", type);
                     continue;
                 }
-                if (!handlers.TryGetValue(request, out var list)) handlers[request] = list = new();
-                if (!list.Any(h => Same(h, type))) list.Add(type);
+                if (!handlers.TryGetValue(request, out var list))
+                    handlers[request] = list = new();
+                if (!list.Any(h => Same(h, type)))
+                    list.Add(type);
                 // A handler may refer to contracts from a separate assembly; include its exact request.
                 var responseContracts = GetContracts(request, requestDefinition);
                 if (responseContracts.Length != 1 || !Public(request) || !Public(contract.TypeArguments[1]))
@@ -198,7 +206,8 @@ internal sealed partial class GenerationAnalysis
                 {
                     Error(3, $"Conflicting response contracts for {Name(request)}.", type);
                 }
-                else requests[request] = contract.TypeArguments[1];
+                else
+                    requests[request] = contract.TypeArguments[1];
             }
             foreach (var contract in GetContracts(type, voidHandlerDefinition))
             {
@@ -225,8 +234,10 @@ internal sealed partial class GenerationAnalysis
                     Error(3, $"Handler {Name(type)} request {Name(request)} must implement Zendiator.IRequest.", type);
                     continue;
                 }
-                if (!voidHandlers.TryGetValue(request, out var vlist)) voidHandlers[request] = vlist = new();
-                if (!vlist.Any(h => Same(h, type))) vlist.Add(type);
+                if (!voidHandlers.TryGetValue(request, out var vlist))
+                    voidHandlers[request] = vlist = new();
+                if (!vlist.Any(h => Same(h, type)))
+                    vlist.Add(type);
                 // Mirror the response-contract tracking so a void request reached only
                 // through its handler still forms a route.
                 var voidContracts = GetContracts(request, requestDefinition);
@@ -238,7 +249,8 @@ internal sealed partial class GenerationAnalysis
                 {
                     Error(3, $"Conflicting response contracts for {Name(request)}.", type);
                 }
-                else requests[request] = voidContracts[0].TypeArguments[0];
+                else
+                    requests[request] = voidContracts[0].TypeArguments[0];
             }
             var syncContracts = syncOnly.Contains(type.OriginalDefinition) ? System.Array.Empty<INamedTypeSymbol>() : GetContracts(type, syncRequestDefinition);
             if (syncContracts.Length > 0)
@@ -249,7 +261,8 @@ internal sealed partial class GenerationAnalysis
                         Error(3, $"Request {Name(type)} must be a public generic definition with exactly one response contract over public or type-parameter types.", type);
                     else if (MayBeRefLike(syncContracts[0].TypeArguments[0], type))
                         Error(12, $"Request {Name(type)} has a ref-like response. Ref struct responses are not supported; use an ownable response type.", type);
-                    else openSyncRequests[type] = syncContracts[0].TypeArguments[0];
+                    else
+                        openSyncRequests[type] = syncContracts[0].TypeArguments[0];
                 }
                 else if (syncContracts.Length != 1 || HasParameters(type) || !Public(type) || !Public(syncContracts[0].TypeArguments[0]))
                 {
@@ -259,7 +272,8 @@ internal sealed partial class GenerationAnalysis
                 {
                     Error(12, $"Request {Name(type)} has a ref-like response. Ref struct responses are not supported; use an ownable response type.", type);
                 }
-                else syncRequests[type] = syncContracts[0].TypeArguments[0];
+                else
+                    syncRequests[type] = syncContracts[0].TypeArguments[0];
             }
             if (!syncOnly.Contains(type.OriginalDefinition) && GetContracts(type, syncVoidRequestDefinition).Length != 0)
             {
@@ -267,13 +281,15 @@ internal sealed partial class GenerationAnalysis
                 {
                     if (!IsPublicDefinition(type))
                         Error(3, $"Request {Name(type)} must be a public generic definition.", type);
-                    else syncVoidRequests.Add(type);
+                    else
+                        syncVoidRequests.Add(type);
                 }
                 else if (!Public(type))
                 {
                     Error(3, $"Request {Name(type)} must be public.", type);
                 }
-                else syncVoidRequests.Add(type);
+                else
+                    syncVoidRequests.Add(type);
             }
             foreach (var contract in GetContracts(type, syncHandlerDefinition))
             {
@@ -311,13 +327,16 @@ internal sealed partial class GenerationAnalysis
                     Error(3, $"Handler {Name(type)} response {Name(contract.TypeArguments[1])} does not match request {Name(request)} response {Name(reqSync[0].TypeArguments[0])}.", type);
                     continue;
                 }
-                if (!syncHandlers.TryGetValue(request, out var list)) syncHandlers[request] = list = new();
-                if (!list.Any(h => Same(h, type))) list.Add(type);
+                if (!syncHandlers.TryGetValue(request, out var list))
+                    syncHandlers[request] = list = new();
+                if (!list.Any(h => Same(h, type)))
+                    list.Add(type);
                 if (syncRequests.TryGetValue(request, out var existing) && !Same(existing, contract.TypeArguments[1]))
                 {
                     Error(3, $"Conflicting response contracts for {Name(request)}.", type);
                 }
-                else syncRequests[request] = contract.TypeArguments[1];
+                else
+                    syncRequests[request] = contract.TypeArguments[1];
             }
             foreach (var contract in GetContracts(type, syncVoidHandlerDefinition))
             {
@@ -347,8 +366,10 @@ internal sealed partial class GenerationAnalysis
                     Error(3, $"Invalid sync request contract on {Name(type)}.", type);
                     continue;
                 }
-                if (!syncVoidHandlers.TryGetValue(request, out var vlist)) syncVoidHandlers[request] = vlist = new();
-                if (!vlist.Any(h => Same(h, type))) vlist.Add(type);
+                if (!syncVoidHandlers.TryGetValue(request, out var vlist))
+                    syncVoidHandlers[request] = vlist = new();
+                if (!vlist.Any(h => Same(h, type)))
+                    vlist.Add(type);
                 syncVoidRequests.Add(request);
             }
             var notificationContracts = notificationOnly.Contains(type.OriginalDefinition) ? System.Array.Empty<INamedTypeSymbol>() : GetContracts(type, notificationDefinition);
@@ -358,13 +379,15 @@ internal sealed partial class GenerationAnalysis
                 {
                     if (!IsPublicDefinition(type))
                         Error(3, $"Notification {Name(type)} must be a public generic definition.", type);
-                    else openNotifications.Add(type);
+                    else
+                        openNotifications.Add(type);
                 }
                 else if (!Public(type))
                 {
                     Error(3, $"Notification {Name(type)} must be public.", type);
                 }
-                else knownNotifications.Add(type);
+                else
+                    knownNotifications.Add(type);
             }
             foreach (var contract in GetContracts(type, notificationHandlerDefinition))
             {

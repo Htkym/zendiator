@@ -6,7 +6,9 @@ internal static class CanonicalScopedSyncSourceEmitter
 {
     internal static void Emit(StringBuilder b, CanonicalSyncCompositionEmission c)
     {
-        var h = c.Handler; var o = c.ScopedObserver!; var result = h.ResultName ?? "void";
+        var h = c.Handler;
+        var o = c.ScopedObserver!;
+        var result = h.ResultName ?? "void";
         string Call(BoundSyncHookCallbackEmission callback, string arguments) =>
             "((" + callback.ContractName + ")observer)." + callback.MethodName + "(" + arguments + ");";
         b.AppendLine($$"""

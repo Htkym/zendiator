@@ -99,7 +99,8 @@ public sealed class AllocationTests
         public int Sum, Calls;
         public ValueTask<bool> OnNextAsync(int item, CancellationToken cancellationToken)
         {
-            if (item != Calls++ % 16) throw new InvalidOperationException("The mutable cursor lost its iteration state.");
+            if (item != Calls++ % 16)
+                throw new InvalidOperationException("The mutable cursor lost its iteration state.");
             Sum += item;
             return new(true);
         }

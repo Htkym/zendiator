@@ -5,5 +5,8 @@ namespace Zendiator;
 public sealed class GenerateZendiatorAttribute : Attribute
 {
     /// <summary>Gets or sets the namespace for assembly-level generation. Ignored on a class declaration.</summary>
-    public string? Namespace { get; set; }
+    public string? Namespace
+    {
+        get; set;
+    }
 }

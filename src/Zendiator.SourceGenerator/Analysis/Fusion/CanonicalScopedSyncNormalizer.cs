@@ -17,7 +17,8 @@ internal static class CanonicalScopedSyncNormalizer
         void Reject(string reason) => facts.Add(new(reason, route.Anchor));
         if (route.ContractOrigin != FusionContractOrigin.NewCanonical || route.RequestShape != BoundRequestShape.ClosedRefLike ||
             route.RequestIsGeneric || route.Family != BoundDispatchFamily.SendSync || !route.ExplicitHandlerOrder ||
-            route.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void)) Reject("ScopedSynchronousClosedRequestRequired");
+            route.ResultKind is not (FusionResultKind.Response or FusionResultKind.Void))
+            Reject("ScopedSynchronousClosedRequestRequired");
         var handler = route.Handlers.Count == 1 ? route.Handlers[0] : null;
         var stage = route.Stages.Count == 1 ? route.Stages[0] : null;
         if (handler is not
@@ -36,7 +37,9 @@ internal static class CanonicalScopedSyncNormalizer
             stage.Callbacks.Any(c => !IsObservation(c.Phase) || c.Completion != BoundCompletionKind.Synchronous || !Scoped(c)))
             Reject("ScopedDirectClassObservationRequired");
         return new(route, null, new(facts))
-        { ScopedSync = facts.Count == 0 ? new(handler!.SyncEmission!, stage!.ScopedObserver!) : null };
+        {
+            ScopedSync = facts.Count == 0 ? new(handler!.SyncEmission!, stage!.ScopedObserver!) : null
+        };
     }
 
     private static bool Scoped(BoundCallbackModel callback) => callback.Parameters.Count >= 2 &&

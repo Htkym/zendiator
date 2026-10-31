@@ -24,13 +24,24 @@ internal static class SessionFactoryContractBinding
     {
         string Name(ITypeSymbol symbol) => open?.Display(symbol) ?? CanonicalSymbolName.Display(symbol, compilation);
         void Reject(string key, string message) => facts.Add(new(key, anchor, message));
-        if (factory.TypeKind == TypeKind.Error) return (null, true);
-        if (factory.IsRefLikeType) { Reject("RefLikeCapture", "A session factory cannot be captured as a DI service."); return (null, false); }
+        if (factory.TypeKind == TypeKind.Error)
+            return (null, true);
+        if (factory.IsRefLikeType)
+        {
+            Reject("RefLikeCapture", "A session factory cannot be captured as a DI service.");
+            return (null, false);
+        }
         if (factory.IsAbstract || factory.IsStatic || factory.IsUnboundGenericType || HasOpenShape(factory) && (open == null || !open.Contains(factory)) ||
             factory.TypeKind is not (TypeKind.Class or TypeKind.Struct))
-        { Reject("UnsupportedGenerationShape", "A session factory requires a closed, concrete class or struct."); return (null, false); }
+        {
+            Reject("UnsupportedGenerationShape", "A session factory requires a closed, concrete class or struct.");
+            return (null, false);
+        }
         if (!compilation.IsSymbolAccessibleWithin(factory, compilation.Assembly))
-        { Reject("InaccessibleStage", "The session factory is inaccessible to generated code."); return (null, false); }
+        {
+            Reject("InaccessibleStage", "The session factory is inaccessible to generated code.");
+            return (null, false);
+        }
         var assembly = compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly;
         var matches = Roles.SelectMany(role => factory.AllInterfaces
             .Where(i => Same(i.OriginalDefinition, assembly?.GetTypeByMetadataName("Zendiator." + role.Name)))
@@ -44,13 +55,20 @@ internal static class SessionFactoryContractBinding
             return (null, false);
         }
         if (relevant.Length != 1)
-        { Reject("AmbiguousStageContract", "Declare one factory ownership/completion contract for this request and session; no contract is preferred implicitly."); return (null, false); }
+        {
+            Reject("AmbiguousStageContract", "Declare one factory ownership/completion contract for this request and session; no contract is preferred implicitly.");
+            return (null, false);
+        }
         var selected = relevant[0];
         var sync = family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync;
         if (sync && selected.Completion == BoundCompletionKind.ValueTask)
-        { Reject("AsyncHookOnSyncRoute", "An asynchronous session factory cannot run on a synchronous route; blocking conversion is unsupported."); return (null, false); }
+        {
+            Reject("AsyncHookOnSyncRoute", "An asynchronous session factory cannot run on a synchronous route; blocking conversion is unsupported.");
+            return (null, false);
+        }
         var acquire = Callback(factory, selected.Contract, BoundCallbackPhase.SessionAcquire, selected.Completion);
-        if (acquire == null) return (null, true);
+        if (acquire == null)
+            return (null, true);
         BoundCallbackModel? cleanup = null;
         string? cleanupContractName = null;
         if (selected.Ownership == FusionOwnership.OwnedSession)
@@ -68,13 +86,20 @@ internal static class SessionFactoryContractBinding
                 member.MethodKind != MethodKind.Ordinary || member.Arity != 0 || !member.Parameters.IsEmpty ||
                 member.ReturnsByRef || member.ReturnsByRefReadonly || returnType == null || returnType.TypeKind == TypeKind.Error ||
                 !Same(member.ReturnType, returnType))
-            { Reject("StageContractMismatch", "Owned cleanup requires the framework's parameterless Dispose/DisposeAsync contract and its exact void/ValueTask return type."); return (null, false); }
+            {
+                Reject("StageContractMismatch", "Owned cleanup requires the framework's parameterless Dispose/DisposeAsync contract and its exact void/ValueTask return type.");
+                return (null, false);
+            }
             var contract = session.AllInterfaces.FirstOrDefault(i => Same(i, disposable));
             if (contract == null)
-            { Reject("StageContractMismatch", "An Owned session requires " + (sync ? "IDisposable" : "IAsyncDisposable") + " on this route."); return (null, false); }
+            {
+                Reject("StageContractMismatch", "An Owned session requires " + (sync ? "IDisposable" : "IAsyncDisposable") + " on this route.");
+                return (null, false);
+            }
             cleanup = Callback(session, contract, BoundCallbackPhase.SessionCleanup,
                 sync ? BoundCompletionKind.Synchronous : BoundCompletionKind.ValueTask);
-            if (cleanup == null) return (null, true);
+            if (cleanup == null)
+                return (null, true);
             cleanupContractName = Name(contract);
         }
         return (new(Identity(factory), Identity(session), acquire, selected.Ownership, cleanup)
@@ -85,11 +110,17 @@ internal static class SessionFactoryContractBinding
             FactoryHierarchy = StageContractBinding.DescribeHierarchy(factory),
             SyncEmission = family is (BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync) && factory.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(factory, compilation.Assembly)
                     ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name, cleanupContractName)
-                    { FactoryIsValueType = factory.IsValueType, IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource) } : null,
+                    {
+                        FactoryIsValueType = factory.IsValueType,
+                        IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource)
+                    } : null,
             AsyncEmission = family is (BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync or BoundDispatchFamily.Stream) && factory.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(factory, compilation.Assembly)
                     ? new(Name(factory), Name(selected.Contract), selected.Contract.GetMembers().OfType<IMethodSymbol>().Single().Name,
                         cleanupContractName, selected.Completion == BoundCompletionKind.ValueTask)
-                    { FactoryIsValueType = factory.IsValueType, IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource) } : null
+                    {
+                        FactoryIsValueType = factory.IsValueType,
+                        IsSourceDeclaration = factory.Locations.Any(l => l.IsInSource)
+                    } : null
         }, false);
     }
 
@@ -98,14 +129,16 @@ internal static class SessionFactoryContractBinding
     {
         var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
         var member = members.Length == 1 ? members[0] : null;
-        if (member == null) return null;
+        if (member == null)
+            return null;
         var implementation = type.FindImplementationForInterfaceMember(member) as IMethodSymbol;
         if (implementation == null || implementation.IsStatic ||
             implementation.MethodKind is not (MethodKind.Ordinary or MethodKind.ExplicitInterfaceImplementation) ||
             implementation.Arity != member.Arity || implementation.Parameters.Length != member.Parameters.Length ||
             implementation.ReturnsByRef != member.ReturnsByRef || implementation.ReturnsByRefReadonly != member.ReturnsByRefReadonly ||
             !Same(implementation.ReturnType, member.ReturnType) || implementation.Parameters.Zip(member.Parameters,
-                (actual, expected) => actual.RefKind == expected.RefKind && Same(actual.Type, expected.Type)).Any(matches => !matches)) return null;
+                (actual, expected) => actual.RefKind == expected.RefKind && Same(actual.Type, expected.Type)).Any(matches => !matches))
+            return null;
         return new(phase, completion, Identity(contract),
             implementation.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) + "/" + implementation.DeclaredAccessibility +
             "/explicit=" + !implementation.ExplicitInterfaceImplementations.IsEmpty + "/virtual=" + implementation.IsVirtual +

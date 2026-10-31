@@ -38,8 +38,16 @@ internal static class CanonicalSendAsyncReference
     {
         token.ThrowIfCancellationRequested();
         H? handler = provider.GetRequiredService<F>().Create(request, token) ?? throw new InvalidOperationException("A session factory must return a nonnull Handler session.");
-        try { return await handler.HandleAsync(request, token).ConfigureAwait(false); }
-        finally { var detached = handler; handler = null; await detached.DisposeAsync().ConfigureAwait(false); }
+        try
+        {
+            return await handler.HandleAsync(request, token).ConfigureAwait(false);
+        }
+        finally
+        {
+            var detached = handler;
+            handler = null;
+            await detached.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     internal static ValueTask SendOwnedVoid<R, H, F>(IServiceProvider provider, R request, CancellationToken token) where R : class, IRequest where H : class, IRequestHandler<R>, IAsyncDisposable where F : class, IOwnedSessionFactory<R, H>
@@ -51,8 +59,16 @@ internal static class CanonicalSendAsyncReference
     {
         token.ThrowIfCancellationRequested();
         H? handler = provider.GetRequiredService<F>().Create(request, token) ?? throw new InvalidOperationException("A session factory must return a nonnull Handler session.");
-        try { await handler.HandleAsync(request, token).ConfigureAwait(false); }
-        finally { var detached = handler; handler = null; await detached.DisposeAsync().ConfigureAwait(false); }
+        try
+        {
+            await handler.HandleAsync(request, token).ConfigureAwait(false);
+        }
+        finally
+        {
+            var detached = handler;
+            handler = null;
+            await detached.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     internal static ValueTask<T> SendBorrowedResponse<R, T, H, F>(IServiceProvider provider, R request, CancellationToken token) where R : class, IRequest<T> where H : class, IRequestHandler<R, T> where F : class, IBorrowedSessionFactory<R, H>
@@ -88,8 +104,16 @@ internal static class CanonicalSendAsyncReference
     {
         token.ThrowIfCancellationRequested();
         H? handler = await provider.GetRequiredService<F>().CreateAsync(request, token).ConfigureAwait(false) ?? throw new InvalidOperationException("A session factory must return a nonnull Handler session.");
-        try { return await handler.HandleAsync(request, token).ConfigureAwait(false); }
-        finally { var detached = handler; handler = null; await detached.DisposeAsync().ConfigureAwait(false); }
+        try
+        {
+            return await handler.HandleAsync(request, token).ConfigureAwait(false);
+        }
+        finally
+        {
+            var detached = handler;
+            handler = null;
+            await detached.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     internal static ValueTask SendAsyncOwnedVoid<R, H, F>(IServiceProvider provider, R request, CancellationToken token) where R : class, IRequest where H : class, IRequestHandler<R>, IAsyncDisposable where F : class, IAsyncOwnedSessionFactory<R, H>
@@ -101,8 +125,16 @@ internal static class CanonicalSendAsyncReference
     {
         token.ThrowIfCancellationRequested();
         H? handler = await provider.GetRequiredService<F>().CreateAsync(request, token).ConfigureAwait(false) ?? throw new InvalidOperationException("A session factory must return a nonnull Handler session.");
-        try { await handler.HandleAsync(request, token).ConfigureAwait(false); }
-        finally { var detached = handler; handler = null; await detached.DisposeAsync().ConfigureAwait(false); }
+        try
+        {
+            await handler.HandleAsync(request, token).ConfigureAwait(false);
+        }
+        finally
+        {
+            var detached = handler;
+            handler = null;
+            await detached.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     internal static ValueTask<T> SendAsyncBorrowedResponse<R, T, H, F>(IServiceProvider provider, R request, CancellationToken token) where R : class, IRequest<T> where H : class, IRequestHandler<R, T> where F : class, IAsyncBorrowedSessionFactory<R, H>

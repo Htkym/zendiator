@@ -41,8 +41,16 @@ public class ZendiatorSameProducerStream0
     private Competitive.Generated.BenchmarkSameProducerStreams.IZendiator entry = null!;
     private SameProducerStream0 request = null!;
 
-    [Params(16, 1024)] public int Count { get; set; }
-    [Params(false, true)] public bool Asynchronous { get; set; }
+    [Params(16, 1024)]
+    public int Count
+    {
+        get; set;
+    }
+    [Params(false, true)]
+    public bool Asynchronous
+    {
+        get; set;
+    }
     internal Type EntryType => entry.GetType();
 
     [GlobalSetup]
@@ -56,7 +64,11 @@ public class ZendiatorSameProducerStream0
     }
 
     [GlobalCleanup]
-    public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    public void Cleanup()
+    {
+        scope.Dispose();
+        provider.Dispose();
+    }
 
     public IAsyncEnumerable<int> Invoke(SameProducerStream0 value, CancellationToken token = default) => entry.StreamAsync(value, token);
 
@@ -64,14 +76,16 @@ public class ZendiatorSameProducerStream0
     public async ValueTask<int> Full()
     {
         int sum = 0;
-        await foreach (var item in Invoke(request).ConfigureAwait(false)) sum += item;
+        await foreach (var item in Invoke(request).ConfigureAwait(false))
+            sum += item;
         return sum;
     }
 
     [Benchmark]
     public async ValueTask<int> EarlyBreak()
     {
-        await foreach (var item in Invoke(request).ConfigureAwait(false)) return item;
+        await foreach (var item in Invoke(request).ConfigureAwait(false))
+            return item;
         return -1;
     }
 }
@@ -84,8 +98,16 @@ public class MediatRHistoricalSameProducerStream0
     private MediatR.IMediator entry = null!;
     private Stream0 request = null!;
 
-    [Params(16, 1024)] public int Count { get; set; }
-    [Params(false, true)] public bool Asynchronous { get; set; }
+    [Params(16, 1024)]
+    public int Count
+    {
+        get; set;
+    }
+    [Params(false, true)]
+    public bool Asynchronous
+    {
+        get; set;
+    }
     internal Type EntryType => entry.GetType();
 
     [GlobalSetup]
@@ -99,7 +121,11 @@ public class MediatRHistoricalSameProducerStream0
     }
 
     [GlobalCleanup]
-    public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    public void Cleanup()
+    {
+        scope.Dispose();
+        provider.Dispose();
+    }
 
     public IAsyncEnumerable<int> Invoke(Stream0 value, CancellationToken token = default) => entry.CreateStream(value, token);
 
@@ -107,14 +133,16 @@ public class MediatRHistoricalSameProducerStream0
     public async ValueTask<int> Full()
     {
         int sum = 0;
-        await foreach (var item in Invoke(request).ConfigureAwait(false)) sum += item;
+        await foreach (var item in Invoke(request).ConfigureAwait(false))
+            sum += item;
         return sum;
     }
 
     [Benchmark]
     public async ValueTask<int> EarlyBreak()
     {
-        await foreach (var item in Invoke(request).ConfigureAwait(false)) return item;
+        await foreach (var item in Invoke(request).ConfigureAwait(false))
+            return item;
         return -1;
     }
 }
@@ -127,8 +155,16 @@ public class MediatorSameProducerStream0
     private Mediator.Mediator entry = null!;
     private Stream0 request = null!;
 
-    [Params(16, 1024)] public int Count { get; set; }
-    [Params(false, true)] public bool Asynchronous { get; set; }
+    [Params(16, 1024)]
+    public int Count
+    {
+        get; set;
+    }
+    [Params(false, true)]
+    public bool Asynchronous
+    {
+        get; set;
+    }
     internal Type EntryType => entry.GetType();
 
     [GlobalSetup]
@@ -142,7 +178,11 @@ public class MediatorSameProducerStream0
     }
 
     [GlobalCleanup]
-    public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    public void Cleanup()
+    {
+        scope.Dispose();
+        provider.Dispose();
+    }
 
     public IAsyncEnumerable<int> Invoke(Stream0 value, CancellationToken token = default) => entry.CreateStream(value, token);
 
@@ -150,14 +190,16 @@ public class MediatorSameProducerStream0
     public async ValueTask<int> Full()
     {
         int sum = 0;
-        await foreach (var item in Invoke(request).ConfigureAwait(false)) sum += item;
+        await foreach (var item in Invoke(request).ConfigureAwait(false))
+            sum += item;
         return sum;
     }
 
     [Benchmark]
     public async ValueTask<int> EarlyBreak()
     {
-        await foreach (var item in Invoke(request).ConfigureAwait(false)) return item;
+        await foreach (var item in Invoke(request).ConfigureAwait(false))
+            return item;
         return -1;
     }
 }
@@ -170,8 +212,16 @@ public class DispatchRSameProducerStream0
     private DispatchR.IMediator entry = null!;
     private Stream0 request = null!;
 
-    [Params(16, 1024)] public int Count { get; set; }
-    [Params(false, true)] public bool Asynchronous { get; set; }
+    [Params(16, 1024)]
+    public int Count
+    {
+        get; set;
+    }
+    [Params(false, true)]
+    public bool Asynchronous
+    {
+        get; set;
+    }
     internal Type EntryType => entry.GetType();
 
     [GlobalSetup]
@@ -185,7 +235,11 @@ public class DispatchRSameProducerStream0
     }
 
     [GlobalCleanup]
-    public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    public void Cleanup()
+    {
+        scope.Dispose();
+        provider.Dispose();
+    }
 
     public IAsyncEnumerable<int> Invoke(Stream0 value, CancellationToken token = default) => entry.CreateStream(value, token);
 
@@ -193,14 +247,16 @@ public class DispatchRSameProducerStream0
     public async ValueTask<int> Full()
     {
         int sum = 0;
-        await foreach (var item in Invoke(request).ConfigureAwait(false)) sum += item;
+        await foreach (var item in Invoke(request).ConfigureAwait(false))
+            sum += item;
         return sum;
     }
 
     [Benchmark]
     public async ValueTask<int> EarlyBreak()
     {
-        await foreach (var item in Invoke(request).ConfigureAwait(false)) return item;
+        await foreach (var item in Invoke(request).ConfigureAwait(false))
+            return item;
         return -1;
     }
 }
@@ -213,8 +269,16 @@ public class ImmediateSameProducerStream0
     private IStream0.Handler entry = null!;
     private Stream0 request = null!;
 
-    [Params(16, 1024)] public int Count { get; set; }
-    [Params(false, true)] public bool Asynchronous { get; set; }
+    [Params(16, 1024)]
+    public int Count
+    {
+        get; set;
+    }
+    [Params(false, true)]
+    public bool Asynchronous
+    {
+        get; set;
+    }
     internal Type EntryType => entry.GetType();
 
     [GlobalSetup]
@@ -228,7 +292,11 @@ public class ImmediateSameProducerStream0
     }
 
     [GlobalCleanup]
-    public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    public void Cleanup()
+    {
+        scope.Dispose();
+        provider.Dispose();
+    }
 
     public IAsyncEnumerable<int> Invoke(Stream0 value, CancellationToken token = default) => entry.HandleAsync(value, token);
 
@@ -236,14 +304,16 @@ public class ImmediateSameProducerStream0
     public async ValueTask<int> Full()
     {
         int sum = 0;
-        await foreach (var item in Invoke(request).ConfigureAwait(false)) sum += item;
+        await foreach (var item in Invoke(request).ConfigureAwait(false))
+            sum += item;
         return sum;
     }
 
     [Benchmark]
     public async ValueTask<int> EarlyBreak()
     {
-        await foreach (var item in Invoke(request).ConfigureAwait(false)) return item;
+        await foreach (var item in Invoke(request).ConfigureAwait(false))
+            return item;
         return -1;
     }
 }
@@ -254,7 +324,8 @@ internal static class SameProducerStreamGate
 
     internal static async Task Run(string output)
     {
-        if (Correctness.Results.Count != 0) throw new InvalidOperationException("The same-producer gate must run separately.");
+        if (Correctness.Results.Count != 0)
+            throw new InvalidOperationException("The same-producer gate must run separately.");
         Directory.CreateDirectory(output);
         Environment.SetEnvironmentVariable("COLD_CAPTURE_CHILD", "0");
         Environment.SetEnvironmentVariable("COLD_AUDIT_REG", "1");
@@ -312,7 +383,10 @@ internal static class SameProducerStreamGate
                     assemblySha256 = ArtifactEvidence.Hash(type.Assembly.Location)
                 });
             }
-            finally { cleanup(); }
+            finally
+            {
+                cleanup();
+            }
         }
     }
 }

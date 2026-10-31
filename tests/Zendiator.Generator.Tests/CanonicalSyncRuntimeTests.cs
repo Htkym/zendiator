@@ -29,34 +29,63 @@ public sealed class CanonicalSyncRuntimeProbe
     public int FactoryDisposals;
     public Action? DuringHandler;
 
-    public void ConstructHandler(object receiver) { Trace.Add("handler.ctor"); if (ConstructorError != null) throw ConstructorError; Created.Add(receiver); }
-    public void ConstructFactory() { Trace.Add("factory.ctor"); if (ConstructorError != null) throw ConstructorError; }
+    public void ConstructHandler(object receiver)
+    {
+        Trace.Add("handler.ctor");
+        if (ConstructorError != null)
+            throw ConstructorError;
+        Created.Add(receiver);
+    }
+    public void ConstructFactory()
+    {
+        Trace.Add("factory.ctor");
+        if (ConstructorError != null)
+            throw ConstructorError;
+    }
     public void Factory(object receiver, object request, CancellationToken token)
     {
-        Trace.Add("factory"); Calls.Add(("factory", request, token, receiver));
-        AmbientObserved.Add(Ambient.Value); Ambient.Value = "factory";
-        CultureObserved.Add(CultureInfo.CurrentCulture.Name); CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
-        if (CancelInFactory) Cancellation.Cancel();
-        if (FactoryError != null) throw FactoryError;
+        Trace.Add("factory");
+        Calls.Add(("factory", request, token, receiver));
+        AmbientObserved.Add(Ambient.Value);
+        Ambient.Value = "factory";
+        CultureObserved.Add(CultureInfo.CurrentCulture.Name);
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
+        if (CancelInFactory)
+            Cancellation.Cancel();
+        if (FactoryError != null)
+            throw FactoryError;
     }
     public int Handle(object receiver, object request, CancellationToken token)
     {
-        Trace.Add("handler"); Calls.Add(("handler", request, token, receiver));
-        AmbientObserved.Add(Ambient.Value); Ambient.Value = "handler";
-        CultureObserved.Add(CultureInfo.CurrentCulture.Name); CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("es-ES");
-        if (CancelInHandler) Cancellation.Cancel();
+        Trace.Add("handler");
+        Calls.Add(("handler", request, token, receiver));
+        AmbientObserved.Add(Ambient.Value);
+        Ambient.Value = "handler";
+        CultureObserved.Add(CultureInfo.CurrentCulture.Name);
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("es-ES");
+        if (CancelInHandler)
+            Cancellation.Cancel();
         DuringHandler?.Invoke();
-        if (HandlerError != null) throw HandlerError;
+        if (HandlerError != null)
+            throw HandlerError;
         return 73;
     }
     public void Cleanup(object receiver)
     {
-        Trace.Add("handler.dispose"); Released.Add(receiver);
-        AmbientObserved.Add(Ambient.Value); Ambient.Value = "cleanup";
-        CultureObserved.Add(CultureInfo.CurrentCulture.Name); CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
-        if (CleanupError != null) throw CleanupError;
+        Trace.Add("handler.dispose");
+        Released.Add(receiver);
+        AmbientObserved.Add(Ambient.Value);
+        Ambient.Value = "cleanup";
+        CultureObserved.Add(CultureInfo.CurrentCulture.Name);
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
+        if (CleanupError != null)
+            throw CleanupError;
     }
-    public void DisposeFactory() { Trace.Add("factory.dispose"); FactoryDisposals++; }
+    public void DisposeFactory()
+    {
+        Trace.Add("factory.dispose");
+        FactoryDisposals++;
+    }
 }
 
 public sealed partial class GeneratorTests
@@ -134,8 +163,10 @@ public sealed partial class GeneratorTests
     {
         var source = sourceOverride ?? SyncRuntimeSource(receiver, isVoid, named, extension, emptyPipeline);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "CanonicalSync_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        if (candidateOnly) Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
-        else Assert.Empty(diagnostics);
+        if (candidateOnly)
+            Assert.Equal("ZEN0037", Assert.Single(diagnostics).Id);
+        else
+            Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         using var bytes = new MemoryStream();
         var emitted = output.Emit(bytes);
@@ -147,8 +178,10 @@ public sealed partial class GeneratorTests
         {
             var folder = Path.Combine(evidence, receiver + "-" + (isVoid ? "void" : "response") + "-" + named + "-" + extension + "-" + emptyPipeline + "-" +
                 Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source)))[..8]);
-            Directory.CreateDirectory(folder); File.WriteAllText(Path.Combine(folder, "input.cs"), source);
-            foreach (var generated in sources) File.WriteAllText(Path.Combine(folder, generated.HintName), generated.SourceText.ToString());
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(Path.Combine(folder, "input.cs"), source);
+            foreach (var generated in sources)
+                File.WriteAllText(Path.Combine(folder, generated.HintName), generated.SourceText.ToString());
             File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
             File.WriteAllText(Path.Combine(folder, "compile.json"), JsonSerializer.Serialize(new
             {
@@ -180,63 +213,91 @@ public sealed partial class GeneratorTests
             if (type == service)
             {
                 probe.Trace.Add(service.Name.StartsWith("Handler", StringComparison.Ordinal) ? "resolve-handler" : "resolve-factory");
-                if (probe.DiError != null) throw probe.DiError; if (probe.NullService) return null;
+                if (probe.DiError != null)
+                    throw probe.DiError;
+                if (probe.NullService)
+                    return null;
             }
             return inner.GetService(type);
         }
     }
     private static ServiceProvider SyncProvider(SyncFixture f, CanonicalSyncRuntimeProbe probe, bool recording = true, ServiceLifetime? lifetime = null)
     {
-        IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe);
+        IServiceCollection services = new ServiceCollection();
+        services.AddSingleton(probe);
         // Resolve through real Microsoft DI registrations.
-        if (recording) services.AddScoped(f.Service, f.ResolveService.CreateDelegate<Func<IServiceProvider, object>>());
-        if (lifetime != null) services.Add(ServiceDescriptor.Describe(f.Service, f.Service, lifetime.Value));
+        if (recording)
+            services.AddScoped(f.Service, f.ResolveService.CreateDelegate<Func<IServiceProvider, object>>());
+        if (lifetime != null)
+            services.Add(ServiceDescriptor.Describe(f.Service, f.Service, lifetime.Value));
         Assert.Same(services, f.Register.Invoke(null, [services]));
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
     }
     private static (object? Result, Exception? Error) InvokeSync(SyncFixture f, object mediator, object? request, CancellationToken token)
     {
-        try { return (f.Dispatch.Invoke(null, [mediator, request, token]), null); }
-        catch (TargetInvocationException e) { return (null, e.InnerException); }
+        try
+        {
+            return (f.Dispatch.Invoke(null, [mediator, request, token]), null);
+        }
+        catch (TargetInvocationException e)
+        {
+            return (null, e.InnerException);
+        }
     }
 
     public static IEnumerable<object[]> SyncRuntimeCases()
     {
-        foreach (var receiver in new[] { "direct", "borrowed", "owned" }) foreach (var isVoid in new[] { false, true })
-        {
-            foreach (var scenario in new[] { "success", "null-request", "pre-cancel", "di-error", "di-null", "constructor-error", "handler-error", "handler-oce", "cancel-in-handler" })
-                yield return [receiver, isVoid, scenario];
-            if (receiver != "direct") foreach (var scenario in new[] { "factory-error", "factory-oce", "factory-null", "cancel-in-factory" })
-                yield return [receiver, isVoid, scenario];
-            if (receiver == "owned") foreach (var scenario in new[] { "cleanup-error-success","cleanup-oce-success","cleanup-error-over-body",
-                "cleanup-oce-over-body","cleanup-error-over-oce","cleanup-oce-over-oce" }) yield return [receiver, isVoid, scenario];
-        }
+        foreach (var receiver in new[] { "direct", "borrowed", "owned" })
+            foreach (var isVoid in new[] { false, true })
+            {
+                foreach (var scenario in new[] { "success", "null-request", "pre-cancel", "di-error", "di-null", "constructor-error", "handler-error", "handler-oce", "cancel-in-handler" })
+                    yield return [receiver, isVoid, scenario];
+                if (receiver != "direct")
+                    foreach (var scenario in new[] { "factory-error", "factory-oce", "factory-null", "cancel-in-factory" })
+                        yield return [receiver, isVoid, scenario];
+                if (receiver == "owned")
+                    foreach (var scenario in new[] { "cleanup-error-success","cleanup-oce-success","cleanup-error-over-body",
+                "cleanup-oce-over-body","cleanup-error-over-oce","cleanup-oce-over-oce" })
+                        yield return [receiver, isVoid, scenario];
+            }
     }
 
     [Theory]
     [MemberData(nameof(SyncRuntimeCases))]
     public void Generated_SendSync_executes_public_registration_and_matches_independent_D03_D04_trace_identity_and_ownership(string receiver, bool isVoid, string scenario)
     {
-        var f = SyncRuntimeFixture(receiver, isVoid); var probe = new CanonicalSyncRuntimeProbe();
-        var diError = new InvalidOperationException("DI identity"); var factoryError = new Exception("factory identity"); var handlerError = new Exception("handler identity");
-        var cleanupError = new Exception("cleanup identity"); using var otherToken = new CancellationTokenSource();
-        var constructorError = new Exception("constructor identity"); probe.ConstructorError = scenario == "constructor-error" ? constructorError : null;
+        var f = SyncRuntimeFixture(receiver, isVoid);
+        var probe = new CanonicalSyncRuntimeProbe();
+        var diError = new InvalidOperationException("DI identity");
+        var factoryError = new Exception("factory identity");
+        var handlerError = new Exception("handler identity");
+        var cleanupError = new Exception("cleanup identity");
+        using var otherToken = new CancellationTokenSource();
+        var constructorError = new Exception("constructor identity");
+        probe.ConstructorError = scenario == "constructor-error" ? constructorError : null;
         var factoryOce = new OperationCanceledException("factory OCE", otherToken.Token);
         var handlerOce = new OperationCanceledException("handler OCE", otherToken.Token);
         var cleanupOce = new OperationCanceledException("cleanup OCE", otherToken.Token);
-        probe.DiError = scenario == "di-error" ? diError : null; probe.NullService = scenario == "di-null"; probe.NullSession = scenario == "factory-null";
+        probe.DiError = scenario == "di-error" ? diError : null;
+        probe.NullService = scenario == "di-null";
+        probe.NullSession = scenario == "factory-null";
         probe.FactoryError = scenario == "factory-error" ? factoryError : scenario == "factory-oce" ? factoryOce : null;
         probe.HandlerError = scenario is "handler-error" or "cleanup-error-over-body" or "cleanup-oce-over-body" ? handlerError :
             scenario is "handler-oce" or "cleanup-error-over-oce" or "cleanup-oce-over-oce" ? handlerOce : null;
         probe.CleanupError = scenario.StartsWith("cleanup-error", StringComparison.Ordinal) ? cleanupError :
             scenario.StartsWith("cleanup-oce", StringComparison.Ordinal) ? cleanupOce : null;
-        probe.CancelInFactory = scenario == "cancel-in-factory"; probe.CancelInHandler = scenario == "cancel-in-handler";
-        if (scenario == "pre-cancel") probe.Cancellation.Cancel();
-        var originalAmbient = CanonicalSyncRuntimeProbe.Ambient.Value; CanonicalSyncRuntimeProbe.Ambient.Value = "caller";
-        var originalCulture = CultureInfo.CurrentCulture; CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        probe.CancelInFactory = scenario == "cancel-in-factory";
+        probe.CancelInHandler = scenario == "cancel-in-handler";
+        if (scenario == "pre-cancel")
+            probe.Cancellation.Cancel();
+        var originalAmbient = CanonicalSyncRuntimeProbe.Ambient.Value;
+        CanonicalSyncRuntimeProbe.Ambient.Value = "caller";
+        var originalCulture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
         try
         {
-            using var provider = SyncProvider(f, probe); var scope = provider.CreateScope();
+            using var provider = SyncProvider(f, probe);
+            var scope = provider.CreateScope();
             try
             {
                 var mediator = scope.ServiceProvider.GetRequiredService(f.Interface);
@@ -271,17 +332,33 @@ public sealed partial class GeneratorTests
                     "cleanup-oce-success" or "cleanup-oce-over-body" or "cleanup-oce-over-oce" => cleanupOce,
                     _ => null
                 };
-                if (escaping != null) Assert.Same(escaping, actual.Error);
-                else if (scenario == "null-request") Assert.Equal("request", Assert.IsType<ArgumentNullException>(actual.Error).ParamName);
-                else if (scenario == "pre-cancel") Assert.Equal(probe.Cancellation.Token, Assert.IsType<OperationCanceledException>(actual.Error).CancellationToken);
-                else if (scenario is "di-null" or "factory-null") Assert.IsType<InvalidOperationException>(actual.Error);
-                else { Assert.Null(actual.Error); Assert.Equal(isVoid ? null : (object)73, actual.Result); }
-                if (escaping is OperationCanceledException oce) Assert.Equal(oce.CancellationToken, Assert.IsType<OperationCanceledException>(actual.Error).CancellationToken);
-                Assert.All(probe.Calls, call => { Assert.Same(request, call.Request); Assert.Equal(probe.Cancellation.Token, call.Token); });
-                foreach (var call in probe.Calls.Where(c => c.Phase == "handler")) Assert.Same(Assert.Single(probe.Created), call.Receiver);
-                var handlerRan = expected.Contains("handler"); var factoryRan = expected.Contains("factory");
+                if (escaping != null)
+                    Assert.Same(escaping, actual.Error);
+                else if (scenario == "null-request")
+                    Assert.Equal("request", Assert.IsType<ArgumentNullException>(actual.Error).ParamName);
+                else if (scenario == "pre-cancel")
+                    Assert.Equal(probe.Cancellation.Token, Assert.IsType<OperationCanceledException>(actual.Error).CancellationToken);
+                else if (scenario is "di-null" or "factory-null")
+                    Assert.IsType<InvalidOperationException>(actual.Error);
+                else
+                {
+                    Assert.Null(actual.Error);
+                    Assert.Equal(isVoid ? null : (object)73, actual.Result);
+                }
+                if (escaping is OperationCanceledException oce)
+                    Assert.Equal(oce.CancellationToken, Assert.IsType<OperationCanceledException>(actual.Error).CancellationToken);
+                Assert.All(probe.Calls, call =>
+                {
+                    Assert.Same(request, call.Request);
+                    Assert.Equal(probe.Cancellation.Token, call.Token);
+                });
+                foreach (var call in probe.Calls.Where(c => c.Phase == "handler"))
+                    Assert.Same(Assert.Single(probe.Created), call.Receiver);
+                var handlerRan = expected.Contains("handler");
+                var factoryRan = expected.Contains("factory");
                 Assert.Equal(receiver == "owned" && handlerRan ? 1 : 0, probe.Released.Count);
-                if (probe.Released.Count != 0) Assert.Same(Assert.Single(probe.Created), probe.Released[0]);
+                if (probe.Released.Count != 0)
+                    Assert.Same(Assert.Single(probe.Created), probe.Released[0]);
                 Assert.Equal(0, probe.FactoryDisposals);
                 Assert.Equal(receiver == "owned" && handlerRan ? "cleanup" : handlerRan ? "handler" : factoryRan ? "factory" : "caller", CanonicalSyncRuntimeProbe.Ambient.Value);
                 Assert.Equal(factoryRan ? (handlerRan ? (receiver == "owned" ? new[] { "caller", "factory", "handler" } : new[] { "caller", "factory" }) : new[] { "caller" }) :
@@ -290,12 +367,20 @@ public sealed partial class GeneratorTests
                     handlerRan ? new[] { "" } : [], probe.CultureObserved);
                 Assert.Equal(receiver == "owned" && handlerRan ? "en-US" : handlerRan ? "es-ES" : factoryRan ? "fr-FR" : "", CultureInfo.CurrentCulture.Name);
             }
-            finally { scope.Dispose(); }
+            finally
+            {
+                scope.Dispose();
+            }
             // The real DI scope owns directly resolved services and factories, but never the returned session.
             Assert.Equal(receiver == "direct" ? probe.Created.Count : receiver == "owned" ? probe.Created.Count : 0, probe.Released.Count);
             Assert.Equal(receiver == "direct" || scenario == "constructor-error" ? 0 : probe.Trace.Contains("factory.ctor") ? 1 : 0, probe.FactoryDisposals);
         }
-        finally { CanonicalSyncRuntimeProbe.Ambient.Value = originalAmbient; CultureInfo.CurrentCulture = originalCulture; probe.Cancellation.Dispose(); }
+        finally
+        {
+            CanonicalSyncRuntimeProbe.Ambient.Value = originalAmbient;
+            CultureInfo.CurrentCulture = originalCulture;
+            probe.Cancellation.Dispose();
+        }
     }
 
     [Theory]
@@ -307,44 +392,80 @@ public sealed partial class GeneratorTests
     [InlineData("owned", ServiceLifetime.Scoped)]
     public void Generated_SendSync_captures_dependencies_preserves_overrides_and_leaves_DI_cleanup_to_scope(string receiver, ServiceLifetime lifetime)
     {
-        var f = SyncRuntimeFixture(receiver, false); var probe = new CanonicalSyncRuntimeProbe();
+        var f = SyncRuntimeFixture(receiver, false);
+        var probe = new CanonicalSyncRuntimeProbe();
         var ambient = CanonicalSyncRuntimeProbe.Ambient.Value;
         var culture = CultureInfo.CurrentCulture;
         try
         {
-            using var provider = SyncProvider(f, probe, recording: false, lifetime); using (var scope = provider.CreateScope())
+            using var provider = SyncProvider(f, probe, recording: false, lifetime);
+            using (var scope = provider.CreateScope())
             {
                 var mediator = scope.ServiceProvider.GetRequiredService(f.Interface);
-                for (var i = 0; i < 2; i++) { var actual = InvokeSync(f, mediator, Activator.CreateInstance(f.Request), default); Assert.Null(actual.Error); Assert.Equal(73, actual.Result); }
+                for (var i = 0; i < 2; i++)
+                {
+                    var actual = InvokeSync(f, mediator, Activator.CreateInstance(f.Request), default);
+                    Assert.Null(actual.Error);
+                    Assert.Equal(73, actual.Result);
+                }
                 Assert.Equal(receiver == "direct" ? 1 : 2, probe.Created.Count);
-                Assert.Equal(receiver == "owned" ? 2 : 0, probe.Released.Count); Assert.Equal(0, probe.FactoryDisposals);
-                if (receiver != "direct") Assert.Single(probe.Trace, t => t == "factory.ctor");
+                Assert.Equal(receiver == "owned" ? 2 : 0, probe.Released.Count);
+                Assert.Equal(0, probe.FactoryDisposals);
+                if (receiver != "direct")
+                    Assert.Single(probe.Trace, t => t == "factory.ctor");
                 var receivers = probe.Calls.Where(c => c.Phase == "handler").Select(c => c.Receiver).ToArray();
-                if (receiver == "direct") Assert.Same(receivers[0], receivers[1]); else Assert.NotSame(receivers[0], receivers[1]);
+                if (receiver == "direct")
+                    Assert.Same(receivers[0], receivers[1]);
+                else
+                    Assert.NotSame(receivers[0], receivers[1]);
             }
             Assert.Equal(receiver == "borrowed" ? 0 : probe.Created.Count, probe.Released.Count);
             Assert.Equal(receiver == "direct" ? 0 : 1, probe.FactoryDisposals);
         }
-        finally { CanonicalSyncRuntimeProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; probe.Cancellation.Dispose(); }
+        finally
+        {
+            CanonicalSyncRuntimeProbe.Ambient.Value = ambient;
+            CultureInfo.CurrentCulture = culture;
+            probe.Cancellation.Dispose();
+        }
     }
 
     [Fact]
     public void Generated_Owned_SendSync_reentry_uses_distinct_sessions_and_cleans_inner_before_outer()
     {
-        var f = SyncRuntimeFixture("owned", false); var probe = new CanonicalSyncRuntimeProbe(); var ambient = CanonicalSyncRuntimeProbe.Ambient.Value;
+        var f = SyncRuntimeFixture("owned", false);
+        var probe = new CanonicalSyncRuntimeProbe();
+        var ambient = CanonicalSyncRuntimeProbe.Ambient.Value;
         var culture = CultureInfo.CurrentCulture;
         try
         {
-            using var provider = SyncProvider(f, probe); using var scope = provider.CreateScope(); var mediator = scope.ServiceProvider.GetRequiredService(f.Interface);
-            var outer = Activator.CreateInstance(f.Request); var inner = Activator.CreateInstance(f.Request);
-            probe.DuringHandler = () => { probe.DuringHandler = null; var actual = InvokeSync(f, mediator, inner, default); Assert.Null(actual.Error); Assert.Equal(73, actual.Result); };
-            var result = InvokeSync(f, mediator, outer, default); Assert.Null(result.Error); Assert.Equal(73, result.Result);
+            using var provider = SyncProvider(f, probe);
+            using var scope = provider.CreateScope();
+            var mediator = scope.ServiceProvider.GetRequiredService(f.Interface);
+            var outer = Activator.CreateInstance(f.Request);
+            var inner = Activator.CreateInstance(f.Request);
+            probe.DuringHandler = () =>
+            {
+                probe.DuringHandler = null;
+                var actual = InvokeSync(f, mediator, inner, default);
+                Assert.Null(actual.Error);
+                Assert.Equal(73, actual.Result);
+            };
+            var result = InvokeSync(f, mediator, outer, default);
+            Assert.Null(result.Error);
+            Assert.Equal(73, result.Result);
             Assert.Equal(new[] { "resolve-factory","factory.ctor","factory","handler.ctor","handler",
                 "factory","handler.ctor","handler","handler.dispose","handler.dispose" }, probe.Trace);
-            Assert.NotSame(probe.Created[0], probe.Created[1]); Assert.Equal(new[] { probe.Created[1], probe.Created[0] }, probe.Released);
+            Assert.NotSame(probe.Created[0], probe.Created[1]);
+            Assert.Equal(new[] { probe.Created[1], probe.Created[0] }, probe.Released);
             Assert.Equal(new[] { outer, outer, inner, inner }, probe.Calls.Select(c => c.Request));
         }
-        finally { CanonicalSyncRuntimeProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; probe.Cancellation.Dispose(); }
+        finally
+        {
+            CanonicalSyncRuntimeProbe.Ambient.Value = ambient;
+            CultureInfo.CurrentCulture = culture;
+            probe.Cancellation.Dispose();
+        }
     }
 
     [Theory]
@@ -354,14 +475,25 @@ public sealed partial class GeneratorTests
     public void Generated_SendSync_connects_static_or_default_registration_and_empty_pipeline(bool named, bool extension, bool emptyPipeline)
     {
         var inferred = emptyPipeline && extension ? SyncRuntimeSource("owned", true, named, extension, emptyPipeline).Replace("c.Pipeline<Ping>(DispatchFamily.SendSync)", "c.Pipeline<Ping>()") : null;
-        var f = CompileSyncFixture("owned", true, named, extension, emptyPipeline, sourceOverride: inferred); var probe = new CanonicalSyncRuntimeProbe(); var ambient = CanonicalSyncRuntimeProbe.Ambient.Value;
+        var f = CompileSyncFixture("owned", true, named, extension, emptyPipeline, sourceOverride: inferred);
+        var probe = new CanonicalSyncRuntimeProbe();
+        var ambient = CanonicalSyncRuntimeProbe.Ambient.Value;
         var culture = CultureInfo.CurrentCulture;
         try
         {
-            using var provider = SyncProvider(f, probe); using var scope = provider.CreateScope(); var actual = InvokeSync(f, scope.ServiceProvider.GetRequiredService(f.Interface), Activator.CreateInstance(f.Request), default);
-            Assert.Null(actual.Error); Assert.Null(actual.Result); Assert.Single(probe.Released);
+            using var provider = SyncProvider(f, probe);
+            using var scope = provider.CreateScope();
+            var actual = InvokeSync(f, scope.ServiceProvider.GetRequiredService(f.Interface), Activator.CreateInstance(f.Request), default);
+            Assert.Null(actual.Error);
+            Assert.Null(actual.Result);
+            Assert.Single(probe.Released);
         }
-        finally { CanonicalSyncRuntimeProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; probe.Cancellation.Dispose(); }
+        finally
+        {
+            CanonicalSyncRuntimeProbe.Ambient.Value = ambient;
+            CultureInfo.CurrentCulture = culture;
+            probe.Cancellation.Dispose();
+        }
     }
 
     [Fact]
@@ -372,24 +504,38 @@ public sealed partial class GeneratorTests
             .Replace("ISyncRequest<int>", "ISyncRequest<Response<string>>").Replace("ISyncRequestHandler<Ping,int>", "ISyncRequestHandler<Ping,Response<string>>")
             .Replace("int ISyncRequestHandler", "Response<string> ISyncRequestHandler").Replace("return _probe.Handle(this,request,token);", "return new(_probe.Handle(this,request,token));");
         var f = CompileSyncFixture("owned", false, sourceOverride: source, applicationNamespace: "event.class");
-        var probe = new CanonicalSyncRuntimeProbe(); var ambient = CanonicalSyncRuntimeProbe.Ambient.Value; var culture = CultureInfo.CurrentCulture;
+        var probe = new CanonicalSyncRuntimeProbe();
+        var ambient = CanonicalSyncRuntimeProbe.Ambient.Value;
+        var culture = CultureInfo.CurrentCulture;
         try
         {
-            using var provider = SyncProvider(f, probe); using var scope = provider.CreateScope(); var actual = InvokeSync(f, scope.ServiceProvider.GetRequiredService(f.Interface), Activator.CreateInstance(f.Request), default);
-            Assert.Null(actual.Error); Assert.Equal(73, actual.Result!.GetType().GetProperty("Value")!.GetValue(actual.Result)); Assert.Single(probe.Released);
+            using var provider = SyncProvider(f, probe);
+            using var scope = provider.CreateScope();
+            var actual = InvokeSync(f, scope.ServiceProvider.GetRequiredService(f.Interface), Activator.CreateInstance(f.Request), default);
+            Assert.Null(actual.Error);
+            Assert.Equal(73, actual.Result!.GetType().GetProperty("Value")!.GetValue(actual.Result));
+            Assert.Single(probe.Released);
         }
-        finally { CanonicalSyncRuntimeProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; probe.Cancellation.Dispose(); }
+        finally
+        {
+            CanonicalSyncRuntimeProbe.Ambient.Value = ambient;
+            CultureInfo.CurrentCulture = culture;
+            probe.Cancellation.Dispose();
+        }
     }
 
     [Fact]
     public void Generated_SendSync_registrar_rejects_changed_structure_before_mutating_services()
     {
-        var f = SyncRuntimeFixture("owned", false); var config = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
+        var f = SyncRuntimeFixture("owned", false);
+        var config = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
         var method = typeof(global::Zendiator.DependencyInjection.ZendiatorConfiguration).GetMethods().Single(m => m.Name == "Handlers" && m.GetParameters().Length == 2);
         method.MakeGenericMethod(f.Request).Invoke(config, [DispatchFamily.SendSync, new[] { f.Service }]);
-        var services = new ServiceCollection(); var registrar = f.Assembly.GetType("App.Generated.Reads.ZendiatorGeneratedRegistrar")!.GetMethod("Add", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var services = new ServiceCollection();
+        var registrar = f.Assembly.GetType("App.Generated.Reads.ZendiatorGeneratedRegistrar")!.GetMethod("Add", BindingFlags.Static | BindingFlags.NonPublic)!;
         var error = Assert.Throws<TargetInvocationException>(() => registrar.Invoke(null, [services, config.Snapshot()]));
-        Assert.IsType<InvalidOperationException>(error.InnerException); Assert.Empty(services);
+        Assert.IsType<InvalidOperationException>(error.InnerException);
+        Assert.Empty(services);
     }
 
     [Fact]
@@ -454,9 +600,13 @@ public sealed partial class GeneratorTests
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "CanonicalSyncUnsupported_" + shape), out var output, out var diagnostics);
         if (shape is "struct-request" or "struct-handler" or "struct-factory" or "array-result" or "stage-wrapper" or "multiple-routes")
         {
-            Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources, routes: shape == "multiple-routes" ? 2 : 1); return;
+            Assert.Empty(diagnostics);
+            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+            AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources, routes: shape == "multiple-routes" ? 2 : 1);
+            return;
         }
-        Assert.Equal(shape == "multiple-routes" ? 2 : 1, diagnostics.Length); Assert.All(diagnostics, d => Assert.Equal("ZEN0037", d.Id));
+        Assert.Equal(shape == "multiple-routes" ? 2 : 1, diagnostics.Length);
+        Assert.All(diagnostics, d => Assert.Equal("ZEN0037", d.Id));
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
         AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
     }
@@ -468,19 +618,24 @@ public sealed partial class GeneratorTests
     [InlineData("provider")]
     public void Enabled_SendSync_accepts_custom_collection_and_registered_provider_decorator(string boundary)
     {
-        var f = SyncRuntimeFixture("owned", false); var probe = new CanonicalSyncRuntimeProbe();
+        var f = SyncRuntimeFixture("owned", false);
+        var probe = new CanonicalSyncRuntimeProbe();
         if (boundary == "collection")
         {
             var collection = new CustomSyncCollection();
-            Assert.Same(collection, f.Register.Invoke(null, [collection])); Assert.NotEmpty(collection);
+            Assert.Same(collection, f.Register.Invoke(null, [collection]));
+            Assert.NotEmpty(collection);
         }
         else
         {
-            IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe); f.Register.Invoke(null, [services]);
+            IServiceCollection services = new ServiceCollection();
+            services.AddSingleton(probe);
+            f.Register.Invoke(null, [services]);
             using var provider = services.BuildServiceProvider();
             Assert.NotNull(Activator.CreateInstance(f.Mediator, new RecordingSyncProvider(provider, probe, f.Service)));
         }
-        Assert.Empty(probe.Trace); probe.Cancellation.Dispose();
+        Assert.Empty(probe.Trace);
+        probe.Cancellation.Dispose();
     }
 
     [Fact]
@@ -501,9 +656,11 @@ public sealed partial class GeneratorTests
     public void Enabled_SendSync_missing_or_source_homonym_Microsoft_DI_implementation_keeps_ZEN0037(bool homonym)
     {
         var source = SyncRuntimeSource("direct", false, dispatch: false);
-        if (homonym) source += "namespace Microsoft.Extensions.DependencyInjection { public sealed class ServiceProvider {} }";
+        if (homonym)
+            source += "namespace Microsoft.Extensions.DependencyInjection { public sealed class ServiceProvider {} }";
         var compilation = SyncCompilation(source, "UnsupportedProviderReference");
-        if (!homonym) compilation = compilation.WithReferences(compilation.References.Where(r => !string.Equals(Path.GetFileName(r.Display), "Microsoft.Extensions.DependencyInjection.dll", StringComparison.OrdinalIgnoreCase)));
+        if (!homonym)
+            compilation = compilation.WithReferences(compilation.References.Where(r => !string.Equals(Path.GetFileName(r.Display), "Microsoft.Extensions.DependencyInjection.dll", StringComparison.OrdinalIgnoreCase)));
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(compilation, out var output, out var diagnostics);
         Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));

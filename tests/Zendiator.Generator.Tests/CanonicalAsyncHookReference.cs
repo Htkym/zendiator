@@ -14,19 +14,39 @@ internal static class CanonicalAsyncHookReference
     {
         token.ThrowIfCancellationRequested();
         var outer = provider.GetRequiredService<K>();
-        var savedOuter = request; var successOuter = false; Exception? errorOuter = null;
+        var savedOuter = request;
+        var successOuter = false;
+        Exception? errorOuter = null;
         try
         {
             savedOuter = await outer.BeforeAsync(savedOuter, token).ConfigureAwait(false);
-            ArgumentNullException.ThrowIfNull(savedOuter, "request"); token.ThrowIfCancellationRequested();
+            ArgumentNullException.ThrowIfNull(savedOuter, "request");
+            token.ThrowIfCancellationRequested();
             T response;
             response = await provider.GetRequiredService<H>().HandleAsync(savedOuter, token).ConfigureAwait(false);
             response = await outer.AfterAsync(savedOuter, response, token).ConfigureAwait(false);
             successOuter = true;
             return response;
         }
-        catch (Exception failure) { errorOuter = failure; try { await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false); } catch (Exception replacement) { errorOuter = replacement; throw; } throw; }
-        finally { await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false); }
+        catch (Exception failure)
+        {
+            errorOuter = failure;
+            try
+            {
+                await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false);
+            }
+            catch (Exception replacement)
+            {
+                errorOuter = replacement;
+                throw;
+            }
+
+            throw;
+        }
+        finally
+        {
+            await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false);
+        }
     }
 
     internal static ValueTask SendHookDirectVoid<R, K, H>(IServiceProvider provider, R request, CancellationToken token) where R : class, IRequest where K : class, IAsyncSendRequestTransform<R>, IAsyncSendSuccessObserver<R>, IAsyncSendExceptionObserver<R>, IAsyncSendFinallyObserver<R> where H : class, IRequestHandler<R>
@@ -38,17 +58,37 @@ internal static class CanonicalAsyncHookReference
     {
         token.ThrowIfCancellationRequested();
         var outer = provider.GetRequiredService<K>();
-        var savedOuter = request; var successOuter = false; Exception? errorOuter = null;
+        var savedOuter = request;
+        var successOuter = false;
+        Exception? errorOuter = null;
         try
         {
             savedOuter = await outer.BeforeAsync(savedOuter, token).ConfigureAwait(false);
-            ArgumentNullException.ThrowIfNull(savedOuter, "request"); token.ThrowIfCancellationRequested();
+            ArgumentNullException.ThrowIfNull(savedOuter, "request");
+            token.ThrowIfCancellationRequested();
             await provider.GetRequiredService<H>().HandleAsync(savedOuter, token).ConfigureAwait(false);
             await outer.AfterAsync(savedOuter, token).ConfigureAwait(false);
             successOuter = true;
         }
-        catch (Exception failure) { errorOuter = failure; try { await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false); } catch (Exception replacement) { errorOuter = replacement; throw; } throw; }
-        finally { await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false); }
+        catch (Exception failure)
+        {
+            errorOuter = failure;
+            try
+            {
+                await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false);
+            }
+            catch (Exception replacement)
+            {
+                errorOuter = replacement;
+                throw;
+            }
+
+            throw;
+        }
+        finally
+        {
+            await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false);
+        }
     }
 
     internal static ValueTask<T> SendHookOwnedResponse<R, T, K, H, F>(IServiceProvider provider, R request, CancellationToken token) where R : class, IRequest<T> where K : class, IAsyncSendRequestTransform<R>, IAsyncSendResponseTransform<R, T>, IAsyncSendExceptionObserver<R>, IAsyncSendFinallyObserver<R>, IAsyncDisposable where H : class, IRequestHandler<R, T> where F : class, IOwnedSessionFactory<R, K>
@@ -62,21 +102,46 @@ internal static class CanonicalAsyncHookReference
         K? outer = provider.GetRequiredService<F>().Create(request, token) ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
         try
         {
-            var savedOuter = request; var successOuter = false; Exception? errorOuter = null;
+            var savedOuter = request;
+            var successOuter = false;
+            Exception? errorOuter = null;
             try
             {
                 savedOuter = await outer.BeforeAsync(savedOuter, token).ConfigureAwait(false);
-                ArgumentNullException.ThrowIfNull(savedOuter, "request"); token.ThrowIfCancellationRequested();
+                ArgumentNullException.ThrowIfNull(savedOuter, "request");
+                token.ThrowIfCancellationRequested();
                 T response;
                 response = await provider.GetRequiredService<H>().HandleAsync(savedOuter, token).ConfigureAwait(false);
                 response = await outer.AfterAsync(savedOuter, response, token).ConfigureAwait(false);
                 successOuter = true;
                 return response;
             }
-            catch (Exception failure) { errorOuter = failure; try { await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false); } catch (Exception replacement) { errorOuter = replacement; throw; } throw; }
-            finally { await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false); }
+            catch (Exception failure)
+            {
+                errorOuter = failure;
+                try
+                {
+                    await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false);
+                }
+                catch (Exception replacement)
+                {
+                    errorOuter = replacement;
+                    throw;
+                }
+
+                throw;
+            }
+            finally
+            {
+                await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false);
+            }
         }
-        finally { var detached = outer; outer = null; await detached.DisposeAsync().ConfigureAwait(false); }
+        finally
+        {
+            var detached = outer;
+            outer = null;
+            await detached.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     internal static ValueTask SendHookOwnedVoid<R, K, H, F>(IServiceProvider provider, R request, CancellationToken token) where R : class, IRequest where K : class, IAsyncSendRequestTransform<R>, IAsyncSendSuccessObserver<R>, IAsyncSendExceptionObserver<R>, IAsyncSendFinallyObserver<R>, IAsyncDisposable where H : class, IRequestHandler<R> where F : class, IOwnedSessionFactory<R, K>
@@ -90,19 +155,44 @@ internal static class CanonicalAsyncHookReference
         K? outer = provider.GetRequiredService<F>().Create(request, token) ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
         try
         {
-            var savedOuter = request; var successOuter = false; Exception? errorOuter = null;
+            var savedOuter = request;
+            var successOuter = false;
+            Exception? errorOuter = null;
             try
             {
                 savedOuter = await outer.BeforeAsync(savedOuter, token).ConfigureAwait(false);
-                ArgumentNullException.ThrowIfNull(savedOuter, "request"); token.ThrowIfCancellationRequested();
+                ArgumentNullException.ThrowIfNull(savedOuter, "request");
+                token.ThrowIfCancellationRequested();
                 await provider.GetRequiredService<H>().HandleAsync(savedOuter, token).ConfigureAwait(false);
                 await outer.AfterAsync(savedOuter, token).ConfigureAwait(false);
                 successOuter = true;
             }
-            catch (Exception failure) { errorOuter = failure; try { await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false); } catch (Exception replacement) { errorOuter = replacement; throw; } throw; }
-            finally { await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false); }
+            catch (Exception failure)
+            {
+                errorOuter = failure;
+                try
+                {
+                    await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false);
+                }
+                catch (Exception replacement)
+                {
+                    errorOuter = replacement;
+                    throw;
+                }
+
+                throw;
+            }
+            finally
+            {
+                await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false);
+            }
         }
-        finally { var detached = outer; outer = null; await detached.DisposeAsync().ConfigureAwait(false); }
+        finally
+        {
+            var detached = outer;
+            outer = null;
+            await detached.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     internal static ValueTask<T> SendHookBorrowedResponse<R, T, K, H, F>(IServiceProvider provider, R request, CancellationToken token) where R : class, IRequest<T> where K : class, IAsyncSendRequestTransform<R>, IAsyncSendResponseTransform<R, T>, IAsyncSendExceptionObserver<R>, IAsyncSendFinallyObserver<R> where H : class, IRequestHandler<R, T> where F : class, IBorrowedSessionFactory<R, K>
@@ -114,19 +204,39 @@ internal static class CanonicalAsyncHookReference
     {
         token.ThrowIfCancellationRequested();
         K? outer = provider.GetRequiredService<F>().Create(request, token) ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
-        var savedOuter = request; var successOuter = false; Exception? errorOuter = null;
+        var savedOuter = request;
+        var successOuter = false;
+        Exception? errorOuter = null;
         try
         {
             savedOuter = await outer.BeforeAsync(savedOuter, token).ConfigureAwait(false);
-            ArgumentNullException.ThrowIfNull(savedOuter, "request"); token.ThrowIfCancellationRequested();
+            ArgumentNullException.ThrowIfNull(savedOuter, "request");
+            token.ThrowIfCancellationRequested();
             T response;
             response = await provider.GetRequiredService<H>().HandleAsync(savedOuter, token).ConfigureAwait(false);
             response = await outer.AfterAsync(savedOuter, response, token).ConfigureAwait(false);
             successOuter = true;
             return response;
         }
-        catch (Exception failure) { errorOuter = failure; try { await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false); } catch (Exception replacement) { errorOuter = replacement; throw; } throw; }
-        finally { await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false); }
+        catch (Exception failure)
+        {
+            errorOuter = failure;
+            try
+            {
+                await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false);
+            }
+            catch (Exception replacement)
+            {
+                errorOuter = replacement;
+                throw;
+            }
+
+            throw;
+        }
+        finally
+        {
+            await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false);
+        }
     }
 
     internal static ValueTask SendHookBorrowedVoid<R, K, H, F>(IServiceProvider provider, R request, CancellationToken token) where R : class, IRequest where K : class, IAsyncSendRequestTransform<R>, IAsyncSendSuccessObserver<R>, IAsyncSendExceptionObserver<R>, IAsyncSendFinallyObserver<R> where H : class, IRequestHandler<R> where F : class, IBorrowedSessionFactory<R, K>
@@ -138,17 +248,37 @@ internal static class CanonicalAsyncHookReference
     {
         token.ThrowIfCancellationRequested();
         K? outer = provider.GetRequiredService<F>().Create(request, token) ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
-        var savedOuter = request; var successOuter = false; Exception? errorOuter = null;
+        var savedOuter = request;
+        var successOuter = false;
+        Exception? errorOuter = null;
         try
         {
             savedOuter = await outer.BeforeAsync(savedOuter, token).ConfigureAwait(false);
-            ArgumentNullException.ThrowIfNull(savedOuter, "request"); token.ThrowIfCancellationRequested();
+            ArgumentNullException.ThrowIfNull(savedOuter, "request");
+            token.ThrowIfCancellationRequested();
             await provider.GetRequiredService<H>().HandleAsync(savedOuter, token).ConfigureAwait(false);
             await outer.AfterAsync(savedOuter, token).ConfigureAwait(false);
             successOuter = true;
         }
-        catch (Exception failure) { errorOuter = failure; try { await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false); } catch (Exception replacement) { errorOuter = replacement; throw; } throw; }
-        finally { await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false); }
+        catch (Exception failure)
+        {
+            errorOuter = failure;
+            try
+            {
+                await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false);
+            }
+            catch (Exception replacement)
+            {
+                errorOuter = replacement;
+                throw;
+            }
+
+            throw;
+        }
+        finally
+        {
+            await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false);
+        }
     }
 
     internal static ValueTask<T> SendHookAsyncOwnedResponse<R, T, K, H, F>(IServiceProvider provider, R request, CancellationToken token) where R : class, IRequest<T> where K : class, IAsyncSendRequestTransform<R>, IAsyncSendResponseTransform<R, T>, IAsyncSendExceptionObserver<R>, IAsyncSendFinallyObserver<R>, IAsyncDisposable where H : class, IRequestHandler<R, T> where F : class, IAsyncOwnedSessionFactory<R, K>
@@ -162,21 +292,46 @@ internal static class CanonicalAsyncHookReference
         K? outer = await provider.GetRequiredService<F>().CreateAsync(request, token).ConfigureAwait(false) ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
         try
         {
-            var savedOuter = request; var successOuter = false; Exception? errorOuter = null;
+            var savedOuter = request;
+            var successOuter = false;
+            Exception? errorOuter = null;
             try
             {
                 savedOuter = await outer.BeforeAsync(savedOuter, token).ConfigureAwait(false);
-                ArgumentNullException.ThrowIfNull(savedOuter, "request"); token.ThrowIfCancellationRequested();
+                ArgumentNullException.ThrowIfNull(savedOuter, "request");
+                token.ThrowIfCancellationRequested();
                 T response;
                 response = await provider.GetRequiredService<H>().HandleAsync(savedOuter, token).ConfigureAwait(false);
                 response = await outer.AfterAsync(savedOuter, response, token).ConfigureAwait(false);
                 successOuter = true;
                 return response;
             }
-            catch (Exception failure) { errorOuter = failure; try { await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false); } catch (Exception replacement) { errorOuter = replacement; throw; } throw; }
-            finally { await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false); }
+            catch (Exception failure)
+            {
+                errorOuter = failure;
+                try
+                {
+                    await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false);
+                }
+                catch (Exception replacement)
+                {
+                    errorOuter = replacement;
+                    throw;
+                }
+
+                throw;
+            }
+            finally
+            {
+                await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false);
+            }
         }
-        finally { var detached = outer; outer = null; await detached.DisposeAsync().ConfigureAwait(false); }
+        finally
+        {
+            var detached = outer;
+            outer = null;
+            await detached.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     internal static ValueTask SendHookAsyncOwnedVoid<R, K, H, F>(IServiceProvider provider, R request, CancellationToken token) where R : class, IRequest where K : class, IAsyncSendRequestTransform<R>, IAsyncSendSuccessObserver<R>, IAsyncSendExceptionObserver<R>, IAsyncSendFinallyObserver<R>, IAsyncDisposable where H : class, IRequestHandler<R> where F : class, IAsyncOwnedSessionFactory<R, K>
@@ -190,19 +345,44 @@ internal static class CanonicalAsyncHookReference
         K? outer = await provider.GetRequiredService<F>().CreateAsync(request, token).ConfigureAwait(false) ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
         try
         {
-            var savedOuter = request; var successOuter = false; Exception? errorOuter = null;
+            var savedOuter = request;
+            var successOuter = false;
+            Exception? errorOuter = null;
             try
             {
                 savedOuter = await outer.BeforeAsync(savedOuter, token).ConfigureAwait(false);
-                ArgumentNullException.ThrowIfNull(savedOuter, "request"); token.ThrowIfCancellationRequested();
+                ArgumentNullException.ThrowIfNull(savedOuter, "request");
+                token.ThrowIfCancellationRequested();
                 await provider.GetRequiredService<H>().HandleAsync(savedOuter, token).ConfigureAwait(false);
                 await outer.AfterAsync(savedOuter, token).ConfigureAwait(false);
                 successOuter = true;
             }
-            catch (Exception failure) { errorOuter = failure; try { await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false); } catch (Exception replacement) { errorOuter = replacement; throw; } throw; }
-            finally { await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false); }
+            catch (Exception failure)
+            {
+                errorOuter = failure;
+                try
+                {
+                    await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false);
+                }
+                catch (Exception replacement)
+                {
+                    errorOuter = replacement;
+                    throw;
+                }
+
+                throw;
+            }
+            finally
+            {
+                await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false);
+            }
         }
-        finally { var detached = outer; outer = null; await detached.DisposeAsync().ConfigureAwait(false); }
+        finally
+        {
+            var detached = outer;
+            outer = null;
+            await detached.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     internal static ValueTask<T> SendHookAsyncBorrowedResponse<R, T, K, H, F>(IServiceProvider provider, R request, CancellationToken token) where R : class, IRequest<T> where K : class, IAsyncSendRequestTransform<R>, IAsyncSendResponseTransform<R, T>, IAsyncSendExceptionObserver<R>, IAsyncSendFinallyObserver<R> where H : class, IRequestHandler<R, T> where F : class, IAsyncBorrowedSessionFactory<R, K>
@@ -214,19 +394,39 @@ internal static class CanonicalAsyncHookReference
     {
         token.ThrowIfCancellationRequested();
         K? outer = await provider.GetRequiredService<F>().CreateAsync(request, token).ConfigureAwait(false) ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
-        var savedOuter = request; var successOuter = false; Exception? errorOuter = null;
+        var savedOuter = request;
+        var successOuter = false;
+        Exception? errorOuter = null;
         try
         {
             savedOuter = await outer.BeforeAsync(savedOuter, token).ConfigureAwait(false);
-            ArgumentNullException.ThrowIfNull(savedOuter, "request"); token.ThrowIfCancellationRequested();
+            ArgumentNullException.ThrowIfNull(savedOuter, "request");
+            token.ThrowIfCancellationRequested();
             T response;
             response = await provider.GetRequiredService<H>().HandleAsync(savedOuter, token).ConfigureAwait(false);
             response = await outer.AfterAsync(savedOuter, response, token).ConfigureAwait(false);
             successOuter = true;
             return response;
         }
-        catch (Exception failure) { errorOuter = failure; try { await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false); } catch (Exception replacement) { errorOuter = replacement; throw; } throw; }
-        finally { await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false); }
+        catch (Exception failure)
+        {
+            errorOuter = failure;
+            try
+            {
+                await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false);
+            }
+            catch (Exception replacement)
+            {
+                errorOuter = replacement;
+                throw;
+            }
+
+            throw;
+        }
+        finally
+        {
+            await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false);
+        }
     }
 
     internal static ValueTask SendHookAsyncBorrowedVoid<R, K, H, F>(IServiceProvider provider, R request, CancellationToken token) where R : class, IRequest where K : class, IAsyncSendRequestTransform<R>, IAsyncSendSuccessObserver<R>, IAsyncSendExceptionObserver<R>, IAsyncSendFinallyObserver<R> where H : class, IRequestHandler<R> where F : class, IAsyncBorrowedSessionFactory<R, K>
@@ -238,17 +438,37 @@ internal static class CanonicalAsyncHookReference
     {
         token.ThrowIfCancellationRequested();
         K? outer = await provider.GetRequiredService<F>().CreateAsync(request, token).ConfigureAwait(false) ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
-        var savedOuter = request; var successOuter = false; Exception? errorOuter = null;
+        var savedOuter = request;
+        var successOuter = false;
+        Exception? errorOuter = null;
         try
         {
             savedOuter = await outer.BeforeAsync(savedOuter, token).ConfigureAwait(false);
-            ArgumentNullException.ThrowIfNull(savedOuter, "request"); token.ThrowIfCancellationRequested();
+            ArgumentNullException.ThrowIfNull(savedOuter, "request");
+            token.ThrowIfCancellationRequested();
             await provider.GetRequiredService<H>().HandleAsync(savedOuter, token).ConfigureAwait(false);
             await outer.AfterAsync(savedOuter, token).ConfigureAwait(false);
             successOuter = true;
         }
-        catch (Exception failure) { errorOuter = failure; try { await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false); } catch (Exception replacement) { errorOuter = replacement; throw; } throw; }
-        finally { await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false); }
+        catch (Exception failure)
+        {
+            errorOuter = failure;
+            try
+            {
+                await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false);
+            }
+            catch (Exception replacement)
+            {
+                errorOuter = replacement;
+                throw;
+            }
+
+            throw;
+        }
+        finally
+        {
+            await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false);
+        }
     }
 
     internal static ValueTask<T> SendHookTwoResponse<R, T, K, J, H>(IServiceProvider provider, R request, CancellationToken token) where R : class, IRequest<T> where K : class, IAsyncSendRequestTransform<R>, IAsyncSendResponseTransform<R, T>, IAsyncSendExceptionObserver<R>, IAsyncSendFinallyObserver<R> where J : class, IAsyncSendRequestTransform<R>, IAsyncSendResponseTransform<R, T>, IAsyncSendExceptionObserver<R>, IAsyncSendFinallyObserver<R> where H : class, IRequestHandler<R, T>
@@ -260,29 +480,70 @@ internal static class CanonicalAsyncHookReference
     {
         token.ThrowIfCancellationRequested();
         var outer = provider.GetRequiredService<K>();
-        var savedOuter = request; var successOuter = false; Exception? errorOuter = null;
+        var savedOuter = request;
+        var successOuter = false;
+        Exception? errorOuter = null;
         try
         {
             savedOuter = await outer.BeforeAsync(savedOuter, token).ConfigureAwait(false);
-            ArgumentNullException.ThrowIfNull(savedOuter, "request"); token.ThrowIfCancellationRequested();
+            ArgumentNullException.ThrowIfNull(savedOuter, "request");
+            token.ThrowIfCancellationRequested();
             T response;
-            var inner = provider.GetRequiredService<J>(); var savedInner = savedOuter; var successInner = false; Exception? errorInner = null;
+            var inner = provider.GetRequiredService<J>();
+            var savedInner = savedOuter;
+            var successInner = false;
+            Exception? errorInner = null;
             try
             {
                 savedInner = await inner.BeforeAsync(savedInner, token).ConfigureAwait(false);
-                ArgumentNullException.ThrowIfNull(savedInner, "request"); token.ThrowIfCancellationRequested();
+                ArgumentNullException.ThrowIfNull(savedInner, "request");
+                token.ThrowIfCancellationRequested();
                 response = await provider.GetRequiredService<H>().HandleAsync(savedInner, token).ConfigureAwait(false);
                 response = await inner.AfterAsync(savedInner, response, token).ConfigureAwait(false);
                 successInner = true;
             }
-            catch (Exception failure) { errorInner = failure; try { await inner.OnExceptionAsync(savedInner, failure, token).ConfigureAwait(false); } catch (Exception replacement) { errorInner = replacement; throw; } throw; }
-            finally { await inner.FinallyAsync(savedInner, new(successInner, errorInner), token).ConfigureAwait(false); }
+            catch (Exception failure)
+            {
+                errorInner = failure;
+                try
+                {
+                    await inner.OnExceptionAsync(savedInner, failure, token).ConfigureAwait(false);
+                }
+                catch (Exception replacement)
+                {
+                    errorInner = replacement;
+                    throw;
+                }
+
+                throw;
+            }
+            finally
+            {
+                await inner.FinallyAsync(savedInner, new(successInner, errorInner), token).ConfigureAwait(false);
+            }
             response = await outer.AfterAsync(savedOuter, response, token).ConfigureAwait(false);
             successOuter = true;
             return response;
         }
-        catch (Exception failure) { errorOuter = failure; try { await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false); } catch (Exception replacement) { errorOuter = replacement; throw; } throw; }
-        finally { await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false); }
+        catch (Exception failure)
+        {
+            errorOuter = failure;
+            try
+            {
+                await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false);
+            }
+            catch (Exception replacement)
+            {
+                errorOuter = replacement;
+                throw;
+            }
+
+            throw;
+        }
+        finally
+        {
+            await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false);
+        }
     }
 
     internal static ValueTask SendHookTwoVoid<R, K, J, H>(IServiceProvider provider, R request, CancellationToken token) where R : class, IRequest where K : class, IAsyncSendRequestTransform<R>, IAsyncSendSuccessObserver<R>, IAsyncSendExceptionObserver<R>, IAsyncSendFinallyObserver<R> where J : class, IAsyncSendRequestTransform<R>, IAsyncSendSuccessObserver<R>, IAsyncSendExceptionObserver<R>, IAsyncSendFinallyObserver<R> where H : class, IRequestHandler<R>
@@ -294,27 +555,68 @@ internal static class CanonicalAsyncHookReference
     {
         token.ThrowIfCancellationRequested();
         var outer = provider.GetRequiredService<K>();
-        var savedOuter = request; var successOuter = false; Exception? errorOuter = null;
+        var savedOuter = request;
+        var successOuter = false;
+        Exception? errorOuter = null;
         try
         {
             savedOuter = await outer.BeforeAsync(savedOuter, token).ConfigureAwait(false);
-            ArgumentNullException.ThrowIfNull(savedOuter, "request"); token.ThrowIfCancellationRequested();
-            var inner = provider.GetRequiredService<J>(); var savedInner = savedOuter; var successInner = false; Exception? errorInner = null;
+            ArgumentNullException.ThrowIfNull(savedOuter, "request");
+            token.ThrowIfCancellationRequested();
+            var inner = provider.GetRequiredService<J>();
+            var savedInner = savedOuter;
+            var successInner = false;
+            Exception? errorInner = null;
             try
             {
                 savedInner = await inner.BeforeAsync(savedInner, token).ConfigureAwait(false);
-                ArgumentNullException.ThrowIfNull(savedInner, "request"); token.ThrowIfCancellationRequested();
+                ArgumentNullException.ThrowIfNull(savedInner, "request");
+                token.ThrowIfCancellationRequested();
                 await provider.GetRequiredService<H>().HandleAsync(savedInner, token).ConfigureAwait(false);
                 await inner.AfterAsync(savedInner, token).ConfigureAwait(false);
                 successInner = true;
             }
-            catch (Exception failure) { errorInner = failure; try { await inner.OnExceptionAsync(savedInner, failure, token).ConfigureAwait(false); } catch (Exception replacement) { errorInner = replacement; throw; } throw; }
-            finally { await inner.FinallyAsync(savedInner, new(successInner, errorInner), token).ConfigureAwait(false); }
+            catch (Exception failure)
+            {
+                errorInner = failure;
+                try
+                {
+                    await inner.OnExceptionAsync(savedInner, failure, token).ConfigureAwait(false);
+                }
+                catch (Exception replacement)
+                {
+                    errorInner = replacement;
+                    throw;
+                }
+
+                throw;
+            }
+            finally
+            {
+                await inner.FinallyAsync(savedInner, new(successInner, errorInner), token).ConfigureAwait(false);
+            }
             await outer.AfterAsync(savedOuter, token).ConfigureAwait(false);
             successOuter = true;
         }
-        catch (Exception failure) { errorOuter = failure; try { await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false); } catch (Exception replacement) { errorOuter = replacement; throw; } throw; }
-        finally { await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false); }
+        catch (Exception failure)
+        {
+            errorOuter = failure;
+            try
+            {
+                await outer.OnExceptionAsync(savedOuter, failure, token).ConfigureAwait(false);
+            }
+            catch (Exception replacement)
+            {
+                errorOuter = replacement;
+                throw;
+            }
+
+            throw;
+        }
+        finally
+        {
+            await outer.FinallyAsync(savedOuter, new(successOuter, errorOuter), token).ConfigureAwait(false);
+        }
     }
 
 }

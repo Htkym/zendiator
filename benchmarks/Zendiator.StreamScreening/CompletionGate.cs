@@ -31,8 +31,10 @@ public class CompletionGate<T> : IValueTaskSource<T>, IDisposable
         WaitIdle();
         _core.Reset();
         _value = value;
-        if (_pending) _idle.Reset();
-        else _core.SetResult(value);
+        if (_pending)
+            _idle.Reset();
+        else
+            _core.SetResult(value);
         return new(this, _core.Version);
     }
 
@@ -41,7 +43,8 @@ public class CompletionGate<T> : IValueTaskSource<T>, IDisposable
     public virtual void OnCompleted(Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags)
     {
         _core.OnCompleted(continuation, state, token, flags);
-        if (_pending) _work.Set();
+        if (_pending)
+            _work.Set();
     }
 
     private void Work()
@@ -49,10 +52,20 @@ public class CompletionGate<T> : IValueTaskSource<T>, IDisposable
         while (true)
         {
             _work.WaitOne();
-            if (_stop) return;
-            try { _core.SetResult(_value); }
-            catch (Exception error) { _failure = ExceptionDispatchInfo.Capture(error); }
-            finally { _idle.Set(); }
+            if (_stop)
+                return;
+            try
+            {
+                _core.SetResult(_value);
+            }
+            catch (Exception error)
+            {
+                _failure = ExceptionDispatchInfo.Capture(error);
+            }
+            finally
+            {
+                _idle.Set();
+            }
         }
     }
 
@@ -77,9 +90,22 @@ public class CompletionGate<T> : IValueTaskSource<T>, IDisposable
 // Used only by the separately compiled preflight callback copy.
 public sealed class CountedCompletionGate<T>(bool pending) : CompletionGate<T>(pending)
 {
-    public int Consumptions { get; private set; }
-    public int Registrations { get; private set; }
-    public override T GetResult(short token) { Consumptions++; return base.GetResult(token); }
+    public int Consumptions
+    {
+        get; private set;
+    }
+    public int Registrations
+    {
+        get; private set;
+    }
+    public override T GetResult(short token)
+    {
+        Consumptions++;
+        return base.GetResult(token);
+    }
     public override void OnCompleted(Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags)
-    { Registrations++; base.OnCompleted(continuation, state, token, flags); }
+    {
+        Registrations++;
+        base.OnCompleted(continuation, state, token, flags);
+    }
 }

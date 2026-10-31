@@ -16,10 +16,14 @@ internal static class CanonicalExecutionGraphNormalizer
             return CanonicalScopedSyncNormalizer.Graph(route);
         if (route.Family == BoundDispatchFamily.Stream)
         {
-            return new(route, null, CanonicalStreamGraphValidator.CheckContract(route)) { NativeStream = true };
+            return new(route, null, CanonicalStreamGraphValidator.CheckContract(route))
+            {
+                NativeStream = true
+            };
         }
         var facts = CanonicalSendGraphValidator.CheckContract(route);
-        if (facts.Count != 0) return new(route, null, facts);
+        if (facts.Count != 0)
+            return new(route, null, facts);
         var schedule = CanonicalSendScheduleBuilder.Build(route);
         return new(route, schedule, CanonicalSendGraphValidator.Validate(route, schedule));
     }

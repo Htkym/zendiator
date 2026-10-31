@@ -22,7 +22,8 @@ public sealed partial class GeneratorTests
                 (sync ? "public void Finally(Ping r,SendExitInfo e,CancellationToken c){}" :
                     "public ValueTask FinallyAsync(Ping r,SendExitInfo e,CancellationToken c)=>default;"));
         }
-        if (isVoid) source = source.Replace("IRequest<int>", "IRequest").Replace("ISyncRequest<int>", "ISyncRequest")
+        if (isVoid)
+            source = source.Replace("IRequest<int>", "IRequest").Replace("ISyncRequest<int>", "ISyncRequest")
             .Replace("IRequestHandler<Ping,int>", "IRequestHandler<Ping>").Replace("ISyncRequestHandler<Ping,int>", "ISyncRequestHandler<Ping>")
             .Replace("ValueTask<int> HandleAsync", "ValueTask HandleAsync").Replace("int Handle(", "void Handle(")
             .Replace("=> new(1);", "=> default;").Replace("=> 1;", "{}")
@@ -77,7 +78,8 @@ public sealed partial class GeneratorTests
         }
         Assert.All(schedule.Owners.Where(o => o.Kind == SendOwnerKind.Service), o =>
         {
-            Assert.True(o.Borrowed); Assert.Equal(FusionCleanupKind.None, o.Cleanup);
+            Assert.True(o.Borrowed);
+            Assert.Equal(FusionCleanupKind.None, o.Cleanup);
         });
         Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.Contains("Reads"));
     }
@@ -146,7 +148,10 @@ public sealed partial class GeneratorTests
             "pending-body-lease-lost" => original with
             {
                 Awaits = new(original.Awaits.Select(a => a.Producer.Phase == SendExecutionPhase.Finally
-                ? a with { RetainedSlots = new(a.RetainedSlots.Where(s => s != resource + "/live")) } : a))
+                ? a with
+                {
+                    RetainedSlots = new(a.RetainedSlots.Where(s => s != resource + "/live"))
+                } : a))
             },
             _ => throw new ArgumentOutOfRangeException(nameof(mutation))
         };
@@ -165,8 +170,14 @@ public sealed partial class GeneratorTests
         var candidate = ChangeControl(original, Scope(0, 0), e => e.From.Site?.Phase ==
             (afterFailure ? SendExecutionPhase.ValidateSessionResult : SendExecutionPhase.AcquireSession) &&
             e.Outcome == (afterFailure ? SendControlOutcome.Failure : SendControlOutcome.Success)
-                ? e with { To = Point(Scope(0, 0), SessionSite(0, 0, 0, SendExecutionPhase.CommitSession)) } : e);
-        Assert.Equal(original, candidate with { ControlFlows = original.ControlFlows });
+                ? e with
+                {
+                    To = Point(Scope(0, 0), SessionSite(0, 0, 0, SendExecutionPhase.CommitSession))
+                } : e);
+        Assert.Equal(original, candidate with
+        {
+            ControlFlows = original.ControlFlows
+        });
         Assert.Contains(CanonicalSendSessionValidator.Validate(graph.Contract, candidate), f => f.Reason == "OwnershipTransferredBeforeNonNullSessionValidation");
         Assert.Contains(CanonicalSendControlValidator.Validate(graph.Contract, candidate), f => f.Reason == "OwnershipTransferredBeforeNonNullSessionValidation");
     }

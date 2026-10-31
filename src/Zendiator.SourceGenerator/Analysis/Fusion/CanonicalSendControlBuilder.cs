@@ -55,7 +55,8 @@ internal sealed class CanonicalSendControlBuilder
             flow.Edge(guard, first, SendControlOutcome.Success);
             flow.Edge(guard, Exit("operation", false), SendControlOutcome.Failure);
         }
-        else flow.Edge(boundary, first);
+        else
+            flow.Edge(boundary, first);
         for (var b = 0; b < route.Handlers.Count; b++)
         {
             var branch = flow.Node(b, -1, SendExecutionPhase.BranchStart);
@@ -67,9 +68,11 @@ internal sealed class CanonicalSendControlBuilder
                 flow.Edge(branch, commit, SendControlOutcome.Success, SendControlPredicate.SpanDestination);
                 flow.Edge(branch, returned, SendControlOutcome.Success, SendControlPredicate.NoSpanDestination);
             }
-            else flow.Edge(branch, returned, SendControlOutcome.Success);
+            else
+                flow.Edge(branch, returned, SendControlOutcome.Success);
         }
-        if (span) flow.Edge(commit, returned);
+        if (span)
+            flow.Edge(commit, returned);
         flow.Edge(returned, Exit("operation", true));
         return flow.Finish();
     }

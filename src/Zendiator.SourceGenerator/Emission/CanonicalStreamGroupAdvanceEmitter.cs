@@ -9,7 +9,8 @@ internal static class CanonicalStreamGroupAdvanceEmitter
 {
     internal static IReadOnlyList<CanonicalStreamFallbackSegment> Chain(CanonicalStreamFallbackModel model)
     {
-        if (model.Segments.Count <= 2 || model.Segments.Count > 6) return Array.Empty<CanonicalStreamFallbackSegment>();
+        if (model.Segments.Count <= 2 || model.Segments.Count > 6)
+            return Array.Empty<CanonicalStreamFallbackSegment>();
         var current = model.Segments.Single(s => s.Id == model.ConsumerSegment);
         var item = current.OutputItemName ?? model.Handler.ItemName;
         var chain = new List<CanonicalStreamFallbackSegment> { current };
@@ -19,7 +20,8 @@ internal static class CanonicalStreamGroupAdvanceEmitter
         {
             var child = model.Segments.Single(s => s.Id == upstream);
             if (child.Hooks.Count != 0 || (child.OutputItemName ?? model.Handler.ItemName) != item
-                || (child.SourceItemName ?? model.Handler.ItemName) != item) break;
+                || (child.SourceItemName ?? model.Handler.ItemName) != item)
+                break;
             chain.Add(child);
             current = child;
         }
@@ -39,18 +41,24 @@ internal static class CanonicalStreamGroupAdvanceEmitter
     {
         var chain = Chain(model);
         var index = -1;
-        for (var i = 0; i < chain.Count; i++) if (chain[i].Id == cursor) index = i;
-        if (index < 0) return "";
+        for (var i = 0; i < chain.Count; i++)
+            if (chain[i].Id == cursor)
+                index = i;
+        if (index < 0)
+            return "";
         var b = new StringBuilder();
         if (index + 1 < chain.Count)
         {
             var child = chain[index + 1].Id;
             b.AppendLine("private Cursor" + child + "? _identitySource;");
-            if (index != 0) b.AppendLine("internal Cursor" + child + "? GroupIdentitySource => _identitySource;");
+            if (index != 0)
+                b.AppendLine("internal Cursor" + child + "? GroupIdentitySource => _identitySource;");
         }
         b.AppendLine("internal global::System.Threading.Tasks.ValueTask<bool> CompleteGroupResult(bool moved, global::System.Exception? error) => error is not null ? MoveFailed(error) : moved ? MoveSucceeded(true) : EndAsync();");
-        if (index == 0) EmitConsumer(b, chain);
-        else b.AppendLine("""
+        if (index == 0)
+            EmitConsumer(b, chain);
+        else
+            b.AppendLine("""
             internal bool TryBeginGroupMove() => TryBeginMove();
             internal void CheckGroupRoot()
             {
@@ -71,7 +79,8 @@ internal static class CanonicalStreamGroupAdvanceEmitter
         b.AppendLine("private global::System.Threading.Tasks.ValueTask<bool> AdvanceGroup(Cursor" + children[0].Id + " child)");
         b.AppendLine("{");
         b.AppendLine("Token.ThrowIfCancellationRequested();");
-        foreach (var child in children) b.AppendLine("Cursor" + child.Id + "? p" + child.Id + " = null;");
+        foreach (var child in children)
+            b.AppendLine("Cursor" + child.Id + "? p" + child.Id + " = null;");
         b.AppendLine("int depth = -1;");
         b.AppendLine("global::System.Threading.Tasks.ValueTask<bool> pending = default;");
         b.AppendLine("bool completed = true, moved = false;");
@@ -91,9 +100,11 @@ internal static class CanonicalStreamGroupAdvanceEmitter
                 b.AppendLine("if (next" + nextId + " is null) { pending = " + target + ".MoveGroupRaw(); goto Observing; }");
                 b.AppendLine(target + ".CheckGroupToken();");
             }
-            else b.AppendLine("pending = " + target + ".MoveGroupRaw();");
+            else
+                b.AppendLine("pending = " + target + ".MoveGroupRaw();");
         }
-        if (children.Length > 1) b.AppendLine("Observing:");
+        if (children.Length > 1)
+            b.AppendLine("Observing:");
         b.AppendLine("completed = pending.IsCompletedSuccessfully;");
         b.AppendLine("if (completed) moved = pending.GetAwaiter().GetResult();");
         b.AppendLine("} catch (global::System.Exception error) { failure = error; }");

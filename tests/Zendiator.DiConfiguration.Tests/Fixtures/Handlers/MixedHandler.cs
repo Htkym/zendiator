@@ -24,6 +24,11 @@ public struct MixedCursor(int value) : IAsyncEnumerator<int>
 {
     private bool _moved;
     public int Current => value;
-    public ValueTask<bool> MoveNextAsync() { var hasValue = !_moved; _moved = true; return new(hasValue); }
+    public ValueTask<bool> MoveNextAsync()
+    {
+        var hasValue = !_moved;
+        _moved = true;
+        return new(hasValue);
+    }
     public ValueTask DisposeAsync() => default;
 }

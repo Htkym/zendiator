@@ -94,7 +94,8 @@ public sealed class ConfigurationTests
         static void RejectMutation<T>(IReadOnlyList<T> values)
         {
             var before = values.ToArray();
-            if (values is ICollection<T> mutable) Assert.Throws<NotSupportedException>(mutable.Clear);
+            if (values is ICollection<T> mutable)
+                Assert.Throws<NotSupportedException>(mutable.Clear);
             if (values is IList<T> indexed && values.Count != 0)
                 Assert.Throws<NotSupportedException>(() => indexed[0] = default!);
             Assert.Equal(before, values.ToArray());

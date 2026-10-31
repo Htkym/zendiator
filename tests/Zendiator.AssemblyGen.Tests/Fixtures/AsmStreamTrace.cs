@@ -11,7 +11,11 @@ public sealed class AsmStreamTrace(Trace trace) : IStreamMiddleware<AsmNumbers, 
         {
             return new TracedCursor(await upstream.OpenAsync(request, cancellationToken), trace);
         }
-        catch { trace.Events.Add("s-after"); throw; }
+        catch
+        {
+            trace.Events.Add("s-after");
+            throw;
+        }
     }
 
     private sealed class TracedCursor(IAsyncEnumerator<int> inner, Trace trace) : IAsyncEnumerator<int>
@@ -20,8 +24,14 @@ public sealed class AsmStreamTrace(Trace trace) : IStreamMiddleware<AsmNumbers, 
         public ValueTask<bool> MoveNextAsync() => inner.MoveNextAsync();
         public async ValueTask DisposeAsync()
         {
-            try { await inner.DisposeAsync(); }
-            finally { trace.Events.Add("s-after"); }
+            try
+            {
+                await inner.DisposeAsync();
+            }
+            finally
+            {
+                trace.Events.Add("s-after");
+            }
         }
     }
 }

@@ -29,11 +29,21 @@ internal static class CanonicalSendSyncReference
         catch (Exception failure)
         {
             error = failure;
-            try { hook.OnException(saved, failure, token); }
-            catch (Exception replacement) { error = replacement; throw; }
+            try
+            {
+                hook.OnException(saved, failure, token);
+            }
+            catch (Exception replacement)
+            {
+                error = replacement;
+                throw;
+            }
             throw;
         }
-        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+        finally
+        {
+            hook.Finally(saved, new SendExitInfo(success, error), token);
+        }
     }
 
     internal static void SendVoid<R, THook, THandler>(IServiceProvider provider, R request, CancellationToken token)
@@ -59,11 +69,21 @@ internal static class CanonicalSendSyncReference
         catch (Exception failure)
         {
             error = failure;
-            try { hook.OnException(saved, failure, token); }
-            catch (Exception replacement) { error = replacement; throw; }
+            try
+            {
+                hook.OnException(saved, failure, token);
+            }
+            catch (Exception replacement)
+            {
+                error = replacement;
+                throw;
+            }
             throw;
         }
-        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+        finally
+        {
+            hook.Finally(saved, new SendExitInfo(success, error), token);
+        }
     }
 
     internal static T SendResponseWithoutHook<R, T, THandler>(IServiceProvider provider, R request, CancellationToken token)
@@ -97,11 +117,21 @@ internal static class CanonicalSendSyncReference
         catch (Exception failure)
         {
             error = failure;
-            try { outer.OnException(saved, failure, token); }
-            catch (Exception replacement) { error = replacement; throw; }
+            try
+            {
+                outer.OnException(saved, failure, token);
+            }
+            catch (Exception replacement)
+            {
+                error = replacement;
+                throw;
+            }
             throw;
         }
-        finally { outer.Finally(saved, new SendExitInfo(success, error), token); }
+        finally
+        {
+            outer.Finally(saved, new SendExitInfo(success, error), token);
+        }
     }
 
     internal static void SendTwoHooksVoid<R, TOuter, TInner, THandler>(IServiceProvider provider, R request, CancellationToken token)
@@ -126,11 +156,21 @@ internal static class CanonicalSendSyncReference
         catch (Exception failure)
         {
             error = failure;
-            try { outer.OnException(saved, failure, token); }
-            catch (Exception replacement) { error = replacement; throw; }
+            try
+            {
+                outer.OnException(saved, failure, token);
+            }
+            catch (Exception replacement)
+            {
+                error = replacement;
+                throw;
+            }
             throw;
         }
-        finally { outer.Finally(saved, new SendExitInfo(success, error), token); }
+        finally
+        {
+            outer.Finally(saved, new SendExitInfo(success, error), token);
+        }
     }
 
     internal static void SendVoidWithoutHook<R, THandler>(IServiceProvider provider, R request, CancellationToken token)
@@ -151,8 +191,16 @@ internal static class CanonicalSendSyncReference
         var factory = provider.GetRequiredService<TFactory>();
         THandler? session = factory.Create(request, token)
             ?? throw new InvalidOperationException("A session factory must return a nonnull Handler session.");
-        try { return session.Handle(request, token); }
-        finally { var detached = session; session = null; detached.Dispose(); }
+        try
+        {
+            return session.Handle(request, token);
+        }
+        finally
+        {
+            var detached = session;
+            session = null;
+            detached.Dispose();
+        }
     }
 
     internal static void SendOwnedVoidWithoutHook<R, THandler, TFactory>(IServiceProvider provider, R request, CancellationToken token)
@@ -165,8 +213,16 @@ internal static class CanonicalSendSyncReference
         var factory = provider.GetRequiredService<TFactory>();
         THandler? session = factory.Create(request, token)
             ?? throw new InvalidOperationException("A session factory must return a nonnull Handler session.");
-        try { session.Handle(request, token); }
-        finally { var detached = session; session = null; detached.Dispose(); }
+        try
+        {
+            session.Handle(request, token);
+        }
+        finally
+        {
+            var detached = session;
+            session = null;
+            detached.Dispose();
+        }
     }
 
     internal static T SendBorrowedResponseWithoutHook<R, T, THandler, TFactory>(IServiceProvider provider, R request, CancellationToken token)
@@ -201,11 +257,20 @@ internal static class CanonicalSendSyncReference
         where THandler : class, ISyncRequestHandler<R, T>
         where TFactory : class, IOwnedSessionFactory<R, THook>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
         THook? hook = provider.GetRequiredService<TFactory>().Create(request, token)
             ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
-        try { return InvokeResponseWithSessionHook<R, T, THook, THandler>(provider, request, token, hook); }
-        finally { var detached = hook; hook = null; detached.Dispose(); }
+        try
+        {
+            return InvokeResponseWithSessionHook<R, T, THook, THandler>(provider, request, token, hook);
+        }
+        finally
+        {
+            var detached = hook;
+            hook = null;
+            detached.Dispose();
+        }
     }
 
     internal static void SendOwnedHookVoid<R, THook, THandler, TFactory>(IServiceProvider provider, R request, CancellationToken token)
@@ -214,11 +279,20 @@ internal static class CanonicalSendSyncReference
         where THandler : class, ISyncRequestHandler<R>
         where TFactory : class, IOwnedSessionFactory<R, THook>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
         THook? hook = provider.GetRequiredService<TFactory>().Create(request, token)
             ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
-        try { InvokeVoidWithSessionHook<R, THook, THandler>(provider, request, token, hook); }
-        finally { var detached = hook; hook = null; detached.Dispose(); }
+        try
+        {
+            InvokeVoidWithSessionHook<R, THook, THandler>(provider, request, token, hook);
+        }
+        finally
+        {
+            var detached = hook;
+            hook = null;
+            detached.Dispose();
+        }
     }
 
     internal static T SendBorrowedHookResponse<R, T, THook, THandler, TFactory>(IServiceProvider provider, R request, CancellationToken token)
@@ -227,7 +301,8 @@ internal static class CanonicalSendSyncReference
         where THandler : class, ISyncRequestHandler<R, T>
         where TFactory : class, IBorrowedSessionFactory<R, THook>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
         var hook = provider.GetRequiredService<TFactory>().Create(request, token)
             ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
         return InvokeResponseWithSessionHook<R, T, THook, THandler>(provider, request, token, hook);
@@ -239,7 +314,8 @@ internal static class CanonicalSendSyncReference
         where THandler : class, ISyncRequestHandler<R>
         where TFactory : class, IBorrowedSessionFactory<R, THook>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
         var hook = provider.GetRequiredService<TFactory>().Create(request, token)
             ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
         InvokeVoidWithSessionHook<R, THook, THandler>(provider, request, token, hook);
@@ -251,22 +327,38 @@ internal static class CanonicalSendSyncReference
         where THandler : class, ISyncRequestHandler<R, T>, IDisposable
         where TFactory : class, IOwnedSessionFactory<R, THandler>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
-        var hook = provider.GetRequiredService<THook>(); var saved = request; var success = false; Exception? error = null;
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
+        var hook = provider.GetRequiredService<THook>();
+        var saved = request;
+        var success = false;
+        Exception? error = null;
         try
         {
             saved = hook.Before(saved, token);
             var response = SendOwnedResponseWithoutHook<R, T, THandler, TFactory>(provider, saved, token);
-            response = hook.After(saved, response, token); success = true; return response;
+            response = hook.After(saved, response, token);
+            success = true;
+            return response;
         }
         catch (Exception failure)
         {
             error = failure;
-            try { hook.OnException(saved, failure, token); }
-            catch (Exception replacement) { error = replacement; throw; }
+            try
+            {
+                hook.OnException(saved, failure, token);
+            }
+            catch (Exception replacement)
+            {
+                error = replacement;
+                throw;
+            }
             throw;
         }
-        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+        finally
+        {
+            hook.Finally(saved, new SendExitInfo(success, error), token);
+        }
     }
 
     internal static void SendHookOwnedHandlerVoid<R, THook, THandler, TFactory>(IServiceProvider provider, R request, CancellationToken token)
@@ -275,22 +367,37 @@ internal static class CanonicalSendSyncReference
         where THandler : class, ISyncRequestHandler<R>, IDisposable
         where TFactory : class, IOwnedSessionFactory<R, THandler>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
-        var hook = provider.GetRequiredService<THook>(); var saved = request; var success = false; Exception? error = null;
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
+        var hook = provider.GetRequiredService<THook>();
+        var saved = request;
+        var success = false;
+        Exception? error = null;
         try
         {
             saved = hook.Before(saved, token);
             SendOwnedVoidWithoutHook<R, THandler, TFactory>(provider, saved, token);
-            hook.After(saved, token); success = true;
+            hook.After(saved, token);
+            success = true;
         }
         catch (Exception failure)
         {
             error = failure;
-            try { hook.OnException(saved, failure, token); }
-            catch (Exception replacement) { error = replacement; throw; }
+            try
+            {
+                hook.OnException(saved, failure, token);
+            }
+            catch (Exception replacement)
+            {
+                error = replacement;
+                throw;
+            }
             throw;
         }
-        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+        finally
+        {
+            hook.Finally(saved, new SendExitInfo(success, error), token);
+        }
     }
 
     internal static T SendHookBorrowedHandlerResponse<R, T, THook, THandler, TFactory>(IServiceProvider provider, R request, CancellationToken token)
@@ -299,22 +406,38 @@ internal static class CanonicalSendSyncReference
         where THandler : class, ISyncRequestHandler<R, T>
         where TFactory : class, IBorrowedSessionFactory<R, THandler>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
-        var hook = provider.GetRequiredService<THook>(); var saved = request; var success = false; Exception? error = null;
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
+        var hook = provider.GetRequiredService<THook>();
+        var saved = request;
+        var success = false;
+        Exception? error = null;
         try
         {
             saved = hook.Before(saved, token);
             var response = SendBorrowedResponseWithoutHook<R, T, THandler, TFactory>(provider, saved, token);
-            response = hook.After(saved, response, token); success = true; return response;
+            response = hook.After(saved, response, token);
+            success = true;
+            return response;
         }
         catch (Exception failure)
         {
             error = failure;
-            try { hook.OnException(saved, failure, token); }
-            catch (Exception replacement) { error = replacement; throw; }
+            try
+            {
+                hook.OnException(saved, failure, token);
+            }
+            catch (Exception replacement)
+            {
+                error = replacement;
+                throw;
+            }
             throw;
         }
-        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+        finally
+        {
+            hook.Finally(saved, new SendExitInfo(success, error), token);
+        }
     }
 
     internal static void SendHookBorrowedHandlerVoid<R, THook, THandler, TFactory>(IServiceProvider provider, R request, CancellationToken token)
@@ -323,22 +446,37 @@ internal static class CanonicalSendSyncReference
         where THandler : class, ISyncRequestHandler<R>
         where TFactory : class, IBorrowedSessionFactory<R, THandler>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
-        var hook = provider.GetRequiredService<THook>(); var saved = request; var success = false; Exception? error = null;
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
+        var hook = provider.GetRequiredService<THook>();
+        var saved = request;
+        var success = false;
+        Exception? error = null;
         try
         {
             saved = hook.Before(saved, token);
             SendBorrowedVoidWithoutHook<R, THandler, TFactory>(provider, saved, token);
-            hook.After(saved, token); success = true;
+            hook.After(saved, token);
+            success = true;
         }
         catch (Exception failure)
         {
             error = failure;
-            try { hook.OnException(saved, failure, token); }
-            catch (Exception replacement) { error = replacement; throw; }
+            try
+            {
+                hook.OnException(saved, failure, token);
+            }
+            catch (Exception replacement)
+            {
+                error = replacement;
+                throw;
+            }
             throw;
         }
-        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+        finally
+        {
+            hook.Finally(saved, new SendExitInfo(success, error), token);
+        }
     }
 
     // Hook ownership encloses its callbacks; Handler ownership ends before the Hook observes or transforms the result.
@@ -349,11 +487,20 @@ internal static class CanonicalSendSyncReference
         where THookFactory : class, IOwnedSessionFactory<R, THook>
         where THandlerFactory : class, IOwnedSessionFactory<R, THandler>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
         THook? hook = provider.GetRequiredService<THookFactory>().Create(request, token)
             ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
-        try { return InvokeOwnedHandlerResponseWithSessionHook<R, T, THook, THandler, THandlerFactory>(provider, request, token, hook); }
-        finally { var detached = hook; hook = null; detached.Dispose(); }
+        try
+        {
+            return InvokeOwnedHandlerResponseWithSessionHook<R, T, THook, THandler, THandlerFactory>(provider, request, token, hook);
+        }
+        finally
+        {
+            var detached = hook;
+            hook = null;
+            detached.Dispose();
+        }
     }
 
     internal static void SendOwnedHookOwnedHandlerVoid<R, THook, THandler, THookFactory, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token)
@@ -363,11 +510,20 @@ internal static class CanonicalSendSyncReference
         where THookFactory : class, IOwnedSessionFactory<R, THook>
         where THandlerFactory : class, IOwnedSessionFactory<R, THandler>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
         THook? hook = provider.GetRequiredService<THookFactory>().Create(request, token)
             ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
-        try { InvokeOwnedHandlerVoidWithSessionHook<R, THook, THandler, THandlerFactory>(provider, request, token, hook); }
-        finally { var detached = hook; hook = null; detached.Dispose(); }
+        try
+        {
+            InvokeOwnedHandlerVoidWithSessionHook<R, THook, THandler, THandlerFactory>(provider, request, token, hook);
+        }
+        finally
+        {
+            var detached = hook;
+            hook = null;
+            detached.Dispose();
+        }
     }
 
     internal static T SendOwnedHookBorrowedHandlerResponse<R, T, THook, THandler, THookFactory, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token)
@@ -377,11 +533,20 @@ internal static class CanonicalSendSyncReference
         where THookFactory : class, IOwnedSessionFactory<R, THook>
         where THandlerFactory : class, IBorrowedSessionFactory<R, THandler>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
         THook? hook = provider.GetRequiredService<THookFactory>().Create(request, token)
             ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
-        try { return InvokeBorrowedHandlerResponseWithSessionHook<R, T, THook, THandler, THandlerFactory>(provider, request, token, hook); }
-        finally { var detached = hook; hook = null; detached.Dispose(); }
+        try
+        {
+            return InvokeBorrowedHandlerResponseWithSessionHook<R, T, THook, THandler, THandlerFactory>(provider, request, token, hook);
+        }
+        finally
+        {
+            var detached = hook;
+            hook = null;
+            detached.Dispose();
+        }
     }
 
     internal static void SendOwnedHookBorrowedHandlerVoid<R, THook, THandler, THookFactory, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token)
@@ -391,11 +556,20 @@ internal static class CanonicalSendSyncReference
         where THookFactory : class, IOwnedSessionFactory<R, THook>
         where THandlerFactory : class, IBorrowedSessionFactory<R, THandler>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
         THook? hook = provider.GetRequiredService<THookFactory>().Create(request, token)
             ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
-        try { InvokeBorrowedHandlerVoidWithSessionHook<R, THook, THandler, THandlerFactory>(provider, request, token, hook); }
-        finally { var detached = hook; hook = null; detached.Dispose(); }
+        try
+        {
+            InvokeBorrowedHandlerVoidWithSessionHook<R, THook, THandler, THandlerFactory>(provider, request, token, hook);
+        }
+        finally
+        {
+            var detached = hook;
+            hook = null;
+            detached.Dispose();
+        }
     }
 
     internal static T SendBorrowedHookOwnedHandlerResponse<R, T, THook, THandler, THookFactory, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token)
@@ -405,7 +579,8 @@ internal static class CanonicalSendSyncReference
         where THookFactory : class, IBorrowedSessionFactory<R, THook>
         where THandlerFactory : class, IOwnedSessionFactory<R, THandler>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
         var hook = provider.GetRequiredService<THookFactory>().Create(request, token)
             ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
         return InvokeOwnedHandlerResponseWithSessionHook<R, T, THook, THandler, THandlerFactory>(provider, request, token, hook);
@@ -418,7 +593,8 @@ internal static class CanonicalSendSyncReference
         where THookFactory : class, IBorrowedSessionFactory<R, THook>
         where THandlerFactory : class, IOwnedSessionFactory<R, THandler>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
         var hook = provider.GetRequiredService<THookFactory>().Create(request, token)
             ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
         InvokeOwnedHandlerVoidWithSessionHook<R, THook, THandler, THandlerFactory>(provider, request, token, hook);
@@ -431,7 +607,8 @@ internal static class CanonicalSendSyncReference
         where THookFactory : class, IBorrowedSessionFactory<R, THook>
         where THandlerFactory : class, IBorrowedSessionFactory<R, THandler>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
         var hook = provider.GetRequiredService<THookFactory>().Create(request, token)
             ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
         return InvokeBorrowedHandlerResponseWithSessionHook<R, T, THook, THandler, THandlerFactory>(provider, request, token, hook);
@@ -444,7 +621,8 @@ internal static class CanonicalSendSyncReference
         where THookFactory : class, IBorrowedSessionFactory<R, THook>
         where THandlerFactory : class, IBorrowedSessionFactory<R, THandler>
     {
-        ArgumentNullException.ThrowIfNull(request); token.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(request);
+        token.ThrowIfCancellationRequested();
         var hook = provider.GetRequiredService<THookFactory>().Create(request, token)
             ?? throw new InvalidOperationException("A session factory must return a nonnull Hook session.");
         InvokeBorrowedHandlerVoidWithSessionHook<R, THook, THandler, THandlerFactory>(provider, request, token, hook);
@@ -456,21 +634,35 @@ internal static class CanonicalSendSyncReference
         where THandler : class, ISyncRequestHandler<R, T>, IDisposable
         where THandlerFactory : class, IOwnedSessionFactory<R, THandler>
     {
-        var saved = request; var success = false; Exception? error = null;
+        var saved = request;
+        var success = false;
+        Exception? error = null;
         try
         {
             saved = hook.Before(saved, token);
             var response = SendOwnedResponseWithoutHook<R, T, THandler, THandlerFactory>(provider, saved, token);
-            response = hook.After(saved, response, token); success = true; return response;
+            response = hook.After(saved, response, token);
+            success = true;
+            return response;
         }
         catch (Exception failure)
         {
             error = failure;
-            try { hook.OnException(saved, failure, token); }
-            catch (Exception replacement) { error = replacement; throw; }
+            try
+            {
+                hook.OnException(saved, failure, token);
+            }
+            catch (Exception replacement)
+            {
+                error = replacement;
+                throw;
+            }
             throw;
         }
-        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+        finally
+        {
+            hook.Finally(saved, new SendExitInfo(success, error), token);
+        }
     }
 
     private static void InvokeOwnedHandlerVoidWithSessionHook<R, THook, THandler, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token, THook hook)
@@ -479,21 +671,34 @@ internal static class CanonicalSendSyncReference
         where THandler : class, ISyncRequestHandler<R>, IDisposable
         where THandlerFactory : class, IOwnedSessionFactory<R, THandler>
     {
-        var saved = request; var success = false; Exception? error = null;
+        var saved = request;
+        var success = false;
+        Exception? error = null;
         try
         {
             saved = hook.Before(saved, token);
             SendOwnedVoidWithoutHook<R, THandler, THandlerFactory>(provider, saved, token);
-            hook.After(saved, token); success = true;
+            hook.After(saved, token);
+            success = true;
         }
         catch (Exception failure)
         {
             error = failure;
-            try { hook.OnException(saved, failure, token); }
-            catch (Exception replacement) { error = replacement; throw; }
+            try
+            {
+                hook.OnException(saved, failure, token);
+            }
+            catch (Exception replacement)
+            {
+                error = replacement;
+                throw;
+            }
             throw;
         }
-        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+        finally
+        {
+            hook.Finally(saved, new SendExitInfo(success, error), token);
+        }
     }
 
     private static T InvokeBorrowedHandlerResponseWithSessionHook<R, T, THook, THandler, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token, THook hook)
@@ -502,21 +707,35 @@ internal static class CanonicalSendSyncReference
         where THandler : class, ISyncRequestHandler<R, T>
         where THandlerFactory : class, IBorrowedSessionFactory<R, THandler>
     {
-        var saved = request; var success = false; Exception? error = null;
+        var saved = request;
+        var success = false;
+        Exception? error = null;
         try
         {
             saved = hook.Before(saved, token);
             var response = SendBorrowedResponseWithoutHook<R, T, THandler, THandlerFactory>(provider, saved, token);
-            response = hook.After(saved, response, token); success = true; return response;
+            response = hook.After(saved, response, token);
+            success = true;
+            return response;
         }
         catch (Exception failure)
         {
             error = failure;
-            try { hook.OnException(saved, failure, token); }
-            catch (Exception replacement) { error = replacement; throw; }
+            try
+            {
+                hook.OnException(saved, failure, token);
+            }
+            catch (Exception replacement)
+            {
+                error = replacement;
+                throw;
+            }
             throw;
         }
-        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+        finally
+        {
+            hook.Finally(saved, new SendExitInfo(success, error), token);
+        }
     }
 
     private static void InvokeBorrowedHandlerVoidWithSessionHook<R, THook, THandler, THandlerFactory>(IServiceProvider provider, R request, CancellationToken token, THook hook)
@@ -525,21 +744,34 @@ internal static class CanonicalSendSyncReference
         where THandler : class, ISyncRequestHandler<R>
         where THandlerFactory : class, IBorrowedSessionFactory<R, THandler>
     {
-        var saved = request; var success = false; Exception? error = null;
+        var saved = request;
+        var success = false;
+        Exception? error = null;
         try
         {
             saved = hook.Before(saved, token);
             SendBorrowedVoidWithoutHook<R, THandler, THandlerFactory>(provider, saved, token);
-            hook.After(saved, token); success = true;
+            hook.After(saved, token);
+            success = true;
         }
         catch (Exception failure)
         {
             error = failure;
-            try { hook.OnException(saved, failure, token); }
-            catch (Exception replacement) { error = replacement; throw; }
+            try
+            {
+                hook.OnException(saved, failure, token);
+            }
+            catch (Exception replacement)
+            {
+                error = replacement;
+                throw;
+            }
             throw;
         }
-        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+        finally
+        {
+            hook.Finally(saved, new SendExitInfo(success, error), token);
+        }
     }
 
     // The stage guard precedes acquisition. Successful factory return does not insert another entry guard.
@@ -548,21 +780,37 @@ internal static class CanonicalSendSyncReference
         where THook : class, ISendRequestTransform<R>, ISendResponseTransform<R, T>, ISendExceptionObserver<R>, ISendFinallyObserver<R>
         where THandler : class, ISyncRequestHandler<R, T>
     {
-        var saved = request; var success = false; Exception? error = null;
+        var saved = request;
+        var success = false;
+        Exception? error = null;
         try
         {
-            saved = hook.Before(saved, token); ArgumentNullException.ThrowIfNull(saved); token.ThrowIfCancellationRequested();
+            saved = hook.Before(saved, token);
+            ArgumentNullException.ThrowIfNull(saved);
+            token.ThrowIfCancellationRequested();
             var response = provider.GetRequiredService<THandler>().Handle(saved, token);
-            response = hook.After(saved, response, token); success = true; return response;
+            response = hook.After(saved, response, token);
+            success = true;
+            return response;
         }
         catch (Exception failure)
         {
             error = failure;
-            try { hook.OnException(saved, failure, token); }
-            catch (Exception replacement) { error = replacement; throw; }
+            try
+            {
+                hook.OnException(saved, failure, token);
+            }
+            catch (Exception replacement)
+            {
+                error = replacement;
+                throw;
+            }
             throw;
         }
-        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+        finally
+        {
+            hook.Finally(saved, new SendExitInfo(success, error), token);
+        }
     }
 
     private static void InvokeVoidWithSessionHook<R, THook, THandler>(IServiceProvider provider, R request, CancellationToken token, THook hook)
@@ -570,19 +818,35 @@ internal static class CanonicalSendSyncReference
         where THook : class, ISendRequestTransform<R>, ISendSuccessObserver<R>, ISendExceptionObserver<R>, ISendFinallyObserver<R>
         where THandler : class, ISyncRequestHandler<R>
     {
-        var saved = request; var success = false; Exception? error = null;
+        var saved = request;
+        var success = false;
+        Exception? error = null;
         try
         {
-            saved = hook.Before(saved, token); ArgumentNullException.ThrowIfNull(saved); token.ThrowIfCancellationRequested();
-            provider.GetRequiredService<THandler>().Handle(saved, token); hook.After(saved, token); success = true;
+            saved = hook.Before(saved, token);
+            ArgumentNullException.ThrowIfNull(saved);
+            token.ThrowIfCancellationRequested();
+            provider.GetRequiredService<THandler>().Handle(saved, token);
+            hook.After(saved, token);
+            success = true;
         }
         catch (Exception failure)
         {
             error = failure;
-            try { hook.OnException(saved, failure, token); }
-            catch (Exception replacement) { error = replacement; throw; }
+            try
+            {
+                hook.OnException(saved, failure, token);
+            }
+            catch (Exception replacement)
+            {
+                error = replacement;
+                throw;
+            }
             throw;
         }
-        finally { hook.Finally(saved, new SendExitInfo(success, error), token); }
+        finally
+        {
+            hook.Finally(saved, new SendExitInfo(success, error), token);
+        }
     }
 }

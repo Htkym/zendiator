@@ -82,13 +82,15 @@ public class ZendiatorServiceResolver
         var owner = EnterInitialization();
         try
         {
-            if (GetCaptured<TSet>(slot) is { } existing) return (TSet)existing;
+            if (GetCaptured<TSet>(slot) is { } existing)
+                return (TSet)existing;
             Publish(slot, dependencies, typeof(TSet));
             return dependencies;
         }
         finally
         {
-            if (owner) ExitInitialization();
+            if (owner)
+                ExitInitialization();
         }
     }
 
@@ -104,14 +106,17 @@ public class ZendiatorServiceResolver
             ArgumentNullException.ThrowIfNull(dependencies);
             // This overload already owns the initialization; publish without entering it again.
             var published = dependencies;
-            if (GetCaptured<TSet>(slot) is { } existing) published = (TSet)existing;
-            else Publish(slot, dependencies, typeof(TSet));
+            if (GetCaptured<TSet>(slot) is { } existing)
+                published = (TSet)existing;
+            else
+                Publish(slot, dependencies, typeof(TSet));
             captureFirst(published);
             return published;
         }
         finally
         {
-            if (owner) ExitInitialization();
+            if (owner)
+                ExitInitialization();
         }
     }
 
@@ -123,14 +128,17 @@ public class ZendiatorServiceResolver
         var owner = EnterInitialization();
         try
         {
-            if (Volatile.Read(ref field) is { } existing) return existing;
+            if (Volatile.Read(ref field) is { } existing)
+                return existing;
             var service = _provider.GetRequiredService<T>();
-            if (Volatile.Read(ref field) is null) Volatile.Write(ref field, service);
+            if (Volatile.Read(ref field) is null)
+                Volatile.Write(ref field, service);
             return service;
         }
         finally
         {
-            if (owner) ExitInitialization();
+            if (owner)
+                ExitInitialization();
         }
     }
 
@@ -141,8 +149,10 @@ public class ZendiatorServiceResolver
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private object? GetCaptured<T>(int slot)
     {
-        if (Volatile.Read(ref _storage) is not { } storage) return null;
-        if (typeof(T) != typeof(object[]) && typeof(T) != typeof(object?[]?[]) && storage.GetType() == typeof(T)) return storage;
+        if (Volatile.Read(ref _storage) is not { } storage)
+            return null;
+        if (typeof(T) != typeof(object[]) && typeof(T) != typeof(object?[]?[]) && storage.GetType() == typeof(T))
+            return storage;
         return GetPagedValue(storage, slot);
     }
 
@@ -154,7 +164,8 @@ public class ZendiatorServiceResolver
             var page = Unsafe.As<object?[]>(storage);
             return (uint)slot < (uint)page.Length ? Volatile.Read(ref page[slot]) : null;
         }
-        if (storage.GetType() != typeof(object?[]?[])) return null;
+        if (storage.GetType() != typeof(object?[]?[]))
+            return null;
         var pages = Unsafe.As<object?[]?[]>(storage);
         var pageIndex = slot >> PageBits;
         return (uint)pageIndex < (uint)pages.Length && Volatile.Read(ref pages[pageIndex]) is { } target
@@ -169,32 +180,38 @@ public class ZendiatorServiceResolver
         var owner = EnterInitialization();
         try
         {
-            if (GetCaptured<T>(slot) is { } existing) return (T)existing;
+            if (GetCaptured<T>(slot) is { } existing)
+                return (T)existing;
             var service = _provider.GetRequiredService<T>();
             // A reentrant factory may have populated another slot while resolving this service.
-            if (GetCaptured<T>(slot) is null) Publish(slot, service, typeof(T));
+            if (GetCaptured<T>(slot) is null)
+                Publish(slot, service, typeof(T));
             return service;
         }
         finally
         {
-            if (owner) ExitInitialization();
+            if (owner)
+                ExitInitialization();
         }
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private T ResolveSharedSlow<T>(int slot) where T : notnull
     {
-        if (GetGeneratedService(typeof(T)) is not { } generated) return ResolveSlow<T>(slot);
+        if (GetGeneratedService(typeof(T)) is not { } generated)
+            return ResolveSlow<T>(slot);
         var owner = EnterInitialization();
         try
         {
-            if (GetCaptured<T>(slot) is { } existing) return (T)existing;
+            if (GetCaptured<T>(slot) is { } existing)
+                return (T)existing;
             Publish(slot, generated, typeof(T));
             return (T)generated;
         }
         finally
         {
-            if (owner) ExitInitialization();
+            if (owner)
+                ExitInitialization();
         }
     }
 
@@ -219,7 +236,8 @@ public class ZendiatorServiceResolver
             _layout &= CapacityMask;
         }
         structure = Place(structure, slot, service);
-        if (!ReferenceEquals(structure, storage)) Volatile.Write(ref _storage, structure);
+        if (!ReferenceEquals(structure, storage))
+            Volatile.Write(ref _storage, structure);
     }
 
     private object Place(object? structure, int slot, object service, bool fullFirstPage = false)
@@ -280,8 +298,10 @@ public class ZendiatorServiceResolver
     private bool EnterInitialization()
     {
         var thread = Environment.CurrentManagedThreadId;
-        if (Volatile.Read(ref _initializingThread) == thread) return false;
-        if (Interlocked.CompareExchange(ref _initializingThread, thread, 0) != 0) WaitForInitialization(thread);
+        if (Volatile.Read(ref _initializingThread) == thread)
+            return false;
+        if (Interlocked.CompareExchange(ref _initializingThread, thread, 0) != 0)
+            WaitForInitialization(thread);
         return true;
     }
 
@@ -309,7 +329,8 @@ public class ZendiatorServiceResolver
         Volatile.Write(ref _initializingThread, 0);
         if (Volatile.Read(ref _initializationWaiters) != 0)
         {
-            lock (InitializationMonitor) Monitor.PulseAll(InitializationMonitor);
+            lock (InitializationMonitor)
+                Monitor.PulseAll(InitializationMonitor);
         }
     }
 }

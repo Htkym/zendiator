@@ -8,14 +8,18 @@ internal static class CanonicalStreamFallbackProjection
 {
     internal static CanonicalStreamFallbackModel? Create(CanonicalRouteGraph row)
     {
-        var c = row.Input.Composition; var route = row.Input.Route;
+        var c = row.Input.Composition;
+        var route = row.Input.Route;
         if (row.Graph is not { IsValid: true, NativeStream: true } || c.GeneratedNamespace == null ||
             c.Errors.Count != 0 || c.CompilerOwnsHandlerError || c.ExternAliases.Count != 0 ||
             c.Facts.Count != 1 || c.Facts[0].Key != "IncompleteExecutionContract" ||
-            route.Family != BoundDispatchFamily.Stream || route.Handlers.Count != 1) return null;
-        var handler = route.Handlers[0]; var call = handler.StreamEmission;
+            route.Family != BoundDispatchFamily.Stream || route.Handlers.Count != 1)
+            return null;
+        var handler = route.Handlers[0];
+        var call = handler.StreamEmission;
         if (call == null || string.IsNullOrEmpty(call.CursorName) || handler.CompilerOwnsError ||
-            !Receiver(handler.ServiceOwnership, handler.Sessions)) return null;
+            !Receiver(handler.ServiceOwnership, handler.Sessions))
+            return null;
         var segments = new List<CanonicalStreamFallbackSegment>();
         var hooks = new List<BoundStreamHookEmission>();
         BoundWrapperEmission? wrapper = null;
@@ -24,16 +28,21 @@ internal static class CanonicalStreamFallbackProjection
         var sourceItem = route.StreamItemFlow?.Source.Name ?? call.ItemName;
         foreach (var stage in route.Stages)
         {
-            if (stage.CompilerOwnsError || !Receiver(stage.ServiceOwnership, stage.Sessions)) return null;
+            if (stage.CompilerOwnsError || !Receiver(stage.ServiceOwnership, stage.Sessions))
+                return null;
             if (stage.Kind == FusionStageKind.Hook && stage.StreamEmission is { } hook &&
                 hook.Phase is BoundCallbackPhase.Filter or BoundCallbackPhase.Map &&
                 hook.Completion is BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask)
             {
-                hooks.Add(hook with { Factory = Factory(stage.Sessions) });
+                hooks.Add(hook with
+                {
+                    Factory = Factory(stage.Sessions)
+                });
                 continue;
             }
             if (stage.Kind != FusionStageKind.Wrapper || stage.StreamWrapperEmission is not
-                { Completion: BoundCompletionKind.ValueTask } middleware) return null;
+                { Completion: BoundCompletionKind.ValueTask } middleware)
+                return null;
             Flush();
             upstream = segments.Count - 1;
             sourceItem = stage.StreamItems?.Output.Name ?? sourceItem;
@@ -56,7 +65,11 @@ internal static class CanonicalStreamFallbackProjection
         {
             var outputItem = hooks.Count == 0 ? sourceItem : hooks[hooks.Count - 1].OutputItemName ?? sourceItem;
             segments.Add(new(segments.Count, upstream, wrapper, new(hooks))
-            { WrapperFactory = wrapperFactory, SourceItemName = sourceItem, OutputItemName = outputItem });
+            {
+                WrapperFactory = wrapperFactory,
+                SourceItemName = sourceItem,
+                OutputItemName = outputItem
+            });
             sourceItem = outputItem;
         }
     }

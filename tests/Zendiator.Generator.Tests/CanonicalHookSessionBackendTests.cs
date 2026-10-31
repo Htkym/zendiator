@@ -72,8 +72,14 @@ public sealed partial class GeneratorTests
         var name = owned ? isVoid ? "SendOwnedHookVoid" : "SendOwnedHookResponse" : isVoid ? "SendBorrowedHookVoid" : "SendBorrowedHookResponse";
         var method = typeof(CanonicalSendSyncReference).GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic)!
             .MakeGenericMethod(isVoid ? [fixture.Request, hook, handler, fixture.Service] : [fixture.Request, typeof(int), hook, handler, fixture.Service]);
-        try { return (method.Invoke(null, [provider, request, token]), null); }
-        catch (TargetInvocationException error) { return (null, error.InnerException); }
+        try
+        {
+            return (method.Invoke(null, [provider, request, token]), null);
+        }
+        catch (TargetInvocationException error)
+        {
+            return (null, error.InnerException);
+        }
     }
 
     [Theory]
@@ -101,7 +107,8 @@ public sealed partial class GeneratorTests
         var fixture = HookSessionBackendFixture(owned, isVoid);
         var reference = lifetime == ServiceLifetime.Transient ? null : RunHookSessionLifetimes(owned, isVoid, lifetime, fixture);
         var generated = RunHookSessionLifetimes(owned, isVoid, lifetime, fixture, generated: true);
-        if (reference is not null) Assert.Equal(reference, generated);
+        if (reference is not null)
+            Assert.Equal(reference, generated);
         WriteNestedHookEvidence("hook-session-differential-lifetimes", owned + "-" + isVoid + "-" + lifetime, new
         {
             owned,
@@ -116,42 +123,66 @@ public sealed partial class GeneratorTests
     {
         public R Before(R request, CancellationToken token) => request;
         public T After(R request, T response, CancellationToken token) => response;
-        public void OnException(R request, Exception error, CancellationToken token) { }
-        public void Finally(R request, SendExitInfo exit, CancellationToken token) { }
-        public void Dispose() { }
+        public void OnException(R request, Exception error, CancellationToken token)
+        {
+        }
+        public void Finally(R request, SendExitInfo exit, CancellationToken token)
+        {
+        }
+        public void Dispose()
+        {
+        }
     }
     public sealed class ExternalVoidSessionHook<R> : ISendRequestTransform<R>, ISendSuccessObserver<R>, ISendExceptionObserver<R>, ISendFinallyObserver<R>, IDisposable
     {
         public R Before(R request, CancellationToken token) => request;
-        public void After(R request, CancellationToken token) { }
-        public void OnException(R request, Exception error, CancellationToken token) { }
-        public void Finally(R request, SendExitInfo exit, CancellationToken token) { }
-        public void Dispose() { }
+        public void After(R request, CancellationToken token)
+        {
+        }
+        public void OnException(R request, Exception error, CancellationToken token)
+        {
+        }
+        public void Finally(R request, SendExitInfo exit, CancellationToken token)
+        {
+        }
+        public void Dispose()
+        {
+        }
     }
     public static IEnumerable<object[]> HookSessionBackendBoundaries()
     {
-        foreach (var owned in new[] { false, true }) foreach (var isVoid in new[] { false, true }) foreach (var shape in new[] {
+        foreach (var owned in new[] { false, true })
+            foreach (var isVoid in new[] { false, true })
+                foreach (var shape in new[] {
             "two-hooks", "handler-session", "factory-struct", "factory-internal", "missing-before", "missing-after", "missing-exception", "missing-finally", "external-hook", "async" })
-            yield return [owned, isVoid, shape];
+                    yield return [owned, isVoid, shape];
     }
     [Theory]
     [MemberData(nameof(HookSessionBackendBoundaries))]
     public void Hook_session_candidate_blocks_unproved_shapes_before_emission(bool owned, bool isVoid, string shape)
     {
         var source = HookSessionBackendSource(owned, isVoid, dispatch: false);
-        if (shape == "two-hooks") source = source.Replace("Stage.Hook<Hook<string>,Factory<string>>()", "Stage.Hook<Hook<string>,Factory<string>>(),Stage.Hook<SecondHook>()") +
+        if (shape == "two-hooks")
+            source = source.Replace("Stage.Hook<Hook<string>,Factory<string>>()", "Stage.Hook<Hook<string>,Factory<string>>(),Stage.Hook<SecondHook>()") +
             "namespace App { public sealed class SecondHook : HookBase<string> { public SecondHook(Probe probe):base(probe){} } }";
-        if (shape == "handler-session") source = source.Replace("typeof(Handler<string>)", "HandlerEntry.Session<Handler<string>,HandlerFactory>()") +
+        if (shape == "handler-session")
+            source = source.Replace("typeof(Handler<string>)", "HandlerEntry.Session<Handler<string>,HandlerFactory>()") +
             "namespace App { public sealed class HandlerFactory : IOwnedSessionFactory<Ping,Handler<string>> { public Handler<string> Create(Ping r,CancellationToken t)=>throw new NotImplementedException(); } }";
-        if (shape == "factory-internal") source = source.Replace("public sealed class Factory<T>", "internal sealed class Factory<T>");
-        if (shape == "factory-struct") source = source.Replace("public sealed class Factory<T> : FactoryBase<T> where T:class { public Factory(Probe probe,Dependency dependency):base(probe,dependency){} }",
+        if (shape == "factory-internal")
+            source = source.Replace("public sealed class Factory<T>", "internal sealed class Factory<T>");
+        if (shape == "factory-struct")
+            source = source.Replace("public sealed class Factory<T> : FactoryBase<T> where T:class { public Factory(Probe probe,Dependency dependency):base(probe,dependency){} }",
             "public struct Factory<T> : " + (owned ? "IOwnedSessionFactory" : "IBorrowedSessionFactory") + "<Ping,Hook<T>> where T:class { public Factory(Probe p,Dependency d){} public Hook<T> Create(Ping r,CancellationToken t)=>throw new NotImplementedException(); }");
-        if (shape == "missing-before") source = source.Replace("ISendRequestTransform<Ping>,", "").Replace("Ping ISendRequestTransform<Ping>.Before(Ping request,CancellationToken token) { _probe.HookReceivers.Add(this); return (Ping)_probe.Core.Before(request,token)!; }", "");
-        if (shape == "missing-after") source = source.Replace(isVoid ? "ISendSuccessObserver<Ping>," : "ISendResponseTransform<Ping,int>,", "").Replace(isVoid ?
+        if (shape == "missing-before")
+            source = source.Replace("ISendRequestTransform<Ping>,", "").Replace("Ping ISendRequestTransform<Ping>.Before(Ping request,CancellationToken token) { _probe.HookReceivers.Add(this); return (Ping)_probe.Core.Before(request,token)!; }", "");
+        if (shape == "missing-after")
+            source = source.Replace(isVoid ? "ISendSuccessObserver<Ping>," : "ISendResponseTransform<Ping,int>,", "").Replace(isVoid ?
             "void ISendSuccessObserver<Ping>.After(Ping request,CancellationToken token) { _probe.HookReceivers.Add(this); _probe.Core.After(request,0,token); }" :
             "int ISendResponseTransform<Ping,int>.After(Ping request,int response,CancellationToken token) { _probe.HookReceivers.Add(this); return _probe.Core.After(request,response,token); }", "");
-        if (shape == "missing-exception") source = source.Replace("ISendExceptionObserver<Ping>,", "").Replace("void ISendExceptionObserver<Ping>.OnException(Ping request,Exception error,CancellationToken token) { _probe.HookReceivers.Add(this); _probe.Core.Observe(request,error,token); }", "");
-        if (shape == "missing-finally") source = source.Replace("ISendFinallyObserver<Ping>,", "").Replace("void ISendFinallyObserver<Ping>.Finally(Ping request,SendExitInfo exit,CancellationToken token) { _probe.HookReceivers.Add(this); _probe.Core.Finish(request,exit,token); }", "");
+        if (shape == "missing-exception")
+            source = source.Replace("ISendExceptionObserver<Ping>,", "").Replace("void ISendExceptionObserver<Ping>.OnException(Ping request,Exception error,CancellationToken token) { _probe.HookReceivers.Add(this); _probe.Core.Observe(request,error,token); }", "");
+        if (shape == "missing-finally")
+            source = source.Replace("ISendFinallyObserver<Ping>,", "").Replace("void ISendFinallyObserver<Ping>.Finally(Ping request,SendExitInfo exit,CancellationToken token) { _probe.HookReceivers.Add(this); _probe.Core.Finish(request,exit,token); }", "");
         if (shape == "external-hook")
         {
             var external = "global::Zendiator.Generator.Tests.GeneratorTests." + (isVoid ? "ExternalVoidSessionHook<Ping>" : "ExternalResponseSessionHook<Ping,int>");
@@ -164,7 +195,8 @@ public sealed partial class GeneratorTests
                 .Replace("ISyncRequest", "IRequest").Replace("DispatchFamily.SendSync", "DispatchFamily.SendAsync")
                 .Replace((isVoid ? "void" : "int") + " IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">.Handle(Ping request,CancellationToken token) { " + (isVoid ? "" : "return ") + "_probe.Core.Handle(request,token); }",
                     (isVoid ? "ValueTask" : "ValueTask<int>") + " IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">.HandleAsync(Ping request,CancellationToken token) { " + (isVoid ? "_probe.Core.Handle(request,token); return default;" : "return new(_probe.Core.Handle(request,token));") + " }");
-            if (owned) source = source.Replace("ISendFinallyObserver<Ping>,IDisposable where", "ISendFinallyObserver<Ping>,IDisposable,IAsyncDisposable where")
+            if (owned)
+                source = source.Replace("ISendFinallyObserver<Ping>,IDisposable where", "ISendFinallyObserver<Ping>,IDisposable,IAsyncDisposable where")
                 .Replace("void IDisposable.Dispose()=>_probe.Release(this);", "void IDisposable.Dispose()=>_probe.Release(this); public ValueTask DisposeAsync(){ _probe.Release(this); return default; }");
         }
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "HookSessionBoundary" + Guid.NewGuid()), out var output, out var diagnostics);
@@ -194,7 +226,13 @@ public sealed partial class GeneratorTests
         Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalRouteOutputFile"].SelectMany(s => s.Outputs), o => Assert.True(o.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
         driver = driver.RunGenerators(SyncCompilation(HookSessionBackendSource(false, false, dispatch: false), "HookSessionIncremental"));
         var borrowed = CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
-        Assert.NotEqual(first, borrowed); Assert.Contains("var detached = hook;", first); Assert.DoesNotContain("var detached = hook;", borrowed);
-        WriteNestedHookEvidence("hook-session-incremental", "ownership", new { bodyCached = true, ownershipChangesCleanup = true });
+        Assert.NotEqual(first, borrowed);
+        Assert.Contains("var detached = hook;", first);
+        Assert.DoesNotContain("var detached = hook;", borrowed);
+        WriteNestedHookEvidence("hook-session-incremental", "ownership", new
+        {
+            bodyCached = true,
+            ownershipChangesCleanup = true
+        });
     }
 }

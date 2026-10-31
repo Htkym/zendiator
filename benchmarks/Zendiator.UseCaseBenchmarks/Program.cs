@@ -10,31 +10,40 @@ using System.Text.Json;
 
 if (args.Length > 0 && args[0] == "--artifact-gate")
 {
-    if (args.Length != 2) throw new ArgumentException("--artifact-gate requires one saved request file");
+    if (args.Length != 2)
+        throw new ArgumentException("--artifact-gate requires one saved request file");
     await ArtifactGate.Run(Path.GetFullPath(args[1]));
     return;
 }
 
 if (args.Length > 0 && args[0] == "--validate-native-pooling")
 {
-    if (args.Length != 2) throw new ArgumentException("--validate-native-pooling requires one output directory");
+    if (args.Length != 2)
+        throw new ArgumentException("--validate-native-pooling requires one output directory");
     await NativePoolingGate.Run(Path.GetFullPath(args[1]));
     return;
 }
 
 if (args.Length > 0 && args[0] == "--validate-same-producer")
 {
-    if (args.Length != 2) throw new ArgumentException("--validate-same-producer requires one output directory");
+    if (args.Length != 2)
+        throw new ArgumentException("--validate-same-producer requires one output directory");
     await SameProducerStreamGate.Run(Path.GetFullPath(args[1]));
     return;
 }
 
-if (!File.Exists("Zendiator.UseCaseBenchmarks.csproj")) throw new InvalidOperationException("Run from the use-case benchmark directory.");
-if (args.Contains("--help")) { BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args); return; }
+if (!File.Exists("Zendiator.UseCaseBenchmarks.csproj"))
+    throw new InvalidOperationException("Run from the use-case benchmark directory.");
+if (args.Contains("--help"))
+{
+    BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
+    return;
+}
 var output = Path.GetFullPath(Environment.GetEnvironmentVariable("COLD_RUN") ?? Path.Combine("..", "..", ".local", "benchmarks", "explore"));
 Directory.CreateDirectory(output);
 Environment.SetEnvironmentVariable("COLD_EVIDENCE_DIR", output);
-if (args.Contains("--validate-only")) Environment.SetEnvironmentVariable("COLD_AUDIT_REG", "1");
+if (args.Contains("--validate-only"))
+    Environment.SetEnvironmentVariable("COLD_AUDIT_REG", "1");
 var runtimeHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(Zendiator.DependencyInjection.ZendiatorServiceResolver).Assembly.Location)));
 var expectedChildRuntimeHash = Environment.GetEnvironmentVariable("COLD_EXPECT_CHILD_Z_SHA") ?? "SKIP";
 Environment.SetEnvironmentVariable("COLD_EXPECT_Z_SHA", expectedChildRuntimeHash);
@@ -59,8 +68,14 @@ if (skipGate)
 }
 else
 {
-    try { await GeneratedGate.Run(); }
-    finally { Correctness.Save(output); }
+    try
+    {
+        await GeneratedGate.Run();
+    }
+    finally
+    {
+        Correctness.Save(output);
+    }
     Console.WriteLine($"Correctness passed: {Correctness.Results.Count} checks.");
 }
 var hashes = Directory.EnumerateFiles(".").Where(p => Path.GetExtension(p) is ".cs" or ".csproj" or ".ps1" || Path.GetFileName(p) == "packages.lock.json")
@@ -92,14 +107,21 @@ File.WriteAllText(Path.Combine(output, "manifest.json"), JsonSerializer.Serializ
     generated,
     args
 }, new JsonSerializerOptions { WriteIndented = true }));
-if (args.Contains("--validate-only")) return;
-if (args.Contains("--breakdown")) throw new NotSupportedException("The legacy allocation diagnostic is outside this canonical comparison adapter.");
-if (args.Contains("--stream-breakdown")) { await StreamAllocationProfile.Run(output); return; }
+if (args.Contains("--validate-only"))
+    return;
+if (args.Contains("--breakdown"))
+    throw new NotSupportedException("The legacy allocation diagnostic is outside this canonical comparison adapter.");
+if (args.Contains("--stream-breakdown"))
+{
+    await StreamAllocationProfile.Run(output);
+    return;
+}
 if (args.Contains("--inspect"))
 {
     var zero = new ZendiatorSend0 { Lifetime = "Scoped" };
     var five = new ZendiatorSend5 { Lifetime = "Scoped" };
-    zero.Setup(); five.Setup();
+    zero.Setup();
+    five.Setup();
     try
     {
         for (var round = 0; round < 3; round++)
@@ -110,7 +132,11 @@ if (args.Contains("--inspect"))
             Thread.Sleep(300);
         }
     }
-    finally { zero.Cleanup(); five.Cleanup(); }
+    finally
+    {
+        zero.Cleanup();
+        five.Cleanup();
+    }
     Console.WriteLine("JIT diagnostic passed.");
     return;
 }
@@ -131,7 +157,8 @@ var job = Job.Default.WithId("Comparison").WithWarmupCount(matrix is not null ||
     .WithIterationCount(matrix is not null || formal ? 12 : 8)
     .WithLaunchCount(matrix is not null ? 1 : formal ? 3 : selectedCase is not null ? 1 : 2)
     .WithIterationTime(TimeInterval.FromMilliseconds(matrix is not null || formal ? 500 : 300));
-if (pinned) job = job.WithAffinity(new IntPtr(1));
+if (pinned)
+    job = job.WithAffinity(new IntPtr(1));
 Environment.SetEnvironmentVariable("COLD_CAPTURE_CHILD", "1");
 var config = DefaultConfig.Instance.AddJob(job).AddExporter(JsonExporter.Full).WithArtifactsPath(output).WithOptions(ConfigOptions.KeepBenchmarkFiles)
     .AddFilter(new SimpleFilter(b =>
@@ -139,22 +166,29 @@ var config = DefaultConfig.Instance.AddJob(job).AddExporter(JsonExporter.Full).W
         var name = b.Descriptor.Type.Name;
         var method = b.Descriptor.WorkloadMethod.Name;
         var lifetime = b.Parameters.Items.FirstOrDefault(p => p.Name == "Lifetime")?.Value as string;
-        if (matrix is not null) return matrix.Any(c => c.Type == name && c.Method == method
+        if (matrix is not null)
+            return matrix.Any(c => c.Type == name && c.Method == method
             && c.Lifetime == lifetime
             && (c.Count is null || Equals(b.Parameters.Items.FirstOrDefault(p => p.Name == "Count")?.Value, c.Count.Value))
             && (c.Asynchronous is null || Equals(b.Parameters.Items.FirstOrDefault(p => p.Name == "Asynchronous")?.Value, c.Asynchronous.Value))
             && (!singleCase || b.Parameters.Items.Count() == (c.Lifetime is null ? 0 : 1)
                 + (c.Count is null ? 0 : 1) + (c.Asynchronous is null ? 0 : 1)));
-        if (selectedCase is not null) return name + "." + method == selectedCase && lifetime == selectedLifetime;
-        if (name.StartsWith("Direct") || lifetime != "Scoped") return false;
-        if (scopedPair) return method == "ScopeK1" && name is "ZendiatorSend0" or "ImmediateSend0";
-        if (competitors) return method == "ScopeK1" && name is "ZendiatorSend0" or "MediatRHistoricalSend0" or "ImmediateSend0" or "DispatchRSend0" or "MediatorSend0";
-        if (coldOnly) return method == "ScopeK1" && name is "ZendiatorSend0" or "MediatRHistoricalSend0";
+        if (selectedCase is not null)
+            return name + "." + method == selectedCase && lifetime == selectedLifetime;
+        if (name.StartsWith("Direct") || lifetime != "Scoped")
+            return false;
+        if (scopedPair)
+            return method == "ScopeK1" && name is "ZendiatorSend0" or "ImmediateSend0";
+        if (competitors)
+            return method == "ScopeK1" && name is "ZendiatorSend0" or "MediatRHistoricalSend0" or "ImmediateSend0" or "DispatchRSend0" or "MediatorSend0";
+        if (coldOnly)
+            return method == "ScopeK1" && name is "ZendiatorSend0" or "MediatRHistoricalSend0";
         return name == "ZendiatorSend0" && method is "Typed" or "ScopeK1"
             || name == "ZendiatorSend5" && method is "Typed" or "ScopeK1"
             || name == "MediatRHistoricalSend0" && method == "ScopeK1";
     }));
-if (matrix is not null) config = config.WithOrderer(new InterleavedOrderer()).WithOptions(ConfigOptions.JoinSummary | ConfigOptions.KeepBenchmarkFiles);
+if (matrix is not null)
+    config = config.WithOrderer(new InterleavedOrderer()).WithOptions(ConfigOptions.JoinSummary | ConfigOptions.KeepBenchmarkFiles);
 var summaries = BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, config);
 ArtifactEvidence.Write(Path.Combine(output, "build-artifacts.json"), new
 {

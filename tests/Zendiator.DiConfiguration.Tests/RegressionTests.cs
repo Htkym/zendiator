@@ -20,7 +20,8 @@ public sealed class RegressionTests
         await scope.ServiceProvider.GetRequiredService<IZendiator>().PublishAsync(new MixedNoteSecond());
         Assert.Equal(7, scope.ServiceProvider.GetRequiredService<MixedNotificationHandler>().NotificationResult);
         var items = new List<int>();
-        await foreach (var item in mediator.StreamAsync(new MixedStreamSecond())) items.Add(item);
+        await foreach (var item in mediator.StreamAsync(new MixedStreamSecond()))
+            items.Add(item);
         Assert.Equal([7], items);
     }
 

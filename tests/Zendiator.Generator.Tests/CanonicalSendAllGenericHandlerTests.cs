@@ -45,11 +45,15 @@ public sealed partial class GeneratorTests
     private static string AllClosedHandlerExtras(AllGenericCase c, bool wrapper = false, bool genericHook = false)
     {
         var text = "namespace GenericCases." + c.Name + "{using Ping=" + c.Request + ";" + string.Join("", new[] { 1, 2, 3 }.Select(id => "using G" + id + "=" + ClosedHandlerName(c, id) + ";"));
-        if (genericHook) text += "using GHook=" + ClosedHookName(c) + ";" + AllClosedHookFactory(c);
+        if (genericHook)
+            text += "using GHook=" + ClosedHookName(c) + ";" + AllClosedHookFactory(c);
         foreach (var id in new[] { 2, 1, 3 })
         {
-            var mode = AllGenericHandlerMode(c, id); var af = mode.StartsWith("async-", StringComparison.Ordinal); var owned = mode.EndsWith("owned", StringComparison.Ordinal);
-            if (mode != "direct") text += $$"""
+            var mode = AllGenericHandlerMode(c, id);
+            var af = mode.StartsWith("async-", StringComparison.Ordinal);
+            var owned = mode.EndsWith("owned", StringComparison.Ordinal);
+            if (mode != "direct")
+                text += $$"""
                 public sealed class GF{{id}}:I{{(af ? "Async" : "")}}{{(owned ? "Owned" : "Borrowed")}}SessionFactory<Ping,G{{id}}>,IDisposable{
                     private readonly Probe p;public GF{{id}}(Probe p){this.p=p;p.Factories.Add("GF{{id}}");}
                     public {{(af ? "ValueTask<G" + id + ">" : "G" + id)}} {{(af ? "CreateAsync" : "Create")}}(Ping r,CancellationToken t){r.Mark(p,"GF{{id}}.acquire",t);var value=new G{{id}}(p);return {{(af ? "new(value)" : "value")}};}
@@ -58,8 +62,14 @@ public sealed partial class GeneratorTests
                 """;
             var completion = c.Async ? "a" : "s";
             var reference = CanonicalCapabilityReference.Source(c.Async, c.Void, completion, completion, completion, completion, false, wrapper ? "direct" : AllGenericHookMode(c), mode, wrapper);
-            reference = Regex.Replace(reference, @"\bOracle\b", "GenericReference" + id); reference = Regex.Replace(reference, @"\bHandler\b", "G" + id); reference = Regex.Replace(reference, @"\bHFactory\b", "GF" + id);
-            if (genericHook) { reference = Regex.Replace(reference, @"\bHook0\b", "GHook"); reference = Regex.Replace(reference, @"\bKFactory\b", "GKFactory"); }
+            reference = Regex.Replace(reference, @"\bOracle\b", "GenericReference" + id);
+            reference = Regex.Replace(reference, @"\bHandler\b", "G" + id);
+            reference = Regex.Replace(reference, @"\bHFactory\b", "GF" + id);
+            if (genericHook)
+            {
+                reference = Regex.Replace(reference, @"\bHook0\b", "GHook");
+                reference = Regex.Replace(reference, @"\bKFactory\b", "GKFactory");
+            }
             text += reference.Replace("namespace App {", "", StringComparison.Ordinal)[..^1];
         }
         var ret = c.Async ? c.Void ? "ValueTask" : "ValueTask<int[]>" : c.Void ? "void" : "int[]";
@@ -68,13 +78,15 @@ public sealed partial class GeneratorTests
     }
     private static string AllClosedHandlerConfiguration(IEnumerable<AllGenericCase> cases, bool wrapper = false, bool genericHook = false)
     {
-        var handlers = new List<string>(); var pipelines = new List<string>();
+        var handlers = new List<string>();
+        var pipelines = new List<string>();
         foreach (var c in cases)
         {
             var a = "global::GenericCases." + c.Name + ".";
             var entries = new[] { 2, 1, 3 }.Select(id => id == 3 ? "typeof(" + ClosedHandlerName(c, id) + ")" : "HandlerEntry.Session<" + ClosedHandlerName(c, id) + "," + a + "GF" + id + ">()");
             handlers.Add($"c.Handlers<{c.Request}>(DispatchFamily.{c.Family},{string.Join(",", entries)});");
-            var hook = genericHook ? ClosedHookName(c) : a + "Hook0"; var factory = a + (genericHook ? "GKFactory" : "KFactory");
+            var hook = genericHook ? ClosedHookName(c) : a + "Hook0";
+            var factory = a + (genericHook ? "GKFactory" : "KFactory");
             pipelines.Add($"c.Pipeline<{c.Request}>(DispatchFamily.{c.Family},Stage.Hook<{hook}{(wrapper ? "" : "," + factory)}>(){(wrapper ? ",Stage.Wrapper<" + a + "W>(),Stage.Hook<" + a + "Hook1>()" : "")});");
         }
         return string.Join("", handlers) + string.Join("", pipelines.AsEnumerable().Reverse());
@@ -87,11 +99,16 @@ public sealed partial class GeneratorTests
             foreach (var wrapped in new[] { false, true })
                 foreach (var (name, type) in new[] { ("Internal", "InternalH<string>"), ("Containing", "InternalHost.Nested<string>"), ("Argument", "GenericH3<global::GenericCases.HiddenTag>"), ("PublicNested", "PublicHost.Nested<string>"), ("OldInternalPlain", "InternalPlain"), ("Constraint", "ConstrainedH<int>") }.Where(p => !wrapped || p.Item1 != "Constraint"))
                 {
-                    var marker = "Visibility" + c.Name + name + (wrapped ? "Wrapped" : ""); var a = "global::GenericCases." + c.Name + ".";
+                    var marker = "Visibility" + c.Name + name + (wrapped ? "Wrapped" : "");
+                    var a = "global::GenericCases." + c.Name + ".";
                     var config = AllGenericConfiguration([c], wrapped ? "wrapper" : "").Replace("typeof(" + a + "H3)", "typeof(" + a + type + ")", StringComparison.Ordinal);
                     text += "[ZendiatorComposition(\"" + marker + "\")]public sealed class " + marker + ";public static class " + marker + "Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<" + marker + ">(c=>{" + config + "});}";
                 }
-            var wrong = c with { Argument = c.Argument == "int" ? "string" : "int" }; var markerWrong = "Visibility" + c.Name + "WrongRequest";
+            var wrong = c with
+            {
+                Argument = c.Argument == "int" ? "string" : "int"
+            };
+            var markerWrong = "Visibility" + c.Name + "WrongRequest";
             var wrongConfig = AllGenericConfiguration([c]).Replace("typeof(global::GenericCases." + c.Name + ".H3)", "typeof(" + ClosedHandlerName(wrong, 3) + ")", StringComparison.Ordinal);
             text += "[ZendiatorComposition(\"" + markerWrong + "\")]public sealed class " + markerWrong + ";public static class " + markerWrong + "Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<" + markerWrong + ">(c=>{" + wrongConfig + "});}";
         }
@@ -101,7 +118,8 @@ public sealed partial class GeneratorTests
     }
     private static string AllClosedHandlerSource(bool genericHook = false)
     {
-        var common = SendAllCompositionSource(false); common = common[..common.IndexOf("namespace AllMix {", StringComparison.Ordinal)];
+        var common = SendAllCompositionSource(false);
+        common = common[..common.IndexOf("namespace AllMix {", StringComparison.Ordinal)];
         var definitions = "namespace GenericCases{" + AllGenericRequestDefinition("Response", false) + AllGenericRequestDefinition("Command", true) + "}";
         var cases = string.Join("", AllClosedHandlerCases.Select(c => (genericHook ? AllClosedHandlerWrapperConsumerCase(c) : AllGenericConsumerCase(c)).Replace(".ReferenceAll.Run", ".GenericReferenceAll.Run", StringComparison.Ordinal)
             .Replace("break;", "expectedTypes=new[]{" + string.Join(",", (c.Name == "AVString" ? new[] { 2, 1 } : new[] { 2, 1, 3 }).Select(id => "typeof(" + ClosedHandlerName(c, id) + ").ToString()")) + "};break;", StringComparison.Ordinal)));
@@ -160,10 +178,27 @@ public sealed partial class GeneratorTests
     [Fact]
     public async Task AllClosedHandler_four_profiles_preserve_actual_type_arguments_DI_branch_tags_pending_and_ownership()
     {
-        var source = AllClosedHandlerSource(); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllClosedHandlerRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); var folder = AllGenericFolder("handler-runtime"); SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); var contract = AssertAllGenericContract(output, driver, false, AllClosedHandlerCases);
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); if (folder != null) { File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); File.WriteAllText(Path.Combine(folder, "contract.json"), JsonSerializer.Serialize(contract)); }
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var result = await assembly.GetType("AllGeneric.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result); using var json = JsonDocument.Parse(result); Assert.Equal(10, json.RootElement.GetProperty("dispatches").GetInt32());
+        var source = AllClosedHandlerSource();
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllClosedHandlerRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        var folder = AllGenericFolder("handler-runtime");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var contract = AssertAllGenericContract(output, driver, false, AllClosedHandlerCases);
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+        {
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+            File.WriteAllText(Path.Combine(folder, "contract.json"), JsonSerializer.Serialize(contract));
+        }
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var result = await assembly.GetType("AllGeneric.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
+        using var json = JsonDocument.Parse(result);
+        Assert.Equal(10, json.RootElement.GetProperty("dispatches").GetInt32());
     }
 }

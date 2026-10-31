@@ -17,7 +17,8 @@ public sealed class HouseholdNameCursor(int count, CancellationToken cancellatio
 
     public async ValueTask<bool> MoveNextAsync()
     {
-        if (_index >= count) return false;
+        if (_index >= count)
+            return false;
         cancellationToken.ThrowIfCancellationRequested();
         await Task.Yield();
         cancellationToken.ThrowIfCancellationRequested();
@@ -25,5 +26,9 @@ public sealed class HouseholdNameCursor(int count, CancellationToken cancellatio
         return true;
     }
 
-    public ValueTask DisposeAsync() { _index = count; return default; }
+    public ValueTask DisposeAsync()
+    {
+        _index = count;
+        return default;
+    }
 }

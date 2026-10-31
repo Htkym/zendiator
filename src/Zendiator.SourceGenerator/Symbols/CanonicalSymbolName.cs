@@ -30,7 +30,10 @@ internal static class CanonicalSymbolName
         {
             var part = parts[i];
             if (part.Symbol is ITypeParameterSymbol parameter && parameters != null && parameters.TryGetValue(parameter, out var replacement))
-            { text.Append(replacement); continue; }
+            {
+                text.Append(replacement);
+                continue;
+            }
             if (part.ToString() == "global" && i + 1 < parts.Length && parts[i + 1].ToString() == "::")
             {
                 // Each qualified named type, including a nested generic argument, has its own prefix.
@@ -38,7 +41,8 @@ internal static class CanonicalSymbolName
                 var alias = named == null ? null : Alias(named, compilation);
                 text.Append(alias == null ? "global" : Identifier(alias));
             }
-            else text.Append(part.ToString());
+            else
+                text.Append(part.ToString());
         }
         return text.ToString();
     }
@@ -48,7 +52,8 @@ internal static class CanonicalSymbolName
         var definition = type.OriginalDefinition;
         var name = SymbolUtilities.QualifiedMetadataName(definition);
         if (name == null || SymbolUtilities.Same(definition.ContainingAssembly, compilation.Assembly) ||
-            SymbolUtilities.Same(compilation.GetTypeByMetadataName(name)?.OriginalDefinition, definition)) return null;
+            SymbolUtilities.Same(compilation.GetTypeByMetadataName(name)?.OriginalDefinition, definition))
+            return null;
         // Only look up this known type. Do not enumerate assemblies' exported types or interfaces.
         return compilation.References.SelectMany(reference =>
         {
@@ -67,12 +72,15 @@ internal static class CanonicalSymbolName
         foreach (var reference in compilation.References)
         {
             if (reference.Properties.Aliases.IsDefaultOrEmpty || !reference.Properties.Aliases.Contains(alias) ||
-                compilation.GetAssemblyOrModuleSymbol(reference) is not IAssemblySymbol assembly) continue;
+                compilation.GetAssemblyOrModuleSymbol(reference) is not IAssemblySymbol assembly)
+                continue;
             var resolved = assembly.GetTypeByMetadataName(name) ?? assembly.ResolveForwardedType(name);
-            if (resolved == null) continue;
+            if (resolved == null)
+                continue;
             // Every definition exposed by the alias group must be this exact type. Forwarded
             // copies of the same definition are harmless; same-name types in other assemblies are not.
-            if (!SymbolUtilities.Same(resolved.OriginalDefinition, definition)) return false;
+            if (!SymbolUtilities.Same(resolved.OriginalDefinition, definition))
+                return false;
             found = true;
         }
         return found;

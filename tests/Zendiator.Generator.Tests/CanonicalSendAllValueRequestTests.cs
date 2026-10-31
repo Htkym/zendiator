@@ -17,15 +17,21 @@ public sealed partial class GeneratorTests
         profile == "SV" ? "borrowed" : profile == "AR" ? "async-owned" : "owned";
     private static string AllValueModule(string profile)
     {
-        var async = profile[0] == 'A'; var isVoid = profile[1] == 'V'; var wrapper = ValueWrapper(profile);
+        var async = profile[0] == 'A';
+        var isVoid = profile[1] == 'V';
+        var wrapper = ValueWrapper(profile);
         var hookMode = wrapper ? "direct" : async ? "async-owned" : "borrowed";
-        var ret = async ? isVoid ? "ValueTask" : "ValueTask<int>" : isVoid ? "void" : "int"; var prefix = async ? "IAsyncSend" : "ISend";
-        var method = async ? "HandleAsync" : "Handle"; var disposable = async ? "IAsyncDisposable" : "IDisposable";
+        var ret = async ? isVoid ? "ValueTask" : "ValueTask<int>" : isVoid ? "void" : "int";
+        var prefix = async ? "IAsyncSend" : "ISend";
+        var method = async ? "HandleAsync" : "Handle";
+        var disposable = async ? "IAsyncDisposable" : "IDisposable";
         string Dispose(string id) => async ? "public ValueTask DisposeAsync(){p.Cleanup(this);return default;}" : "public void Dispose()=>p.Cleanup(this);";
         string Factory(string mode, string type, string name)
         {
-            if (mode == "direct") return "";
-            var af = mode.StartsWith("async-", StringComparison.Ordinal); var owned = mode.EndsWith("owned", StringComparison.Ordinal);
+            if (mode == "direct")
+                return "";
+            var af = mode.StartsWith("async-", StringComparison.Ordinal);
+            var owned = mode.EndsWith("owned", StringComparison.Ordinal);
             return $$"""
                 public sealed class {{name}}:I{{(af ? "Async" : "")}}{{(owned ? "Owned" : "Borrowed")}}SessionFactory<Ping,{{type}}>,IDisposable {
                     private readonly Probe p;public {{name}}(Probe p){this.p=p;p.Factories.Add("{{profile}}.{{name}}");}
@@ -46,7 +52,8 @@ public sealed partial class GeneratorTests
             """;
         for (var hookId = 0; hookId < (wrapper ? 2 : 1); hookId++)
         {
-            var id = hookId; var mode = hookMode;
+            var id = hookId;
+            var mode = hookMode;
             text += $$"""
                 public sealed class Hook{{id}}:{{prefix}}RequestTransform<Ping>,{{prefix}}{{(isVoid ? "SuccessObserver<Ping>" : "ResponseTransform<Ping,int>")}},{{prefix}}ExceptionObserver<Ping>,{{prefix}}FinallyObserver<Ping>,{{disposable}}{
                     private readonly Probe p;public Hook{{id}}(Probe p){this.p=p;p.Created(this,"K{{id}}",{{(mode.EndsWith("owned", StringComparison.Ordinal) ? "true" : "false")}},{{(mode == "direct" ? "true" : "false")}});}
@@ -61,7 +68,8 @@ public sealed partial class GeneratorTests
         text += Factory(hookMode, "Hook0", "KFactory");
         foreach (var id in new[] { 2, 1, 3 })
         {
-            var mode = ValueHandlerMode(profile, id); var fail = async ? "return p." + (isVoid ? "FailedVoid" : "FailedResponse") + "();" : "throw p.Failure;";
+            var mode = ValueHandlerMode(profile, id);
+            var fail = async ? "return p." + (isVoid ? "FailedVoid" : "FailedResponse") + "();" : "throw p.Failure;";
             text += $$"""
                 [ZendiatorHandler]public sealed class H{{id}}:{{(async ? "IRequestHandler" : "ISyncRequestHandler")}}<Ping{{(isVoid ? "" : ",int")}}>,{{disposable}}{
                     private readonly Probe p;public H{{id}}(Probe p){this.p=p;p.Created(this,"H{{id}}",{{(mode.EndsWith("owned", StringComparison.Ordinal) ? "true" : "false")}},{{(mode == "direct" ? "true" : "false")}});}
@@ -76,12 +84,17 @@ public sealed partial class GeneratorTests
             text += Factory(mode, "H" + id, "F" + id);
             var completion = async ? "a" : "s";
             var reference = CanonicalCapabilityReference.Source(async, isVoid, completion, completion, completion, completion, false, hookMode, mode, wrapper);
-            reference = Regex.Replace(reference, @"\bOracle\b", "Reference" + id); reference = Regex.Replace(reference, @"\bHandler\b", "H" + id); reference = Regex.Replace(reference, @"\bHFactory\b", "F" + id);
+            reference = Regex.Replace(reference, @"\bOracle\b", "Reference" + id);
+            reference = Regex.Replace(reference, @"\bHandler\b", "H" + id);
+            reference = Regex.Replace(reference, @"\bHFactory\b", "F" + id);
             text += reference.Replace("namespace App {", "", StringComparison.Ordinal)[..^1];
         }
         if (wrapper)
         {
-            var aw = async ? "await " : ""; var cfg = async ? ".ConfigureAwait(false)" : ""; var invoke = async ? "InvokeAsync" : "Invoke"; var value = isVoid ? "" : "value=";
+            var aw = async ? "await " : "";
+            var cfg = async ? ".ConfigureAwait(false)" : "";
+            var invoke = async ? "InvokeAsync" : "Invoke";
+            var value = isVoid ? "" : "value=";
             text += $$"""
                 public sealed class W:{{prefix}}Wrapper<Ping{{(isVoid ? "" : ",int")}}>,{{disposable}}{
                     private readonly Probe p;public W(Probe p){this.p=p;p.Created(this,"W",false,true);}
@@ -131,10 +144,12 @@ public sealed partial class GeneratorTests
         """;
     private static string AllValueConfiguration()
     {
-        var handlers = new List<string>(); var pipelines = new List<string>();
+        var handlers = new List<string>();
+        var pipelines = new List<string>();
         foreach (var (profile, alias) in AllValueProfiles.Zip(new[] { "T", "U", "V", "W" }))
         {
-            var family = profile[0] == 'A' ? "SendAllAsync" : "SendAllSync"; var wrapper = ValueWrapper(profile);
+            var family = profile[0] == 'A' ? "SendAllAsync" : "SendAllSync";
+            var wrapper = ValueWrapper(profile);
             var entries = new[] { 2, 1, 3 }.Select(id => ValueHandlerMode(profile, id) == "direct" ? $"typeof({alias}.H{id})" : $"HandlerEntry.Session<{alias}.H{id},{alias}.F{id}>()");
             handlers.Add($"c.Handlers<{alias}.Ping>(DispatchFamily.{family},{string.Join(",", entries)});");
             pipelines.Add($"c.Pipeline<{alias}.Ping>(DispatchFamily.{family},Stage.Hook<{alias}.Hook0{(wrapper ? "" : "," + alias + ".KFactory")}>(){(wrapper ? ",Stage.Wrapper<" + alias + ".W>(),Stage.Hook<" + alias + ".Hook1>()" : "")});");
@@ -145,12 +160,21 @@ public sealed partial class GeneratorTests
     }
     private static string AllValueConsumerCase(string profile)
     {
-        var alias = profile switch { "SR" => "T", "SV" => "U", "AR" => "V", _ => "W" };
-        var async = profile[0] == 'A'; var isVoid = profile[1] == 'V';
+        var alias = profile switch
+        {
+            "SR" => "T",
+            "SV" => "U",
+            "AR" => "V",
+            _ => "W"
+        };
+        var async = profile[0] == 'A';
+        var isVoid = profile[1] == 'V';
         var request = profile == "SV" ? "default(" + alias + ".Ping)" : "new " + alias + ".Ping(1,shared)";
         var call = (async ? "task=" : isVoid ? "" : "results=") + "(generated?" + "m." + (async ? "SendAllAsync" : "SendAll") + "(request,p.Token.Token):" + alias + ".ReferenceAll.Run(sp,request,p.Token.Token));";
-        if (!async && isVoid) call = "if(generated)m.SendAll(request,p.Token.Token);else " + alias + ".ReferenceAll.Run(sp,request,p.Token.Token);";
-        if (profile == "SR") call = "if(generated){var count=m.SendAll(request,destination,p.Token.Token);P.Check(count==3&&destination[3]==-9,\"Span complete commit/trailing sentinel\");results=destination.Take(3).ToArray();}else{results=T.ReferenceAll.Run(sp,request,p.Token.Token);results.CopyTo(destination,0);}";
+        if (!async && isVoid)
+            call = "if(generated)m.SendAll(request,p.Token.Token);else " + alias + ".ReferenceAll.Run(sp,request,p.Token.Token);";
+        if (profile == "SR")
+            call = "if(generated){var count=m.SendAll(request,destination,p.Token.Token);P.Check(count==3&&destination[3]==-9,\"Span complete commit/trailing sentinel\");results=destination.Take(3).ToArray();}else{results=T.ReferenceAll.Run(sp,request,p.Token.Token);results.CopyTo(destination,0);}";
         return $$"""
             case "{{profile}}":{
                 var request={{request}};{{(async ? (isVoid ? "ValueTask" : "ValueTask<int[]>") + " task;" : "")}}
@@ -172,7 +196,8 @@ public sealed partial class GeneratorTests
     }
     private static string AllValueSource(bool gate)
     {
-        var common = SendAllCompositionSource(false); common = common[..common.IndexOf("namespace AllMix {", StringComparison.Ordinal)];
+        var common = SendAllCompositionSource(false);
+        common = common[..common.IndexOf("namespace AllMix {", StringComparison.Ordinal)];
         return common + AllValueProbeSource + string.Join("", AllValueProfiles.Select(AllValueModule)) + """
             namespace AllValue{
             using System;using System.Collections.Generic;using System.Linq;using System.Text.Json;using System.Threading;using System.Threading.Tasks;
@@ -224,36 +249,85 @@ public sealed partial class GeneratorTests
     }
     private static object AssertAllValueContract(Compilation output, GeneratorDriver driver)
     {
-        foreach (var profile in AllValueProfiles) Assert.True(output.GetTypeByMetadataName("ValueCases." + profile + ".Ping")!.IsValueType);
-        var api = output.GetTypeByMetadataName("AllValue.Generated.Many.IZendiator")!; Assert.NotNull(api);
-        var all = api.GetMembers().OfType<IMethodSymbol>().Where(m => m.Name is "SendAll" or "SendAllAsync").ToArray(); Assert.Equal(5, all.Length); Assert.All(all, m => Assert.True(m.Parameters[0].Type.IsValueType));
-        var methods = new List<string>(); var guards = 0;
+        foreach (var profile in AllValueProfiles)
+            Assert.True(output.GetTypeByMetadataName("ValueCases." + profile + ".Ping")!.IsValueType);
+        var api = output.GetTypeByMetadataName("AllValue.Generated.Many.IZendiator")!;
+        Assert.NotNull(api);
+        var all = api.GetMembers().OfType<IMethodSymbol>().Where(m => m.Name is "SendAll" or "SendAllAsync").ToArray();
+        Assert.Equal(5, all.Length);
+        Assert.All(all, m => Assert.True(m.Parameters[0].Type.IsValueType));
+        var methods = new List<string>();
+        var guards = 0;
         foreach (var file in driver.GetRunResult().Results.Single().GeneratedSources.Where(IsCanonicalRoute))
             foreach (var method in CSharpSyntaxTree.ParseText(file.SourceText).GetRoot().DescendantNodes().OfType<MethodDeclarationSyntax>().Where(m => m.ParameterList.Parameters.Any(p => p.Type?.ToString().StartsWith("global::ValueCases.", StringComparison.Ordinal) == true)))
             {
                 methods.Add(method.Identifier.ValueText);
-                var boxingGuards = method.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(i => i.Expression.ToString().EndsWith("ArgumentNullException.ThrowIfNull", StringComparison.Ordinal) && i.ArgumentList.Arguments.Any(a => a.Expression is IdentifierNameSyntax n && (n.Identifier.ValueText == "request" || n.Identifier.ValueText.StartsWith("saved", StringComparison.Ordinal)))).ToArray(); guards += boxingGuards.Length;
-                Assert.Empty(boxingGuards); Assert.DoesNotContain(method.DescendantNodes().OfType<CastExpressionSyntax>(), c => c.Type.ToString() is "object" or "global::System.Object");
+                var boxingGuards = method.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(i => i.Expression.ToString().EndsWith("ArgumentNullException.ThrowIfNull", StringComparison.Ordinal) && i.ArgumentList.Arguments.Any(a => a.Expression is IdentifierNameSyntax n && (n.Identifier.ValueText == "request" || n.Identifier.ValueText.StartsWith("saved", StringComparison.Ordinal)))).ToArray();
+                guards += boxingGuards.Length;
+                Assert.Empty(boxingGuards);
+                Assert.DoesNotContain(method.DescendantNodes().OfType<CastExpressionSyntax>(), c => c.Type.ToString() is "object" or "global::System.Object");
             }
-        Assert.True(methods.Count >= 17); return new { typedValueMethods = methods, requestBoxingNullGuards = guards, allPublicMethods = all.Length };
+        Assert.True(methods.Count >= 17);
+        return new
+        {
+            typedValueMethods = methods,
+            requestBoxingNullGuards = guards,
+            allPublicMethods = all.Length
+        };
     }
     private static string? AllValueFolder(string name)
-    { var e = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR"); if (string.IsNullOrEmpty(e)) return null; var p = Path.Combine(e, "all-value-" + name); Directory.CreateDirectory(p); return p; }
+    {
+        var e = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
+        if (string.IsNullOrEmpty(e))
+            return null;
+        var p = Path.Combine(e, "all-value-" + name);
+        Directory.CreateDirectory(p);
+        return p;
+    }
     [Fact]
     public void AllValue_gate_preserves_typed_all_response_void_and_omits_boxing_null_guards()
     {
-        var source = AllValueSource(true); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllValueGate_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); var folder = AllValueFolder("gate"); SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); var contract = AssertAllValueContract(output, driver);
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, dispatches = 0, contract, profiles = AllValueProfiles }));
+        var source = AllValueSource(true);
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllValueGate_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        var folder = AllValueFolder("gate");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var contract = AssertAllValueContract(output, driver);
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new
+            {
+                generatorInputs = 1,
+                dispatches = 0,
+                contract,
+                profiles = AllValueProfiles
+            }));
     }
     [Fact]
     public async Task AllValue_four_profiles_preserve_default_large_saved_values_shared_references_and_wrapper_retry()
     {
-        var source = AllValueSource(false); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllValueRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); var folder = AllValueFolder("runtime"); SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); var contract = AssertAllValueContract(output, driver);
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); if (folder != null) { File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); File.WriteAllText(Path.Combine(folder, "contract.json"), JsonSerializer.Serialize(contract)); }
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var result = await assembly.GetType("AllValue.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result); using var json = JsonDocument.Parse(result); Assert.Equal(10, json.RootElement.GetProperty("dispatches").GetInt32());
+        var source = AllValueSource(false);
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllValueRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        var folder = AllValueFolder("runtime");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var contract = AssertAllValueContract(output, driver);
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+        {
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+            File.WriteAllText(Path.Combine(folder, "contract.json"), JsonSerializer.Serialize(contract));
+        }
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var result = await assembly.GetType("AllValue.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
+        using var json = JsonDocument.Parse(result);
+        Assert.Equal(10, json.RootElement.GetProperty("dispatches").GetInt32());
     }
 }
 

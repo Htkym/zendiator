@@ -21,7 +21,10 @@ internal sealed class RequiredSendExecutionContract
     internal readonly List<SendSessionCall> SessionCalls = new();
     internal readonly List<SendServiceResolution> ServiceResolutions = new();
     internal readonly List<SendCallbackReceiver> CallbackReceivers = new();
-    internal bool Async { get; private set; }
+    internal bool Async
+    {
+        get; private set;
+    }
 
     internal static RequiredSendExecutionContract Derive(BoundPipelineModel route)
     {
@@ -58,8 +61,10 @@ internal sealed class RequiredSendExecutionContract
                 BoundCompletionKind.Synchronous, null, null, SendFailureDisposition.EscapeOperation));
             required.Edge(-1, -1, SendExecutionPhase.OperationBoundary, b, -1, SendExecutionPhase.BranchStart);
             required.Edge(b, -1, SendExecutionPhase.BranchStart, b, 0, SendExecutionPhase.ArgumentGuard);
-            if (span) required.Edge(-1, -1, SendExecutionPhase.DestinationGuard, b, -1, SendExecutionPhase.BranchStart, SendOrderCondition.SpanDestination);
-            if (b > 0) required.Edge(b - 1, 0, SendExecutionPhase.ScopeExit, b, -1, SendExecutionPhase.BranchStart, SendOrderCondition.AllBranchesSuccess);
+            if (span)
+                required.Edge(-1, -1, SendExecutionPhase.DestinationGuard, b, -1, SendExecutionPhase.BranchStart, SendOrderCondition.SpanDestination);
+            if (b > 0)
+                required.Edge(b - 1, 0, SendExecutionPhase.ScopeExit, b, -1, SendExecutionPhase.BranchStart, SendOrderCondition.AllBranchesSuccess);
             for (var s = 0; s <= route.Stages.Count; s++)
             {
                 var handler = s == route.Stages.Count;
@@ -105,7 +110,8 @@ internal sealed class RequiredSendExecutionContract
                     required.Edge(b, s, SendExecutionPhase.InvokeWrapper, b, s, SendExecutionPhase.ScopeExit, SendOrderCondition.InnerSuccess);
                     required.Scopes.Add(new(owner, Scope(b, s + 1), Site(b, s, SendExecutionPhase.InvokeWrapper), null, null, null, SendExitPolicy.OpaqueWrapperEscape));
                 }
-                else required.Hook(route, b, s);
+                else
+                    required.Hook(route, b, s);
             }
         }
         RequiredSendSessionContract.Append(route, required);
@@ -132,7 +138,8 @@ internal sealed class RequiredSendExecutionContract
             Edge(b, s, SendExecutionPhase.Before, b, s, SendExecutionPhase.InvokeInner);
             Orders.Add(new(Site(b, s, SendExecutionPhase.Before), error ?? finallySite ?? Site(b, s, SendExecutionPhase.ScopeExit), SendOrderCondition.Failure));
         }
-        else Edge(b, s, SendExecutionPhase.Entered, b, s, SendExecutionPhase.InvokeInner);
+        else
+            Edge(b, s, SendExecutionPhase.Entered, b, s, SendExecutionPhase.InvokeInner);
         if (success != null)
         {
             Callback(route, b, s, SendExecutionPhase.Success, stage.Callbacks.Single(c => c.Phase == BoundCallbackPhase.Success), SendExecutionCondition.InnerSuccess,
@@ -164,13 +171,17 @@ internal sealed class RequiredSendExecutionContract
         var handler = s == route.Stages.Count;
         var anchor = handler ? route.Handlers[b].Anchor : route.Stages[s].Anchor;
         Sites.Add(new(Site(b, s, phase), anchor, Scope(b, s), condition, callback.Completion, callback.Implementation, callback.ReturnType, failure));
-        if (callback.Completion != BoundCompletionKind.ValueTask) return;
+        if (callback.Completion != BoundCompletionKind.ValueTask)
+            return;
         var hook = !handler && route.Stages[s].Kind == FusionStageKind.Hook;
         var slots = new List<string> { Scope(b, s) + "/input-request" };
-        if (hook) slots.Add(Scope(b, s) + "/effective-request");
+        if (hook)
+            slots.Add(Scope(b, s) + "/effective-request");
         slots.Add(Scope(b, s) + "/start-token");
-        if (hook) slots.Add(Scope(b, s) + "/error");
-        if (route.ResultKind == FusionResultKind.Response) slots.Add(Scope(b, s) + "/response");
+        if (hook)
+            slots.Add(Scope(b, s) + "/error");
+        if (route.ResultKind == FusionResultKind.Response)
+            slots.Add(Scope(b, s) + "/response");
         var result = phase == SendExecutionPhase.Before ? route.Request :
             phase is SendExecutionPhase.InvokeHandler or SendExecutionPhase.InvokeWrapper or SendExecutionPhase.Success ? route.Result ?? "void" : "void";
         Awaits.Add(new(Site(b, s, phase), Scope(b, s), result, true, true, normal, failureTarget, failureTarget, new(slots)));

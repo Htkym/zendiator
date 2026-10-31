@@ -4,10 +4,18 @@ using System.Linq;
 
 namespace Zendiator.SourceGenerator;
 
-internal enum CanonicalStreamConnectionKind { CanonicalCandidate, CanonicalPending, InvalidContract, ConflictingComposition }
+internal enum CanonicalStreamConnectionKind
+{
+    CanonicalCandidate, CanonicalPending, InvalidContract, ConflictingComposition
+}
 internal sealed record CanonicalStreamConnection(string RouteKey, string CompositionIdentity, string Anchor,
     CanonicalStreamConnectionKind Kind, string Reason)
-{ public CanonicalStreamFallbackModel? Canonical { get; init; } }
+{
+    public CanonicalStreamFallbackModel? Canonical
+    {
+        get; init;
+    }
+}
 internal sealed record CanonicalStreamConnectionCatalog(EquatableArray<CanonicalStreamConnection> Routes);
 
 internal static class CanonicalStreamEmissionNormalizer
@@ -17,8 +25,11 @@ internal static class CanonicalStreamEmissionNormalizer
         var connections = new List<CanonicalStreamConnection>();
         foreach (var row in rows.Where(r => r.Route.Input.Route.Family == BoundDispatchFamily.Stream))
         {
-            var input = row.Route.Input; var c = input.Composition; var route = input.Route;
-            CanonicalStreamConnectionKind kind; string reason;
+            var input = row.Route.Input;
+            var c = input.Composition;
+            var route = input.Route;
+            CanonicalStreamConnectionKind kind;
+            string reason;
             CanonicalStreamFallbackModel? canonical = null;
             if (catalog.Compositions.Count(other => other.Identity == c.Identity || other.Key == c.Key ||
                 c.GeneratedNamespace != null && other.GeneratedNamespace == c.GeneratedNamespace) != 1)
@@ -44,7 +55,10 @@ internal static class CanonicalStreamEmissionNormalizer
                 kind = CanonicalStreamConnectionKind.CanonicalPending;
                 reason = "The Stream contract has no complete native source projection; registration remains blocked.";
             }
-            connections.Add(new(input.Key, c.Identity, route.Anchor, kind, reason) { Canonical = canonical });
+            connections.Add(new(input.Key, c.Identity, route.Anchor, kind, reason)
+            {
+                Canonical = canonical
+            });
         }
         var collisions = new HashSet<string>(connections.Where(c => c.Canonical != null).GroupBy(c => c.Canonical!.HintName)
             .Where(g => g.Count() != 1).Select(g => g.Key), StringComparer.Ordinal);
@@ -64,7 +78,8 @@ internal static class CanonicalStreamEmissionNormalizer
         foreach (var model in canonical)
         {
             var file = rendered.Single(f => f.HintName == model.HintName);
-            if (file.Source.Length == 0) throw new InvalidOperationException("Selected Stream source has no matching rendered route file.");
+            if (file.Source.Length == 0)
+                throw new InvalidOperationException("Selected Stream source has no matching rendered route file.");
             yield return file;
         }
     }

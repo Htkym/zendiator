@@ -12,8 +12,10 @@ public sealed partial class GeneratorTests
     private static readonly ConcurrentDictionary<(bool HookOwned, bool HandlerOwned, bool Void), SyncFixture> MixedBackendFixtures = new();
     private static string MixedBackendSource(bool hookOwned, bool handlerOwned, bool isVoid, bool dispatch = true)
     {
-        var hookContract = hookOwned ? "IOwnedSessionFactory" : "IBorrowedSessionFactory"; var handlerContract = handlerOwned ? "IOwnedSessionFactory" : "IBorrowedSessionFactory";
-        var result = isVoid ? "" : ",int"; var afterContract = isVoid ? "ISendSuccessObserver<Ping>" : "ISendResponseTransform<Ping,int>";
+        var hookContract = hookOwned ? "IOwnedSessionFactory" : "IBorrowedSessionFactory";
+        var handlerContract = handlerOwned ? "IOwnedSessionFactory" : "IBorrowedSessionFactory";
+        var result = isVoid ? "" : ",int";
+        var afterContract = isVoid ? "ISendSuccessObserver<Ping>" : "ISendResponseTransform<Ping,int>";
         return $$"""
             using System; using System.Threading; using Zendiator; using Zendiator.DependencyInjection; using Microsoft.Extensions.DependencyInjection;
             using Probe=global::Zendiator.Generator.Tests.GeneratorTests.MixedSessionProbe;
@@ -76,31 +78,64 @@ public sealed partial class GeneratorTests
     [MemberData(nameof(MixedSessionReferenceCases))]
     public void Candidate_mixed_sessions_match_typed_reference_and_independent_goldens(bool hookOwned, bool owned, bool isVoid, string scenario, string golden)
     {
-        var f = MixedBackendFixture(hookOwned, owned, isVoid); var reference = RunMixedSessionScenario(hookOwned, owned, isVoid, scenario, golden, f); var generated = RunMixedSessionScenario(hookOwned, owned, isVoid, scenario, golden, f, generated: true);
+        var f = MixedBackendFixture(hookOwned, owned, isVoid);
+        var reference = RunMixedSessionScenario(hookOwned, owned, isVoid, scenario, golden, f);
+        var generated = RunMixedSessionScenario(hookOwned, owned, isVoid, scenario, golden, f, generated: true);
         Assert.Equal(reference, generated);
-        WriteNestedHookEvidence("mixed-session-differential", hookOwned + "-" + owned + "-" + isVoid + "-" + scenario, new { hookOwned, handlerOwned = owned, isVoid, scenario, golden, reference = JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
+        WriteNestedHookEvidence("mixed-session-differential", hookOwned + "-" + owned + "-" + isVoid + "-" + scenario, new
+        {
+            hookOwned,
+            handlerOwned = owned,
+            isVoid,
+            scenario,
+            golden,
+            reference = JsonSerializer.Deserialize<JsonElement>(reference),
+            generated = JsonSerializer.Deserialize<JsonElement>(generated)
+        });
     }
     [Theory]
     [MemberData(nameof(MixedSessionLifetimeCases))]
     public void Candidate_mixed_sessions_capture_DI_dependencies_and_preserve_resource_owners(bool hookOwned, bool handlerOwned, bool isVoid, ServiceLifetime lifetime)
     {
-        var f = MixedBackendFixture(hookOwned, handlerOwned, isVoid); var reference = lifetime == ServiceLifetime.Transient ? null : RunMixedSessionLifetimes(hookOwned, handlerOwned, isVoid, lifetime, f); var generated = RunMixedSessionLifetimes(hookOwned, handlerOwned, isVoid, lifetime, f, generated: true);
-        if (reference is not null) Assert.Equal(reference, generated);
-        WriteNestedHookEvidence("mixed-session-differential-lifetimes", hookOwned + "-" + handlerOwned + "-" + isVoid + "-" + lifetime, new { hookOwned, handlerOwned, isVoid, lifetime = lifetime.ToString(), reference = reference is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
+        var f = MixedBackendFixture(hookOwned, handlerOwned, isVoid);
+        var reference = lifetime == ServiceLifetime.Transient ? null : RunMixedSessionLifetimes(hookOwned, handlerOwned, isVoid, lifetime, f);
+        var generated = RunMixedSessionLifetimes(hookOwned, handlerOwned, isVoid, lifetime, f, generated: true);
+        if (reference is not null)
+            Assert.Equal(reference, generated);
+        WriteNestedHookEvidence("mixed-session-differential-lifetimes", hookOwned + "-" + handlerOwned + "-" + isVoid + "-" + lifetime, new
+        {
+            hookOwned,
+            handlerOwned,
+            isVoid,
+            lifetime = lifetime.ToString(),
+            reference = reference is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(reference),
+            generated = JsonSerializer.Deserialize<JsonElement>(generated)
+        });
     }
     public static IEnumerable<object[]> MixedBackendBoundaries()
-    { foreach (var hookOwned in new[] { false, true }) foreach (var handlerOwned in new[] { false, true }) foreach (var isVoid in new[] { false, true }) foreach (var shape in new[] { "two-hooks", "missing-finally", "external-hook-factory", "external-handler-factory", "wrapper", "async" }) yield return [hookOwned, handlerOwned, isVoid, shape]; }
+    {
+        foreach (var hookOwned in new[] { false, true })
+            foreach (var handlerOwned in new[] { false, true })
+                foreach (var isVoid in new[] { false, true })
+                    foreach (var shape in new[] { "two-hooks", "missing-finally", "external-hook-factory", "external-handler-factory", "wrapper", "async" })
+                        yield return [hookOwned, handlerOwned, isVoid, shape];
+    }
     [Theory]
     [MemberData(nameof(MixedBackendBoundaries))]
     public void Mixed_session_candidate_blocks_unproved_shapes_before_emission(bool hookOwned, bool handlerOwned, bool isVoid, string shape)
     {
         var source = MixedBackendSource(hookOwned, handlerOwned, isVoid, dispatch: false);
-        if (shape == "two-hooks") source = source.Replace("Stage.Hook<Hook<string>,HookFactory<string>>()", "Stage.Hook<Hook<string>,HookFactory<string>>(),Stage.Hook<SecondHook>()") +
+        if (shape == "two-hooks")
+            source = source.Replace("Stage.Hook<Hook<string>,HookFactory<string>>()", "Stage.Hook<Hook<string>,HookFactory<string>>(),Stage.Hook<SecondHook>()") +
             "namespace App { public sealed class SecondHook : HookBase<string> {public SecondHook(Probe probe,Ping request,CancellationToken token):base(probe,request,token){}} }";
-        if (shape == "missing-finally") source = source.Replace("ISendFinallyObserver<Ping>,", "").Replace("void ISendFinallyObserver<Ping>.Finally(Ping request,SendExitInfo exit,CancellationToken token)=>_probe.Core.Finish(request,exit,token);", "");
-        if (shape == "external-hook-factory") source = source.Replace("Stage.Hook<Hook<string>,HookFactory<string>>()", "Stage.Hook<Hook<string>,global::Zendiator.Generator.Tests.GeneratorTests." + (hookOwned ? "OwnedMixedHookFactory" : "BorrowedMixedHookFactory") + "<Ping,Hook<string>>>()");
-        if (shape == "external-handler-factory") source = source.Replace("HandlerEntry.Session<Handler<string>,Factory<string>>()", "HandlerEntry.Session<Handler<string>,global::Zendiator.Generator.Tests.GeneratorTests." + (handlerOwned ? "OwnedHookHandlerFactory" : "BorrowedHookHandlerFactory") + "<Ping,Handler<string>>>()");
-        if (shape == "wrapper") source = source.Replace("Stage.Hook<Hook<string>,HookFactory<string>>()", "Stage.Wrapper<Wrapper>()") +
+        if (shape == "missing-finally")
+            source = source.Replace("ISendFinallyObserver<Ping>,", "").Replace("void ISendFinallyObserver<Ping>.Finally(Ping request,SendExitInfo exit,CancellationToken token)=>_probe.Core.Finish(request,exit,token);", "");
+        if (shape == "external-hook-factory")
+            source = source.Replace("Stage.Hook<Hook<string>,HookFactory<string>>()", "Stage.Hook<Hook<string>,global::Zendiator.Generator.Tests.GeneratorTests." + (hookOwned ? "OwnedMixedHookFactory" : "BorrowedMixedHookFactory") + "<Ping,Hook<string>>>()");
+        if (shape == "external-handler-factory")
+            source = source.Replace("HandlerEntry.Session<Handler<string>,Factory<string>>()", "HandlerEntry.Session<Handler<string>,global::Zendiator.Generator.Tests.GeneratorTests." + (handlerOwned ? "OwnedHookHandlerFactory" : "BorrowedHookHandlerFactory") + "<Ping,Handler<string>>>()");
+        if (shape == "wrapper")
+            source = source.Replace("Stage.Hook<Hook<string>,HookFactory<string>>()", "Stage.Wrapper<Wrapper>()") +
             (isVoid ? "namespace App {public sealed class Wrapper : ISendWrapper<Ping> {public void Invoke<TNext>(Ping request,TNext next,CancellationToken token) where TNext:ISendContinuation<Ping> =>next.Invoke(request,token);}}" :
                 "namespace App {public sealed class Wrapper : ISendWrapper<Ping,int> {public int Invoke<TNext>(Ping request,TNext next,CancellationToken token) where TNext:ISendContinuation<Ping,int> =>next.Invoke(request,token);}}");
         if (shape == "async")
@@ -108,31 +143,52 @@ public sealed partial class GeneratorTests
             source = source.Replace("using System;", "using System; using System.Threading.Tasks;").Replace("ISyncRequest", "IRequest").Replace("DispatchFamily.SendSync", "DispatchFamily.SendAsync")
                 .Replace((isVoid ? "void" : "int") + " IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">.Handle(Ping request,CancellationToken token){ " + (isVoid ? "" : "return ") + "_probe.Core.Handle(request,token); }",
                     (isVoid ? "ValueTask" : "ValueTask<int>") + " IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">.HandleAsync(Ping request,CancellationToken token){ " + (isVoid ? "_probe.Core.Handle(request,token);return default;" : "return new(_probe.Core.Handle(request,token));") + " }");
-            if (hookOwned) source = source.Replace("ISendFinallyObserver<Ping>,IDisposable where T:class", "ISendFinallyObserver<Ping>,IDisposable,IAsyncDisposable where T:class")
+            if (hookOwned)
+                source = source.Replace("ISendFinallyObserver<Ping>,IDisposable where T:class", "ISendFinallyObserver<Ping>,IDisposable,IAsyncDisposable where T:class")
                 .Replace("void IDisposable.Dispose()=>_probe.ReleaseHook(this,_request,_token);", "void IDisposable.Dispose()=>_probe.ReleaseHook(this,_request,_token); public ValueTask DisposeAsync(){((IDisposable)this).Dispose();return default;}");
-            if (handlerOwned) source = source.Replace("IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">,IDisposable where T:class", "IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">,IDisposable,IAsyncDisposable where T:class")
+            if (handlerOwned)
+                source = source.Replace("IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">,IDisposable where T:class", "IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">,IDisposable,IAsyncDisposable where T:class")
                 .Replace("void IDisposable.Dispose()=>_probe.Handler.Release(this,_request,_token);", "void IDisposable.Dispose()=>_probe.Handler.Release(this,_request,_token); public ValueTask DisposeAsync(){((IDisposable)this).Dispose();return default;}");
         }
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "MixedUnproved" + Guid.NewGuid()), out var output, out var diagnostics);
-        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); AssertAcceptedSendEmission(driver, diagnostics, shape == "async" ? BoundDispatchFamily.SendAsync : BoundDispatchFamily.SendSync, isVoid);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        AssertAcceptedSendEmission(driver, diagnostics, shape == "async" ? BoundDispatchFamily.SendAsync : BoundDispatchFamily.SendSync, isVoid);
         AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
-        WriteNestedHookEvidence("mixed-session-backend-boundaries", hookOwned + "-" + handlerOwned + "-" + isVoid + "-" + shape, new { hookOwned, handlerOwned, isVoid, shape, source, diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }), generatedExecution = true });
+        WriteNestedHookEvidence("mixed-session-backend-boundaries", hookOwned + "-" + handlerOwned + "-" + isVoid + "-" + shape, new
+        {
+            hookOwned,
+            handlerOwned,
+            isVoid,
+            shape,
+            source,
+            diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }),
+            generatedExecution = true
+        });
     }
     [Fact]
     public void Mixed_session_body_edits_cache_emission_and_each_ownership_change_updates_its_cleanup()
     {
-        var source = MixedBackendSource(true, true, false, dispatch: false); var driver = SyncDriver().RunGenerators(SyncCompilation(source, "MixedIncremental"));
+        var source = MixedBackendSource(true, true, false, dispatch: false);
+        var driver = SyncDriver().RunGenerators(SyncCompilation(source, "MixedIncremental"));
         var first = CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
-        Assert.Contains("var detached = hook;", first); Assert.Contains("var detached = handler;", first);
+        Assert.Contains("var detached = hook;", first);
+        Assert.Contains("var detached = handler;", first);
         driver = driver.RunGenerators(SyncCompilation(source.Replace("return _probe.Core.Handle(request,token);", "return _probe.Core.Handle(request,token)+0;"), "MixedIncremental"));
         Assert.Equal(first, CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));
         Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalRouteOutputFile"].SelectMany(s => s.Outputs), o => Assert.True(o.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
         driver = driver.RunGenerators(SyncCompilation(MixedBackendSource(false, true, false, dispatch: false), "MixedIncremental"));
         var borrowedHook = CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
-        Assert.DoesNotContain("var detached = hook;", borrowedHook); Assert.Contains("var detached = handler;", borrowedHook);
+        Assert.DoesNotContain("var detached = hook;", borrowedHook);
+        Assert.Contains("var detached = handler;", borrowedHook);
         driver = driver.RunGenerators(SyncCompilation(MixedBackendSource(true, false, false, dispatch: false), "MixedIncremental"));
         var borrowedHandler = CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
-        Assert.Contains("var detached = hook;", borrowedHandler); Assert.DoesNotContain("var detached = handler;", borrowedHandler);
-        WriteNestedHookEvidence("mixed-session-backend-incremental", "ownership", new { bodyCached = true, hookOwnershipChangesOuterCleanup = true, handlerOwnershipChangesInnerCleanup = true });
+        Assert.Contains("var detached = hook;", borrowedHandler);
+        Assert.DoesNotContain("var detached = handler;", borrowedHandler);
+        WriteNestedHookEvidence("mixed-session-backend-incremental", "ownership", new
+        {
+            bodyCached = true,
+            hookOwnershipChangesOuterCleanup = true,
+            handlerOwnershipChangesInnerCleanup = true
+        });
     }
 }

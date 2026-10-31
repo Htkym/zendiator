@@ -28,7 +28,8 @@ public static class Program
         var collected = mediator.SendAll(new CollectCounts<Product>(1));
         var read = await mediator.SendAllAsync(new ReadCounts<Product>(1));
         var numbers = new List<int>();
-        await foreach (var item in mediator.StreamAsync(new ReadNumbers(6))) numbers.Add(item);
+        await foreach (var item in mediator.StreamAsync(new ReadNumbers(6)))
+            numbers.Add(item);
 
         Console.WriteLine($"Product: {product.Name}");
         Console.WriteLine($"Sum: {sum}");
@@ -61,7 +62,13 @@ public static class AppServices
     });
 }
 
-public interface IEntity { string Id { get; } }
+public interface IEntity
+{
+    string Id
+    {
+        get;
+    }
+}
 public sealed record Product(string Id, string Name) : IEntity;
 public sealed record Lookup<T>(string Id) : IRequest<T> where T : class;
 public interface IEntityStore<T> where T : class, IEntity
@@ -84,8 +91,14 @@ public sealed class LookupHandler<T>(IEntityStore<T> store) : IRequestHandler<Lo
 
 public interface IInventory
 {
-    int CachedCount { get; }
-    int WarehouseCount { get; }
+    int CachedCount
+    {
+        get;
+    }
+    int WarehouseCount
+    {
+        get;
+    }
     ValueTask RefreshAsync(int count, CancellationToken token);
     ValueTask<int> ReadPrimaryAsync(CancellationToken token);
     ValueTask<int> ReadReplicaAsync(CancellationToken token);
@@ -133,8 +146,12 @@ public sealed class SumHook<TMarker> : ISendRequestTransform<Sum<TMarker>>, ISen
 {
     public Sum<TMarker> Before(Sum<TMarker> request, CancellationToken token) => request with { Right = request.Right + 1 };
     public int After(Sum<TMarker> request, int response, CancellationToken token) => response;
-    public void OnException(Sum<TMarker> request, Exception error, CancellationToken token) { }
-    public void Finally(Sum<TMarker> request, SendExitInfo exit, CancellationToken token) { }
+    public void OnException(Sum<TMarker> request, Exception error, CancellationToken token)
+    {
+    }
+    public void Finally(Sum<TMarker> request, SendExitInfo exit, CancellationToken token)
+    {
+    }
 }
 
 public sealed record CachedCount<TMarker>(string Key) : IRequest<int> where TMarker : class;
@@ -150,9 +167,13 @@ public sealed class CountCache<TMarker> : IAsyncSendWrapper<CachedCount<TMarker>
     public async ValueTask<int> InvokeAsync<TNext>(CachedCount<TMarker> request, TNext next, CancellationToken token)
         where TNext : IAsyncSendContinuation<CachedCount<TMarker>, int>
     {
-        if (_values.TryGetValue(request.Key, out var cached)) return cached;
+        if (_values.TryGetValue(request.Key, out var cached))
+            return cached;
         int result;
-        try { result = await next.InvokeAsync(request, token).ConfigureAwait(false); }
+        try
+        {
+            result = await next.InvokeAsync(request, token).ConfigureAwait(false);
+        }
         catch (TransientCountException) when (!token.IsCancellationRequested)
         {
             result = await next.InvokeAsync(request, token).ConfigureAwait(false);
@@ -166,19 +187,31 @@ public sealed record CollectCounts<TMarker>(int Offset) : ISyncMultiRequest<int>
 [ZendiatorHandler]
 public sealed class CachedCollector<TMarker>(IInventory inventory) : ISyncRequestHandler<CollectCounts<TMarker>, int> where TMarker : class
 {
-    public int Handle(CollectCounts<TMarker> request, CancellationToken token) { token.ThrowIfCancellationRequested(); return inventory.CachedCount + request.Offset; }
+    public int Handle(CollectCounts<TMarker> request, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        return inventory.CachedCount + request.Offset;
+    }
 }
 [ZendiatorHandler]
 public sealed class WarehouseCollector<TMarker>(IInventory inventory) : ISyncRequestHandler<CollectCounts<TMarker>, int> where TMarker : class
 {
-    public int Handle(CollectCounts<TMarker> request, CancellationToken token) { token.ThrowIfCancellationRequested(); return inventory.WarehouseCount + request.Offset; }
+    public int Handle(CollectCounts<TMarker> request, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        return inventory.WarehouseCount + request.Offset;
+    }
 }
 public sealed class CollectHook<TMarker> : ISendRequestTransform<CollectCounts<TMarker>>, ISendResponseTransform<CollectCounts<TMarker>, int>, ISendExceptionObserver<CollectCounts<TMarker>>, ISendFinallyObserver<CollectCounts<TMarker>> where TMarker : class
 {
     public CollectCounts<TMarker> Before(CollectCounts<TMarker> request, CancellationToken token) => request with { Offset = request.Offset + 1 };
     public int After(CollectCounts<TMarker> request, int response, CancellationToken token) => response + 10;
-    public void OnException(CollectCounts<TMarker> request, Exception error, CancellationToken token) { }
-    public void Finally(CollectCounts<TMarker> request, SendExitInfo exit, CancellationToken token) { }
+    public void OnException(CollectCounts<TMarker> request, Exception error, CancellationToken token)
+    {
+    }
+    public void Finally(CollectCounts<TMarker> request, SendExitInfo exit, CancellationToken token)
+    {
+    }
 }
 
 public sealed record ReadCounts<TMarker>(int Offset) : IRequest<int> where TMarker : class;
@@ -212,7 +245,10 @@ public sealed class NumberCursor(IInventory inventory, int count, CancellationTo
 {
     private int _index;
     private bool _started;
-    public int Current { get; private set; }
+    public int Current
+    {
+        get; private set;
+    }
     public ValueTask<bool> MoveNextAsync() => _started ? new(Move()) : StartAsync();
 
     private async ValueTask<bool> StartAsync()
@@ -226,12 +262,18 @@ public sealed class NumberCursor(IInventory inventory, int count, CancellationTo
     private bool Move()
     {
         token.ThrowIfCancellationRequested();
-        if (_index >= count) return false;
+        if (_index >= count)
+            return false;
         Current = ++_index;
         return true;
     }
 
-    public ValueTask DisposeAsync() { _started = true; _index = count; return default; }
+    public ValueTask DisposeAsync()
+    {
+        _started = true;
+        _index = count;
+        return default;
+    }
 }
 public sealed class KeepEven : IStreamItemFilter<ReadNumbers, int>
 {

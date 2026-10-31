@@ -57,7 +57,8 @@ internal static class CanonicalAsyncFastPathEmitter
         const string token = "global::System.Threading.CancellationToken";
         for (var i = 0; i < hooks.Length; i++)
         {
-            var hook = hooks[i]; var callback = hook.Before!;
+            var hook = hooks[i];
+            var callback = hook.Before!;
             CanonicalAsyncCallEmitter.EmitCall(b, "Before" + i, h.RequestName, hook.HookIsValueType ? "object" : hook.HookName,
                 callback.ContractName, callback.MethodName, callback.CallTarget,
                 new[] { h.RequestName, token }, new[] { "request", "cancellationToken" }, generic, constraints);

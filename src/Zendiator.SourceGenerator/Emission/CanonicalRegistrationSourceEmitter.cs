@@ -20,11 +20,16 @@ internal static class CanonicalRegistrationSourceEmitter
                         global::System.ArgumentNullException.ThrowIfNull(snapshot);
                         var expected = new global::Zendiator.DependencyInjection.ZendiatorConfiguration();
             """);
-        if (c.UseLocalHandlers) b.AppendLine("            expected.UseLocalHandlers();");
-        foreach (var marker in c.CatalogMarkerTypes) b.AppendLine("            expected.UseCatalogFrom<" + marker + ">();");
-        foreach (var type in c.ExplicitHandlerTypes) b.AppendLine("            expected.AddHandler(typeof(" + type + "));");
-        foreach (var route in plan.Routes.OrderBy(r => r.HandlerOrdinal)) Handler(b, route);
-        foreach (var route in plan.Routes.OrderBy(r => r.PipelineOrdinal)) Pipeline(b, route);
+        if (c.UseLocalHandlers)
+            b.AppendLine("            expected.UseLocalHandlers();");
+        foreach (var marker in c.CatalogMarkerTypes)
+            b.AppendLine("            expected.UseCatalogFrom<" + marker + ">();");
+        foreach (var type in c.ExplicitHandlerTypes)
+            b.AppendLine("            expected.AddHandler(typeof(" + type + "));");
+        foreach (var route in plan.Routes.OrderBy(r => r.HandlerOrdinal))
+            Handler(b, route);
+        foreach (var route in plan.Routes.OrderBy(r => r.PipelineOrdinal))
+            Pipeline(b, route);
         foreach (var before in plan.Routes.Select(r => r.Registration.StreamBeforeRegistration)
             .Where(before => before != null).GroupBy(before => before!.Ordinal)
             .Select(group => group.First()).OrderBy(before => before!.Ordinal))

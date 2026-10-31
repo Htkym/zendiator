@@ -13,7 +13,8 @@ public sealed partial class GeneratorTests
     private static string ComposedSample()
     {
         using var stream = typeof(GeneratorTests).Assembly.GetManifestResourceStream("Zendiator.ComposedApp.Source")!;
-        using var reader = new StreamReader(stream); return reader.ReadToEnd();
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
     }
 
     private static BlockSyntax ComposedRegistrationBody(string source) => Assert.IsType<BlockSyntax>(Assert.Single(
@@ -28,10 +29,13 @@ public sealed partial class GeneratorTests
         {
             var call = Assert.IsType<InvocationExpressionSyntax>(Assert.IsType<ExpressionStatementSyntax>(statement).Expression);
             var member = Assert.IsType<MemberAccessExpressionSyntax>(call.Expression);
-            if (member.Name.Identifier.ValueText == "Handlers") groups.Add(statement.ToFullString());
-            else groups[^1] += statement.ToFullString();
+            if (member.Name.Identifier.ValueText == "Handlers")
+                groups.Add(statement.ToFullString());
+            else
+                groups[^1] += statement.ToFullString();
         }
-        Assert.Equal(7, groups.Count); return groups.ToArray();
+        Assert.Equal(7, groups.Count);
+        return groups.ToArray();
     }
 
     private static string ComposedDeclarations(string source)
@@ -53,15 +57,20 @@ public sealed partial class GeneratorTests
     private static string? ComposedFolder(string name)
     {
         var root = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
-        if (string.IsNullOrEmpty(root)) return null;
-        var folder = Path.Combine(root, "composed-app-" + name); Directory.CreateDirectory(folder); return folder;
+        if (string.IsNullOrEmpty(root))
+            return null;
+        var folder = Path.Combine(root, "composed-app-" + name);
+        Directory.CreateDirectory(folder);
+        return folder;
     }
 
     private static void AssertComposedProfile(Compilation output, string ns, params (string Method, int Count)[] methods)
     {
-        var api = output.GetTypeByMetadataName(ns + ".IZendiator"); Assert.NotNull(api);
+        var api = output.GetTypeByMetadataName(ns + ".IZendiator");
+        Assert.NotNull(api);
         Assert.NotNull(output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar"));
-        foreach (var (method, count) in methods) Assert.Equal(count, api.GetMembers(method).Length);
+        foreach (var (method, count) in methods)
+            Assert.Equal(count, api.GetMembers(method).Length);
     }
 
     private const string ComposedRuntime = """
@@ -150,26 +159,63 @@ public sealed partial class GeneratorTests
     [Fact]
     public async Task Composed_app_reuses_single_route_backends_preserves_route_outputs_and_observable_contracts()
     {
-        var sample = ComposedSample(); var groups = ComposedRegistrationGroups(sample); var references = ComposedReferences(groups);
-        var declarations = ComposedDeclarations(sample); var body = ComposedRegistrationBody(declarations);
+        var sample = ComposedSample();
+        var groups = ComposedRegistrationGroups(sample);
+        var references = ComposedReferences(groups);
+        var declarations = ComposedDeclarations(sample);
+        var body = ComposedRegistrationBody(declarations);
         var beforeSource = declarations.Replace(body.ToFullString(), "{" + string.Join("\n", groups.Take(4)) + "}");
         var compilation = SyncCompilation(beforeSource, "ComposedApp_" + Guid.NewGuid().ToString("N")).AddSyntaxTrees(CSharpSyntaxTree.ParseText(references, SyncParseOptions));
-        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(compilation, out var beforeOutput, out var beforeDiagnostics); SaveSendAllSync(ComposedFolder("before"), beforeSource, driver, beforeOutput, beforeDiagnostics);
-        Assert.Empty(beforeDiagnostics); Assert.Empty(beforeOutput.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        var stable = driver.GetRunResult().Results.Single().GeneratedSources.Where(s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal) && s.SourceText.ToString().Contains("namespace ComposedApp.Generated.App")).ToDictionary(s => s.HintName, s => s.SourceText.ToString(), StringComparer.Ordinal); Assert.Equal(4, stable.Count);
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(compilation, out var beforeOutput, out var beforeDiagnostics);
+        SaveSendAllSync(ComposedFolder("before"), beforeSource, driver, beforeOutput, beforeDiagnostics);
+        Assert.Empty(beforeDiagnostics);
+        Assert.Empty(beforeOutput.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var stable = driver.GetRunResult().Results.Single().GeneratedSources.Where(s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal) && s.SourceText.ToString().Contains("namespace ComposedApp.Generated.App")).ToDictionary(s => s.HintName, s => s.SourceText.ToString(), StringComparer.Ordinal);
+        Assert.Equal(4, stable.Count);
         var runtimeSource = ComposedRuntime.Replace("__SNAPSHOT__", string.Join("\n", groups));
         var finalCompilation = compilation.ReplaceSyntaxTree(compilation.SyntaxTrees.First(), CSharpSyntaxTree.ParseText(sample, SyncParseOptions)).AddSyntaxTrees(CSharpSyntaxTree.ParseText(runtimeSource, SyncParseOptions));
-        var finalDriver = driver.RunGeneratorsAndUpdateCompilation(finalCompilation, out var output, out var diagnostics); var folder = ComposedFolder("runtime"); SaveSendAllSync(folder, sample, finalDriver, output, diagnostics);
-        if (folder != null) { File.WriteAllText(Path.Combine(folder, "input-0.cs"), sample); File.WriteAllText(Path.Combine(folder, "input-1.cs"), references); File.WriteAllText(Path.Combine(folder, "input-2.cs"), runtimeSource); }
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        var sources = finalDriver.GetRunResult().Results.Single().GeneratedSources.ToDictionary(s => s.HintName, s => s.SourceText.ToString(), StringComparer.Ordinal); foreach (var source in stable) Assert.Equal(source.Value, sources[source.Key]);
+        var finalDriver = driver.RunGeneratorsAndUpdateCompilation(finalCompilation, out var output, out var diagnostics);
+        var folder = ComposedFolder("runtime");
+        SaveSendAllSync(folder, sample, finalDriver, output, diagnostics);
+        if (folder != null)
+        {
+            File.WriteAllText(Path.Combine(folder, "input-0.cs"), sample);
+            File.WriteAllText(Path.Combine(folder, "input-1.cs"), references);
+            File.WriteAllText(Path.Combine(folder, "input-2.cs"), runtimeSource);
+        }
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var sources = finalDriver.GetRunResult().Results.Single().GeneratedSources.ToDictionary(s => s.HintName, s => s.SourceText.ToString(), StringComparer.Ordinal);
+        foreach (var source in stable)
+            Assert.Equal(source.Value, sources[source.Key]);
         Assert.Equal(7, sources.Count(s => s.Key.StartsWith("Zendiator.Route.", StringComparison.Ordinal) && s.Value.Contains("namespace ComposedApp.Generated.App")));
-        var api = output.GetTypeByMetadataName("ComposedApp.Generated.App.IZendiator")!; Assert.NotNull(api); Assert.False(api.IsGenericType); Assert.Equal(3, api.GetMembers("SendAsync").Length); Assert.Single(api.GetMembers("Send")); Assert.Equal(2, api.GetMembers("SendAll").Length); Assert.Single(api.GetMembers("SendAllAsync")); Assert.Single(api.GetMembers("StreamAsync"));
-        var lookup = Assert.Single(api.GetMembers("SendAsync").OfType<IMethodSymbol>(), m => m.Parameters[0].Type.Name == "Lookup"); var parameter = Assert.Single(lookup.TypeParameters); Assert.True(parameter.HasReferenceTypeConstraint); Assert.Contains(parameter.ConstraintTypes, t => t.Name == "IEntity"); Assert.True(SymbolEqualityComparer.Default.Equals(parameter, Assert.Single(Assert.IsAssignableFrom<INamedTypeSymbol>(lookup.ReturnType).TypeArguments)));
-        var command = Assert.Single(api.GetMembers("SendAsync").OfType<IMethodSymbol>(), m => m.Parameters[0].Type.Name == "RefreshInventory"); Assert.True(SymbolEqualityComparer.Default.Equals(output.GetTypeByMetadataName("System.Threading.Tasks.ValueTask"), command.ReturnType));
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); if (folder != null) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); bytes.Position = 0;
-        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var runtime = await assembly.GetType("ComposedApp.ComposedEntry")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(25));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime); using var json = JsonDocument.Parse(runtime); Assert.Equal(22, json.RootElement.GetProperty("dispatchAttempts").GetInt32());
+        var api = output.GetTypeByMetadataName("ComposedApp.Generated.App.IZendiator")!;
+        Assert.NotNull(api);
+        Assert.False(api.IsGenericType);
+        Assert.Equal(3, api.GetMembers("SendAsync").Length);
+        Assert.Single(api.GetMembers("Send"));
+        Assert.Equal(2, api.GetMembers("SendAll").Length);
+        Assert.Single(api.GetMembers("SendAllAsync"));
+        Assert.Single(api.GetMembers("StreamAsync"));
+        var lookup = Assert.Single(api.GetMembers("SendAsync").OfType<IMethodSymbol>(), m => m.Parameters[0].Type.Name == "Lookup");
+        var parameter = Assert.Single(lookup.TypeParameters);
+        Assert.True(parameter.HasReferenceTypeConstraint);
+        Assert.Contains(parameter.ConstraintTypes, t => t.Name == "IEntity");
+        Assert.True(SymbolEqualityComparer.Default.Equals(parameter, Assert.Single(Assert.IsAssignableFrom<INamedTypeSymbol>(lookup.ReturnType).TypeArguments)));
+        var command = Assert.Single(api.GetMembers("SendAsync").OfType<IMethodSymbol>(), m => m.Parameters[0].Type.Name == "RefreshInventory");
+        Assert.True(SymbolEqualityComparer.Default.Equals(output.GetTypeByMetadataName("System.Threading.Tasks.ValueTask"), command.ReturnType));
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var runtime = await assembly.GetType("ComposedApp.ComposedEntry")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(25));
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime);
+        using var json = JsonDocument.Parse(runtime);
+        Assert.Equal(22, json.RootElement.GetProperty("dispatchAttempts").GetInt32());
     }
 
     [Fact]
@@ -188,9 +234,14 @@ public sealed partial class GeneratorTests
             ("invalid-factory", declarations.Replace("typeof(ReadNumbersHandler));", "HandlerEntry.Session(typeof(ReadNumbersHandler), typeof(InvalidFactory)));") + "public sealed class InvalidFactory;", "ZEN0025"),
         })
         {
-            Assert.NotEqual(declarations, source); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "ComposedRejected_" + name + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); SaveSendAllSync(ComposedFolder(name), source, driver, output, diagnostics);
-            Assert.Contains(diagnostics, d => d.Id == expected && d.Location.IsInSource); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-            Assert.Null(output.GetTypeByMetadataName("ComposedApp.Generated.App.IZendiator")); Assert.Null(output.GetTypeByMetadataName("ComposedApp.Generated.App.ZendiatorGeneratedRegistrar")); Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal));
+            Assert.NotEqual(declarations, source);
+            var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "ComposedRejected_" + name + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+            SaveSendAllSync(ComposedFolder(name), source, driver, output, diagnostics);
+            Assert.Contains(diagnostics, d => d.Id == expected && d.Location.IsInSource);
+            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+            Assert.Null(output.GetTypeByMetadataName("ComposedApp.Generated.App.IZendiator"));
+            Assert.Null(output.GetTypeByMetadataName("ComposedApp.Generated.App.ZendiatorGeneratedRegistrar"));
+            Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal));
         }
     }
 }

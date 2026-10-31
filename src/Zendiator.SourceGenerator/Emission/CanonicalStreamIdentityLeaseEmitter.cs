@@ -19,8 +19,10 @@ internal static class CanonicalStreamIdentityLeaseEmitter
         {
             var child = model.Segments.Single(s => s.Id == upstream);
             if (child.Hooks.Count != 0 || (child.OutputItemName ?? model.Handler.ItemName) != item
-                || (child.SourceItemName ?? model.Handler.ItemName) != item) break;
-            if (!visited.Add(child.Id)) throw new InvalidOperationException("A Stream identity prefix is cyclic.");
+                || (child.SourceItemName ?? model.Handler.ItemName) != item)
+                break;
+            if (!visited.Add(child.Id))
+                throw new InvalidOperationException("A Stream identity prefix is cyclic.");
             chain.Add(child);
             current = child;
         }
@@ -40,10 +42,14 @@ internal static class CanonicalStreamIdentityLeaseEmitter
     {
         var chain = Chain(model);
         var index = -1;
-        for (var i = 0; i < chain.Count; i++) if (chain[i].Id == cursor) index = i;
-        if (index < 0) return "";
+        for (var i = 0; i < chain.Count; i++)
+            if (chain[i].Id == cursor)
+                index = i;
+        if (index < 0)
+            return "";
         var b = new StringBuilder();
-        if (index + 1 < chain.Count) EmitEdge(b, model, chain[index + 1].Id, cursor);
+        if (index + 1 < chain.Count)
+            EmitEdge(b, model, chain[index + 1].Id, cursor);
         if (index > 0)
         {
             var item = chain[index].OutputItemName ?? model.Handler.ItemName;
@@ -61,7 +67,8 @@ internal static class CanonicalStreamIdentityLeaseEmitter
                 internal void RetireIdentityLeaseChildClose() => RetireClaimedClose();
                 """);
         }
-        else EmitRoot(b, model, chain);
+        else
+            EmitRoot(b, model, chain);
         return b.ToString();
     }
 
@@ -155,7 +162,8 @@ internal static class CanonicalStreamIdentityLeaseEmitter
                 private bool _disposing = true;
                 private global::System.Exception? _error;
             """);
-        foreach (var child in children) b.AppendLine("private Cursor" + child.Id + "? " + Field(child) + ";");
+        foreach (var child in children)
+            b.AppendLine("private Cursor" + child.Id + "? " + Field(child) + ";");
         b.AppendLine("internal void Attach(Cursor" + chain[0].Id + " owner, " + parameters + ")");
         b.AppendLine("{");
         for (var i = 0; i < children.Length; i++)
@@ -212,7 +220,8 @@ internal static class CanonicalStreamIdentityLeaseEmitter
 
     private static string Name(CanonicalStreamFallbackModel model, string name)
     {
-        while (model.Generic?.Parameters.Contains(name) == true) name = "_" + name;
+        while (model.Generic?.Parameters.Contains(name) == true)
+            name = "_" + name;
         return name;
     }
 }

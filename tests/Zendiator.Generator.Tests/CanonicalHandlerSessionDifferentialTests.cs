@@ -35,8 +35,14 @@ public sealed partial class GeneratorTests
             isVoid ? "SendBorrowedVoidWithoutHook" : "SendBorrowedResponseWithoutHook";
         var method = typeof(CanonicalSendSyncReference).GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic)!
             .MakeGenericMethod(isVoid ? [fixture.Request, handler, fixture.Service] : [fixture.Request, typeof(int), handler, fixture.Service]);
-        try { return (method.Invoke(null, [provider, request, token]), null); }
-        catch (TargetInvocationException error) { return (null, error.InnerException); }
+        try
+        {
+            return (method.Invoke(null, [provider, request, token]), null);
+        }
+        catch (TargetInvocationException error)
+        {
+            return (null, error.InnerException);
+        }
     }
 
     [Theory]
@@ -48,7 +54,14 @@ public sealed partial class GeneratorTests
         var generated = RunHandlerSessionScenario(owned, isVoid, scenario, fixture, generated: true);
         Assert.Equal(reference, generated);
         WriteNestedHookEvidence("handler-session-differential", owned + "-" + isVoid + "-" + scenario,
-            new { owned, isVoid, scenario, reference = JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
+            new
+            {
+                owned,
+                isVoid,
+                scenario,
+                reference = JsonSerializer.Deserialize<JsonElement>(reference),
+                generated = JsonSerializer.Deserialize<JsonElement>(generated)
+            });
     }
 
     [Theory]
@@ -58,9 +71,17 @@ public sealed partial class GeneratorTests
         var fixture = HandlerSessionDifferentialFixture(owned, isVoid);
         var reference = lifetime == ServiceLifetime.Transient ? null : RunHandlerSessionLifetimes(owned, isVoid, lifetime, fixture);
         var generated = RunHandlerSessionLifetimes(owned, isVoid, lifetime, fixture, generated: true);
-        if (reference is not null) Assert.Equal(reference, generated);
+        if (reference is not null)
+            Assert.Equal(reference, generated);
         WriteNestedHookEvidence("handler-session-differential-lifetimes", owned + "-" + isVoid + "-" + lifetime,
-            new { owned, isVoid, lifetime = lifetime.ToString(), reference = reference is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
+            new
+            {
+                owned,
+                isVoid,
+                lifetime = lifetime.ToString(),
+                reference = reference is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(reference),
+                generated = JsonSerializer.Deserialize<JsonElement>(generated)
+            });
     }
 
     public sealed class SharedBorrowedSessionProbe
@@ -72,7 +93,11 @@ public sealed partial class GeneratorTests
         public Exception? DiError => null;
         public bool NullService => false;
         public bool NullSession => false;
-        public object GetShared(Func<object> create) { lock (_gate) return _session ??= create(); }
+        public object GetShared(Func<object> create)
+        {
+            lock (_gate)
+                return _session ??= create();
+        }
         public void ReleaseOwner() => ((IDisposable)_session!).Dispose();
         public void ConstructHandler(object receiver) => Core.ConstructHandler(receiver);
         public void ConstructFactory() => Core.ConstructFactory();
@@ -89,23 +114,32 @@ public sealed partial class GeneratorTests
 
     public static IEnumerable<object[]> SharedBorrowedSessionCases()
     {
-        foreach (var isVoid in new[] { false, true }) foreach (var lifetime in new[] { ServiceLifetime.Scoped, ServiceLifetime.Transient, ServiceLifetime.Singleton })
-            yield return [isVoid, lifetime];
+        foreach (var isVoid in new[] { false, true })
+            foreach (var lifetime in new[] { ServiceLifetime.Scoped, ServiceLifetime.Transient, ServiceLifetime.Singleton })
+                yield return [isVoid, lifetime];
     }
     private static async Task<string> RunSharedBorrowedSession(bool isVoid, ServiceLifetime lifetime, bool parallel, bool generated)
     {
-        var fixture = SharedBorrowedFixture(isVoid); var probe = new SharedBorrowedSessionProbe(); var core = probe.Core;
-        using var barrier = new Barrier(2); if (parallel) core.ConcurrentGate = barrier;
-        var count = parallel ? 2 : 4; var cancellation = Enumerable.Range(0, count).Select(_ => new CancellationTokenSource()).ToArray();
+        var fixture = SharedBorrowedFixture(isVoid);
+        var probe = new SharedBorrowedSessionProbe();
+        var core = probe.Core;
+        using var barrier = new Barrier(2);
+        if (parallel)
+            core.ConcurrentGate = barrier;
+        var count = parallel ? 2 : 4;
+        var cancellation = Enumerable.Range(0, count).Select(_ => new CancellationTokenSource()).ToArray();
         try
         {
             var requests = Enumerable.Range(0, count).Select(_ => Activator.CreateInstance(fixture.Request)!).ToArray();
             var errors = requests.Select((_, i) => i % 3 == 0 ? null : i % 3 == 1 ? new Exception("body " + i) : new OperationCanceledException(cancellation[i].Token)).ToArray();
-            for (var i = 0; i < count; i++) Assert.True(core.Operations.TryAdd(requests[i], new(cancellation[i].Token, errors[i])));
-            IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe);
+            for (var i = 0; i < count; i++)
+                Assert.True(core.Operations.TryAdd(requests[i], new(cancellation[i].Token, errors[i])));
+            IServiceCollection services = new ServiceCollection();
+            services.AddSingleton(probe);
             services.Add(ServiceDescriptor.Describe(fixture.Service, fixture.Service, lifetime));
             Assert.Same(services, fixture.Register.Invoke(null, [services]));
-            var snapshots = new List<object>(); var scopeCleanup = new List<int>();
+            var snapshots = new List<object>();
+            var scopeCleanup = new List<int>();
             using (var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
             {
                 for (var s = 0; s < (parallel ? 1 : 2); s++)
@@ -120,9 +154,12 @@ public sealed partial class GeneratorTests
                             TaskCreationOptions.LongRunning, TaskScheduler.Default))).WaitAsync(TimeSpan.FromSeconds(30)) : indexes.Select(Invoke).ToArray();
                         for (var j = 0; j < indexes.Length; j++)
                         {
-                            var i = indexes[j]; Assert.Same(errors[i], actual[j].Error); Assert.Equal(errors[i] != null || isVoid ? null : (object)73, actual[j].Result);
+                            var i = indexes[j];
+                            Assert.Same(errors[i], actual[j].Error);
+                            Assert.Equal(errors[i] != null || isVoid ? null : (object)73, actual[j].Result);
                             var calls = core.Calls.Where(c => ReferenceEquals(c.Request, requests[i])).ToArray();
-                            Assert.Equal(new[] { "factory", "handler" }, calls.Select(c => c.Phase)); Assert.All(calls, c => Assert.Equal(cancellation[i].Token, c.Token));
+                            Assert.Equal(new[] { "factory", "handler" }, calls.Select(c => c.Phase));
+                            Assert.All(calls, c => Assert.Equal(cancellation[i].Token, c.Token));
                             Assert.Same(Assert.Single(core.Created), calls[1].Receiver);
                             snapshots.Add(new
                             {
@@ -139,16 +176,22 @@ public sealed partial class GeneratorTests
                     }
                     scopeCleanup.Add(core.FactoryDisposals);
                 }
-                Assert.Empty(core.Released); Assert.Single(core.Created);
+                Assert.Empty(core.Released);
+                Assert.Single(core.Created);
             }
             var factories = core.FactoryConstructions;
-            if (generated && parallel && lifetime == ServiceLifetime.Transient) Assert.InRange(factories, 1, count);
-            else Assert.Equal(lifetime == ServiceLifetime.Singleton ? 1 : lifetime == ServiceLifetime.Scoped || generated ? parallel ? 1 : 2 : count, factories);
+            if (generated && parallel && lifetime == ServiceLifetime.Transient)
+                Assert.InRange(factories, 1, count);
+            else
+                Assert.Equal(lifetime == ServiceLifetime.Singleton ? 1 : lifetime == ServiceLifetime.Scoped || generated ? parallel ? 1 : 2 : count, factories);
             Assert.Equal(factories, core.FactoryDisposals);
-            var factoryCalls = core.Calls.Where(c => c.Phase == "factory").ToArray(); Assert.Equal(count, factoryCalls.Length);
+            var factoryCalls = core.Calls.Where(c => c.Phase == "factory").ToArray();
+            Assert.Equal(count, factoryCalls.Length);
             Assert.Equal(generated ? lifetime == ServiceLifetime.Singleton || parallel ? 1 : 2 : factories,
                 factoryCalls.Select(c => c.Receiver).Distinct(ReferenceEqualityComparer.Instance).Count());
-            Assert.Empty(core.Released); probe.ReleaseOwner(); Assert.Same(Assert.Single(core.Created), Assert.Single(core.Released));
+            Assert.Empty(core.Released);
+            probe.ReleaseOwner();
+            Assert.Same(Assert.Single(core.Created), Assert.Single(core.Released));
             return JsonSerializer.Serialize(new
             {
                 operations = snapshots,
@@ -160,7 +203,11 @@ public sealed partial class GeneratorTests
                 finalOwnerReleasedSessions = core.Released.Count
             });
         }
-        finally { foreach (var source in cancellation) source.Dispose(); }
+        finally
+        {
+            foreach (var source in cancellation)
+                source.Dispose();
+        }
     }
 
     [Theory]
@@ -169,9 +216,16 @@ public sealed partial class GeneratorTests
     {
         var reference = lifetime == ServiceLifetime.Transient ? null : await RunSharedBorrowedSession(isVoid, lifetime, false, false);
         var generated = await RunSharedBorrowedSession(isVoid, lifetime, false, true);
-        if (reference is not null) Assert.Equal(reference, generated);
+        if (reference is not null)
+            Assert.Equal(reference, generated);
         WriteNestedHookEvidence("handler-session-shared", "reuse-" + isVoid + "-" + lifetime,
-            new { isVoid, lifetime = lifetime.ToString(), reference = reference is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
+            new
+            {
+                isVoid,
+                lifetime = lifetime.ToString(),
+                reference = reference is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(reference),
+                generated = JsonSerializer.Deserialize<JsonElement>(generated)
+            });
     }
     [Theory]
     [MemberData(nameof(SharedBorrowedSessionCases))]
@@ -179,8 +233,15 @@ public sealed partial class GeneratorTests
     {
         var reference = lifetime == ServiceLifetime.Transient ? null : await RunSharedBorrowedSession(isVoid, lifetime, true, false);
         var generated = await RunSharedBorrowedSession(isVoid, lifetime, true, true);
-        if (reference is not null) Assert.Equal(reference, generated);
+        if (reference is not null)
+            Assert.Equal(reference, generated);
         WriteNestedHookEvidence("handler-session-shared", "parallel-" + isVoid + "-" + lifetime,
-            new { isVoid, lifetime = lifetime.ToString(), reference = reference is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
+            new
+            {
+                isVoid,
+                lifetime = lifetime.ToString(),
+                reference = reference is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(reference),
+                generated = JsonSerializer.Deserialize<JsonElement>(generated)
+            });
     }
 }

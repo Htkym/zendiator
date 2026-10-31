@@ -14,8 +14,11 @@ public sealed partial class GeneratorTests
         var text = "namespace GenericCases.Hooks{";
         foreach (var c in AllGenericCases.Where(c => c.Argument == "int"))
         {
-            var module = AllGenericModule(c); var start = module.IndexOf("public class Hook0:", StringComparison.Ordinal); var end = module.IndexOf("public sealed class GenericHook", start, StringComparison.Ordinal);
-            var name = (c.Async ? "Async" : "Sync") + (c.Void ? "Command" : "Response"); var request = "global::GenericCases." + (c.Void ? "Command" : "Response") + "<T>";
+            var module = AllGenericModule(c);
+            var start = module.IndexOf("public class Hook0:", StringComparison.Ordinal);
+            var end = module.IndexOf("public sealed class GenericHook", start, StringComparison.Ordinal);
+            var name = (c.Async ? "Async" : "Sync") + (c.Void ? "Command" : "Response");
+            var request = "global::GenericCases." + (c.Void ? "Command" : "Response") + "<T>";
             var declaration = module[start..end].Replace("public class Hook0:", "public class " + name + "<T>:", StringComparison.Ordinal).Replace("public Hook0(", "public " + name + "(", StringComparison.Ordinal)
                 .Replace("this.p=p;p.Created", "this.p=p;p.Trace.Add(\"hook-type:\"+GetType());p.Created", StringComparison.Ordinal);
             text += Regex.Replace(declaration, @"\bPing\b", request);
@@ -66,7 +69,8 @@ public sealed partial class GeneratorTests
             ("Constraint", a + "ConstrainedHook<int>", false, "CS0452"),
             ("WrongRequest", ClosedHookName(c with { Argument = c.Argument == "int" ? "string" : "int" }), false, "ZEN0026"),
             ("Partial", a + "PartialGenericHook<string>", false, "ZEN0037")
-        }) yield return (name, Config(type), accepted, diagnostic);
+        })
+            yield return (name, Config(type), accepted, diagnostic);
         yield return ("GenericFactory", AllGenericConfiguration([c], "hook").Replace("Stage.Hook<" + a + "GenericHook<string>>()", "Stage.Hook<" + a + "GenericHook<string>," + a + "GenericHookResourceFactory<string>>()", StringComparison.Ordinal), true, "");
         yield return ("MultipleHooks", AllGenericConfiguration([c], "hook").Replace("Stage.Hook<" + a + "GenericHook<string>>()", "Stage.Hook<" + a + "GenericHook<string>>(),Stage.Hook<" + a + "OtherFullHook>()", StringComparison.Ordinal), false, "ZEN0037");
         yield return ("TwoHooksWrapper", AllGenericConfiguration([c], "wrapper").Replace("Stage.Wrapper<" + a + "W>()", "Stage.Wrapper<" + a + "W>(),Stage.Hook<" + a + "OtherFullHook>()", StringComparison.Ordinal), true, "");
@@ -88,23 +92,48 @@ public sealed partial class GeneratorTests
         foreach (var c in new[] { AllGenericCases[0], AllGenericCases[5] })
             foreach (var entry in AllClosedHookGateEntries(c))
             {
-                var marker = "HookVisibility" + c.Name + entry.Name; var ns = "AllGeneric.Generated." + marker;
-                Assert.Equal(entry.Accepted, output.GetTypeByMetadataName(ns + ".IZendiator") != null); Assert.Equal(entry.Accepted, output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar") != null);
+                var marker = "HookVisibility" + c.Name + entry.Name;
+                var ns = "AllGeneric.Generated." + marker;
+                Assert.Equal(entry.Accepted, output.GetTypeByMetadataName(ns + ".IZendiator") != null);
+                Assert.Equal(entry.Accepted, output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar") != null);
                 Assert.Equal(entry.Accepted, files.Any(f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.Text.Contains(ns + ".ZendiatorGeneratedRegistrar", StringComparison.Ordinal)));
-                var start = source.IndexOf("public static class " + marker + "Bridge", StringComparison.Ordinal); var end = source.IndexOf("});}", start, StringComparison.Ordinal);
+                var start = source.IndexOf("public static class " + marker + "Bridge", StringComparison.Ordinal);
+                var end = source.IndexOf("});}", start, StringComparison.Ordinal);
                 var found = diagnostics.Where(d => d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.Start < end).ToArray();
-                if (entry.Accepted || entry.Diagnostic == "CS0452") Assert.Empty(found); else Assert.Equal(entry.Diagnostic, Assert.Single(found).Id);
-                if (entry.Diagnostic == "CS0452") Assert.Single(compiler, d => d.Id == "CS0452" && d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.Start < end);
+                if (entry.Accepted || entry.Diagnostic == "CS0452")
+                    Assert.Empty(found);
+                else
+                    Assert.Equal(entry.Diagnostic, Assert.Single(found).Id);
+                if (entry.Diagnostic == "CS0452")
+                    Assert.Single(compiler, d => d.Id == "CS0452" && d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.Start < end);
             }
         Assert.NotNull(output.GetTypeByMetadataName("AllGeneric.Generated.LegacyInternalGenericHook.IZendiator"));
     }
     [Fact]
     public async Task AllClosedHook_four_profiles_preserve_actual_type_arguments_pending_and_ownership()
     {
-        var source = AllClosedHandlerSource(true); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllClosedHookRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); var folder = AllGenericFolder("hook-runtime"); SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); var contract = AssertAllGenericContract(output, driver, false, AllClosedHandlerCases);
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); if (folder != null) { File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); File.WriteAllText(Path.Combine(folder, "contract.json"), JsonSerializer.Serialize(contract)); }
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var result = await assembly.GetType("AllGeneric.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result); using var json = JsonDocument.Parse(result); Assert.Equal(8, json.RootElement.GetProperty("dispatches").GetInt32()); Assert.Equal(0, json.RootElement.GetProperty("interleaveDispatches").GetInt32());
+        var source = AllClosedHandlerSource(true);
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllClosedHookRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        var folder = AllGenericFolder("hook-runtime");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var contract = AssertAllGenericContract(output, driver, false, AllClosedHandlerCases);
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+        {
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+            File.WriteAllText(Path.Combine(folder, "contract.json"), JsonSerializer.Serialize(contract));
+        }
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var result = await assembly.GetType("AllGeneric.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
+        using var json = JsonDocument.Parse(result);
+        Assert.Equal(8, json.RootElement.GetProperty("dispatches").GetInt32());
+        Assert.Equal(0, json.RootElement.GetProperty("interleaveDispatches").GetInt32());
     }
 }

@@ -30,7 +30,8 @@ public sealed class CanonicalConcurrentSyncProbe
             throw new TimeoutException("Concurrent fixture participants did not overlap.");
         var operation = Operations[request];
         operation.Reenter?.Invoke();
-        if (operation.Error is { } error) throw error;
+        if (operation.Error is { } error)
+            throw error;
         return 73;
     }
     public void Cleanup(object receiver) => Released.Enqueue(receiver);
@@ -58,22 +59,28 @@ public sealed partial class GeneratorTests
     {
         foreach (var receiver in new[] { "direct", "borrowed", "owned" })
             foreach (var isVoid in new[] { false, true })
-                foreach (var after in new[] { false, true }) yield return [receiver, isVoid, after];
+                foreach (var after in new[] { false, true })
+                    yield return [receiver, isVoid, after];
     }
 
     [Theory]
     [MemberData(nameof(SingletonRegistrationCases))]
     public void Generated_SendSync_preserves_Singleton_before_or_after_registration_across_scopes(string receiver, bool isVoid, bool after)
     {
-        var f = SingletonFixture(receiver, isVoid); var probe = new CanonicalSyncRuntimeProbe();
-        var ambient = CanonicalSyncRuntimeProbe.Ambient.Value; var culture = CultureInfo.CurrentCulture;
+        var f = SingletonFixture(receiver, isVoid);
+        var probe = new CanonicalSyncRuntimeProbe();
+        var ambient = CanonicalSyncRuntimeProbe.Ambient.Value;
+        var culture = CultureInfo.CurrentCulture;
         try
         {
-            IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe);
+            IServiceCollection services = new ServiceCollection();
+            services.AddSingleton(probe);
             var register = f.Assembly.GetType("App.Bridge")!.GetMethod("AddSingletonService")!;
-            if (!after) register.Invoke(null, [services]);
+            if (!after)
+                register.Invoke(null, [services]);
             Assert.Same(services, f.Register.Invoke(null, [services]));
-            if (after) register.Invoke(null, [services]);
+            if (after)
+                register.Invoke(null, [services]);
             Assert.Equal(ServiceLifetime.Singleton, services.Last(d => d.ServiceType == f.Service).Lifetime);
             using (var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
             {
@@ -83,25 +90,36 @@ public sealed partial class GeneratorTests
                     using (var scope = provider.CreateScope())
                     {
                         var mediator = scope.ServiceProvider.GetRequiredService(f.Interface);
-                        if (s == 0) firstMediator = mediator; else Assert.NotSame(firstMediator, mediator);
+                        if (s == 0)
+                            firstMediator = mediator;
+                        else
+                            Assert.NotSame(firstMediator, mediator);
                         for (var i = 0; i < 2; i++)
                         {
                             var actual = InvokeSync(f, mediator, Activator.CreateInstance(f.Request), default);
-                            Assert.Null(actual.Error); Assert.Equal(isVoid ? null : (object)73, actual.Result);
+                            Assert.Null(actual.Error);
+                            Assert.Equal(isVoid ? null : (object)73, actual.Result);
                         }
                     }
                     Assert.Equal(receiver == "owned" ? (s + 1) * 2 : 0, probe.Released.Count);
                     Assert.Equal(0, probe.FactoryDisposals);
                 }
                 var calls = probe.Calls.Where(c => c.Phase == (receiver == "direct" ? "handler" : "factory")).ToArray();
-                Assert.Equal(4, calls.Length); Assert.All(calls, c => Assert.Same(calls[0].Receiver, c.Receiver));
+                Assert.Equal(4, calls.Length);
+                Assert.All(calls, c => Assert.Same(calls[0].Receiver, c.Receiver));
                 Assert.Equal(receiver == "direct" ? 1 : 4, probe.Created.Count);
-                if (receiver != "direct") Assert.Single(probe.Trace, t => t == "factory.ctor");
+                if (receiver != "direct")
+                    Assert.Single(probe.Trace, t => t == "factory.ctor");
             }
             Assert.Equal(receiver == "direct" ? 1 : receiver == "owned" ? 4 : 0, probe.Released.Count);
             Assert.Equal(receiver == "direct" ? 0 : 1, probe.FactoryDisposals);
         }
-        finally { CanonicalSyncRuntimeProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; probe.Cancellation.Dispose(); }
+        finally
+        {
+            CanonicalSyncRuntimeProbe.Ambient.Value = ambient;
+            CultureInfo.CurrentCulture = culture;
+            probe.Cancellation.Dispose();
+        }
     }
 
     public static IEnumerable<object[]> SingletonMediatorCases()
@@ -115,11 +133,14 @@ public sealed partial class GeneratorTests
     [MemberData(nameof(SingletonMediatorCases))]
     public void Generated_Singleton_interface_entry_captures_root_dependencies_and_preserves_ValidateScopes(string receiver, ServiceLifetime lifetime)
     {
-        var f = SyncRuntimeFixture(receiver, false); var probe = new CanonicalSyncRuntimeProbe();
-        var ambient = CanonicalSyncRuntimeProbe.Ambient.Value; var culture = CultureInfo.CurrentCulture;
+        var f = SyncRuntimeFixture(receiver, false);
+        var probe = new CanonicalSyncRuntimeProbe();
+        var ambient = CanonicalSyncRuntimeProbe.Ambient.Value;
+        var culture = CultureInfo.CurrentCulture;
         try
         {
-            IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe);
+            IServiceCollection services = new ServiceCollection();
+            services.AddSingleton(probe);
             services.Add(ServiceDescriptor.Describe(f.Service, f.Service, lifetime));
             services.Add(ServiceDescriptor.Singleton(f.Interface, f.Mediator));
             Assert.Same(services, f.Register.Invoke(null, [services]));
@@ -131,19 +152,31 @@ public sealed partial class GeneratorTests
                     using (var scope = provider.CreateScope())
                     {
                         var mediator = scope.ServiceProvider.GetRequiredService(f.Interface);
-                        if (s == 0) firstMediator = mediator; else Assert.Same(firstMediator, mediator);
+                        if (s == 0)
+                            firstMediator = mediator;
+                        else
+                            Assert.Same(firstMediator, mediator);
                         for (var i = 0; i < 2; i++)
                         {
                             var actual = InvokeSync(f, mediator, Activator.CreateInstance(f.Request), default);
                             if (lifetime == ServiceLifetime.Scoped)
                                 Assert.Contains("scoped", Assert.IsType<InvalidOperationException>(actual.Error).Message, StringComparison.OrdinalIgnoreCase);
-                            else { Assert.Null(actual.Error); Assert.Equal(73, actual.Result); }
+                            else
+                            {
+                                Assert.Null(actual.Error);
+                                Assert.Equal(73, actual.Result);
+                            }
                         }
                     }
                     Assert.Equal(receiver == "owned" && lifetime != ServiceLifetime.Scoped ? (s + 1) * 2 : 0, probe.Released.Count);
                     Assert.Equal(0, probe.FactoryDisposals);
                 }
-                if (lifetime == ServiceLifetime.Scoped) { Assert.Empty(probe.Calls); Assert.Empty(probe.Created); Assert.Empty(probe.Trace); }
+                if (lifetime == ServiceLifetime.Scoped)
+                {
+                    Assert.Empty(probe.Calls);
+                    Assert.Empty(probe.Created);
+                    Assert.Empty(probe.Trace);
+                }
                 else
                 {
                     var receivers = probe.Calls.Where(c => c.Phase == (receiver == "direct" ? "handler" : "factory")).Select(c => c.Receiver).ToArray();
@@ -154,7 +187,12 @@ public sealed partial class GeneratorTests
             Assert.Equal(receiver == "direct" ? resolved : receiver == "owned" && resolved != 0 ? 4 : 0, probe.Released.Count);
             Assert.Equal(receiver == "direct" ? 0 : resolved, probe.FactoryDisposals);
         }
-        finally { CanonicalSyncRuntimeProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; probe.Cancellation.Dispose(); }
+        finally
+        {
+            CanonicalSyncRuntimeProbe.Ambient.Value = ambient;
+            CultureInfo.CurrentCulture = culture;
+            probe.Cancellation.Dispose();
+        }
     }
 
     [Theory]
@@ -166,31 +204,51 @@ public sealed partial class GeneratorTests
     [InlineData("owned", true)]
     public void Generated_SendSync_distinguishes_external_instance_from_container_captured_delegate(string receiver, bool external)
     {
-        var f = SyncRuntimeFixture(receiver, false); var probe = new CanonicalSyncRuntimeProbe();
-        var ambient = CanonicalSyncRuntimeProbe.Ambient.Value; var culture = CultureInfo.CurrentCulture;
+        var f = SyncRuntimeFixture(receiver, false);
+        var probe = new CanonicalSyncRuntimeProbe();
+        var ambient = CanonicalSyncRuntimeProbe.Ambient.Value;
+        var culture = CultureInfo.CurrentCulture;
         object? externalService = null;
         try
         {
-            IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe);
-            if (external) { externalService = Activator.CreateInstance(f.Service, probe)!; services.Add(ServiceDescriptor.Singleton(f.Service, externalService)); }
-            else services.Add(ServiceDescriptor.Singleton(f.Service, provider => Activator.CreateInstance(f.Service, provider.GetRequiredService<CanonicalSyncRuntimeProbe>())!));
+            IServiceCollection services = new ServiceCollection();
+            services.AddSingleton(probe);
+            if (external)
+            {
+                externalService = Activator.CreateInstance(f.Service, probe)!;
+                services.Add(ServiceDescriptor.Singleton(f.Service, externalService));
+            }
+            else
+                services.Add(ServiceDescriptor.Singleton(f.Service, provider => Activator.CreateInstance(f.Service, provider.GetRequiredService<CanonicalSyncRuntimeProbe>())!));
             Assert.Same(services, f.Register.Invoke(null, [services]));
             using (var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
             {
                 using (var scope = provider.CreateScope())
                 {
                     var mediator = scope.ServiceProvider.GetRequiredService(f.Interface);
-                    for (var i = 0; i < 2; i++) Assert.Null(InvokeSync(f, mediator, Activator.CreateInstance(f.Request), default).Error);
+                    for (var i = 0; i < 2; i++)
+                        Assert.Null(InvokeSync(f, mediator, Activator.CreateInstance(f.Request), default).Error);
                 }
-                Assert.Equal(receiver == "owned" ? 2 : 0, probe.Released.Count); Assert.Equal(0, probe.FactoryDisposals);
+                Assert.Equal(receiver == "owned" ? 2 : 0, probe.Released.Count);
+                Assert.Equal(0, probe.FactoryDisposals);
             }
             Assert.Equal(receiver == "owned" ? 2 : receiver == "direct" && !external ? 1 : 0, probe.Released.Count);
             Assert.Equal(receiver != "direct" && !external ? 1 : 0, probe.FactoryDisposals);
-            if (externalService is IDisposable owner) { owner.Dispose(); externalService = null; }
+            if (externalService is IDisposable owner)
+            {
+                owner.Dispose();
+                externalService = null;
+            }
             Assert.Equal(receiver == "direct" ? 1 : receiver == "owned" ? 2 : 0, probe.Released.Count);
             Assert.Equal(receiver == "direct" ? 0 : 1, probe.FactoryDisposals);
         }
-        finally { (externalService as IDisposable)?.Dispose(); CanonicalSyncRuntimeProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; probe.Cancellation.Dispose(); }
+        finally
+        {
+            (externalService as IDisposable)?.Dispose();
+            CanonicalSyncRuntimeProbe.Ambient.Value = ambient;
+            CultureInfo.CurrentCulture = culture;
+            probe.Cancellation.Dispose();
+        }
     }
 
     [Theory]
@@ -198,7 +256,8 @@ public sealed partial class GeneratorTests
     [InlineData("owned")]
     public void Generated_standard_implementation_type_constructor_failure_preserves_identity_without_session_cleanup(string receiver)
     {
-        var f = SyncRuntimeFixture(receiver, false); var error = new Exception("standard implementation-type constructor identity");
+        var f = SyncRuntimeFixture(receiver, false);
+        var error = new Exception("standard implementation-type constructor identity");
         var probe = new CanonicalSyncRuntimeProbe { ConstructorError = error };
         using (var provider = SyncProvider(f, probe, recording: false))
         {
@@ -208,16 +267,23 @@ public sealed partial class GeneratorTests
                 var actual = InvokeSync(f, mediator, Activator.CreateInstance(f.Request), default);
                 Assert.Same(error, actual.Error);
                 Assert.Equal(new[] { receiver == "direct" ? "handler.ctor" : "factory.ctor" }, probe.Trace);
-                Assert.Empty(probe.Calls); Assert.Empty(probe.Created); Assert.Empty(probe.Released); Assert.Equal(0, probe.FactoryDisposals);
+                Assert.Empty(probe.Calls);
+                Assert.Empty(probe.Created);
+                Assert.Empty(probe.Released);
+                Assert.Equal(0, probe.FactoryDisposals);
             }
-            Assert.Empty(probe.Released); Assert.Equal(0, probe.FactoryDisposals);
+            Assert.Empty(probe.Released);
+            Assert.Equal(0, probe.FactoryDisposals);
         }
-        Assert.Empty(probe.Released); Assert.Equal(0, probe.FactoryDisposals); probe.Cancellation.Dispose();
+        Assert.Empty(probe.Released);
+        Assert.Equal(0, probe.FactoryDisposals);
+        probe.Cancellation.Dispose();
     }
 
     private static ServiceProvider ConcurrentSingletonProvider(SyncFixture f, CanonicalConcurrentSyncProbe probe)
     {
-        IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe);
+        IServiceCollection services = new ServiceCollection();
+        services.AddSingleton(probe);
         services.Add(ServiceDescriptor.Singleton(f.Service, f.Service));
         services.Add(ServiceDescriptor.Singleton(f.Interface, f.Mediator));
         Assert.Same(services, f.Register.Invoke(null, [services]));
@@ -233,14 +299,17 @@ public sealed partial class GeneratorTests
     [InlineData("owned", true)]
     public async Task Generated_Singleton_SendSync_keeps_parallel_request_token_exception_and_session_identity(string receiver, bool isVoid)
     {
-        var f = ConcurrentSingletonFixture(receiver, isVoid); var probe = new CanonicalConcurrentSyncProbe();
-        using var barrier = new Barrier(8); probe.ConcurrentGate = barrier;
+        var f = ConcurrentSingletonFixture(receiver, isVoid);
+        var probe = new CanonicalConcurrentSyncProbe();
+        using var barrier = new Barrier(8);
+        probe.ConcurrentGate = barrier;
         var cancellation = Enumerable.Range(0, 8).Select(_ => new CancellationTokenSource()).ToArray();
         try
         {
             var requests = Enumerable.Range(0, 8).Select(_ => Activator.CreateInstance(f.Request)!).ToArray();
             var errors = requests.Select((_, i) => i % 3 == 0 ? null : i % 3 == 1 ? new Exception("operation " + i) : new OperationCanceledException(cancellation[i].Token)).ToArray();
-            for (var i = 0; i < 8; i++) Assert.True(probe.Operations.TryAdd(requests[i], new(cancellation[i].Token, errors[i])));
+            for (var i = 0; i < 8; i++)
+                Assert.True(probe.Operations.TryAdd(requests[i], new(cancellation[i].Token, errors[i])));
             using (var provider = ConcurrentSingletonProvider(f, probe))
             {
                 var mediator = provider.GetRequiredService(f.Interface);
@@ -253,14 +322,17 @@ public sealed partial class GeneratorTests
                     Assert.Equal(errors[i] != null || isVoid ? null : (object)73, actual[i].Result);
                     var call = Assert.Single(probe.Calls, c => c.Phase == "handler" && ReferenceEquals(c.Request, requests[i]));
                     Assert.Equal(cancellation[i].Token, call.Token);
-                    if (receiver != "direct") Assert.Equal(cancellation[i].Token,
+                    if (receiver != "direct")
+                        Assert.Equal(cancellation[i].Token,
                         Assert.Single(probe.Calls, c => c.Phase == "factory" && ReferenceEquals(c.Request, requests[i])).Token);
                 }
                 var handlers = probe.Calls.Where(c => c.Phase == "handler").Select(c => c.Receiver).ToArray();
                 Assert.Equal(receiver == "direct" ? 1 : 8, handlers.Distinct(ReferenceEqualityComparer.Instance).Count());
                 Assert.Equal(receiver == "direct" ? 1 : 8, probe.Created.Count);
-                Assert.Equal(receiver == "owned" ? 8 : 0, probe.Released.Count); Assert.Equal(0, probe.FactoryDisposals);
-                if (receiver == "owned") Assert.All(handlers, handler => Assert.Single(probe.Released, x => ReferenceEquals(x, handler)));
+                Assert.Equal(receiver == "owned" ? 8 : 0, probe.Released.Count);
+                Assert.Equal(0, probe.FactoryDisposals);
+                if (receiver == "owned")
+                    Assert.All(handlers, handler => Assert.Single(probe.Released, x => ReferenceEquals(x, handler)));
                 if (receiver != "direct")
                 {
                     Assert.Equal(1, probe.FactoryConstructions);
@@ -270,7 +342,11 @@ public sealed partial class GeneratorTests
             Assert.Equal(receiver == "direct" ? 1 : receiver == "owned" ? 8 : 0, probe.Released.Count);
             Assert.Equal(receiver == "direct" ? 0 : 1, probe.FactoryDisposals);
         }
-        finally { foreach (var source in cancellation) source.Dispose(); }
+        finally
+        {
+            foreach (var source in cancellation)
+                source.Dispose();
+        }
     }
 
     [Theory]
@@ -282,9 +358,12 @@ public sealed partial class GeneratorTests
     [InlineData("owned", true)]
     public void Generated_Singleton_SendSync_reentry_keeps_inner_failure_and_cleanup_separate_from_outer(string receiver, bool isVoid)
     {
-        var f = ConcurrentSingletonFixture(receiver, isVoid); var probe = new CanonicalConcurrentSyncProbe();
-        using var outerToken = new CancellationTokenSource(); using var innerToken = new CancellationTokenSource();
-        var outer = Activator.CreateInstance(f.Request)!; var inner = Activator.CreateInstance(f.Request)!;
+        var f = ConcurrentSingletonFixture(receiver, isVoid);
+        var probe = new CanonicalConcurrentSyncProbe();
+        using var outerToken = new CancellationTokenSource();
+        using var innerToken = new CancellationTokenSource();
+        var outer = Activator.CreateInstance(f.Request)!;
+        var inner = Activator.CreateInstance(f.Request)!;
         var error = new Exception("inner identity");
         using (var provider = ConcurrentSingletonProvider(f, probe))
         {
@@ -292,24 +371,32 @@ public sealed partial class GeneratorTests
             Assert.True(probe.Operations.TryAdd(inner, new(innerToken.Token, error)));
             Assert.True(probe.Operations.TryAdd(outer, new(outerToken.Token, Reenter: () =>
             {
-                var result = InvokeSync(f, mediator, inner, innerToken.Token); Assert.Same(error, result.Error);
+                var result = InvokeSync(f, mediator, inner, innerToken.Token);
+                Assert.Same(error, result.Error);
                 Assert.Equal(receiver == "owned" ? 1 : 0, probe.Released.Count);
             })));
             var actual = InvokeSync(f, mediator, outer, outerToken.Token);
-            Assert.Null(actual.Error); Assert.Equal(isVoid ? null : (object)73, actual.Result);
+            Assert.Null(actual.Error);
+            Assert.Equal(isVoid ? null : (object)73, actual.Result);
             var outerCall = Assert.Single(probe.Calls, c => c.Phase == "handler" && ReferenceEquals(c.Request, outer));
             var innerCall = Assert.Single(probe.Calls, c => c.Phase == "handler" && ReferenceEquals(c.Request, inner));
-            Assert.Equal(outerToken.Token, outerCall.Token); Assert.Equal(innerToken.Token, innerCall.Token);
-            if (receiver == "direct") Assert.Same(outerCall.Receiver, innerCall.Receiver);
+            Assert.Equal(outerToken.Token, outerCall.Token);
+            Assert.Equal(innerToken.Token, innerCall.Token);
+            if (receiver == "direct")
+                Assert.Same(outerCall.Receiver, innerCall.Receiver);
             else
             {
                 Assert.NotSame(outerCall.Receiver, innerCall.Receiver);
-                var factories = probe.Calls.Where(c => c.Phase == "factory").ToArray(); Assert.Equal(2, factories.Length);
+                var factories = probe.Calls.Where(c => c.Phase == "factory").ToArray();
+                Assert.Equal(2, factories.Length);
                 Assert.Same(factories[0].Receiver, factories[1].Receiver);
-                Assert.Equal(outerToken.Token, factories[0].Token); Assert.Equal(innerToken.Token, factories[1].Token);
+                Assert.Equal(outerToken.Token, factories[0].Token);
+                Assert.Equal(innerToken.Token, factories[1].Token);
             }
-            if (receiver == "owned") Assert.Equal(new[] { innerCall.Receiver, outerCall.Receiver }, probe.Released.ToArray());
-            else Assert.Empty(probe.Released);
+            if (receiver == "owned")
+                Assert.Equal(new[] { innerCall.Receiver, outerCall.Receiver }, probe.Released.ToArray());
+            else
+                Assert.Empty(probe.Released);
             Assert.Equal(0, probe.FactoryDisposals);
         }
         Assert.Equal(receiver == "direct" ? 1 : receiver == "owned" ? 2 : 0, probe.Released.Count);

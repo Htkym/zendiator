@@ -47,19 +47,26 @@ internal static class NativePoolingGate
                             while (true)
                             {
                                 var move = cursor.MoveNextAsync();
-                                if (!move.IsCompleted) pending++;
-                                if (!await move.ConfigureAwait(false)) break;
+                                if (!move.IsCompleted)
+                                    pending++;
+                                if (!await move.ConfigureAwait(false))
+                                    break;
                                 values.Add(cursor.Current);
-                                if (early) break;
+                                if (early)
+                                    break;
                             }
                         }
-                        finally { await cursor.DisposeAsync().ConfigureAwait(false); }
+                        finally
+                        {
+                            await cursor.DisposeAsync().ConfigureAwait(false);
+                        }
                         var count = early ? 1 : 16;
                         var expectedEvents = Enumerable.Range(1, Math.Max(path.Depth, 0)).Append(100);
                         Check(values.SequenceEqual(Enumerable.Range(0, count)) && probe.Handlers == 1 &&
                             probe.Items == count && probe.Disposals == 1 && probe.Events.SequenceEqual(expectedEvents),
                             path.Name, "values-order-count-and-once-cleanup");
-                        if (early) await RepeatDispose(cursor, probe, path.Name, "settled-Early-second-Dispose");
+                        if (early)
+                            await RepeatDispose(cursor, probe, path.Name, "settled-Early-second-Dispose");
                         results.Add(new
                         {
                             path = path.Name,
@@ -133,10 +140,19 @@ internal static class NativePoolingGate
                 {
                     var result = (ValueTask<int>)typeof(NativePoolingBenchmarks).GetMethod(method)!.Invoke(asynchronousBenchmark, null)!;
                     Check(await result.ConfigureAwait(false) == 523776, method, "exact-timed-consumer-TaskYield-Full1024");
-                    results.Add(new { path = method, scenario = "ExactTimedConsumerTaskYieldFull1024", status = "Passed", sum = 523776 });
+                    results.Add(new
+                    {
+                        path = method,
+                        scenario = "ExactTimedConsumerTaskYieldFull1024",
+                        status = "Passed",
+                        sum = 523776
+                    });
                 }
             }
-            finally { asynchronousBenchmark.Cleanup(); }
+            finally
+            {
+                asynchronousBenchmark.Cleanup();
+            }
             Check(ordinary.GetCustomAttribute<AsyncMethodBuilderAttribute>() is null &&
                 pooled.GetCustomAttribute<AsyncMethodBuilderAttribute>()?.BuilderType == typeof(PoolingAsyncValueTaskMethodBuilder<>),
                 Family, "builder-attribute-selection");
@@ -150,7 +166,10 @@ internal static class NativePoolingGate
             Save("Failed", error.ToString());
             throw;
         }
-        finally { benchmark.Cleanup(); }
+        finally
+        {
+            benchmark.Cleanup();
+        }
 
         IAsyncEnumerator<int> Create((string Name, bool Pooled, int Depth) path, bool asynchronous, Probe probe, CancellationToken token) =>
             path.Depth < 0
@@ -178,14 +197,20 @@ internal static class NativePoolingGate
                         next = StartQueued(cursor, nextContext, path.Name);
                         nextIssued.SetResult();
                     }
-                    catch (Exception error) { nextIssued.SetException(error); }
+                    catch (Exception error)
+                    {
+                        nextIssued.SetException(error);
+                    }
                 });
                 context.Drain();
                 await nextIssued.Task.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
                 nextContext.Drain();
                 Check(await next.ConfigureAwait(false) && cursor.Current == 1, path.Name, "next-Move-immediately-after-GetResult");
             }
-            finally { await cursor.DisposeAsync().ConfigureAwait(false); }
+            finally
+            {
+                await cursor.DisposeAsync().ConfigureAwait(false);
+            }
             Check(probe.Items == 2 && probe.Disposals == 1, path.Name, "registered-next-cleanup");
         }
 
@@ -205,7 +230,10 @@ internal static class NativePoolingGate
                 Check(!await cursor.MoveNextAsync().ConfigureAwait(false), path.Name, "saved-Task-EOF");
                 Check(saved.Status == TaskStatus.RanToCompletion && saved.Result, path.Name, "saved-Task-remains-true-after-reuse");
             }
-            finally { await cursor.DisposeAsync().ConfigureAwait(false); }
+            finally
+            {
+                await cursor.DisposeAsync().ConfigureAwait(false);
+            }
             Check(probe.Items == 16 && probe.Disposals == 1, path.Name, "saved-Task-cleanup");
         }
 
@@ -220,14 +248,19 @@ internal static class NativePoolingGate
                 var pending = StartQueued(cursor, context, path.Name);
                 var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 pending.ConfigureAwait(false).GetAwaiter().UnsafeOnCompleted(() => completed.SetResult());
-                if (cancel) cancellation.Cancel();
-                else probe.Fail = true;
+                if (cancel)
+                    cancellation.Cancel();
+                else
+                    probe.Fail = true;
                 context.Drain();
                 await completed.Task.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
                 Check(cancel ? pending.IsCanceled && !pending.IsFaulted : pending.IsFaulted && !pending.IsCanceled,
                     path.Name, cancel ? "pending-Canceled-classification-before-consumption" : "pending-Faulted-classification-before-consumption");
                 var caught = false;
-                try { await pending.ConfigureAwait(false); }
+                try
+                {
+                    await pending.ConfigureAwait(false);
+                }
                 catch (OperationCanceledException error) when (cancel)
                 {
                     Check(error.CancellationToken == cancellation.Token, path.Name, "pending-cancel-token");
@@ -240,9 +273,13 @@ internal static class NativePoolingGate
                 }
                 Check(caught, path.Name, cancel ? "pending-cancel-observed-once" : "pending-fault-observed-once");
             }
-            finally { await cursor.DisposeAsync().ConfigureAwait(false); }
+            finally
+            {
+                await cursor.DisposeAsync().ConfigureAwait(false);
+            }
             Check(probe.Handlers == 1 && probe.Items == 0 && probe.Disposals == 1, path.Name, "failed-Move-settled-before-Dispose");
-            if (!cancel) await RepeatDispose(cursor, probe, path.Name, "settled-fault-second-Dispose");
+            if (!cancel)
+                await RepeatDispose(cursor, probe, path.Name, "settled-fault-second-Dispose");
         }
 
         async Task RepeatDispose(IAsyncEnumerator<int> cursor, Probe probe, string path, string scenario)
@@ -300,15 +337,23 @@ internal static class NativePoolingGate
     {
         var prior = SynchronizationContext.Current;
         ValueTask<bool> move;
-        try { SynchronizationContext.SetSynchronizationContext(context); move = cursor.MoveNextAsync(); }
-        finally { SynchronizationContext.SetSynchronizationContext(prior); }
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(context);
+            move = cursor.MoveNextAsync();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(prior);
+        }
         Check(!move.IsCompleted && context.Count > 0, path, "controlled-source-pending");
         return move;
     }
 
     private static void Check(bool condition, string path, string scenario)
     {
-        if (!condition) throw new InvalidOperationException($"{path}: {scenario}");
+        if (!condition)
+            throw new InvalidOperationException($"{path}: {scenario}");
     }
 
     private sealed class QueuedContext : SynchronizationContext
@@ -318,7 +363,8 @@ internal static class NativePoolingGate
         public override void Post(SendOrPostCallback callback, object? state) => callbacks.Enqueue((callback, state));
         internal void Drain()
         {
-            while (callbacks.TryDequeue(out var item)) item.Callback(item.State);
+            while (callbacks.TryDequeue(out var item))
+                item.Callback(item.State);
         }
     }
 }

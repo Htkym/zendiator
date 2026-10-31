@@ -91,11 +91,13 @@ public sealed partial class GeneratorTests
         using var bytes = new MemoryStream();
         var emitted = output.Emit(bytes);
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-        if (folder != null) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+        if (folder != null)
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
         bytes.Position = 0;
         var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var runtime = await assembly.GetType("OpenSendWrapper.PairEntry")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()();
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime);
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime);
         using var json = JsonDocument.Parse(runtime);
         Assert.Equal(3, json.RootElement.GetProperty("publicOperations").GetInt32());
 
@@ -111,12 +113,25 @@ public sealed partial class GeneratorTests
         Assert.Equal(2, composition.Pipelines.Count);
         Assert.All(Assert.Single(CanonicalExecutionGraphNormalizer.Create(catalog).Compositions), graph => Assert.True(graph.IsValid));
         Assert.Equal(2, refused.Length);
-        Assert.All(refused, d => { Assert.Equal("ZEN0037", d.Id); Assert.True(d.Location.IsInSource); });
+        Assert.All(refused, d =>
+        {
+            Assert.Equal("ZEN0037", d.Id);
+            Assert.True(d.Location.IsInSource);
+        });
         Assert.Null(refusedOutput.GetTypeByMetadataName("OpenSendWrapper.Generated.Pair.IZendiator"));
         Assert.Null(refusedOutput.GetTypeByMetadataName("OpenSendWrapper.Generated.Pair.Zendiator"));
         Assert.Null(refusedOutput.GetTypeByMetadataName("OpenSendWrapper.Generated.Pair.ZendiatorGeneratedRegistrar"));
         Assert.DoesNotContain(rejected.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal));
         Assert.Empty(refusedOutput.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "membership.json"), JsonSerializer.Serialize(new { completeSelectedHandlers = composition.Handlers.Count, definitions, pipelines = composition.Pipelines.Count, frontendErrors = 0, validRouteGraphs = 2, wholeCompositionRefused = true }));
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "membership.json"), JsonSerializer.Serialize(new
+            {
+                completeSelectedHandlers = composition.Handlers.Count,
+                definitions,
+                pipelines = composition.Pipelines.Count,
+                frontendErrors = 0,
+                validRouteGraphs = 2,
+                wholeCompositionRefused = true
+            }));
     }
 }

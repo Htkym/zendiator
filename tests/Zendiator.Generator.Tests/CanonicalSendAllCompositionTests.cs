@@ -131,8 +131,10 @@ public sealed partial class GeneratorTests
 
     private static void AssertSendAllCompositionContract(Compilation output)
     {
-        var contract = output.GetTypeByMetadataName("AllMix.Generated.Many.IZendiator"); Assert.NotNull(contract);
-        var all = contract.GetMembers("SendAll").OfType<IMethodSymbol>().ToArray(); Assert.Equal(3, all.Length);
+        var contract = output.GetTypeByMetadataName("AllMix.Generated.Many.IZendiator");
+        Assert.NotNull(contract);
+        var all = contract.GetMembers("SendAll").OfType<IMethodSymbol>().ToArray();
+        Assert.Equal(3, all.Length);
         Assert.Contains(all, m => m.ReturnType is IArrayTypeSymbol a && a.ElementType.SpecialType == SpecialType.System_Int32);
         Assert.Contains(all, m => m.ReturnType.SpecialType == SpecialType.System_Int32 && m.Parameters[1].Type.Name == "Span");
         Assert.Contains(all, m => m.ReturnsVoid && m.Parameters[0].Type.ToDisplayString() == "AllSync.Command.Ping");
@@ -178,7 +180,12 @@ public sealed partial class GeneratorTests
             .Select(c => output.GetSemanticModel(c.SyntaxTree).GetSymbolInfo(c).Symbol).OfType<IMethodSymbol>(),
             m => m.Name == "SendAll" && SymbolEqualityComparer.Default.Equals(m.ContainingType, mediator));
         Assert.IsAssignableFrom<IArrayTypeSymbol>(forwarded.ReturnType);
-        return new { handlerOrder = handlers.Select(Request), pipelineOrder = pipelines.Select(Request), privateBranchNames = branches };
+        return new
+        {
+            handlerOrder = handlers.Select(Request),
+            pipelineOrder = pipelines.Select(Request),
+            privateBranchNames = branches
+        };
     }
 
     [Fact]
@@ -189,19 +196,32 @@ public sealed partial class GeneratorTests
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         var folder = string.IsNullOrEmpty(evidence) ? null : Path.Combine(evidence, "sendall-composition-gate");
         SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Equal(5, diagnostics.Length); Assert.All(diagnostics, d => Assert.Equal("ZEN0037", d.Id));
+        Assert.Equal(5, diagnostics.Length);
+        Assert.All(diagnostics, d => Assert.Equal("ZEN0037", d.Id));
         var start = source.IndexOf("public static IServiceCollection RegisterRejected(", StringComparison.Ordinal);
         var end = source.IndexOf("/* rejected end */", start, StringComparison.Ordinal);
         Assert.All(diagnostics, d => Assert.InRange(d.Location.SourceSpan.Start, start, end));
         var anchors = diagnostics.Select(d => source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length)).ToArray();
-        foreach (var request in new[] { "S.Items", "C.Ping", "R.Ping", "B.Ping", "A.Ping" }) Assert.Single(anchors, a => a.StartsWith("c.Pipeline<" + request + ">", StringComparison.Ordinal));
+        foreach (var request in new[] { "S.Items", "C.Ping", "R.Ping", "B.Ping", "A.Ping" })
+            Assert.Single(anchors, a => a.StartsWith("c.Pipeline<" + request + ">", StringComparison.Ordinal));
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        AssertSendAllCompositionContract(output); var registration = AssertSendAllCompositionRegistration(output);
-        Assert.Null(output.GetTypeByMetadataName("AllMix.Generated.Rejected.IZendiator")); Assert.Null(output.GetTypeByMetadataName("AllMix.Generated.Rejected.ZendiatorGeneratedRegistrar"));
+        AssertSendAllCompositionContract(output);
+        var registration = AssertSendAllCompositionRegistration(output);
+        Assert.Null(output.GetTypeByMetadataName("AllMix.Generated.Rejected.IZendiator"));
+        Assert.Null(output.GetTypeByMetadataName("AllMix.Generated.Rejected.ZendiatorGeneratedRegistrar"));
         var files = driver.GetRunResult().Results.Single().GeneratedSources;
         Assert.Contains(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains("AllMix.Generated.Many.ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
         Assert.DoesNotContain(files, f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.SourceText.ToString().Contains("AllMix.Generated.Rejected.ZendiatorGeneratedRegistrar", StringComparison.Ordinal));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, runtimeOperations = 0, acceptedRoutes = 5, rejectedPipelineDiagnostics = 5, unsupportedMultipleWrapperWholeCompositionRejected = true, registration }));
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "gate-result.json"), JsonSerializer.Serialize(new
+            {
+                generatorInputs = 1,
+                runtimeOperations = 0,
+                acceptedRoutes = 5,
+                rejectedPipelineDiagnostics = 5,
+                unsupportedMultipleWrapperWholeCompositionRejected = true,
+                registration
+            }));
     }
 
     [Fact]
@@ -212,16 +232,29 @@ public sealed partial class GeneratorTests
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         var folder = string.IsNullOrEmpty(evidence) ? null : Path.Combine(evidence, "sendall-composition-runtime");
         SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        AssertSendAllCompositionContract(output); var registration = AssertSendAllCompositionRegistration(output);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        AssertSendAllCompositionContract(output);
+        var registration = AssertSendAllCompositionRegistration(output);
         Assert.Equal(5, driver.GetRunResult().Results.Single().GeneratedSources.Count(f => IsCanonicalRoute(f)));
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-        if (folder != null) { File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); File.WriteAllText(Path.Combine(folder, "registration.json"), JsonSerializer.Serialize(registration)); }
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+        {
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+            File.WriteAllText(Path.Combine(folder, "registration.json"), JsonSerializer.Serialize(registration));
+        }
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var run = assembly.GetType("AllMix.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>();
-        var result = await run().WaitAsync(TimeSpan.FromSeconds(15)); if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
-        using var observed = JsonDocument.Parse(result); var value = observed.RootElement;
-        Assert.Equal(5, value.GetProperty("runtimeOperations").GetInt32()); Assert.Equal(3, value.GetProperty("copied").GetInt32());
+        var result = await run().WaitAsync(TimeSpan.FromSeconds(15));
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
+        using var observed = JsonDocument.Parse(result);
+        var value = observed.RootElement;
+        Assert.Equal(5, value.GetProperty("runtimeOperations").GetInt32());
+        Assert.Equal(3, value.GetProperty("copied").GetInt32());
         Assert.Equal(new[] { 115, 114, 116, -9 }, value.GetProperty("destination").EnumerateArray().Select(x => x.GetInt32()));
         Assert.Equal(new[] { 22 }, value.GetProperty("response").EnumerateArray().Select(x => x.GetInt32()));
         Assert.Equal(new[] { 2, 4 }, value.GetProperty("values").EnumerateArray().Select(x => x.GetInt32()));

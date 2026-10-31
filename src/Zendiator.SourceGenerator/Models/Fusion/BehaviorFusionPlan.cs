@@ -1,13 +1,37 @@
 namespace Zendiator.SourceGenerator;
 
-internal enum FusionDispatchKind { SendSync, SendAsync, SendAllSyncBranch, SendAllAsyncBranch, Stream }
-internal enum FusionResultKind { Response, Void, Item }
-internal enum FusionStageKind { Hook, Wrapper }
-internal enum FusionSitePhase { OperationEntry, StageEntry, HandlerEntry, FirstMove, Item }
-internal enum FusionGuardKind { Argument, Cancellation, TokenComposition, DestinationCapacity }
-internal enum FusionOwnership { BorrowedService, BorrowedResource, OwnedSession }
-internal enum FusionCleanupKind { None, Sync, Async }
-internal enum FusionContractOrigin { Unspecified, CanonicalPrototype, LegacyEmissionBoundary, NewCanonical }
+internal enum FusionDispatchKind
+{
+    SendSync, SendAsync, SendAllSyncBranch, SendAllAsyncBranch, Stream
+}
+internal enum FusionResultKind
+{
+    Response, Void, Item
+}
+internal enum FusionStageKind
+{
+    Hook, Wrapper
+}
+internal enum FusionSitePhase
+{
+    OperationEntry, StageEntry, HandlerEntry, FirstMove, Item
+}
+internal enum FusionGuardKind
+{
+    Argument, Cancellation, TokenComposition, DestinationCapacity
+}
+internal enum FusionOwnership
+{
+    BorrowedService, BorrowedResource, OwnedSession
+}
+internal enum FusionCleanupKind
+{
+    None, Sync, Async
+}
+internal enum FusionContractOrigin
+{
+    Unspecified, CanonicalPrototype, LegacyEmissionBoundary, NewCanonical
+}
 
 [System.Flags]
 internal enum FusionCapabilities
@@ -55,7 +79,10 @@ internal sealed record FusionPlanInput(
     string ContextModelId)
 {
     // Neither an unspecified, prototype nor legacy origin proves canonical execution guarantees.
-    public FusionContractOrigin ContractOrigin { get; init; }
+    public FusionContractOrigin ContractOrigin
+    {
+        get; init;
+    }
 }
 
 /// <summary>Symbol-free generation-time IR. It does not add a runtime dispatch engine.</summary>

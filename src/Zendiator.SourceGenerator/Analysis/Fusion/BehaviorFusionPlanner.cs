@@ -23,7 +23,8 @@ internal static class BehaviorFusionPlanner
             {
                 if (i < input.DeclaredStages.Count && input.DeclaredStages[i].Kind == FusionStageKind.Hook)
                 {
-                    if (start < 0) start = i;
+                    if (start < 0)
+                        start = i;
                 }
                 else if (start >= 0)
                 {
@@ -34,7 +35,8 @@ internal static class BehaviorFusionPlanner
         }
         var core = new BehaviorFusionPlanCore(input,
             new(input.DeclaredStages.Select(s => s.Capabilities)), wrappers, new(segments), new(facts));
-        if (facts.Count != 0) return new(core, null, null);
+        if (facts.Count != 0)
+            return new(core, null, null);
         if (input.DispatchKind != FusionDispatchKind.Stream)
         {
             var scopes = Enumerable.Range(0, input.DeclaredStages.Count).Select(i =>
@@ -58,60 +60,76 @@ internal static class BehaviorFusionPlanner
         void Reject(string key, int stage = -1) => facts.Add(new(key, stage));
         var stream = input.DispatchKind == FusionDispatchKind.Stream;
         var sync = input.DispatchKind is FusionDispatchKind.SendSync or FusionDispatchKind.SendAllSyncBranch;
-        if (input.ContractOrigin == FusionContractOrigin.Unspecified) Reject("MissingContractOrigin");
-        if (!Enum.IsDefined(typeof(FusionContractOrigin), input.ContractOrigin)) Reject("UnknownContractOrigin");
+        if (input.ContractOrigin == FusionContractOrigin.Unspecified)
+            Reject("MissingContractOrigin");
+        if (!Enum.IsDefined(typeof(FusionContractOrigin), input.ContractOrigin))
+            Reject("UnknownContractOrigin");
         if (input.ContractOrigin == FusionContractOrigin.NewCanonical)
             Reject("CanonicalExecutionContractUnavailable");
         if (input.ContractOrigin == FusionContractOrigin.LegacyEmissionBoundary)
         {
             Reject("OpaqueLegacyContractBoundary");
             Reject("CanonicalGuardResolutionScheduleUnavailable");
-            if (!sync) Reject("CanonicalAwaitScheduleUnavailable");
+            if (!sync)
+                Reject("CanonicalAwaitScheduleUnavailable");
             if (stream)
             {
                 Reject("CanonicalSourceMoveScheduleUnavailable");
                 Reject("CanonicalDisposeOwnershipUnavailable");
             }
         }
-        if (!Enum.IsDefined(typeof(FusionDispatchKind), input.DispatchKind)) Reject("UnsupportedFamily");
-        if (string.IsNullOrEmpty(input.RouteKey) || string.IsNullOrEmpty(input.ContextModelId)) Reject("MissingRouteOrContext");
+        if (!Enum.IsDefined(typeof(FusionDispatchKind), input.DispatchKind))
+            Reject("UnsupportedFamily");
+        if (string.IsNullOrEmpty(input.RouteKey) || string.IsNullOrEmpty(input.ContextModelId))
+            Reject("MissingRouteOrContext");
         if ((stream && (input.ResultKind != FusionResultKind.Item || input.Result is null)) ||
             (!stream && (input.ResultKind == FusionResultKind.Item ||
                 (input.ResultKind == FusionResultKind.Response && input.Result is null) ||
                 (input.ResultKind == FusionResultKind.Void && input.Result is not null))) ||
-            !Enum.IsDefined(typeof(FusionResultKind), input.ResultKind)) Reject("ResultShapeMismatch");
-        if (!sync && (input.Request.IsRefLikeType || input.Result?.IsRefLikeType == true)) Reject("RefLikeAcrossAsyncBoundary");
+            !Enum.IsDefined(typeof(FusionResultKind), input.ResultKind))
+            Reject("ResultShapeMismatch");
+        if (!sync && (input.Request.IsRefLikeType || input.Result?.IsRefLikeType == true))
+            Reject("RefLikeAcrossAsyncBoundary");
         var allowed = stream
             ? FusionCapabilities.Filter | FusionCapabilities.Map | FusionCapabilities.Async
             : FusionCapabilities.Before | FusionCapabilities.Success | FusionCapabilities.Exception | FusionCapabilities.Finally | FusionCapabilities.Async;
         for (var i = 0; i < input.DeclaredStages.Count; i++)
         {
             var stage = input.DeclaredStages[i];
-            if (!Enum.IsDefined(typeof(FusionStageKind), stage.Kind)) Reject("UnknownStageKind", i);
+            if (!Enum.IsDefined(typeof(FusionStageKind), stage.Kind))
+                Reject("UnknownStageKind", i);
             if (stage.Kind == FusionStageKind.Wrapper)
             {
                 if (stage.Capabilities != FusionCapabilities.None || stage.InputItem is not null || stage.OutputItem is not null)
                     Reject("OpaqueWrapperHasHookFacts", i);
                 continue;
             }
-            if ((stage.Capabilities & ~allowed) != 0) Reject("UnsupportedCapability", i);
-            if (sync && (stage.Capabilities & FusionCapabilities.Async) != 0) Reject("AsyncOnSyncRoute", i);
+            if ((stage.Capabilities & ~allowed) != 0)
+                Reject("UnsupportedCapability", i);
+            if (sync && (stage.Capabilities & FusionCapabilities.Async) != 0)
+                Reject("AsyncOnSyncRoute", i);
             if (stream)
             {
                 if ((stage.Capabilities & (FusionCapabilities.Filter | FusionCapabilities.Map)) ==
-                    (FusionCapabilities.Filter | FusionCapabilities.Map)) Reject("AmbiguousStageContract", i);
-                if (stage.InputItem is null || stage.OutputItem is null) Reject("MissingItemTypes", i);
-                else if (stage.InputItem != input.Result || stage.OutputItem != input.Result) Reject("UnsupportedItemTransition", i);
-                if ((stage.Capabilities & FusionCapabilities.Async) != 0) Reject("AsyncStreamRequiresBackend", i);
+                    (FusionCapabilities.Filter | FusionCapabilities.Map))
+                    Reject("AmbiguousStageContract", i);
+                if (stage.InputItem is null || stage.OutputItem is null)
+                    Reject("MissingItemTypes", i);
+                else if (stage.InputItem != input.Result || stage.OutputItem != input.Result)
+                    Reject("UnsupportedItemTransition", i);
+                if ((stage.Capabilities & FusionCapabilities.Async) != 0)
+                    Reject("AsyncStreamRequiresBackend", i);
             }
-            else if (stage.InputItem is not null || stage.OutputItem is not null) Reject("ItemFactsOnSendRoute", i);
+            else if (stage.InputItem is not null || stage.OutputItem is not null)
+                Reject("ItemFactsOnSendRoute", i);
         }
         foreach (var site in input.GuardSites)
         {
             if (site.StageIndex < -1 || site.StageIndex > input.DeclaredStages.Count ||
                 !Enum.IsDefined(typeof(FusionSitePhase), site.Phase) || !Enum.IsDefined(typeof(FusionGuardKind), site.Kind))
                 Reject("InvalidGuardSite", site.StageIndex);
-            else if (!SupportsGuardSite(input, site)) Reject("UnsupportedGuardSiteCombination", site.StageIndex);
+            else if (!SupportsGuardSite(input, site))
+                Reject("UnsupportedGuardSiteCombination", site.StageIndex);
         }
         foreach (var site in input.ResolutionSites)
         {
@@ -123,7 +141,8 @@ internal static class BehaviorFusionPlanner
                 Reject("UnsupportedResolutionSiteCombination", site.StageIndex);
             if ((site.Ownership == FusionOwnership.OwnedSession) != (site.Cleanup != FusionCleanupKind.None))
                 Reject("OwnershipCleanupMismatch", site.StageIndex);
-            if (sync && site.Cleanup == FusionCleanupKind.Async) Reject("AsyncCleanupOnSyncRoute", site.StageIndex);
+            if (sync && site.Cleanup == FusionCleanupKind.Async)
+                Reject("AsyncCleanupOnSyncRoute", site.StageIndex);
         }
         return facts;
     }
@@ -143,8 +162,10 @@ internal static class BehaviorFusionPlanner
 
     private static bool SupportsExecutionSite(FusionPlanInput input, int index, FusionSitePhase phase)
     {
-        if (phase == FusionSitePhase.HandlerEntry) return index == input.DeclaredStages.Count;
-        if (index < 0 || index >= input.DeclaredStages.Count) return false;
+        if (phase == FusionSitePhase.HandlerEntry)
+            return index == input.DeclaredStages.Count;
+        if (index < 0 || index >= input.DeclaredStages.Count)
+            return false;
         if (input.DispatchKind == FusionDispatchKind.Stream)
             return (phase == FusionSitePhase.Item && input.DeclaredStages[index].Kind == FusionStageKind.Hook) ||
                 (phase == FusionSitePhase.StageEntry && input.DeclaredStages[index].Kind == FusionStageKind.Wrapper);

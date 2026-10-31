@@ -7,5 +7,8 @@ public sealed class PipelineBehaviorAttribute(Type behaviorType) : Attribute
     public Type BehaviorType { get; } = behaviorType;
 
     /// <summary>Gets or sets the unique order. Lower values run outside higher values.</summary>
-    public int Order { get; set; }
+    public int Order
+    {
+        get; set;
+    }
 }

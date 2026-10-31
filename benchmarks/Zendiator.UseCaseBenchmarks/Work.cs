@@ -2,7 +2,10 @@ using System.Runtime.CompilerServices;
 
 namespace Competitive;
 
-public sealed class Counter { public int Value; public int Active; }
+public sealed class Counter
+{
+    public int Value; public int Active;
+}
 
 public sealed class Probe
 {
@@ -16,7 +19,10 @@ public sealed class Probe
 
 public interface IWork
 {
-    Probe? Probe { get; }
+    Probe? Probe
+    {
+        get;
+    }
 }
 
 public interface ILevel1 : IWork;
@@ -47,11 +53,15 @@ public static class Work
             throw new InvalidOperationException("Notification handlers overlapped");
         try
         {
-            if (asynchronous) await Task.Yield();
+            if (asynchronous)
+                await Task.Yield();
             Void(counter, probe, token);
             probe?.Events.Add(id);
         }
-        finally { counter.Active--; }
+        finally
+        {
+            counter.Active--;
+        }
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -60,7 +70,8 @@ public static class Work
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Relay(IWork request, int id)
     {
-        if (request.Probe is not { } probe) return;
+        if (request.Probe is not { } probe)
+            return;
         if (probe.FailRelay)
             throw new ArithmeticException("Expected relay sentinel");
         probe.Events.Add(id);
@@ -120,19 +131,32 @@ public sealed class WorkStreamCursor(int count, bool asynchronous, Probe? probe,
     private int _index;
     private bool _started;
     private bool _finished;
-    public int Current { get; private set; }
+    public int Current
+    {
+        get; private set;
+    }
 
     public ValueTask<bool> MoveNextAsync()
     {
-        if (_finished) return new(false);
+        if (_finished)
+            return new(false);
         if (!_started)
         {
             token.ThrowIfCancellationRequested();
             _started = true;
-            if (probe is not null) { probe.Handlers++; probe.Events.Add(100); }
+            if (probe is not null)
+            {
+                probe.Handlers++;
+                probe.Events.Add(100);
+            }
         }
-        if (_index >= count) { Finish(); return new(false); }
-        if (asynchronous) return MovePendingAsync();
+        if (_index >= count)
+        {
+            Finish();
+            return new(false);
+        }
+        if (asynchronous)
+            return MovePendingAsync();
         try
         {
             // Preserve Work.Stream's checks on both sides of its optional suspension.
@@ -140,7 +164,11 @@ public sealed class WorkStreamCursor(int count, bool asynchronous, Probe? probe,
             token.ThrowIfCancellationRequested();
             return new(Publish());
         }
-        catch { Finish(); throw; }
+        catch
+        {
+            Finish();
+            throw;
+        }
     }
 
     private async ValueTask<bool> MovePendingAsync()
@@ -152,14 +180,19 @@ public sealed class WorkStreamCursor(int count, bool asynchronous, Probe? probe,
             token.ThrowIfCancellationRequested();
             return Publish();
         }
-        catch { Finish(); throw; }
+        catch
+        {
+            Finish();
+            throw;
+        }
     }
 
     private bool Publish()
     {
         if (probe is not null)
         {
-            if (probe.Fail) throw new ArithmeticException("Expected correctness sentinel");
+            if (probe.Fail)
+                throw new ArithmeticException("Expected correctness sentinel");
             probe.Items++;
         }
         Current = _index++;
@@ -168,28 +201,47 @@ public sealed class WorkStreamCursor(int count, bool asynchronous, Probe? probe,
 
     private void Finish()
     {
-        if (_finished) return;
+        if (_finished)
+            return;
         _finished = true;
-        if (_started && probe is not null) probe.Disposals++;
+        if (_started && probe is not null)
+            probe.Disposals++;
     }
 
-    public ValueTask DisposeAsync() { Finish(); return default; }
+    public ValueTask DisposeAsync()
+    {
+        Finish();
+        return default;
+    }
 }
 
 // Reused only by sequential typed-terminal benchmark operations; results live in this class.
 public sealed class StreamBenchmarkSink : Zendiator.IStreamSink<int>
 {
-    public int Sum { get; private set; }
-    public int First { get; private set; }
+    public int Sum
+    {
+        get; private set;
+    }
+    public int First
+    {
+        get; private set;
+    }
     private bool _firstOnly;
     private bool _seen;
     public void Reset(bool firstOnly)
     {
-        Sum = 0; First = -1; _firstOnly = firstOnly; _seen = false;
+        Sum = 0;
+        First = -1;
+        _firstOnly = firstOnly;
+        _seen = false;
     }
     public ValueTask<bool> OnNextAsync(int item, CancellationToken token)
     {
-        if (!_seen) { First = item; _seen = true; }
+        if (!_seen)
+        {
+            First = item;
+            _seen = true;
+        }
         Sum += item;
         return new(!_firstOnly);
     }

@@ -10,7 +10,8 @@ internal static class ChildEvidence
 
     public static void Record(string scenario, string lifetime)
     {
-        if (Environment.GetEnvironmentVariable("COLD_CAPTURE_CHILD") != "1") return;
+        if (Environment.GetEnvironmentVariable("COLD_CAPTURE_CHILD") != "1")
+            return;
         if (Interlocked.CompareExchange(ref registered, 1, 0) != 0)
             throw new InvalidOperationException("Expected one child setup evidence per process");
         var directory = Environment.GetEnvironmentVariable("COLD_EVIDENCE_DIR")
@@ -69,7 +70,10 @@ internal static class ChildEvidence
                         error = error.ToString()
                     });
                 }
-                catch { Console.Error.WriteLine("Final child assembly capture failed"); }
+                catch
+                {
+                    Console.Error.WriteLine("Final child assembly capture failed");
+                }
             }
         };
         var expected = Environment.GetEnvironmentVariable("COLD_EXPECT_Z_SHA");

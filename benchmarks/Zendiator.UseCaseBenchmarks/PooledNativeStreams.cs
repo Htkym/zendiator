@@ -111,9 +111,21 @@ public class NativePoolingBenchmarks
     private InputOrdinary5 ordinary5 = null!;
     private InputPooled5 pooled5 = null!;
 
-    [Params(16, 1024)] public int Count { get; set; }
-    [Params(false, true)] public bool Asynchronous { get; set; }
-    [Params(false, true)] public bool Early { get; set; }
+    [Params(16, 1024)]
+    public int Count
+    {
+        get; set;
+    }
+    [Params(false, true)]
+    public bool Asynchronous
+    {
+        get; set;
+    }
+    [Params(false, true)]
+    public bool Early
+    {
+        get; set;
+    }
     internal Type EntryType => entry.GetType();
 
     [GlobalSetup]
@@ -130,7 +142,11 @@ public class NativePoolingBenchmarks
     }
 
     [GlobalCleanup]
-    public void Cleanup() { scope.Dispose(); provider.Dispose(); }
+    public void Cleanup()
+    {
+        scope.Dispose();
+        provider.Dispose();
+    }
 
     [Benchmark] public ValueTask<int> RawOrdinary() => Consume(new WorkStreamCursor(Count, Asynchronous, null, default), Early);
     [Benchmark] public ValueTask<int> RawPooled() => Consume(new PooledWorkStreamCursor(Count, Asynchronous, null, default), Early);
@@ -147,11 +163,15 @@ public class NativePoolingBenchmarks
             while (await cursor.MoveNextAsync().ConfigureAwait(false))
             {
                 sum += cursor.Current;
-                if (early) return sum;
+                if (early)
+                    return sum;
             }
             return sum;
         }
-        finally { await cursor.DisposeAsync().ConfigureAwait(false); }
+        finally
+        {
+            await cursor.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     internal IAsyncEnumerable<int> Stream(bool pooled, int depth, int count, bool asynchronous, Probe probe, CancellationToken token) =>

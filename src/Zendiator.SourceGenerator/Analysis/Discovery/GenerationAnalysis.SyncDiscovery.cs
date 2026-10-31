@@ -10,7 +10,8 @@ internal sealed partial class GenerationAnalysis
 {
     private bool EnsureOpenSyncRequest(INamedTypeSymbol reqDef)
     {
-        if (openSyncRequests.ContainsKey(reqDef)) return true;
+        if (openSyncRequests.ContainsKey(reqDef))
+            return true;
         if (!IsOpenDefinition(reqDef))
         {
             Error(3, $"Request {Name(reqDef)} must be a public generic definition with exactly one response contract.", reqDef);
@@ -55,8 +56,10 @@ internal sealed partial class GenerationAnalysis
         var pfixed = new ITypeSymbol[pargs.Length];
         var h2d = new int[type.TypeParameters.Length];
         var hpos = new int[type.TypeParameters.Length];
-        for (var j = 0; j < h2d.Length; j++) h2d[j] = -1;
-        for (var j = 0; j < hpos.Length; j++) hpos[j] = -1;
+        for (var j = 0; j < h2d.Length; j++)
+            h2d[j] = -1;
+        for (var j = 0; j < hpos.Length; j++)
+            hpos[j] = -1;
         for (var i = 0; i < pargs.Length; i++)
         {
             if (pargs[i] is ITypeParameterSymbol hp && Same(hp.ContainingSymbol, type))
@@ -99,7 +102,8 @@ internal sealed partial class GenerationAnalysis
             }
             openSyncRequests[reqDef] = compilation.GetSpecialType(SpecialType.System_Void);
         }
-        else if (!EnsureOpenSyncRequest(reqDef)) return;
+        else if (!EnsureOpenSyncRequest(reqDef))
+            return;
         ITypeSymbol responsePattern = openSyncRequests[reqDef];
         if (!isVoid)
         {
@@ -128,7 +132,8 @@ internal sealed partial class GenerationAnalysis
         }
         var merged = reqDef.TypeParameters.Select(FromTypeParam).ToArray();
         var mapArgs = new ITypeSymbol[type.TypeParameters.Length];
-        for (var j = 0; j < mapArgs.Length; j++) mapArgs[j] = reqDef.TypeParameters[h2d[j]];
+        for (var j = 0; j < mapArgs.Length; j++)
+            mapArgs[j] = reqDef.TypeParameters[h2d[j]];
         for (var j = 0; j < type.TypeParameters.Length; j++)
         {
             var reqAllows = reqDef.TypeParameters[h2d[j]].AllowsRefLikeType;
@@ -138,7 +143,8 @@ internal sealed partial class GenerationAnalysis
                 Error(12, $"Handler {Name(type)} must allow ref struct type arguments where request {Name(reqDef)} allows them.", type);
                 return;
             }
-            if (reqAllows) merged[h2d[j]].AllowsRefLike = true;
+            if (reqAllows)
+                merged[h2d[j]].AllowsRefLike = true;
             if (!MergeHandlerParam(merged[h2d[j]], type.TypeParameters[j], type, mapArgs, compilation))
             {
                 Error(11, $"Handler {Name(type)} declares constraints that request {Name(reqDef)} does not satisfy. Loosen the handler or tighten the request.", type);

@@ -8,12 +8,17 @@ internal static class CanonicalSyncSourceEmitter
 {
     internal static string Emit(CanonicalSyncEmissionModel model)
     {
-        if (model.Compositions.Count == 0) return "";
+        if (model.Compositions.Count == 0)
+            return "";
         var b = Header();
         b.Append(CanonicalSymbolName.Declarations(model.Compositions.SelectMany(c => c.ExternAliases)));
         foreach (var c in model.Compositions)
         {
-            if (c.ScopedObserver != null) { CanonicalScopedSyncSourceEmitter.Emit(b, c); continue; }
+            if (c.ScopedObserver != null)
+            {
+                CanonicalScopedSyncSourceEmitter.Emit(b, c);
+                continue;
+            }
             var h = c.Handler;
             var result = h.ResultName ?? "void";
             var typeParameters = c.Generic?.TypeParameters ?? "";
@@ -47,8 +52,10 @@ internal static class CanonicalSyncSourceEmitter
                     """);
             if (c.Hooks.Count != 0)
             {
-                if (c.Hooks.Count == 1) EmitHookSend(b, c);
-                else EmitNestedHookSend(b, c);
+                if (c.Hooks.Count == 1)
+                    EmitHookSend(b, c);
+                else
+                    EmitNestedHookSend(b, c);
                 b.AppendLine("        }\n    }");
                 EmitRegistrar(b, c);
                 b.AppendLine("}");
@@ -63,7 +70,8 @@ internal static class CanonicalSyncSourceEmitter
                 """);
             else
                 b.AppendLine($$"""            var handler = {{CanonicalServiceResolution.Emit(h.HandlerName, h.HandlerIsValueType)}};""");
-            if (owned) b.AppendLine("            try\n            {");
+            if (owned)
+                b.AppendLine("            try\n            {");
             b.AppendLine($$"""            {{(h.ResultName == null ? "" : "return ")}}(({{h.ContractName}})handler).{{h.MethodName}}(request, cancellationToken);""");
             if (owned)
                 b.AppendLine($$"""
@@ -95,7 +103,8 @@ internal static class CanonicalSyncSourceEmitter
                 """);
         else
             b.AppendLine($$"""            var hook = {{CanonicalServiceResolution.Emit(hook.HookName, hook.HookIsValueType)}};""");
-        if (owned) b.AppendLine("            try\n            {");
+        if (owned)
+            b.AppendLine("            try\n            {");
         var handlerCall = HookHandlerCall(c);
         b.AppendLine($$"""
                     var saved = request;
@@ -158,7 +167,8 @@ internal static class CanonicalSyncSourceEmitter
     private static void EmitNestedHookSend(StringBuilder b, CanonicalSyncCompositionEmission c)
     {
         var h = c.Handler;
-        var outer = c.Hooks[0]; var inner = c.Hooks[1];
+        var outer = c.Hooks[0];
+        var inner = c.Hooks[1];
         b.AppendLine($$"""
                     var outer = {{CanonicalServiceResolution.Emit(outer.HookName, outer.HookIsValueType)}};
                     var savedOuter = request;
@@ -220,7 +230,8 @@ internal static class CanonicalSyncSourceEmitter
 
     internal static string EmitInterceptors(CanonicalSyncInterceptorModel model, string shimName = "CanonicalSyncShims")
     {
-        if (model.CallSites.Count == 0) return "";
+        if (model.CallSites.Count == 0)
+            return "";
         var b = Header();
         b.Append(CanonicalSymbolName.Declarations(model.CallSites.SelectMany(c => c.ExternAliases)));
         b.AppendLine($$"""

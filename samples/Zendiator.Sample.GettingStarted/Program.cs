@@ -90,7 +90,10 @@ public sealed class NumberCursor(int count, CancellationToken token) : IAsyncEnu
 {
     private int _index;
     private bool _started;
-    public int Current { get; private set; }
+    public int Current
+    {
+        get; private set;
+    }
     public ValueTask<bool> MoveNextAsync() => _started ? new(Move()) : StartAsync();
 
     private async ValueTask<bool> StartAsync()
@@ -103,12 +106,18 @@ public sealed class NumberCursor(int count, CancellationToken token) : IAsyncEnu
     private bool Move()
     {
         token.ThrowIfCancellationRequested();
-        if (_index >= count) return false;
+        if (_index >= count)
+            return false;
         Current = ++_index;
         return true;
     }
 
-    public ValueTask DisposeAsync() { _started = true; _index = count; return default; }
+    public ValueTask DisposeAsync()
+    {
+        _started = true;
+        _index = count;
+        return default;
+    }
 }
 
 // Value-type sinks are copied; the list is the shared result owner.

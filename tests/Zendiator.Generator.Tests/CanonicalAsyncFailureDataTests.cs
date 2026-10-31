@@ -36,14 +36,22 @@ public sealed partial class GeneratorTests
                 Assert.Equal("caller", AsyncHookProbe.Ambient.Value);
                 AssertFailureDataTraceAndRequests(p, request);
                 Assert.All(p.Calls.Where(call => call.Phase.EndsWith(".exception", StringComparison.Ordinal)), call => Assert.Same(body, call.Error));
-                Assert.All(p.Calls.Where(call => call.Exit != null), call => { Assert.False(call.Exit!.Value.Success); Assert.Same(body, call.Exit.Value.Error); });
+                Assert.All(p.Calls.Where(call => call.Exit != null), call =>
+                {
+                    Assert.False(call.Exit!.Value.Success);
+                    Assert.Same(body, call.Exit.Value.Error);
+                });
                 Assert.Empty(p.Gates);
                 Assert.Empty(p.ReleasedHooks);
                 Assert.Equal(0, p.HandlerDisposals);
             }
             AssertFailureDataBorrowedDisposal(p);
         }
-        finally { AsyncHookProbe.Ambient.Value = prior; p.Cancellation.Dispose(); }
+        finally
+        {
+            AsyncHookProbe.Ambient.Value = prior;
+            p.Cancellation.Dispose();
+        }
     }
 
     [Theory]
@@ -65,9 +73,14 @@ public sealed partial class GeneratorTests
         {
             switch (Interlocked.Increment(ref published))
             {
-                case 1: observerReady.SetResult(gate); break;
-                case 2: finallyReady.SetResult(gate); break;
-                default: throw new InvalidOperationException("Unexpected pending void callback.");
+                case 1:
+                    observerReady.SetResult(gate);
+                    break;
+                case 2:
+                    finallyReady.SetResult(gate);
+                    break;
+                default:
+                    throw new InvalidOperationException("Unexpected pending void callback.");
             }
         };
         var prior = AsyncHookProbe.Ambient.Value;
@@ -97,12 +110,19 @@ public sealed partial class GeneratorTests
                 p.Pending = null;
                 finallyGate.Fail(final);
                 Exception? actual = null;
-                try { await completion.WaitAsync(TimeSpan.FromSeconds(10)); }
-                catch (Exception error) { actual = error; }
+                try
+                {
+                    await completion.WaitAsync(TimeSpan.FromSeconds(10));
+                }
+                catch (Exception error)
+                {
+                    actual = error;
+                }
                 Assert.Same(final, actual);
                 Assert.Equal(canceledFinally, completion.IsCanceled);
                 Assert.Equal(!canceledFinally, completion.IsFaulted);
-                if (canceledFinally) Assert.Equal(foreign.Token, Assert.IsType<OperationCanceledException>(actual).CancellationToken);
+                if (canceledFinally)
+                    Assert.Equal(foreign.Token, Assert.IsType<OperationCanceledException>(actual).CancellationToken);
                 Assert.Equal("caller", AsyncHookProbe.Ambient.Value);
                 Assert.Equal(2, published);
                 Assert.Equal(2, p.Gates.Count);
@@ -124,7 +144,11 @@ public sealed partial class GeneratorTests
             }
             AssertFailureDataBorrowedDisposal(p);
         }
-        finally { AsyncHookProbe.Ambient.Value = prior; p.Cancellation.Dispose(); }
+        finally
+        {
+            AsyncHookProbe.Ambient.Value = prior;
+            p.Cancellation.Dispose();
+        }
     }
 
     private static void AssertFailureDataTraceAndRequests(AsyncHookProbe p, object original)

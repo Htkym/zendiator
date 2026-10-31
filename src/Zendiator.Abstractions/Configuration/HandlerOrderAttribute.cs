@@ -10,5 +10,8 @@ public sealed class HandlerOrderAttribute : Attribute
 
     public HandlerOrderAttribute(int order) => Order = order;
 
-    public int Order { get; set; }
+    public int Order
+    {
+        get; set;
+    }
 }

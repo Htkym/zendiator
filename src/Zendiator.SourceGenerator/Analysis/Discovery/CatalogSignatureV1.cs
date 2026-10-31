@@ -12,8 +12,14 @@ namespace Zendiator.SourceGenerator;
 
 internal sealed record CatalogHandlerContract(BoundDispatchFamily Family, ITypeSymbol Request, ITypeSymbol? Response)
 {
-    public ITypeSymbol? Cursor { get; init; }
-    public bool ReturnsEnumerable { get; init; }
+    public ITypeSymbol? Cursor
+    {
+        get; init;
+    }
+    public bool ReturnsEnumerable
+    {
+        get; init;
+    }
 }
 internal sealed record CatalogHandlerFact(INamedTypeSymbol Type, CatalogHandlerContract[] Contracts, string[] Errors);
 
@@ -24,7 +30,8 @@ internal static class CatalogSignatureV1
     internal static string DefinitionId(INamedTypeSymbol type)
     {
         var names = new Stack<string>();
-        for (var current = type.OriginalDefinition; current != null; current = current.ContainingType) names.Push(current.MetadataName);
+        for (var current = type.OriginalDefinition; current != null; current = current.ContainingType)
+            names.Push(current.MetadataName);
         return type.ContainingAssembly.Identity + "|" + (type.ContainingNamespace.IsGlobalNamespace ? "" : type.ContainingNamespace.ToDisplayString() + ".") + string.Join("+", names);
     }
     internal static string TypeId(ITypeSymbol type, bool annotations = true) => type switch
@@ -39,7 +46,8 @@ internal static class CatalogSignatureV1
     private static IEnumerable<ITypeParameterSymbol> Parameters(INamedTypeSymbol type)
     {
         var owners = new Stack<INamedTypeSymbol>();
-        for (var current = type; current != null; current = current.ContainingType) owners.Push(current);
+        for (var current = type; current != null; current = current.ContainingType)
+            owners.Push(current);
         return owners.SelectMany(o => o.TypeParameters.OrderBy(p => p.Ordinal));
     }
     private static bool Contains(ITypeSymbol type, ITypeParameterSymbol parameter) => Same(type, parameter) ||
@@ -47,23 +55,31 @@ internal static class CatalogSignatureV1
         type is IArrayTypeSymbol a && Contains(a.ElementType, parameter);
     internal static CatalogHandlerFact Inspect(Compilation compilation, INamedTypeSymbol type)
     {
-        var errors = new List<string>(); var contracts = new List<CatalogHandlerContract>();
-        if (type.IsAbstract || type.IsStatic || type.TypeKind is not (TypeKind.Class or TypeKind.Struct)) errors.Add("HandlerNotConcrete");
-        if (type.IsRefLikeType) errors.Add("RefLikeHandlerUnsupported");
-        if (!compilation.IsSymbolAccessibleWithin(type, compilation.Assembly)) errors.Add("HandlerInaccessible");
-        if (!IsPublicDefinition(type)) errors.Add("CatalogHandlerNotPublic");
+        var errors = new List<string>();
+        var contracts = new List<CatalogHandlerContract>();
+        if (type.IsAbstract || type.IsStatic || type.TypeKind is not (TypeKind.Class or TypeKind.Struct))
+            errors.Add("HandlerNotConcrete");
+        if (type.IsRefLikeType)
+            errors.Add("RefLikeHandlerUnsupported");
+        if (!compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
+            errors.Add("HandlerInaccessible");
+        if (!IsPublicDefinition(type))
+            errors.Add("CatalogHandlerNotPublic");
         var assembly = compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly;
         var definitions = new[]{(ContractNames.Handler,BoundDispatchFamily.SendAsync),(ContractNames.VoidHandler,BoundDispatchFamily.SendAsync),
             (ContractNames.SyncHandler,BoundDispatchFamily.SendSync),(ContractNames.SyncVoidHandler,BoundDispatchFamily.SendSync),
             (ContractNames.StreamHandler,BoundDispatchFamily.Stream),(ContractNames.EnumerableStreamHandler,BoundDispatchFamily.Stream),
             (ContractNames.NotificationHandler,BoundDispatchFamily.Notification)};
-        foreach (var iface in type.AllInterfaces) foreach (var (name, family) in definitions)
-            if (Same(iface.OriginalDefinition, assembly?.GetTypeByMetadataName(name))) contracts.Add(new(family, iface.TypeArguments[0], iface.TypeArguments.Length >= 2 ? iface.TypeArguments[1] : null)
-            {
-                Cursor = family == BoundDispatchFamily.Stream && iface.TypeArguments.Length == 3 ? iface.TypeArguments[2] : null,
-                ReturnsEnumerable = name == ContractNames.EnumerableStreamHandler
-            });
-        if (contracts.Count == 0) errors.Add("MissingHandlerContract");
+        foreach (var iface in type.AllInterfaces)
+            foreach (var (name, family) in definitions)
+                if (Same(iface.OriginalDefinition, assembly?.GetTypeByMetadataName(name)))
+                    contracts.Add(new(family, iface.TypeArguments[0], iface.TypeArguments.Length >= 2 ? iface.TypeArguments[1] : null)
+                    {
+                        Cursor = family == BoundDispatchFamily.Stream && iface.TypeArguments.Length == 3 ? iface.TypeArguments[2] : null,
+                        ReturnsEnumerable = name == ContractNames.EnumerableStreamHandler
+                    });
+        if (contracts.Count == 0)
+            errors.Add("MissingHandlerContract");
         if (ContainsErrorType(type) || type.AllInterfaces.Any(ContainsErrorType) ||
             Parameters(type).SelectMany(p => p.ConstraintTypes).Any(ContainsErrorType) || MissingBaseType(type))
             errors.Add("CatalogDependencyUnavailable");
@@ -73,15 +89,18 @@ internal static class CatalogSignatureV1
             errors.Add("UnsupportedCatalogSignature");
         foreach (var contract in contracts)
         {
-            if (Parameters(type).Any(p => !Contains(contract.Request, p))) errors.Add("UninferableHandlerParameter");
-            if (contracts.Count(c => c.Family == contract.Family && Same(c.Request, contract.Request)) > 1) errors.Add("AmbiguousHandlerContract");
+            if (Parameters(type).Any(p => !Contains(contract.Request, p)))
+                errors.Add("UninferableHandlerParameter");
+            if (contracts.Count(c => c.Family == contract.Family && Same(c.Request, contract.Request)) > 1)
+                errors.Add("AmbiguousHandlerContract");
         }
         return new(type, contracts.ToArray(), errors.Distinct().ToArray());
     }
     private static bool MissingBaseType(INamedTypeSymbol type)
     {
         for (var parent = type.BaseType; parent != null; parent = parent.BaseType)
-            if (ContainsErrorType(parent)) return true;
+            if (ContainsErrorType(parent))
+                return true;
         return false;
     }
     private static bool ContainsErrorType(ITypeSymbol type) => type.TypeKind == TypeKind.Error || (type switch
@@ -120,9 +139,12 @@ internal static class CatalogSignatureV1
     // Match System.Text.Json's BasicLatin/HTML-safe encoding without an analyzer dependency.
     internal static string Json(object? value)
     {
-        if (value == null) return "null";
-        if (value is bool flag) return flag ? "true" : "false";
-        if (value is int number) return number.ToString(CultureInfo.InvariantCulture);
+        if (value == null)
+            return "null";
+        if (value is bool flag)
+            return flag ? "true" : "false";
+        if (value is int number)
+            return number.ToString(CultureInfo.InvariantCulture);
         if (value is string text)
         {
             var b = new StringBuilder("\"");
@@ -131,28 +153,48 @@ internal static class CatalogSignatureV1
                 var c = text[i];
                 switch (c)
                 {
-                    case '\\': b.Append("\\\\"); continue;
-                    case '\b': b.Append("\\b"); continue;
-                    case '\t': b.Append("\\t"); continue;
-                    case '\n': b.Append("\\n"); continue;
-                    case '\f': b.Append("\\f"); continue;
-                    case '\r': b.Append("\\r"); continue;
+                    case '\\':
+                        b.Append("\\\\");
+                        continue;
+                    case '\b':
+                        b.Append("\\b");
+                        continue;
+                    case '\t':
+                        b.Append("\\t");
+                        continue;
+                    case '\n':
+                        b.Append("\\n");
+                        continue;
+                    case '\f':
+                        b.Append("\\f");
+                        continue;
+                    case '\r':
+                        b.Append("\\r");
+                        continue;
                 }
-                if (c >= ' ' && c <= '\x7e' && c is not ('"' or '\'' or '&' or '+' or '<' or '>' or '\x60')) b.Append(c);
+                if (c >= ' ' && c <= '\x7e' && c is not ('"' or '\'' or '&' or '+' or '<' or '>' or '\x60'))
+                    b.Append(c);
                 else
                 {
                     if (char.IsHighSurrogate(c))
                     {
-                        if (i + 1 < text.Length && char.IsLowSurrogate(text[i + 1])) { b.Append("\\u").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture)); c = text[++i]; }
-                        else c = '\ufffd';
+                        if (i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+                        {
+                            b.Append("\\u").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
+                            c = text[++i];
+                        }
+                        else
+                            c = '\ufffd';
                     }
-                    else if (char.IsLowSurrogate(c)) c = '\ufffd';
+                    else if (char.IsLowSurrogate(c))
+                        c = '\ufffd';
                     b.Append("\\u").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
                 }
             }
             return b.Append('"').ToString();
         }
-        if (value is IEnumerable values) return "[" + string.Join(",", values.Cast<object?>().Select(Json)) + "]";
+        if (value is IEnumerable values)
+            return "[" + string.Join(",", values.Cast<object?>().Select(Json)) + "]";
         throw new NotSupportedException("Unsupported catalog JSON value.");
     }
 }

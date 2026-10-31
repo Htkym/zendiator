@@ -20,21 +20,29 @@ public sealed class AdaptiveCacheProbe
     public void Construct(object receiver, int index)
     {
         DuringConstruct?.Invoke(index);
-        if (Record) lock (Created) Created.Add((index, receiver));
+        if (Record)
+            lock (Created)
+                Created.Add((index, receiver));
     }
     public void Before(object receiver, int index)
     {
-        if (Record) lock (BeforeCalls) BeforeCalls.Add((index, receiver));
-        if (BeforeError is { } error) throw error;
+        if (Record)
+            lock (BeforeCalls)
+                BeforeCalls.Add((index, receiver));
+        if (BeforeError is { } error)
+            throw error;
     }
     public int Hit(object receiver, int index, int value)
     {
-        if (Record) lock (Calls) Calls.Add((index, receiver));
+        if (Record)
+            lock (Calls)
+                Calls.Add((index, receiver));
         return value;
     }
     public void Release(object receiver)
     {
-        if (!Record) return;
+        if (!Record)
+            return;
         lock (Released)
         {
             Assert.DoesNotContain(Released, previous => ReferenceEquals(previous, receiver));
@@ -71,16 +79,20 @@ public sealed partial class GeneratorTests
         for (var i = 0; i < routes; i++)
             source.Append("public R").Append(i).Append(" Before(R").Append(i).Append(" r,CancellationToken t){_p.Before(this,").Append(i).Append(");return r;}");
         source.Append("public void Dispose()=>_p.Release(this);}[ZendiatorComposition(\"adaptive\"");
-        if (cacheMode is { } selectedMode) source.Append(",ClosedServiceCache=ClosedServiceCacheMode.").Append(selectedMode);
+        if (cacheMode is { } selectedMode)
+            source.Append(",ClosedServiceCache=ClosedServiceCacheMode.").Append(selectedMode);
         source.Append(")]public sealed class Reads;public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<Reads>(c=>{");
         for (var i = 0; i < routes; i++)
             source.Append("c.Handlers<R").Append(i).Append(">(DispatchFamily.SendSync,typeof(H").Append(i).Append("));c.Pipeline<R").Append(i).Append(">(DispatchFamily.SendSync,Stage.Hook<Shared>());");
         source.Append("});public static object Create(IServiceProvider p)=>new global::Adaptive.Generated.Reads.Zendiator(p);public static object NewService(Probe p,int index)=>index switch{-1=>new Shared(p),");
-        for (var i = 0; i < routes; i++) source.Append(i).Append("=>new H").Append(i).Append("(p),");
+        for (var i = 0; i < routes; i++)
+            source.Append(i).Append("=>new H").Append(i).Append("(p),");
         source.Append("_=>throw new ArgumentOutOfRangeException(nameof(index))};public static int Send(object m,int index,int value){var z=(global::Adaptive.Generated.Reads.IZendiator)m;return index switch{");
-        for (var i = 0; i < routes; i++) source.Append(i).Append("=>z.Send(new R").Append(i).Append("(value)),");
+        for (var i = 0; i < routes; i++)
+            source.Append(i).Append("=>z.Send(new R").Append(i).Append("(value)),");
         source.Append("_=>throw new ArgumentOutOfRangeException(nameof(index))};}public static void Dense(object m,int value){");
-        for (var i = 0; i < routes; i++) source.Append("Send(m,").Append(i).Append(",value);");
+        for (var i = 0; i < routes; i++)
+            source.Append("Send(m,").Append(i).Append(",value);");
         source.Append("}}}");
         var input = source.ToString();
         var policy = cacheMode?.ToString() ?? "Default";
@@ -95,8 +107,10 @@ public sealed partial class GeneratorTests
             var folder = Path.Combine(evidence, "generated-artifacts", "adaptive-closed-" + count + "-" + policy);
             Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, "input.cs"), input);
-            foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
-            if (emitted.Success) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+            foreach (var file in generated)
+                File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
+            if (emitted.Success)
+                File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
             File.WriteAllText(Path.Combine(folder, "compile.json"), JsonSerializer.Serialize(new
             {
                 output.AssemblyName,
@@ -202,7 +216,8 @@ public sealed partial class GeneratorTests
             var folder = Path.Combine(evidence, "generated-artifacts", "closed-cache-stream-layout");
             Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, "input.cs"), source);
-            foreach (var file in driver.GetRunResult().Results.Single().GeneratedSources) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
+            foreach (var file in driver.GetRunResult().Results.Single().GeneratedSources)
+                File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
         }
     }
 
@@ -224,8 +239,10 @@ public sealed partial class GeneratorTests
         Task<int>[] operations = [];
         probe.DuringConstruct = index =>
         {
-            if (index != -1) return;
-            if (Interlocked.Increment(ref constructors) == 2) entered.TrySetResult();
+            if (index != -1)
+                return;
+            if (Interlocked.Increment(ref constructors) == 2)
+                entered.TrySetResult();
             Assert.True(release.Wait(TimeSpan.FromSeconds(10)));
         };
         try
@@ -236,10 +253,12 @@ public sealed partial class GeneratorTests
             release.Set();
             Assert.Equal(new[] { 11, 12 }, await Task.WhenAll(operations).WaitAsync(TimeSpan.FromSeconds(10)));
             probe.DuringConstruct = null;
-            foreach (var route in new[] { 0, 15, 16, 31, 32, 47, 48, 61, 40, 0 }) Assert.Equal(23, fixture.Send(mediator, route, 23));
+            foreach (var route in new[] { 0, 15, 16, 31, 32, 47, 48, 61, 40, 0 })
+                Assert.Equal(23, fixture.Send(mediator, route, 23));
             Assert.Equal(2, probe.Created.Count(call => call.Index == -1));
             Assert.All(probe.BeforeCalls, call => Assert.Same(probe.BeforeCalls[0].Receiver, call.Receiver));
-            foreach (var calls in probe.Calls.GroupBy(call => call.Index)) Assert.All(calls, call => Assert.Same(calls.First().Receiver, call.Receiver));
+            foreach (var calls in probe.Calls.GroupBy(call => call.Index))
+                Assert.All(calls, call => Assert.Same(calls.First().Receiver, call.Receiver));
             Assert.Empty(probe.Released);
             var firstShared = probe.BeforeCalls[0].Receiver;
             await using (var otherScope = provider.CreateAsyncScope())
@@ -255,8 +274,14 @@ public sealed partial class GeneratorTests
         {
             release.Set();
             probe.DuringConstruct = null;
-            try { await Task.WhenAll(operations).WaitAsync(TimeSpan.FromSeconds(10)); }
-            finally { await scope.DisposeAsync(); }
+            try
+            {
+                await Task.WhenAll(operations).WaitAsync(TimeSpan.FromSeconds(10));
+            }
+            finally
+            {
+                await scope.DisposeAsync();
+            }
         }
         Assert.Equal(probe.Created.Count, probe.Released.Count);
         Assert.All(probe.Created, call => Assert.Contains(probe.Released, released => ReferenceEquals(call.Receiver, released)));
@@ -284,8 +309,10 @@ public sealed partial class GeneratorTests
         services.AddTransient(types[0], _ =>
         {
             var attempt = ++attempts;
-            if (attempt == 1) return null!;
-            if (attempt == 2) throw failure;
+            if (attempt == 1)
+                return null!;
+            if (attempt == 2)
+                throw failure;
             if (attempt == 3)
             {
                 innerOther = ((IServiceProvider)mediator).GetService(types[1]);
@@ -333,7 +360,11 @@ public sealed partial class GeneratorTests
         var resolutions = 0;
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton(probe);
-        services.AddSingleton(type, _ => { resolutions++; return box; });
+        services.AddSingleton(type, _ =>
+        {
+            resolutions++;
+            return box;
+        });
         fixture.Register(services);
         using (var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
         using (var scope = provider.CreateScope())
@@ -382,13 +413,17 @@ public sealed partial class GeneratorTests
             void Run()
             {
                 var mediator = fixture.Create(provider);
-                if (shape == 1) fixture.Send(mediator, 0, 1);
-                if (shape == 2) fixture.Dense(mediator, 1);
+                if (shape == 1)
+                    fixture.Send(mediator, 0, 1);
+                if (shape == 2)
+                    fixture.Dense(mediator, 1);
                 GC.KeepAlive(mediator);
             }
-            for (var i = 0; i < 32; i++) Run();
+            for (var i = 0; i < 32; i++)
+                Run();
             var start = GC.GetAllocatedBytesForCurrentThread();
-            for (var i = 0; i < repetitions; i++) Run();
+            for (var i = 0; i < repetitions; i++)
+                Run();
             return GC.GetAllocatedBytesForCurrentThread() - start;
         }
         var construction = Construct(0);
@@ -396,9 +431,11 @@ public sealed partial class GeneratorTests
         var dense = Construct(2);
         var warmed = fixture.Create(provider);
         fixture.Dense(warmed, 1);
-        for (var i = 0; i < 256; i++) fixture.Send(warmed, i % fixture.Handlers.Length, i);
+        for (var i = 0; i < 256; i++)
+            fixture.Send(warmed, i % fixture.Handlers.Length, i);
         var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < repetitions; i++) fixture.Send(warmed, i % fixture.Handlers.Length, i);
+        for (var i = 0; i < repetitions; i++)
+            fixture.Send(warmed, i % fixture.Handlers.Length, i);
         var dispatch = GC.GetAllocatedBytesForCurrentThread() - before;
         GC.KeepAlive(warmed);
         return new(dependencies, repetitions, construction, sparse, dense, dispatch);
@@ -434,7 +471,11 @@ public sealed partial class GeneratorTests
         }
         Assert.Equal(small.ConstructionBytesTotal, small.SparseBytesTotal);
         Assert.Equal(small.ConstructionBytesTotal, small.DenseBytesTotal);
-        Assert.True(large.ConstructionBytesTotal < small.ConstructionBytesTotal, JsonSerializer.Serialize(new { small, large }));
+        Assert.True(large.ConstructionBytesTotal < small.ConstructionBytesTotal, JsonSerializer.Serialize(new
+        {
+            small,
+            large
+        }));
         Assert.True(large.ConstructionBytesTotal < large.SparseBytesTotal);
         Assert.True(large.SparseBytesTotal < large.DenseBytesTotal);
         Assert.Equal(0, small.WarmDispatchBytesTotal);

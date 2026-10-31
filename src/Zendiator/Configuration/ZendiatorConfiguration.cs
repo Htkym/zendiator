@@ -37,7 +37,8 @@ public sealed class ZendiatorConfiguration
         ThrowIfFrozen();
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(beforeTypes);
-        if (beforeTypes.Any(static type => type == null)) throw new ArgumentException("Every Stream Before entry must name a type.", nameof(beforeTypes));
+        if (beforeTypes.Any(static type => type == null))
+            throw new ArgumentException("Every Stream Before entry must name a type.", nameof(beforeTypes));
         _streamBefore.Add((request, Array.AsReadOnly(beforeTypes.ToArray())));
     }
 
@@ -51,8 +52,10 @@ public sealed class ZendiatorConfiguration
     /// <remarks>Final arguments are determined by dedicated map contracts, never inferred by parameter names or ordinal pairing with the request.</remarks>
     public void StreamPipeline(Type request, Type final, params Stage[] stages)
     {
-        ArgumentNullException.ThrowIfNull(request); ArgumentNullException.ThrowIfNull(final);
-        RecordPipeline(request, DispatchFamily.Stream, stages); _streamOutputs.Add((request, final));
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(final);
+        RecordPipeline(request, DispatchFamily.Stream, stages);
+        _streamOutputs.Add((request, final));
     }
 
     /// <summary>Declares stages in order, inferring an unambiguous dispatch family from selected handlers.</summary>
@@ -71,7 +74,8 @@ public sealed class ZendiatorConfiguration
         ThrowIfFrozen();
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(handlers);
-        if (handlers.Any(static type => type == null)) throw new ArgumentException("Every handler entry must name a type.", nameof(handlers));
+        if (handlers.Any(static type => type == null))
+            throw new ArgumentException("Every handler entry must name a type.", nameof(handlers));
         RecordHandlers(request, family, handlers.Select(static type => HandlerEntry.Service(type)).ToArray());
     }
     /// <summary>Declares the authoritative handler order for one route.</summary>
@@ -79,7 +83,8 @@ public sealed class ZendiatorConfiguration
     {
         ThrowIfFrozen();
         ArgumentNullException.ThrowIfNull(handlers);
-        if (handlers.Any(static type => type == null)) throw new ArgumentException("Every handler entry must name a type.", nameof(handlers));
+        if (handlers.Any(static type => type == null))
+            throw new ArgumentException("Every handler entry must name a type.", nameof(handlers));
         RecordHandlers(typeof(TRequest), family, handlers.Select(static type => HandlerEntry.Service(type)).ToArray());
     }
 
@@ -93,14 +98,18 @@ public sealed class ZendiatorConfiguration
     /// <summary>Declares explicit receiver/factory entries for a closed request or handler-derived open request pattern.</summary>
     public void Handlers(Type request, DispatchFamily family, HandlerEntry first, params HandlerEntry[] rest)
     {
-        ThrowIfFrozen(); ArgumentNullException.ThrowIfNull(request); ArgumentNullException.ThrowIfNull(rest);
+        ThrowIfFrozen();
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(rest);
         RecordHandlers(request, family, new[] { first }.Concat(rest).ToArray());
     }
 
     private void RecordHandlers(Type request, DispatchFamily family, HandlerEntry[] handlers)
     {
-        if (!Enum.IsDefined(family)) throw new ArgumentOutOfRangeException(nameof(family));
-        if (handlers.Any(static entry => entry.Type == null)) throw new ArgumentException("Every handler entry must name a type.", nameof(handlers));
+        if (!Enum.IsDefined(family))
+            throw new ArgumentOutOfRangeException(nameof(family));
+        if (handlers.Any(static entry => entry.Type == null))
+            throw new ArgumentException("Every handler entry must name a type.", nameof(handlers));
         _routeHandlers.Add((request, family, Array.AsReadOnly(handlers.ToArray())));
     }
 
@@ -108,8 +117,10 @@ public sealed class ZendiatorConfiguration
     {
         ThrowIfFrozen();
         ArgumentNullException.ThrowIfNull(stages);
-        if (family is { } value && !Enum.IsDefined(value)) throw new ArgumentOutOfRangeException(nameof(family));
-        if (stages.Any(static stage => stage.Type == null)) throw new ArgumentException("Every stage entry must name a type.", nameof(stages));
+        if (family is { } value && !Enum.IsDefined(value))
+            throw new ArgumentOutOfRangeException(nameof(family));
+        if (stages.Any(static stage => stage.Type == null))
+            throw new ArgumentException("Every stage entry must name a type.", nameof(stages));
         _pipelines.Add((request, family, Array.AsReadOnly(stages.ToArray())));
     }
 
@@ -125,7 +136,8 @@ public sealed class ZendiatorConfiguration
     {
         ThrowIfFrozen();
         var marker = typeof(TMarker);
-        if (_catalogMarkers.Any(type => type.Assembly == marker.Assembly)) throw new InvalidOperationException("The same catalog is selected more than once.");
+        if (_catalogMarkers.Any(type => type.Assembly == marker.Assembly))
+            throw new InvalidOperationException("The same catalog is selected more than once.");
         _catalogMarkers.Add(marker);
     }
 

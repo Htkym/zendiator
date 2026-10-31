@@ -38,14 +38,17 @@ public class ZendiatorSingleServiceResolver<T> where T : class
         var threadId = Environment.CurrentManagedThreadId;
         while (true)
         {
-            if (Volatile.Read(ref _value) is { } existing) return existing;
+            if (Volatile.Read(ref _value) is { } existing)
+                return existing;
             var owner = Volatile.Read(ref _ownerThreadId);
-            if (owner == threadId) return ResolveOnOwnerThread();
+            if (owner == threadId)
+                return ResolveOnOwnerThread();
             if (owner == 0 && Interlocked.CompareExchange(ref _ownerThreadId, threadId, 0) == 0)
             {
                 try
                 {
-                    if (_value is { } captured) return captured;
+                    if (_value is { } captured)
+                        return captured;
                     return ResolveOnOwnerThread();
                 }
                 finally
@@ -54,7 +57,8 @@ public class ZendiatorSingleServiceResolver<T> where T : class
                     Interlocked.Exchange(ref _ownerThreadId, 0);
                     if (Volatile.Read(ref _waiterCount) != 0)
                     {
-                        lock (WaitMonitor) Monitor.PulseAll(WaitMonitor);
+                        lock (WaitMonitor)
+                            Monitor.PulseAll(WaitMonitor);
                     }
                 }
             }
@@ -78,7 +82,8 @@ public class ZendiatorSingleServiceResolver<T> where T : class
     {
         var service = _provider.GetRequiredService<T>();
         // Reentrant activation may already have published its own instance.
-        if (_value is null) Volatile.Write(ref _value, service);
+        if (_value is null)
+            Volatile.Write(ref _value, service);
         return service;
     }
 }

@@ -30,7 +30,8 @@ internal static class CanonicalStreamContractBinding
         var result = enumerable
             ? compilation.GetTypeByMetadataName("System.Collections.Generic.IAsyncEnumerable`1")?.Construct(contract.TypeArguments[1])
             : cursor == null || valueTask == null ? null : valueTask.Construct(cursor);
-        if (result == null) return false;
+        if (result == null)
+            return false;
         var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
         return members.Length == 1 && Method(members[0]) && Method(implementation);
 
@@ -40,7 +41,8 @@ internal static class CanonicalStreamContractBinding
                 method.Arity != 0 || method.Parameters.Length != (middleware ? 3 : 2) || method.ReturnsByRef || method.ReturnsByRefReadonly ||
                 !Same(method.ReturnType, result) || method.Parameters.Any(p => p.RefKind != RefKind.None || p.ScopedKind != ScopedKind.None) ||
                 !Same(method.Parameters[0].Type, contract.TypeArguments[0]) ||
-                !Same(method.Parameters[method.Parameters.Length - 1].Type, compilation.GetTypeByMetadataName("System.Threading.CancellationToken"))) return false;
+                !Same(method.Parameters[method.Parameters.Length - 1].Type, compilation.GetTypeByMetadataName("System.Threading.CancellationToken")))
+                return false;
             var upstream = middleware ? Definition(compilation, "Zendiator.IStreamUpstream`2")?.Construct(contract.TypeArguments.ToArray()) : null;
             return !middleware || upstream != null && Same(method.Parameters[1].Type, upstream);
         }

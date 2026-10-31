@@ -12,11 +12,15 @@ public sealed class AsmNumbersHandler : IStreamSourceHandler<AsmNumbers, int, As
 public sealed class AsmNumbersCursor(int count, CancellationToken token) : IAsyncEnumerator<int>
 {
     private int _next;
-    public int Current { get; private set; }
+    public int Current
+    {
+        get; private set;
+    }
     public async ValueTask<bool> MoveNextAsync()
     {
         token.ThrowIfCancellationRequested();
-        if (_next == count) return false;
+        if (_next == count)
+            return false;
         await Task.Yield();
         token.ThrowIfCancellationRequested();
         Current = _next++;

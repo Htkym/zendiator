@@ -118,7 +118,8 @@ public sealed partial class GeneratorTests
         })
         {
             var (invalidWorkspace, invalidDocument) = HandlerFixWorkspace(invalid);
-            using (invalidWorkspace) Assert.Empty(await HandlerFixDiagnostics(invalidDocument));
+            using (invalidWorkspace)
+                Assert.Empty(await HandlerFixDiagnostics(invalidDocument));
         }
         var (otherWorkspace, otherDocument) = HandlerFixWorkspace(source);
         using (otherWorkspace)
@@ -211,7 +212,8 @@ public sealed partial class GeneratorTests
             Assert.Same(diagnostic.Location.SourceTree, await document.GetSyntaxTreeAsync());
             var generated = await document.Project.GetSourceGeneratedDocumentsAsync();
             var generatedText = new List<string>();
-            foreach (var item in generated) generatedText.Add((await item.GetTextAsync()).ToString());
+            foreach (var item in generated)
+                generatedText.Add((await item.GetTextAsync()).ToString());
             Assert.Contains(generatedText, text => text.Contains("Snapshot("));
             var action = Assert.Single(await HandlerFixActions(document, diagnostic));
             document = await ApplyHandlerFix(workspace, document, action);

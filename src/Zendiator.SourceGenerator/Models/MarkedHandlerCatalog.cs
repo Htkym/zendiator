@@ -14,14 +14,41 @@ internal sealed record CompositionSelectionModel(string Identity, string Key,
     EquatableArray<SelectedHandlerModel> Handlers, EquatableArray<string> Errors, bool CompilerOwnsHandlerError,
     EquatableArray<BoundPipelineModel> Pipelines = default, EquatableArray<CompositionDiagnosticFact> Facts = default)
 {
-    public EquatableArray<string> ExternAliases { get; init; }
-    public string? GeneratedNamespace { get; init; }
-    public string? MarkerName { get; init; }
-    public bool UseLocalHandlers { get; init; }
-    public bool HasExplicitSelection { get; init; }
-    public EquatableArray<string> ExplicitHandlerTypes { get; init; }
-    public EquatableArray<string> CatalogMarkerTypes { get; init; }
-    public string? MicrosoftDiProviderName { get; init; }
-    public bool LazyClosedServiceCache { get; init; }
+    public EquatableArray<string> ExternAliases
+    {
+        get; init;
+    }
+    public string? GeneratedNamespace
+    {
+        get; init;
+    }
+    public string? MarkerName
+    {
+        get; init;
+    }
+    public bool UseLocalHandlers
+    {
+        get; init;
+    }
+    public bool HasExplicitSelection
+    {
+        get; init;
+    }
+    public EquatableArray<string> ExplicitHandlerTypes
+    {
+        get; init;
+    }
+    public EquatableArray<string> CatalogMarkerTypes
+    {
+        get; init;
+    }
+    public string? MicrosoftDiProviderName
+    {
+        get; init;
+    }
+    public bool LazyClosedServiceCache
+    {
+        get; init;
+    }
 }
 internal sealed record CompositionSelectionCatalog(EquatableArray<CompositionSelectionModel> Compositions);

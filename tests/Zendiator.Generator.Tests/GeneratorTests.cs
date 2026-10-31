@@ -27,7 +27,8 @@ public sealed partial class GeneratorTests
         Assert.Contains("ZendiatorSingleServiceResolver<global::App.Handler>", text);
         Assert.Equal(2, text.Split("this.GetRequiredService()", StringSplitOptions.None).Length - 1);
         Assert.DoesNotContain("GetDispatchService<global::App.Handler>", text);
-        if (explicitSecond) Assert.Contains("((global::Zendiator.IRequestHandler<global::App.Pong, int>)", text);
+        if (explicitSecond)
+            Assert.Contains("((global::Zendiator.IRequestHandler<global::App.Pong, int>)", text);
     }
 
     [Theory]
@@ -45,7 +46,8 @@ public sealed partial class GeneratorTests
         Assert.Contains("ZendiatorSingleServiceResolver<global::App.Handler>", text);
         Assert.Contains("SyncRoute0Node0(global::Zendiator.DependencyInjection.ZendiatorSingleServiceResolver<global::App.Handler> services)", text);
         Assert.Equal(2, text.Split("GetRequiredService()", StringSplitOptions.None).Length - 1);
-        if (explicitSync) Assert.Contains("((global::Zendiator.ISyncRequestHandler<global::App.Pong, int>)services.GetRequiredService())", text);
+        if (explicitSync)
+            Assert.Contains("((global::Zendiator.ISyncRequestHandler<global::App.Pong, int>)services.GetRequiredService())", text);
     }
 
     [Theory]
@@ -1137,7 +1139,8 @@ public sealed partial class GeneratorTests
         var run = driver.GetRunResult().Results.Single();
         if (run.TrackedSteps.TryGetValue("MarkedHandlerModel", out var steps))
             Assert.Empty(Assert.IsType<MarkedHandlerCatalog>(Assert.Single(steps.SelectMany(s => s.Outputs)).Value).Handlers);
-        else Assert.DoesNotContain(run.GeneratedSources, s => s.HintName == "Zendiator.GeneratedCatalog.g.cs");
+        else
+            Assert.DoesNotContain(run.GeneratedSources, s => s.HintName == "Zendiator.GeneratedCatalog.g.cs");
     }
 
     [Fact]
@@ -1155,8 +1158,10 @@ public sealed partial class GeneratorTests
             var generated = LegacySource(driver.GetRunResult());
             Assert.Contains("global::App.Handler", generated);
             Assert.Equal(!marked, generated.Contains("global::App.ExtraHandler"));
-            if (original == null) original = generated;
-            else if (!marked) Assert.Equal(original, generated);
+            if (original == null)
+                original = generated;
+            else if (!marked)
+                Assert.Equal(original, generated);
         }
         // An unrelated orphan request must still report the existing legacy error.
         var missing = Run(Compilation(Head + Request + Handler + extra.Replace("public sealed class ExtraHandler", "[ZendiatorHandler] public sealed class ExtraHandler") +
@@ -1197,7 +1202,8 @@ public sealed partial class GeneratorTests
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error && d.Id != "ZEN0035"));
         var generated = LegacySource(driver.GetRunResult());
         Assert.Contains("global::App.Handler", generated);
-        foreach (var name in new[] { "A", "B", "C" }) Assert.DoesNotContain("global::App." + name, generated);
+        foreach (var name in new[] { "A", "B", "C" })
+            Assert.DoesNotContain("global::App." + name, generated);
         var selections = Selections(driver);
         Assert.Equal(3, selections.Compositions.Count);
         Assert.Equal("global::App.A", Assert.Single(selections.Compositions.Single(c => c.Key == "reads").Handlers).Definition.Name);

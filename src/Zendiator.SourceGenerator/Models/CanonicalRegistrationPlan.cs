@@ -9,7 +9,10 @@ internal sealed record CanonicalRouteRegistration(CanonicalSyncCompositionEmissi
     int HandlerOrdinal, int PipelineOrdinal, BoundStreamOpenRegistration? Open,
     string? FinalItemName, EquatableArray<RegistrationStageEmission> DeclaredStages)
 {
-    public EquatableArray<CanonicalBranchRegistration> BranchHandlers { get; init; }
+    public EquatableArray<CanonicalBranchRegistration> BranchHandlers
+    {
+        get; init;
+    }
     internal IEnumerable<string> ServiceTypes => (Open != null
         ? Open.Stages.Select(s => s.FactoryName ?? s.TypeName).Concat(Open.HandlerDefinitionNames.Count == 0
             ? new[] { Open.HandlerFactoryDefinitionName ?? Open.HandlerDefinitionName } : Open.HandlerDefinitionNames)
@@ -33,11 +36,14 @@ internal sealed record CanonicalRegistrationPlan(CanonicalSyncCompositionEmissio
     internal static CanonicalRegistrationPlan Multi(CanonicalMultiCompositionEmission c) => new(c.Routes[0].Registration,
         new(c.Routes.Select(r => new CanonicalRouteRegistration(r.Registration, r.Family!.Value, r.HandlerOrdinal, r.PipelineOrdinal,
             r.Stream != null ? r.Stream.OpenRegistration : r.Registration.OpenRegistration, r.Stream?.FinalItemName, r.Stream?.DeclaredStages ?? default)
-        { BranchHandlers = r.SendAllSync != null ? new(r.SendAllSync.Branches.Select(b => new CanonicalBranchRegistration(b.Handler.HandlerName, b.Factory?.FactoryName))) : r.SendAllAsync != null ? new(r.SendAllAsync.Branches.Select(b => new CanonicalBranchRegistration(b.Handler.HandlerName, b.Factory?.FactoryName))) : default })));
+        {
+            BranchHandlers = r.SendAllSync != null ? new(r.SendAllSync.Branches.Select(b => new CanonicalBranchRegistration(b.Handler.HandlerName, b.Factory?.FactoryName))) : r.SendAllAsync != null ? new(r.SendAllAsync.Branches.Select(b => new CanonicalBranchRegistration(b.Handler.HandlerName, b.Factory?.FactoryName))) : default
+        })));
 
     internal static bool Compatible(CanonicalMultiCompositionEmission c)
     {
-        if (c.Routes.Count == 0) return false;
+        if (c.Routes.Count == 0)
+            return false;
         var first = c.Routes[0].Registration;
         return c.Routes.All(r => r.Registration.Namespace == c.Namespace && r.Registration.MarkerName == first.MarkerName &&
             r.Registration.MicrosoftDiProviderName == first.MicrosoftDiProviderName && r.Registration.UseLocalHandlers == first.UseLocalHandlers &&

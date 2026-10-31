@@ -104,7 +104,8 @@ public sealed class ConcurrencyAndReentrancyTests
         }
         finally
         {
-            foreach (var scope in scopes) await scope.DisposeAsync();
+            foreach (var scope in scopes)
+                await scope.DisposeAsync();
         }
     }
 

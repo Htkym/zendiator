@@ -30,20 +30,25 @@ internal static class CanonicalMediatorIdentity
                 .OfType<ClassDeclarationSyntax>().Where(c => c.Identifier.ValueText == "ZendiatorGeneratedRegistrar"))
             {
                 var model = compilation.GetSemanticModel(tree);
-                if (model.GetDeclaredSymbol(declaration, cancellationToken) is not INamedTypeSymbol { IsStatic: true } registrar) continue;
+                if (model.GetDeclaredSymbol(declaration, cancellationToken) is not INamedTypeSymbol { IsStatic: true } registrar)
+                    continue;
                 var space = registrar.ContainingNamespace;
-                if (!IsCompositionNamespace(space, compilation)) continue;
+                if (!IsCompositionNamespace(space, compilation))
+                    continue;
                 var implementations = space.GetTypeMembers("Zendiator").Where(t => t.Arity == 0 && t.IsSealed && t.TypeKind == TypeKind.Class).ToArray();
                 var contracts = space.GetTypeMembers("IZendiator").Where(t => t.Arity == 0 && t.TypeKind == TypeKind.Interface).ToArray();
-                if (implementations.Length != 1 || contracts.Length != 1) continue;
+                if (implementations.Length != 1 || contracts.Length != 1)
+                    continue;
                 var implementation = implementations[0];
                 var contract = contracts[0];
-                if (!implementation.Interfaces.Any(i => Same(i, contract))) continue;
+                if (!implementation.Interfaces.Any(i => Same(i, contract)))
+                    continue;
 
                 foreach (var methodSyntax in declaration.Members.OfType<MethodDeclarationSyntax>())
                 {
                     if (model.GetDeclaredSymbol(methodSyntax, cancellationToken) is not IMethodSymbol { IsStatic: true, Name: "Add", Parameters.Length: 2 } method ||
-                        !Same(method.ReturnType, collection) || !Same(method.Parameters[0].Type, collection) || !Same(method.Parameters[1].Type, snapshot)) continue;
+                        !Same(method.ReturnType, collection) || !Same(method.Parameters[0].Type, collection) || !Same(method.Parameters[1].Type, snapshot))
+                        continue;
                     var registersImplementation = false;
                     var registersContract = false;
                     var registersAlias = false;
@@ -56,19 +61,23 @@ internal static class CanonicalMediatorIdentity
                             call.ArgumentList.Arguments[1].Expression is not InvocationExpressionSyntax scoped ||
                             model.GetSymbolInfo(scoped, cancellationToken).Symbol is not IMethodSymbol { Name: "Scoped" } factory ||
                             !Same(factory.ContainingType, descriptor) || scoped.ArgumentList.Arguments.Count != 2 ||
-                            scoped.ArgumentList.Arguments[0].Expression is not TypeOfExpressionSyntax service) continue;
+                            scoped.ArgumentList.Arguments[0].Expression is not TypeOfExpressionSyntax service)
+                            continue;
                         var serviceType = model.GetTypeInfo(service.Type, cancellationToken).Type;
                         var value = scoped.ArgumentList.Arguments[1].Expression;
                         if (Same(serviceType, implementation) && value is TypeOfExpressionSyntax concrete &&
-                            Same(model.GetTypeInfo(concrete.Type, cancellationToken).Type, implementation)) registersImplementation = true;
+                            Same(model.GetTypeInfo(concrete.Type, cancellationToken).Type, implementation))
+                            registersImplementation = true;
                         if (Same(serviceType, contract) && value is TypeOfExpressionSyntax target &&
-                            Same(model.GetTypeInfo(target.Type, cancellationToken).Type, implementation)) registersContract = true;
+                            Same(model.GetTypeInfo(target.Type, cancellationToken).Type, implementation))
+                            registersContract = true;
                         if (Same(serviceType, contract) && value is SimpleLambdaExpressionSyntax { Body: InvocationExpressionSyntax resolution } lambda &&
                             model.GetSymbolInfo(resolution, cancellationToken).Symbol is IMethodSymbol { Name: "GetRequiredService", TypeArguments.Length: 1 } resolve &&
                             Same(resolve.ContainingType, providerExtensions) && Same(resolve.TypeArguments[0], implementation) &&
                             resolution.ArgumentList.Arguments.Count == 1 &&
                             Same(model.GetSymbolInfo(resolution.ArgumentList.Arguments[0].Expression, cancellationToken).Symbol,
-                                model.GetDeclaredSymbol(lambda.Parameter, cancellationToken))) registersAlias = true;
+                                model.GetDeclaredSymbol(lambda.Parameter, cancellationToken)))
+                            registersAlias = true;
                     }
                     // Earlier compositions used a concrete registration plus a contract alias.
                     if (registersContract || registersImplementation && registersAlias)
@@ -87,16 +96,20 @@ internal static class CanonicalMediatorIdentity
 
     private static bool IsCompositionNamespace(INamespaceSymbol space, Compilation compilation)
     {
-        if (space.IsGlobalNamespace || space.ContainingNamespace.Name != "Generated") return false;
+        if (space.IsGlobalNamespace || space.ContainingNamespace.Name != "Generated")
+            return false;
         var parent = space.ContainingNamespace.ContainingNamespace;
         var globalDefault = parent.Name == "Zendiator" && parent.ContainingNamespace.IsGlobalNamespace;
-        if (globalDefault && space.Name == "Default") return true;
+        if (globalDefault && space.Name == "Default")
+            return true;
         var prefix = parent.ToDisplayString(new SymbolDisplayFormat(
             globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
             typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces));
         var marker = compilation.GetTypeByMetadataName(prefix + "." + space.Name);
-        if (marker is null && globalDefault) marker = compilation.GetTypeByMetadataName(space.Name);
-        if (marker is not { TypeKind: TypeKind.Class, IsSealed: true, IsStatic: false, Arity: 0, ContainingType: null, DeclaredAccessibility: Accessibility.Public }) return false;
+        if (marker is null && globalDefault)
+            marker = compilation.GetTypeByMetadataName(space.Name);
+        if (marker is not { TypeKind: TypeKind.Class, IsSealed: true, IsStatic: false, Arity: 0, ContainingType: null, DeclaredAccessibility: Accessibility.Public })
+            return false;
         var attribute = compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly
             .GetTypeByMetadataName("Zendiator.ZendiatorCompositionAttribute");
         return attribute is not null && marker.GetAttributes().Count(a => Same(a.AttributeClass, attribute)) == 1;

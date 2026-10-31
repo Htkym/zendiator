@@ -25,7 +25,8 @@ public sealed partial class GeneratorTests
             .Replace("typeof(Handler<string>)", "HandlerEntry.Session<Handler<string>,Factory<string>>()")
             .Replace("public static object? ResolveService(IServiceProvider provider)=>new Handler<string>(provider.GetRequiredService<Probe>());",
                 "public static object? ResolveService(IServiceProvider provider) { var probe=provider.GetRequiredService<Probe>(); probe.Core.Phases.Add(\"resolve-factory\"); if(probe.DiError is {} error)throw error; if(probe.NullFactory)return null; return new Factory<string>(probe,provider.GetRequiredService<global::Zendiator.Generator.Tests.GeneratorTests.HookHandlerFactoryDependency>()); }");
-        if (!dispatch) source = source.Replace("public static object? Dispatch(object mediator,object? request,CancellationToken token) { " + (isVoid ? "" : "return ") + "((global::App.Generated.Reads.IZendiator)mediator).Send((Ping)request!,token); " + (isVoid ? "return null;" : "") + " }", "");
+        if (!dispatch)
+            source = source.Replace("public static object? Dispatch(object mediator,object? request,CancellationToken token) { " + (isVoid ? "" : "return ") + "((global::App.Generated.Reads.IZendiator)mediator).Send((Ping)request!,token); " + (isVoid ? "return null;" : "") + " }", "");
         var contract = owned ? "IOwnedSessionFactory" : "IBorrowedSessionFactory";
         source += $$"""
             namespace App {
@@ -49,8 +50,14 @@ public sealed partial class GeneratorTests
         var name = owned ? isVoid ? "SendHookOwnedHandlerVoid" : "SendHookOwnedHandlerResponse" : isVoid ? "SendHookBorrowedHandlerVoid" : "SendHookBorrowedHandlerResponse";
         var method = typeof(CanonicalSendSyncReference).GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic)!
             .MakeGenericMethod(isVoid ? [fixture.Request, hook, handler, fixture.Service] : [fixture.Request, typeof(int), hook, handler, fixture.Service]);
-        try { return (method.Invoke(null, [provider, request, token]), null); }
-        catch (TargetInvocationException error) { return (null, error.InnerException); }
+        try
+        {
+            return (method.Invoke(null, [provider, request, token]), null);
+        }
+        catch (TargetInvocationException error)
+        {
+            return (null, error.InnerException);
+        }
     }
     [Theory]
     [MemberData(nameof(HookHandlerReferenceCases))]
@@ -60,7 +67,15 @@ public sealed partial class GeneratorTests
         var reference = RunHookHandlerScenario(owned, isVoid, scenario, golden, fixture);
         var generated = RunHookHandlerScenario(owned, isVoid, scenario, golden, fixture, generated: true);
         Assert.Equal(reference, generated);
-        WriteNestedHookEvidence("hook-handler-session-differential", owned + "-" + isVoid + "-" + scenario, new { owned, isVoid, scenario, golden, reference = JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
+        WriteNestedHookEvidence("hook-handler-session-differential", owned + "-" + isVoid + "-" + scenario, new
+        {
+            owned,
+            isVoid,
+            scenario,
+            golden,
+            reference = JsonSerializer.Deserialize<JsonElement>(reference),
+            generated = JsonSerializer.Deserialize<JsonElement>(generated)
+        });
     }
     [Theory]
     [MemberData(nameof(HookHandlerReferenceLifetimes))]
@@ -69,13 +84,23 @@ public sealed partial class GeneratorTests
         var fixture = HookHandlerBackendFixture(owned, isVoid);
         var reference = lifetime == ServiceLifetime.Transient ? null : RunHookHandlerLifetimes(owned, isVoid, lifetime, fixture);
         var generated = RunHookHandlerLifetimes(owned, isVoid, lifetime, fixture, generated: true);
-        if (reference is not null) Assert.Equal(reference, generated);
-        WriteNestedHookEvidence("hook-handler-session-differential-lifetimes", owned + "-" + isVoid + "-" + lifetime, new { owned, isVoid, lifetime = lifetime.ToString(), reference = reference is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
+        if (reference is not null)
+            Assert.Equal(reference, generated);
+        WriteNestedHookEvidence("hook-handler-session-differential-lifetimes", owned + "-" + isVoid + "-" + lifetime, new
+        {
+            owned,
+            isVoid,
+            lifetime = lifetime.ToString(),
+            reference = reference is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(reference),
+            generated = JsonSerializer.Deserialize<JsonElement>(generated)
+        });
     }
     public static IEnumerable<object[]> HookHandlerBackendBoundaries()
     {
-        foreach (var owned in new[] { false, true }) foreach (var isVoid in new[] { false, true }) foreach (var shape in new[] { "two-hooks", "hook-owned", "wrapper", "missing-before", "missing-after", "missing-exception", "missing-finally", "async" })
-            yield return [owned, isVoid, shape];
+        foreach (var owned in new[] { false, true })
+            foreach (var isVoid in new[] { false, true })
+                foreach (var shape in new[] { "two-hooks", "hook-owned", "wrapper", "missing-before", "missing-after", "missing-exception", "missing-finally", "async" })
+                    yield return [owned, isVoid, shape];
     }
     [Theory]
     [MemberData(nameof(HookHandlerBackendBoundaries))]
@@ -88,14 +113,24 @@ public sealed partial class GeneratorTests
             .Replace("ISyncRequest", "IRequest").Replace("DispatchFamily.SendSync", "DispatchFamily.SendAsync")
             .Replace((isVoid ? "void" : "int") + " IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">.Handle(Ping request,CancellationToken token) { " + (isVoid ? "" : "return ") + "_probe.Core.Handle(request,token); }",
                 (isVoid ? "ValueTask" : "ValueTask<int>") + " IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">.HandleAsync(Ping request,CancellationToken token) { " + (isVoid ? "_probe.Core.Handle(request,token); return default;" : "return new(_probe.Core.Handle(request,token));") + " }");
-            if (owned) source = source.Replace("IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">,IDisposable where T:class", "IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">,IDisposable,IAsyncDisposable where T:class")
+            if (owned)
+                source = source.Replace("IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">,IDisposable where T:class", "IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">,IDisposable,IAsyncDisposable where T:class")
                 .Replace("void IDisposable.Dispose()=>_probe.Release(this,_request,_token);", "void IDisposable.Dispose()=>_probe.Release(this,_request,_token); public ValueTask DisposeAsync(){_probe.Release(this,_request,_token);return default;}");
         }
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "HookHandlerBoundary" + Guid.NewGuid()), out var output, out var diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         AssertAcceptedSendEmission(driver, diagnostics, shape == "async" ? BoundDispatchFamily.SendAsync : BoundDispatchFamily.SendSync, isVoid);
-        var generatedCount = driver.GetRunResult().Results.Single().GeneratedSources.Length; AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
-        WriteNestedHookEvidence("hook-handler-session-boundaries", owned + "-" + isVoid + "-" + shape, new { owned, isVoid, shape, source, diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }), generatedSources = generatedCount });
+        var generatedCount = driver.GetRunResult().Results.Single().GeneratedSources.Length;
+        AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
+        WriteNestedHookEvidence("hook-handler-session-boundaries", owned + "-" + isVoid + "-" + shape, new
+        {
+            owned,
+            isVoid,
+            shape,
+            source,
+            diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }),
+            generatedSources = generatedCount
+        });
     }
     [Fact]
     public void Hook_Handler_session_body_edits_cache_emission_but_ownership_changes_cleanup()
@@ -108,7 +143,13 @@ public sealed partial class GeneratorTests
         Assert.All(driver.GetRunResult().Results.Single().TrackedSteps["CanonicalRouteOutputFile"].SelectMany(s => s.Outputs), o => Assert.True(o.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
         driver = driver.RunGenerators(SyncCompilation(HookHandlerBackendSource(false, false, dispatch: false), "HookHandlerIncremental"));
         var borrowed = CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
-        Assert.NotEqual(first, borrowed); Assert.Contains("var detached = handler;", first); Assert.DoesNotContain("var detached = handler;", borrowed);
-        WriteNestedHookEvidence("hook-handler-session-incremental", "ownership", new { bodyCached = true, ownershipChangesCleanup = true });
+        Assert.NotEqual(first, borrowed);
+        Assert.Contains("var detached = handler;", first);
+        Assert.DoesNotContain("var detached = handler;", borrowed);
+        WriteNestedHookEvidence("hook-handler-session-incremental", "ownership", new
+        {
+            bodyCached = true,
+            ownershipChangesCleanup = true
+        });
     }
 }

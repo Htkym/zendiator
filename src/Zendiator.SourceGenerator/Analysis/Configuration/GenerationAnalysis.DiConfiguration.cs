@@ -34,7 +34,8 @@ internal sealed partial class GenerationAnalysis
             foreach (var statement in block.Statements)
             {
                 ct.ThrowIfCancellationRequested();
-                if (!AnalyzeDiStatement(statement, parameterName, model, setting)) valid = false;
+                if (!AnalyzeDiStatement(statement, parameterName, model, setting))
+                    valid = false;
             }
         }
         else if (lambda.Body is ExpressionSyntax expression)
@@ -44,14 +45,16 @@ internal sealed partial class GenerationAnalysis
                 singleAccess.Expression is IdentifierNameSyntax singleTarget &&
                 singleTarget.Identifier.Text == parameterName)
             {
-                if (!AnalyzeDiCall(single, singleAccess.Name.Identifier.Text, model, setting)) valid = false;
+                if (!AnalyzeDiCall(single, singleAccess.Name.Identifier.Text, model, setting))
+                    valid = false;
             }
             else if (expression is AssignmentExpressionSyntax assignment &&
                 assignment.Left is MemberAccessExpressionSyntax assignAccess &&
                 assignAccess.Expression is IdentifierNameSyntax assignTarget &&
                 assignTarget.Identifier.Text == parameterName)
             {
-                if (!AnalyzeDiAssignment(assignAccess.Name.Identifier.Text, assignment.Right, model, setting)) valid = false;
+                if (!AnalyzeDiAssignment(assignAccess.Name.Identifier.Text, assignment.Right, model, setting))
+                    valid = false;
             }
             else
             {
@@ -92,14 +95,18 @@ internal sealed partial class GenerationAnalysis
         var location = invocation.GetLocation();
         INamedTypeSymbol? TypeArgument(int index)
         {
-            if (invocation.Expression is not MemberAccessExpressionSyntax access) return null;
-            if (access.Name is not GenericNameSyntax generic) return null;
-            if (generic.TypeArgumentList.Arguments.Count <= index) return null;
+            if (invocation.Expression is not MemberAccessExpressionSyntax access)
+                return null;
+            if (access.Name is not GenericNameSyntax generic)
+                return null;
+            if (generic.TypeArgumentList.Arguments.Count <= index)
+                return null;
             return model.GetSymbolInfo(generic.TypeArgumentList.Arguments[index], ct).Symbol as INamedTypeSymbol;
         }
         int? IntArgument(int index)
         {
-            if (invocation.ArgumentList == null || invocation.ArgumentList.Arguments.Count <= index) return null;
+            if (invocation.ArgumentList == null || invocation.ArgumentList.Arguments.Count <= index)
+                return null;
             var constant = model.GetConstantValue(invocation.ArgumentList.Arguments[index].Expression, ct);
             return constant.HasValue && constant.Value is int value ? value : (int?)null;
         }
@@ -121,18 +128,22 @@ internal sealed partial class GenerationAnalysis
         {
             case "RegisterServicesFromAssemblyContaining":
                 {
-                    if (invocation.ArgumentList?.Arguments.Count != 0) goto Unsupported;
+                    if (invocation.ArgumentList?.Arguments.Count != 0)
+                        goto Unsupported;
                     var marker = TypeArgument(0);
-                    if (marker != null && marker.IsUnboundGenericType) marker = marker.OriginalDefinition;
+                    if (marker != null && marker.IsUnboundGenericType)
+                        marker = marker.OriginalDefinition;
                     var key = marker == null ? null : FullNameOf(marker);
-                    if (key == null) goto Unsupported;
+                    if (key == null)
+                        goto Unsupported;
                     if (!setting.Markers.Any(entry => entry.Key == key))
                         setting.Markers.Add((marker!, key));
                     return true;
                 }
             case "RegisterServicesFromAssembly":
                 {
-                    if (invocation.ArgumentList?.Arguments.Count != 1) goto Unsupported;
+                    if (invocation.ArgumentList?.Arguments.Count != 1)
+                        goto Unsupported;
                     var expression = invocation.ArgumentList.Arguments[0].Expression;
                     if (expression is MemberAccessExpressionSyntax
                         {
@@ -143,19 +154,23 @@ internal sealed partial class GenerationAnalysis
                         target.ContainingAssembly != null)
                     {
                         var identity = target.ContainingAssembly.Identity.ToString();
-                        if (!setting.Assemblies.Contains(identity)) setting.Assemblies.Add(identity);
+                        if (!setting.Assemblies.Contains(identity))
+                            setting.Assemblies.Add(identity);
                         return true;
                     }
                     goto Unsupported;
                 }
             case "AddOpenBehavior":
                 {
-                    if (invocation.ArgumentList?.Arguments.Count != 2) goto Unsupported;
+                    if (invocation.ArgumentList?.Arguments.Count != 2)
+                        goto Unsupported;
                     var behavior = TypeofArgument(0, out var supported);
                     var order = IntArgument(1);
-                    if (!supported || behavior == null || order == null) goto Unsupported;
+                    if (!supported || behavior == null || order == null)
+                        goto Unsupported;
                     var key = FullNameOf(behavior);
-                    if (key == null) goto Unsupported;
+                    if (key == null)
+                        goto Unsupported;
                     var isOpen = behavior.IsUnboundGenericType;
                     if (setting.Behaviors.Any(entry => entry.Key == key))
                     {
@@ -172,11 +187,14 @@ internal sealed partial class GenerationAnalysis
                 }
             case "AddNotification":
                 {
-                    if (invocation.ArgumentList?.Arguments.Count != 0) goto Unsupported;
+                    if (invocation.ArgumentList?.Arguments.Count != 0)
+                        goto Unsupported;
                     var notification = TypeArgument(0);
-                    if (notification != null && notification.IsUnboundGenericType) notification = notification.OriginalDefinition;
+                    if (notification != null && notification.IsUnboundGenericType)
+                        notification = notification.OriginalDefinition;
                     var key = notification == null ? null : FullNameOf(notification);
-                    if (key == null) goto Unsupported;
+                    if (key == null)
+                        goto Unsupported;
                     if (setting.Notifications.Any(entry => entry.Key == key))
                     {
                         ErrorAt(18, $"Notification {key} is declared more than once.", location);
@@ -187,13 +205,17 @@ internal sealed partial class GenerationAnalysis
                 }
             case "ConfigureHandlerOrder":
                 {
-                    if (invocation.ArgumentList?.Arguments.Count != 2) goto Unsupported;
+                    if (invocation.ArgumentList?.Arguments.Count != 2)
+                        goto Unsupported;
                     var handler = TypeofArgument(0, out var supported);
                     var order = IntArgument(1);
-                    if (!supported || handler == null || order == null) goto Unsupported;
-                    if (handler.IsUnboundGenericType) handler = handler.OriginalDefinition;
+                    if (!supported || handler == null || order == null)
+                        goto Unsupported;
+                    if (handler.IsUnboundGenericType)
+                        handler = handler.OriginalDefinition;
                     var key = FullNameOf(handler);
-                    if (key == null) goto Unsupported;
+                    if (key == null)
+                        goto Unsupported;
                     if (setting.HandlerOrders.Any(entry => entry.Key == key))
                     {
                         ErrorAt(18, $"Handler {key} has more than one configured order.", location);

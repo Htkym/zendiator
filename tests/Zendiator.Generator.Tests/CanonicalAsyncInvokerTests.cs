@@ -39,18 +39,23 @@ public sealed partial class GeneratorTests
         }
         source = source.Replace("public sealed class Hook<T>", "public class HookBase<T>").Replace("public Hook(Probe p)", "public HookBase(Probe p)");
         var extra = "";
-        if (shape == "obsolete") source = source.Replace(InvokerBefore, "[Obsolete(\"Call through the contract\",true)]" + InvokerBefore);
-        if (shape == "priority") source = source.Replace("public HookBase(Probe p)",
+        if (shape == "obsolete")
+            source = source.Replace(InvokerBefore, "[Obsolete(\"Call through the contract\",true)]" + InvokerBefore);
+        if (shape == "priority")
+            source = source.Replace("public HookBase(Probe p)",
             "[System.Runtime.CompilerServices.OverloadResolutionPriority(1)]public ValueTask<Ping> BeforeAsync(object r,CancellationToken t)=>throw new InvalidOperationException(\"Wrong priority overload\");public HookBase(Probe p)");
-        if (shape == "hidden") extra = "public new ValueTask<Ping> BeforeAsync(Ping r,CancellationToken t)=>throw new InvalidOperationException(\"Hidden method is not the contract\");";
+        if (shape == "hidden")
+            extra = "public new ValueTask<Ping> BeforeAsync(Ping r,CancellationToken t)=>throw new InvalidOperationException(\"Hidden method is not the contract\");";
         if (shape == "multiple")
         {
             source = source.Replace("public class HookBase<T>:", "public class HookBase<T>:IAsyncSendRequestTransform<Other>,");
             extra = "public ValueTask<Other> BeforeAsync(Other r,CancellationToken t)=>throw new InvalidOperationException(\"Wrong request contract\");";
-            source = source.Replace("public HookBase(Probe p)", extra + "public HookBase(Probe p)"); extra = "";
+            source = source.Replace("public HookBase(Probe p)", extra + "public HookBase(Probe p)");
+            extra = "";
             source += "namespace App{public sealed record Other:IRequest<int>;}";
         }
-        if (shape == "reimplemented") source = source.Replace(InvokerBefore, "public ValueTask<Ping> BeforeAsync(Ping r,CancellationToken t)=>throw new InvalidOperationException(\"Wrong inherited contract\");");
+        if (shape == "reimplemented")
+            source = source.Replace(InvokerBefore, "public ValueTask<Ping> BeforeAsync(Ping r,CancellationToken t)=>throw new InvalidOperationException(\"Wrong inherited contract\");");
         return source + "namespace App{public sealed class Hook<T>:HookBase<T>" + (shape == "reimplemented" ? ",IAsyncSendRequestTransform<Ping>" : "") +
             " where T:class{public Hook(Probe p):base(p){}" + extra + (shape == "reimplemented" ? InvokerBefore.Replace("public ValueTask", "public new ValueTask") : "") + "}}";
     }
@@ -59,8 +64,11 @@ public sealed partial class GeneratorTests
     {
         var source = AsyncInvokerSource(shape);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AsyncInvoker_" + shape), out var output, out var diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
         var sources = driver.GetRunResult().Results.Single().GeneratedSources;
         AssertCanonicalOutputRoles(sources);
         var route = Assert.Single(sources, s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal));
@@ -71,18 +79,32 @@ public sealed partial class GeneratorTests
         var receiver = output.GetTypeByMetadataName("App.Hook`1")!.Construct(output.GetTypeByMetadataName("App.OuterTag")!);
         var contract = receiver.AllInterfaces.Single(i => i.OriginalDefinition.MetadataName == "IAsyncSendRequestTransform`1" && i.TypeArguments[0].Name == "Ping");
         var expected = receiver.FindImplementationForInterfaceMember(contract.GetMembers("BeforeAsync").Single());
-        if (shape is "explicit" or "obsolete" or "priority") Assert.Empty(concrete);
-        else Assert.True(SymbolEqualityComparer.Default.Equals(expected, Assert.Single(concrete)), "Concrete callback differs from the selected interface implementation.");
+        if (shape is "explicit" or "obsolete" or "priority")
+            Assert.Empty(concrete);
+        else
+            Assert.True(SymbolEqualityComparer.Default.Equals(expected, Assert.Single(concrete)), "Concrete callback differs from the selected interface implementation.");
         Assert.Equal(shape is "exact" or "derived" or "virtual", before.ToString().Contains("GetType()", StringComparison.Ordinal));
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence))
         {
-            var p = Path.Combine(evidence, "typed-invoker-" + shape); Directory.CreateDirectory(p); File.WriteAllText(Path.Combine(p, "input.cs"), source);
-            foreach (var s in sources) File.WriteAllText(Path.Combine(p, s.HintName), s.SourceText.ToString());
+            var p = Path.Combine(evidence, "typed-invoker-" + shape);
+            Directory.CreateDirectory(p);
+            File.WriteAllText(Path.Combine(p, "input.cs"), source);
+            foreach (var s in sources)
+                File.WriteAllText(Path.Combine(p, s.HintName), s.SourceText.ToString());
             File.WriteAllBytes(Path.Combine(p, "generated.dll"), bytes.ToArray());
-            File.WriteAllText(Path.Combine(p, "binding.json"), JsonSerializer.Serialize(new { shape, expected = expected!.ToDisplayString(), concrete = concrete.Select(m => m.ToDisplayString()), exactGuard = shape is "exact" or "derived" or "virtual", compiled = emitted.Success }));
+            File.WriteAllText(Path.Combine(p, "binding.json"), JsonSerializer.Serialize(new
+            {
+                shape,
+                expected = expected!.ToDisplayString(),
+                concrete = concrete.Select(m => m.ToDisplayString()),
+                exactGuard = shape is "exact" or "derived" or "virtual",
+                compiled = emitted.Success
+            }));
         }
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var bridge = assembly.GetType("App.Bridge")!;
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var bridge = assembly.GetType("App.Bridge")!;
         var outer = assembly.GetType("App.Hook`1")!.MakeGenericType(assembly.GetType("App.OuterTag")!);
         return new(assembly, assembly.GetType("App.Generated.Reads.Zendiator")!, assembly.GetType("App.Ping")!, outer,
             assembly.GetType("App.Hook`1")!.MakeGenericType(assembly.GetType("App.InnerTag")!), assembly.GetType("App.Handler")!, outer,
@@ -108,14 +130,16 @@ public sealed partial class GeneratorTests
             await RunAsyncHookCase(fixture, "direct", false, generated, "success", "h0.before");
             await RunAsyncHookCase(fixture, "direct", false, generated, "observer-pending-oce", "h0.exception");
             await RunAsyncHookCase(fixture, "direct", false, generated, "native-before");
-            if (shape == "inherited") await RunAsyncHookCase(fixture, "direct", false, generated, "success", "handler");
+            if (shape == "inherited")
+                await RunAsyncHookCase(fixture, "direct", false, generated, "success", "handler");
         }
     }
 
     [Fact]
     public void Async_typed_invoker_binding_is_equatable_and_sealed_changes_invalidate_the_route()
     {
-        var source = AsyncInvokerSource("inherited"); var driver = SyncDriver().RunGenerators(SyncCompilation(source, "InvokerIncremental"));
+        var source = AsyncInvokerSource("inherited");
+        var driver = SyncDriver().RunGenerators(SyncCompilation(source, "InvokerIncremental"));
         var body = CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
         driver = driver.RunGenerators(SyncCompilation(source.Replace("r.Value)", "r.Value+1)"), "InvokerIncremental"));
         Assert.Equal(body, CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources));

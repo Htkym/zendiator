@@ -52,7 +52,11 @@ public sealed partial class GeneratorTests
         Assert.Empty(inspection.Facts);
         Assert.NotEmpty(inspection.Paths);
         Assert.All(schedule.Owners.Where(o => o.Kind == SendOwnerKind.Service || o.Kind == SendOwnerKind.Provider),
-            owner => { Assert.True(owner.Borrowed); Assert.Equal(FusionCleanupKind.None, owner.Cleanup); });
+            owner =>
+            {
+                Assert.True(owner.Borrowed);
+                Assert.Equal(FusionCleanupKind.None, owner.Cleanup);
+            });
         Assert.All(schedule.Owners.Where(o => o.Kind == SendOwnerKind.Session && !o.Borrowed),
             owner => Assert.Equal(sync ? FusionCleanupKind.Sync : FusionCleanupKind.Async, owner.Cleanup));
         Assert.All(schedule.Owners.Where(o => o.Kind == SendOwnerKind.Session && o.Id.StartsWith(Scope(0, 2))),
@@ -62,9 +66,18 @@ public sealed partial class GeneratorTests
             var declaration = Sessions(route, int.Parse(path.Owner.Split('/')[0].Split(':')[1]), int.Parse(path.Owner.Split(':').Last()));
             Assert.Equal(path.Acquired.Where(i => declaration[i].Ownership == FusionOwnership.OwnedSession).Reverse(), path.CleanupOrder);
         });
-        Assert.All(schedule.SessionCalls, call => { Assert.True(call.PreserveIdentityAndToken); Assert.True(call.ReplacePreviousError); Assert.False(call.Aggregate); });
+        Assert.All(schedule.SessionCalls, call =>
+        {
+            Assert.True(call.PreserveIdentityAndToken);
+            Assert.True(call.ReplacePreviousError);
+            Assert.False(call.Aggregate);
+        });
         Assert.All(schedule.Awaits.Where(a => a.Producer.Phase is SendExecutionPhase.AcquireSession or SendExecutionPhase.CleanupSession),
-            a => { Assert.True(a.ConsumeOnce); Assert.True(a.ConfigureAwaitFalse); });
+            a =>
+            {
+                Assert.True(a.ConsumeOnce);
+                Assert.True(a.ConfigureAwaitFalse);
+            });
         // Accepted frontend input still has no implicit session acquisitions.
         var frontend = Graph(BindAcceptedSendLists(GraphFixture(sync, all, isVoid)));
         Assert.All(frontend.Contract.Stages, stage => Assert.Empty(stage.Sessions));
@@ -76,7 +89,10 @@ public sealed partial class GeneratorTests
     {
         var route = SessionRoute();
         var owned = SessionBinding(false);
-        route = route with { Stages = new(route.Stages.Select((s, i) => i == 0 ? s with { Sessions = new(new[] { owned, owned }) } : s)) };
+        route = route with
+        {
+            Stages = new(route.Stages.Select((s, i) => i == 0 ? s with { Sessions = new(new[] { owned, owned }) } : s))
+        };
         var schedule = CanonicalSendScheduleBuilder.Build(route);
         var inspection = CanonicalSendSessionValidator.Inspect(route, schedule);
         Assert.Empty(inspection.Facts);
@@ -100,25 +116,41 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Session_operand_oracle_rejects_aliases_DI_cleanup_missing_detach_and_failure_aggregation_without_Required_comparison()
     {
-        var route = SessionRoute(); var schedule = CanonicalSendScheduleBuilder.Build(route);
+        var route = SessionRoute();
+        var schedule = CanonicalSendScheduleBuilder.Build(route);
         var commit = SessionSite(0, 0, 0, SendExecutionPhase.CommitSession);
         Reject(schedule with
         {
             SessionTransfers = new(schedule.SessionTransfers.Select(t => t.At == commit
-            ? t with { Source = Session(0, 0, 2) + "/factory-result" } : t))
+            ? t with
+            {
+                Source = Session(0, 0, 2) + "/factory-result"
+            } : t))
         }, "SessionTransferLostOrAliasedResource");
-        Reject(schedule with { SessionTransfers = new(schedule.SessionTransfers.Where(t => !(t.At.Phase == SendExecutionPhase.DetachSession && t.Source == "null"))) },
+        Reject(schedule with
+        {
+            SessionTransfers = new(schedule.SessionTransfers.Where(t => !(t.At.Phase == SendExecutionPhase.DetachSession && t.Source == "null")))
+        },
             "SessionDetachedWithoutClearingExactLiveLease");
         var dispose = SessionSite(0, 0, 2, SendExecutionPhase.CleanupSession);
         Reject(schedule with
         {
             SessionCalls = new(schedule.SessionCalls.Select(c => c.At == dispose
-            ? c with { Receiver = Session(0, 0, 2) + "/factory/resolved" } : c))
+            ? c with
+            {
+                Receiver = Session(0, 0, 2) + "/factory/resolved"
+            } : c))
         }, "CleanupReceiverIsNotTransferredSession");
-        Reject(schedule with { SessionCalls = new(schedule.SessionCalls.Select(c => c.At == dispose ? c with { Aggregate = true } : c)) },
+        Reject(schedule with
+        {
+            SessionCalls = new(schedule.SessionCalls.Select(c => c.At == dispose ? c with { Aggregate = true } : c))
+        },
             "SessionExceptionReplacementIdentityMismatch");
         var awaitSite = Assert.Single(schedule.Awaits, a => a.Producer == dispose);
-        Reject(schedule with { Awaits = new(schedule.Awaits.Select(a => a == awaitSite ? a with { ConsumeOnce = false } : a)) },
+        Reject(schedule with
+        {
+            Awaits = new(schedule.Awaits.Select(a => a == awaitSite ? a with { ConsumeOnce = false } : a))
+        },
             "SessionAwaitConsumptionOrContinuationMismatch");
         void Reject(CanonicalSendExecutionSchedule candidate, string reason) =>
             Assert.Contains(CanonicalSendSessionValidator.Validate(route, candidate), fact => fact.Reason == reason);
@@ -127,7 +159,8 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Actual_session_paths_reject_skip_reverse_order_double_release_and_cleanup_cancel_guard()
     {
-        var route = SessionRoute(); var schedule = CanonicalSendScheduleBuilder.Build(route);
+        var route = SessionRoute();
+        var schedule = CanonicalSendScheduleBuilder.Build(route);
         var owner = Scope(0, 0);
         var dispose2 = Point(owner, SessionSite(0, 0, 2, SendExecutionPhase.CleanupSession));
         var present0 = Point(owner, SessionSite(0, 0, 0, SendExecutionPhase.SessionPresent));
@@ -135,13 +168,22 @@ public sealed partial class GeneratorTests
         Reject(ChangeControl(schedule, owner, e => e.From == dispose2 && e.Outcome == SendControlOutcome.Failure ? e with { To = result } : e),
             "AcquiredSessionsNotReleasedExactlyOnceInReverseOrder");
         Reject(ChangeControl(schedule, owner, e => e.From.Site?.Phase == SendExecutionPhase.DetachSession && e.From.Site.Session == 0
-            ? e with { To = present0 } : e), "SessionCleanupOrderOrDuplicateMismatch");
+            ? e with
+            {
+                To = present0
+            } : e), "SessionCleanupOrderOrDuplicateMismatch");
         Reject(ChangeControl(schedule, owner, e => e.From == dispose2 && e.Outcome == SendControlOutcome.Success ? e with { To = dispose2 } : e),
             "SessionControlCycleOrRepeatedRelease");
         Reject(ChangeControl(schedule, owner, e => e.From == dispose2 && e.Outcome == SendControlOutcome.Failure
-            ? e with { To = Point(owner, SessionSite(0, 0, 0, SendExecutionPhase.SessionGuard)) } : e), "CancellationGuardReachedDuringSessionCleanup");
+            ? e with
+            {
+                To = Point(owner, SessionSite(0, 0, 0, SendExecutionPhase.SessionGuard))
+            } : e), "CancellationGuardReachedDuringSessionCleanup");
         Reject(ChangeControl(schedule, owner, e => e.From.Site?.Phase == SendExecutionPhase.InvokeInner && e.Outcome == SendControlOutcome.Success
-            ? e with { To = Point(owner, SessionSite(0, 0, 2, SendExecutionPhase.DetachSession)) } : e), "OwnedCleanupBeforeHookFinally");
+            ? e with
+            {
+                To = Point(owner, SessionSite(0, 0, 2, SendExecutionPhase.DetachSession))
+            } : e), "OwnedCleanupBeforeHookFinally");
         void Reject(CanonicalSendExecutionSchedule candidate, string reason) =>
             Assert.Contains(CanonicalSendSessionValidator.Validate(route, candidate), fact => fact.Reason == reason);
     }
@@ -216,15 +258,28 @@ public sealed partial class GeneratorTests
         {
             ControlFlows = new(schedule.ControlFlows.Select(f => f.Owner != owner ? f : f with
             {
-                Edges = new(f.Edges.Select(e => e.From == entered ? e with { To = detach } :
-                    e.From == cleanup && e.Outcome == SendControlOutcome.Success ? e with { To = originalBody, Predicate = SendControlPredicate.NoFailure } :
+                Edges = new(f.Edges.Select(e => e.From == entered ? e with
+                {
+                    To = detach
+                } :
+                    e.From == cleanup && e.Outcome == SendControlOutcome.Success ? e with
+                    {
+                        To = originalBody,
+                        Predicate = SendControlPredicate.NoFailure
+                    } :
                     e.To == detach && e.From.Site?.Phase is SendExecutionPhase.Before or SendExecutionPhase.InvokeInner or SendExecutionPhase.InvokeHandler or
-                        SendExecutionPhase.InvokeWrapper or SendExecutionPhase.Success or SendExecutionPhase.Exception or SendExecutionPhase.Finally ? e with { To = result } : e)
+                        SendExecutionPhase.InvokeWrapper or SendExecutionPhase.Success or SendExecutionPhase.Exception or SendExecutionPhase.Finally ? e with
+                        {
+                            To = result
+                        } : e)
                 .Append(new(cleanup, result, SendControlOutcome.Success, SendControlPredicate.HasFailure)))
             }))
         };
         // Sites, Orders, owners, scopes, calls, transfers and await metadata are completely unchanged.
-        Assert.Equal(schedule, candidate with { ControlFlows = schedule.ControlFlows });
+        Assert.Equal(schedule, candidate with
+        {
+            ControlFlows = schedule.ControlFlows
+        });
         var independent = CanonicalSendSessionValidator.Inspect(route, candidate);
         Assert.Contains(independent.Facts, f => f.Reason == "SessionCleanupStartedBeforeBodyOutcome");
         Assert.Contains(independent.Facts, f => f.Reason == "SessionBodyCallbackAfterDetach");
@@ -253,7 +308,10 @@ public sealed partial class GeneratorTests
             })
             {
                 var candidate = ChangeControl(schedule, owner, e => e.From.Site?.Phase == cut.Phase && e.Outcome == cut.Outcome ? e with { To = detach } : e);
-                Assert.Equal(schedule, candidate with { ControlFlows = schedule.ControlFlows });
+                Assert.Equal(schedule, candidate with
+                {
+                    ControlFlows = schedule.ControlFlows
+                });
                 Assert.Contains(CanonicalSendSessionValidator.Validate(route, candidate), f => f.Reason == "SessionCleanupStartedBeforeBodyOutcome");
                 Assert.Contains(CanonicalSendControlValidator.Validate(route, candidate), f => f.Reason == "SessionCleanupStartedBeforeBodyOutcome");
             }
@@ -263,11 +321,24 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Send_session_contract_refuses_implicit_DI_ownership_and_async_cleanup_on_sync()
     {
-        var route = SessionRoute(sync: true); var owned = SessionBinding(true);
-        Reject(owned with { Cleanup = null }, "OwnedSessionCleanupRequired");
-        Reject(owned with { Ownership = FusionOwnership.BorrowedResource }, "BorrowedResourceHasCleanup");
-        Reject(owned with { Cleanup = SessionBinding(false).Cleanup }, "SessionCleanupModeMismatch");
-        Reject(owned with { Ownership = FusionOwnership.BorrowedService }, "ExplicitResourceOwnershipRequired");
+        var route = SessionRoute(sync: true);
+        var owned = SessionBinding(true);
+        Reject(owned with
+        {
+            Cleanup = null
+        }, "OwnedSessionCleanupRequired");
+        Reject(owned with
+        {
+            Ownership = FusionOwnership.BorrowedResource
+        }, "BorrowedResourceHasCleanup");
+        Reject(owned with
+        {
+            Cleanup = SessionBinding(false).Cleanup
+        }, "SessionCleanupModeMismatch");
+        Reject(owned with
+        {
+            Ownership = FusionOwnership.BorrowedService
+        }, "ExplicitResourceOwnershipRequired");
         void Reject(BoundSessionModel binding, string reason) =>
             Assert.Contains(CanonicalSendGraphValidator.CheckContract(route with
             {

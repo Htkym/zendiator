@@ -29,12 +29,16 @@ public sealed class SharedStreamValidator : IStreamMiddleware<ValidatedStream, i
         Id = ++trace.FirstConstructions;
         trace.Events.Add("first:new");
     }
-    public int Id { get; }
+    public int Id
+    {
+        get;
+    }
     public ValueTask<IAsyncEnumerator<int>> OpenAsync(ValidatedStream request, IStreamUpstream<ValidatedStream, int> upstream, CancellationToken cancellationToken)
     {
         _trace.FirstValidations++;
         _trace.Events.Add("first:validate");
-        if (_trace.FailFirst || request.Count < 0) throw _trace.Failure;
+        if (_trace.FailFirst || request.Count < 0)
+            throw _trace.Failure;
         return upstream.OpenAsync(request, cancellationToken);
     }
     ValueTask<IAsyncEnumerator<int>> IStreamMiddleware<OtherValidatedStream, int>.OpenAsync(OtherValidatedStream request,
@@ -61,7 +65,8 @@ public static class EntryValidators<T>
         public ValueTask<IAsyncEnumerator<int>> OpenAsync(ValidatedStream request, IStreamUpstream<ValidatedStream, int> upstream, CancellationToken cancellationToken)
         {
             _trace.Events.Add("middle:validate");
-            if (_trace.FailMiddle) throw _trace.Failure;
+            if (_trace.FailMiddle)
+                throw _trace.Failure;
             return upstream.OpenAsync(request, cancellationToken);
         }
         public void Dispose() => _trace.MiddleDisposals++;

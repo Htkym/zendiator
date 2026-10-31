@@ -44,7 +44,8 @@ internal static class ArtifactGate
         foreach (var name in new[] { "Zendiator.UseCaseBenchmarks", "Zendiator", "Zendiator.Abstractions",
                                     "Microsoft.Extensions.DependencyInjection", "Microsoft.Extensions.DependencyInjection.Abstractions",
                                     "System.Private.CoreLib" })
-            if (!expected.ContainsKey(name)) throw new InvalidOperationException($"Missing mandatory child binding: {name}");
+            if (!expected.ContainsKey(name))
+                throw new InvalidOperationException($"Missing mandatory child binding: {name}");
         foreach (var item in request.ExpectedAssemblies)
         {
             if (!ArtifactEvidence.Within(item.Path, request.BundleRoot) &&
@@ -67,7 +68,8 @@ internal static class ArtifactGate
             {
                 var current = AppDomain.CurrentDomain.GetAssemblies()
                     .SingleOrDefault(assembly => assembly.GetName().Name == item.Name);
-                if (current is null) AssemblyLoadContext.Default.LoadFromAssemblyPath(item.Path);
+                if (current is null)
+                    AssemblyLoadContext.Default.LoadFromAssemblyPath(item.Path);
                 else if (!ArtifactEvidence.SamePath(current.Location, item.Path) ||
                          current.FullName != item.FullName || ArtifactEvidence.Hash(current.Location) != item.Sha256)
                     throw new InvalidOperationException($"Entry startup substituted a binding: {item.Name}");
@@ -124,8 +126,10 @@ internal static class ArtifactGate
                 var attributes = File.GetAttributes(entry);
                 if ((attributes & FileAttributes.ReparsePoint) != 0)
                     throw new InvalidOperationException("Reparse artifacts are not valid saved artifacts");
-                if ((attributes & FileAttributes.Directory) != 0) directories.Push(entry);
-                else files.Add(entry);
+                if ((attributes & FileAttributes.Directory) != 0)
+                    directories.Push(entry);
+                else
+                    files.Add(entry);
             }
         }
         if (files.Count != request.BundleFiles.Count)

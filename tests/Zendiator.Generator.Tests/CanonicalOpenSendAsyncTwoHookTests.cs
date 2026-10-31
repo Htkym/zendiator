@@ -116,42 +116,82 @@ public sealed partial class GeneratorTests
             });} }
             """ : "");
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "OpenSendAsyncTwoHooks_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        var folder = OpenSendAsyncFolder(negative ? "two-hooks-negative" : "two-hooks-runtime"); SaveSendAllSync(folder, source, driver, output, diagnostics);
+        var folder = OpenSendAsyncFolder(negative ? "two-hooks-negative" : "two-hooks-runtime");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         AssertOpenSendAllAsyncOutput(output, driver); // Existing single-hook, void, SendAll and Stream entries are compile sentinels only.
         var catalog = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single().TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
         var route = Assert.Single(Assert.Single(catalog.Compositions, c => c.Key == "OpenAsyncTwoHooks").Pipelines);
         var emission = Assert.Single(CanonicalAsyncEmissionNormalizer.Create(catalog, CanonicalExecutionGraphNormalizer.Create(catalog)).Compositions, c => c.Namespace == "OpenAsyncTwoHooks.Generated.Composition");
-        Assert.Equal(BoundRequestShape.OpenAsyncReference, route.RequestShape); Assert.Equal(FusionResultKind.Response, route.ResultKind); Assert.Equal(2, route.Stages.Count); Assert.Equal(2, emission.Hooks.Count);
-        Assert.Equal(route.SendOpenRegistration, emission.OpenRegistration); Assert.Equal(2, emission.OpenRegistration!.Stages.Count);
+        Assert.Equal(BoundRequestShape.OpenAsyncReference, route.RequestShape);
+        Assert.Equal(FusionResultKind.Response, route.ResultKind);
+        Assert.Equal(2, route.Stages.Count);
+        Assert.Equal(2, emission.Hooks.Count);
+        Assert.Equal(route.SendOpenRegistration, emission.OpenRegistration);
+        Assert.Equal(2, emission.OpenRegistration!.Stages.Count);
         Assert.Equal(new[] { "global::OpenAsyncTwoHooks.First<,>", "global::OpenAsyncTwoHooks.Second<,>" }, emission.OpenRegistration.Stages.Select(s => s.TypeName));
-        var api = output.GetTypeByMetadataName("OpenAsyncTwoHooks.Generated.Composition.IZendiator")!; Assert.NotNull(api); Assert.False(api.IsGenericType);
-        var mediator = output.GetTypeByMetadataName("OpenAsyncTwoHooks.Generated.Composition.Zendiator")!; Assert.False(mediator.IsGenericType);
+        var api = output.GetTypeByMetadataName("OpenAsyncTwoHooks.Generated.Composition.IZendiator")!;
+        Assert.NotNull(api);
+        Assert.False(api.IsGenericType);
+        var mediator = output.GetTypeByMetadataName("OpenAsyncTwoHooks.Generated.Composition.Zendiator")!;
+        Assert.False(mediator.IsGenericType);
         var methods = new[] { Assert.Single(api.GetMembers("SendAsync").OfType<IMethodSymbol>()), Assert.Single(mediator.GetMembers("SendAsync").OfType<IMethodSymbol>()) };
-        Assert.All(methods, m => { Assert.Equal(2, m.Arity); Assert.All(m.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); }); Assert.Equal(SpecialType.System_Int32, ((INamedTypeSymbol)m.ReturnType).TypeArguments.Single().SpecialType); });
+        Assert.All(methods, m =>
+        {
+            Assert.Equal(2, m.Arity);
+            Assert.All(m.TypeParameters, p =>
+            {
+                Assert.True(p.HasReferenceTypeConstraint);
+                Assert.True(p.HasConstructorConstraint);
+            });
+            Assert.Equal(SpecialType.System_Int32, ((INamedTypeSymbol)m.ReturnType).TypeArguments.Single().SpecialType);
+        });
         Assert.Equal(CanonicalConstraintClauses(methods[0]), CanonicalConstraintClauses(methods[1]));
         var invoke = AssertOpenAsyncInvoker(output, mediator, methods[1]);
         Assert.Equal(SpecialType.System_Int32, ((INamedTypeSymbol)invoke.ReturnType).TypeArguments.Single().SpecialType);
         if (negative)
         {
-            var error = Assert.Single(diagnostics, d => d.Id == "ZEN0035" && source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length) == "Stage.Hook(typeof(Unused<,,>))"); Assert.Empty(error.AdditionalLocations);
+            var error = Assert.Single(diagnostics, d => d.Id == "ZEN0035" && source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length) == "Stage.Hook(typeof(Unused<,,>))");
+            Assert.Empty(error.AdditionalLocations);
             Assert.All(diagnostics, d => Assert.Equal("ZEN0035", d.Id));
-            Assert.Null(output.GetTypeByMetadataName("OpenAsyncTwoHooks.Generated.Undetermined.IZendiator")); Assert.Null(output.GetTypeByMetadataName("OpenAsyncTwoHooks.Generated.Undetermined.ZendiatorGeneratedRegistrar"));
-            foreach (var interceptor in driver.GetRunResult().Results.Single().GeneratedSources.Where(f => f.SourceText.ToString().Contains("InterceptsLocation", StringComparison.Ordinal))) Assert.DoesNotContain("typeof(global::OpenAsyncTwoHooks.Undetermined)", interceptor.SourceText.ToString(), StringComparison.Ordinal);
+            Assert.Null(output.GetTypeByMetadataName("OpenAsyncTwoHooks.Generated.Undetermined.IZendiator"));
+            Assert.Null(output.GetTypeByMetadataName("OpenAsyncTwoHooks.Generated.Undetermined.ZendiatorGeneratedRegistrar"));
+            foreach (var interceptor in driver.GetRunResult().Results.Single().GeneratedSources.Where(f => f.SourceText.ToString().Contains("InterceptsLocation", StringComparison.Ordinal)))
+                Assert.DoesNotContain("typeof(global::OpenAsyncTwoHooks.Undetermined)", interceptor.SourceText.ToString(), StringComparison.Ordinal);
         }
-        else Assert.Empty(diagnostics);
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "binding.json"), JsonSerializer.Serialize(new { logicalInputs = 1, dispatches = 0, requestShape = route.RequestShape.ToString(), generic = emission.Generic, openRegistration = emission.OpenRegistration, hooks = emission.Hooks, negative, diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), anchor = source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length) }) }));
+        else
+            Assert.Empty(diagnostics);
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "binding.json"), JsonSerializer.Serialize(new
+            {
+                logicalInputs = 1,
+                dispatches = 0,
+                requestShape = route.RequestShape.ToString(),
+                generic = emission.Generic,
+                openRegistration = emission.OpenRegistration,
+                hooks = emission.Hooks,
+                negative,
+                diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage(), anchor = source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length) })
+            }));
         return (output, folder);
     }
 
     [Fact]
     public async Task OpenSendAsync_two_hooks_pending_and_inner_finally_failure_match_reference()
     {
-        var compiled = CompileOpenSendAsyncTwoHooks(false); using var bytes = new MemoryStream(); var emitted = compiled.Output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-        if (compiled.Folder != null) File.WriteAllBytes(Path.Combine(compiled.Folder, "generated.dll"), bytes.ToArray()); bytes.Position = 0;
-        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var result = await assembly.GetType("OpenAsyncTwoHooks.Entry")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()();
-        if (compiled.Folder != null) File.WriteAllText(Path.Combine(compiled.Folder, "runtime.json"), result);
-        using var json = JsonDocument.Parse(result); Assert.Equal(4, json.RootElement.GetProperty("dispatches").GetInt32());
+        var compiled = CompileOpenSendAsyncTwoHooks(false);
+        using var bytes = new MemoryStream();
+        var emitted = compiled.Output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (compiled.Folder != null)
+            File.WriteAllBytes(Path.Combine(compiled.Folder, "generated.dll"), bytes.ToArray());
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var result = await assembly.GetType("OpenAsyncTwoHooks.Entry")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()();
+        if (compiled.Folder != null)
+            File.WriteAllText(Path.Combine(compiled.Folder, "runtime.json"), result);
+        using var json = JsonDocument.Parse(result);
+        Assert.Equal(4, json.RootElement.GetProperty("dispatches").GetInt32());
     }
 
     [Fact]

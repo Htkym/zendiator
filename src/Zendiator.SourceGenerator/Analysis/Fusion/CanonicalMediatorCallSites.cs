@@ -24,7 +24,8 @@ internal static class CanonicalMediatorCallSites
 
     internal static CanonicalMediatorApi Api(CanonicalSourceFile file)
     {
-        if (file.Api is { } cached) return cached;
+        if (file.Api is { } cached)
+            return cached;
         var root = CSharpSyntaxTree.ParseText(file.Source).GetCompilationUnitRoot();
         var ns = root.Members.OfType<NamespaceDeclarationSyntax>().Single();
         var api = ns.Members.OfType<InterfaceDeclarationSyntax>().Single();
@@ -35,26 +36,32 @@ internal static class CanonicalMediatorCallSites
     internal static EquatableArray<CanonicalMediatorCallSite> Bind(ImmutableArray<InvocationExpressionSyntax> calls,
         EquatableArray<CanonicalMediatorApi> apis, Compilation compilation, CancellationToken token)
     {
-        if (calls.Length == 0 || apis.Count == 0) return default;
+        if (calls.Length == 0 || apis.Count == 0)
+            return default;
         var externs = new EquatableArray<string>(apis.SelectMany(a => a.Externs).Distinct(StringComparer.Ordinal));
         var stub = new StringBuilder("#nullable enable\n");
-        foreach (var declaration in externs) stub.AppendLine(declaration);
+        foreach (var declaration in externs)
+            stub.AppendLine(declaration);
         var namespaces = new HashSet<string>(StringComparer.Ordinal);
         foreach (var group in apis.GroupBy(a => a.Namespace, StringComparer.Ordinal))
         {
             // A user declaration with the generated identity is an error, never an interception target.
-            if (compilation.GetTypeByMetadataName(group.Key + ".IZendiator") != null || compilation.GetTypeByMetadataName(group.Key + ".Zendiator") != null) continue;
+            if (compilation.GetTypeByMetadataName(group.Key + ".IZendiator") != null || compilation.GetTypeByMetadataName(group.Key + ".Zendiator") != null)
+                continue;
             namespaces.Add(group.Key);
             var methods = group.SelectMany(a => a.Methods).Distinct(StringComparer.Ordinal).Select(m => (MethodDeclarationSyntax)SyntaxFactory.ParseMemberDeclaration(m)!).ToArray();
             stub.Append("namespace ").Append(group.Key).AppendLine(" { public interface IZendiator {");
-            foreach (var method in methods) stub.AppendLine(method.ToFullString());
+            foreach (var method in methods)
+                stub.AppendLine(method.ToFullString());
             stub.AppendLine("} public sealed class Zendiator : IZendiator, global::System.IServiceProvider { public Zendiator(global::System.IServiceProvider provider) {} ");
             stub.AppendLine("object? global::System.IServiceProvider.GetService(global::System.Type serviceType) => throw null!;");
-            foreach (var method in methods) stub.AppendLine(method.WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
+            foreach (var method in methods)
+                stub.AppendLine(method.WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
                 .WithSemicolonToken(default).WithBody(SyntaxFactory.Block(SyntaxFactory.ThrowStatement(SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression)))).NormalizeWhitespace().ToFullString());
             stub.AppendLine("} }");
         }
-        if (namespaces.Count == 0) return default;
+        if (namespaces.Count == 0)
+            return default;
         // Bind only the targeted invocations against lightweight API declarations; do not walk all trees semantically.
         var options = (CSharpParseOptions?)compilation.SyntaxTrees.FirstOrDefault()?.Options;
         var augmented = compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText(stub.ToString(), options, cancellationToken: token));
@@ -65,20 +72,30 @@ internal static class CanonicalMediatorCallSites
             var semantic = augmented.GetSemanticModel(call.SyntaxTree);
             if (semantic.GetSymbolInfo(call, token).Symbol is not IMethodSymbol { IsStatic: false } bound ||
                 bound.ContainingType.ContainingType != null || bound.ContainingType.Name is not ("IZendiator" or "Zendiator") ||
-                !namespaces.Contains(bound.ContainingNamespace.ToDisplayString())) continue;
+                !namespaces.Contains(bound.ContainingNamespace.ToDisplayString()))
+                continue;
             // Keep constrained calls on type parameters intact: converting a struct receiver to
             // IZendiator would box a copy and can change mutation and ref receiver semantics.
             var receiverType = semantic.GetTypeInfo(((MemberAccessExpressionSyntax)call.Expression).Expression, token).Type;
-            if (receiverType is not INamedTypeSymbol { IsReferenceType: true }) continue;
+            if (receiverType is not INamedTypeSymbol { IsReferenceType: true })
+                continue;
             var location = semantic.GetInterceptableLocation(call, token);
-            if (location == null) continue;
+            if (location == null)
+                continue;
             var method = bound.OriginalDefinition;
             string Display(ITypeSymbol type) => CanonicalSymbolName.Display(type, augmented);
             var receiver = Display(method.ContainingType);
             var concrete = "global::" + method.ContainingNamespace.ToDisplayString() + ".Zendiator";
             var typeParameters = method.TypeParameters.Length == 0 ? "" : "<" + string.Join(", ", method.TypeParameters.Select(p => p.Name)) + ">";
             var constraints = string.Concat(method.TypeParameters.Select(p => Constraints(p, augmented)));
-            string Ref(IParameterSymbol p) => p.RefKind switch { RefKind.Ref => "ref ", RefKind.Out => "out ", RefKind.In => "in ", RefKind.RefReadOnlyParameter => "ref readonly ", _ => "" };
+            string Ref(IParameterSymbol p) => p.RefKind switch
+            {
+                RefKind.Ref => "ref ",
+                RefKind.Out => "out ",
+                RefKind.In => "in ",
+                RefKind.RefReadOnlyParameter => "ref readonly ",
+                _ => ""
+            };
             var parameters = string.Join(", ", method.Parameters.Select((p, i) => (p.IsParams ? "params " : "") +
                 (p.ScopedKind != ScopedKind.None ? "scoped " : "") + Ref(p) + Display(p.Type) + " p" + i));
             var arguments = string.Join(", ", method.Parameters.Select((p, i) => (p.RefKind is RefKind.In or RefKind.RefReadOnlyParameter ? "in " : Ref(p)) + "p" + i));
@@ -92,20 +109,27 @@ internal static class CanonicalMediatorCallSites
     private static string Constraints(ITypeParameterSymbol parameter, Compilation compilation)
     {
         var constraints = new List<string>();
-        if (parameter.HasUnmanagedTypeConstraint) constraints.Add("unmanaged");
-        else if (parameter.HasValueTypeConstraint) constraints.Add("struct");
-        else if (parameter.HasReferenceTypeConstraint) constraints.Add(parameter.ReferenceTypeConstraintNullableAnnotation == NullableAnnotation.Annotated ? "class?" : "class");
-        else if (parameter.HasNotNullConstraint) constraints.Add("notnull");
+        if (parameter.HasUnmanagedTypeConstraint)
+            constraints.Add("unmanaged");
+        else if (parameter.HasValueTypeConstraint)
+            constraints.Add("struct");
+        else if (parameter.HasReferenceTypeConstraint)
+            constraints.Add(parameter.ReferenceTypeConstraintNullableAnnotation == NullableAnnotation.Annotated ? "class?" : "class");
+        else if (parameter.HasNotNullConstraint)
+            constraints.Add("notnull");
         constraints.AddRange(parameter.ConstraintTypes.Select(t => CanonicalSymbolName.Display(t, compilation)));
-        if (parameter.HasConstructorConstraint) constraints.Add("new()");
-        if (parameter.AllowsRefLikeType) constraints.Add("allows ref struct");
+        if (parameter.HasConstructorConstraint)
+            constraints.Add("new()");
+        if (parameter.AllowsRefLikeType)
+            constraints.Add("allows ref struct");
         return constraints.Count == 0 ? "" : " where " + parameter.Name + " : " + string.Join(", ", constraints);
     }
 
     internal static CanonicalSourceFile Emit(CanonicalMediatorCallSite call)
     {
         var b = new StringBuilder("// <auto-generated/>\n#nullable enable\n");
-        foreach (var declaration in call.Externs) b.AppendLine(declaration);
+        foreach (var declaration in call.Externs)
+            b.AppendLine(declaration);
         b.AppendLine($$"""
             namespace System.Runtime.CompilerServices {
                 [global::System.AttributeUsage(global::System.AttributeTargets.Method, AllowMultiple = true)]
@@ -120,8 +144,10 @@ internal static class CanonicalMediatorCallSites
                     {
             """);
         var invocation = call.Method + call.TypeParameters + "(" + call.Arguments + ")";
-        if (call.Receiver == call.Concrete) b.AppendLine((call.Result == "void" ? "" : "return ") + "mediator." + invocation + ";");
-        else b.AppendLine("if (mediator is " + call.Concrete + " concrete) { " + (call.Result == "void" ? "concrete." + invocation + "; return;" : "return concrete." + invocation + ";") + " }\n" +
+        if (call.Receiver == call.Concrete)
+            b.AppendLine((call.Result == "void" ? "" : "return ") + "mediator." + invocation + ";");
+        else
+            b.AppendLine("if (mediator is " + call.Concrete + " concrete) { " + (call.Result == "void" ? "concrete." + invocation + "; return;" : "return concrete." + invocation + ";") + " }\n" +
             (call.Result == "void" ? "" : "return ") + "mediator." + invocation + ";");
         b.AppendLine("} } }");
         return new("Zendiator.Dispatch." + call.Key + ".g.cs", b.ToString());

@@ -18,45 +18,82 @@ public sealed partial class GeneratorTests
     {
         public R Before(R request, CancellationToken token) => request;
         public T After(R request, T response, CancellationToken token) => response;
-        public void OnException(R request, Exception error, CancellationToken token) { }
-        public void Finally(R request, SendExitInfo exit, CancellationToken token) { }
+        public void OnException(R request, Exception error, CancellationToken token)
+        {
+        }
+        public void Finally(R request, SendExitInfo exit, CancellationToken token)
+        {
+        }
     }
     public sealed class ExternalVoidFourPhaseHook<R> : ISendRequestTransform<R>, ISendSuccessObserver<R>, ISendExceptionObserver<R>, ISendFinallyObserver<R>
     {
         public R Before(R request, CancellationToken token) => request;
-        public void After(R request, CancellationToken token) { }
-        public void OnException(R request, Exception error, CancellationToken token) { }
-        public void Finally(R request, SendExitInfo exit, CancellationToken token) { }
+        public void After(R request, CancellationToken token)
+        {
+        }
+        public void OnException(R request, Exception error, CancellationToken token)
+        {
+        }
+        public void Finally(R request, SendExitInfo exit, CancellationToken token)
+        {
+        }
     }
 
     private static string SingleHookBackendSource(bool isVoid, string shape = "eligible")
     {
-        var capabilities = new List<string>(); var methods = new List<string>();
-        if (shape != "missing-before") { capabilities.Add("ISendRequestTransform<Ping>"); methods.Add("Ping ISendRequestTransform<Ping>.Before(Ping request,CancellationToken token)=>(Ping)_probe.Before(request,token)!;"); }
+        var capabilities = new List<string>();
+        var methods = new List<string>();
+        if (shape != "missing-before")
+        {
+            capabilities.Add("ISendRequestTransform<Ping>");
+            methods.Add("Ping ISendRequestTransform<Ping>.Before(Ping request,CancellationToken token)=>(Ping)_probe.Before(request,token)!;");
+        }
         if (shape != "missing-after")
         {
             capabilities.Add(isVoid ? "ISendSuccessObserver<Ping>" : "ISendResponseTransform<Ping,int>");
             methods.Add(isVoid ? "void ISendSuccessObserver<Ping>.After(Ping request,CancellationToken token)=>_probe.After(request,0,token);" :
                 "int ISendResponseTransform<Ping,int>.After(Ping request,int response,CancellationToken token)=>_probe.After(request,response,token);");
         }
-        if (shape != "missing-exception") { capabilities.Add("ISendExceptionObserver<Ping>"); methods.Add("void ISendExceptionObserver<Ping>.OnException(Ping request,Exception error,CancellationToken token)=>_probe.Observe(request,error,token);"); }
-        if (shape != "missing-finally") { capabilities.Add("ISendFinallyObserver<Ping>"); methods.Add("void ISendFinallyObserver<Ping>.Finally(Ping request,SendExitInfo exit,CancellationToken token)=>_probe.Finish(request,exit,token);"); }
+        if (shape != "missing-exception")
+        {
+            capabilities.Add("ISendExceptionObserver<Ping>");
+            methods.Add("void ISendExceptionObserver<Ping>.OnException(Ping request,Exception error,CancellationToken token)=>_probe.Observe(request,error,token);");
+        }
+        if (shape != "missing-finally")
+        {
+            capabilities.Add("ISendFinallyObserver<Ping>");
+            methods.Add("void ISendFinallyObserver<Ping>.Finally(Ping request,SendExitInfo exit,CancellationToken token)=>_probe.Finish(request,exit,token);");
+        }
         var hook = "public " + (shape == "struct" ? "struct" : "class") + " HookBase<T> : " + string.Join(",", capabilities) + ",IDisposable where T:class { " +
             "private readonly Probe _probe; public HookBase(Probe probe) { _probe=probe; probe.ConstructHook(); } " + string.Join(" ", methods) + " void IDisposable.Dispose()=>_probe.HookDisposals++; }";
-        if (shape != "struct") hook += " public sealed class Hook<T> : HookBase<T> where T:class { public Hook(Probe probe):base(probe){} }";
+        if (shape != "struct")
+            hook += " public sealed class Hook<T> : HookBase<T> where T:class { public Hook(Probe probe):base(probe){} }";
         var stageType = shape == "struct" ? "HookBase<string>" : "Hook<string>";
         var stageEntry = "Stage.Hook<" + stageType + ">()";
         var handlerEntry = "typeof(Handler<string>)";
-        if (shape == "two-hooks") { hook += " public sealed class Hook2<T> : HookBase<T> where T:class { public Hook2(Probe probe):base(probe){} }"; stageEntry += ",Stage.Hook<Hook2<string>>()"; }
-        if (shape == "handler-owned") { hook += " public sealed class HandlerFactory : IOwnedSessionFactory<Ping,Handler<string>> { public Handler<string> Create(Ping request,CancellationToken token)=>throw new NotImplementedException(); }"; handlerEntry = "HandlerEntry.Session<Handler<string>,HandlerFactory>()"; }
-        if (shape == "hook-owned") { hook += " public sealed class HookFactory : IOwnedSessionFactory<Ping,Hook<string>> { public Hook<string> Create(Ping request,CancellationToken token)=>throw new NotImplementedException(); }"; stageEntry = "Stage.Hook<Hook<string>,HookFactory>()"; }
+        if (shape == "two-hooks")
+        {
+            hook += " public sealed class Hook2<T> : HookBase<T> where T:class { public Hook2(Probe probe):base(probe){} }";
+            stageEntry += ",Stage.Hook<Hook2<string>>()";
+        }
+        if (shape == "handler-owned")
+        {
+            hook += " public sealed class HandlerFactory : IOwnedSessionFactory<Ping,Handler<string>> { public Handler<string> Create(Ping request,CancellationToken token)=>throw new NotImplementedException(); }";
+            handlerEntry = "HandlerEntry.Session<Handler<string>,HandlerFactory>()";
+        }
+        if (shape == "hook-owned")
+        {
+            hook += " public sealed class HookFactory : IOwnedSessionFactory<Ping,Hook<string>> { public Hook<string> Create(Ping request,CancellationToken token)=>throw new NotImplementedException(); }";
+            stageEntry = "Stage.Hook<Hook<string>,HookFactory>()";
+        }
         if (shape == "wrapper")
         {
             hook += isVoid ? " public sealed class Wrapper : ISendWrapper<Ping> { public void Invoke<TNext>(Ping request,TNext next,CancellationToken token) where TNext:ISendContinuation<Ping> =>next.Invoke(request,token); }" :
                 " public sealed class Wrapper : ISendWrapper<Ping,int> { public int Invoke<TNext>(Ping request,TNext next,CancellationToken token) where TNext:ISendContinuation<Ping,int> =>next.Invoke(request,token); }";
             stageEntry = "Stage.Wrapper<Wrapper>()";
         }
-        if (shape == "external") stageEntry = isVoid ? "Stage.Hook<global::Zendiator.Generator.Tests.GeneratorTests.ExternalVoidFourPhaseHook<Ping>>()" :
+        if (shape == "external")
+            stageEntry = isVoid ? "Stage.Hook<global::Zendiator.Generator.Tests.GeneratorTests.ExternalVoidFourPhaseHook<Ping>>()" :
             "Stage.Hook<global::Zendiator.Generator.Tests.GeneratorTests.ExternalFourPhaseHook<Ping,int>>()";
         var result = isVoid ? "" : ",int";
         return $$"""
@@ -90,40 +127,66 @@ public sealed partial class GeneratorTests
         var hook = f.Assembly.GetType("App.Hook`1")!.MakeGenericType(typeof(string));
         var method = typeof(CanonicalSendSyncReference).GetMethod(isVoid ? "SendVoid" : "SendResponse", BindingFlags.Static | BindingFlags.NonPublic)!;
         method = method.MakeGenericMethod(isVoid ? [f.Request, hook, f.Service] : [f.Request, typeof(int), hook, f.Service]);
-        try { return (method.Invoke(null, [provider, request, token]), null); }
-        catch (TargetInvocationException error) { return (null, error.InnerException); }
+        try
+        {
+            return (method.Invoke(null, [provider, request, token]), null);
+        }
+        catch (TargetInvocationException error)
+        {
+            return (null, error.InnerException);
+        }
     }
 
     private static string RunSingleHookEngine(SyncFixture f, bool isVoid, string scenario, string golden, bool generated)
     {
-        var probe = new ReferenceSendProbe(); var ambient = ReferenceSendProbe.Ambient.Value; var culture = CultureInfo.CurrentCulture;
-        ReferenceSendProbe.Ambient.Value = "caller"; CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        var probe = new ReferenceSendProbe();
+        var ambient = ReferenceSendProbe.Ambient.Value;
+        var culture = CultureInfo.CurrentCulture;
+        ReferenceSendProbe.Ambient.Value = "caller";
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
         var token = probe.Cancellation.Token;
         Exception body = scenario is "handler-oce" or "after-oce" ? new OperationCanceledException(token) : new Exception("body identity");
         var observer = new Exception("observer identity");
         Exception cleanup = scenario == "finally-oce-over-body" ? new OperationCanceledException(token) : new Exception("finally identity");
         object? request = scenario == "null-request" ? null : Activator.CreateInstance(f.Request);
         var replacement = Activator.CreateInstance(f.Request)!;
-        probe.TransformRequest = scenario is "replace-request" or "before-null" or "before-error"; probe.Replacement = scenario == "before-null" ? null : replacement;
-        if (scenario == "before-error") probe.BeforeError = body;
-        if (scenario == "stage-ctor-error") probe.StageConstructorError = body;
-        if (scenario == "handler-ctor-error") probe.HandlerConstructorError = body;
-        if (scenario is "handler-error" or "handler-oce" or "observer-error-over-body" or "finally-error-over-body" or "finally-oce-over-body" or "finally-error-over-observer") probe.HandlerError = body;
-        if (scenario is "after-error" or "after-oce") probe.AfterError = body;
-        if (scenario is "observer-error-over-body" or "finally-error-over-observer") probe.ObserverError = observer;
-        if (scenario.StartsWith("finally-", StringComparison.Ordinal)) probe.FinallyError = cleanup;
-        probe.CancelBefore = scenario == "cancel-in-before"; probe.CancelHandler = scenario == "cancel-in-handler";
-        probe.CancelAfter = scenario == "cancel-in-after"; probe.CancelFinally = scenario == "cancel-in-finally";
-        if (scenario == "pre-cancel") probe.Cancellation.Cancel();
+        probe.TransformRequest = scenario is "replace-request" or "before-null" or "before-error";
+        probe.Replacement = scenario == "before-null" ? null : replacement;
+        if (scenario == "before-error")
+            probe.BeforeError = body;
+        if (scenario == "stage-ctor-error")
+            probe.StageConstructorError = body;
+        if (scenario == "handler-ctor-error")
+            probe.HandlerConstructorError = body;
+        if (scenario is "handler-error" or "handler-oce" or "observer-error-over-body" or "finally-error-over-body" or "finally-oce-over-body" or "finally-error-over-observer")
+            probe.HandlerError = body;
+        if (scenario is "after-error" or "after-oce")
+            probe.AfterError = body;
+        if (scenario is "observer-error-over-body" or "finally-error-over-observer")
+            probe.ObserverError = observer;
+        if (scenario.StartsWith("finally-", StringComparison.Ordinal))
+            probe.FinallyError = cleanup;
+        probe.CancelBefore = scenario == "cancel-in-before";
+        probe.CancelHandler = scenario == "cancel-in-handler";
+        probe.CancelAfter = scenario == "cancel-in-after";
+        probe.CancelFinally = scenario == "cancel-in-finally";
+        if (scenario == "pre-cancel")
+            probe.Cancellation.Cancel();
         string? ErrorRole(Exception? error) => error == null ? null : ReferenceEquals(error, body) ? "body" : ReferenceEquals(error, observer) ? "observer" :
             ReferenceEquals(error, cleanup) ? "finally" : error is ArgumentNullException ? "guard-null" : error is OperationCanceledException ? "guard-cancel" : "unexpected:" + error.GetType().FullName;
         string? RequestRole(object? value) => value == null ? null : ReferenceEquals(value, request) ? "input" : ReferenceEquals(value, replacement) ? "replacement" : "unexpected";
         try
         {
-            IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe);
+            IServiceCollection services = new ServiceCollection();
+            services.AddSingleton(probe);
             var hook = f.Assembly.GetType("App.Hook`1")!.MakeGenericType(typeof(string));
-            if (scenario is "stage-di-error" or "handler-di-error") services.AddScoped(scenario == "stage-di-error" ? hook : f.Service,
-                _ => { probe.Phases.Add(scenario == "stage-di-error" ? "stage.resolve" : "handler.resolve"); throw body; });
+            if (scenario is "stage-di-error" or "handler-di-error")
+                services.AddScoped(scenario == "stage-di-error" ? hook : f.Service,
+                _ =>
+                {
+                    probe.Phases.Add(scenario == "stage-di-error" ? "stage.resolve" : "handler.resolve");
+                    throw body;
+                });
             Assert.Same(services, f.Register.Invoke(null, [services]));
             using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
             string snapshot;
@@ -133,9 +196,18 @@ public sealed partial class GeneratorTests
                     InvokeSingleHookReference(f, scope.ServiceProvider, request, token, isVoid);
                 Assert.Equal(golden.Split(' ', StringSplitOptions.RemoveEmptyEntries), probe.Phases);
                 if (scenario is "before-null" or "cancel-in-before")
-                { Assert.NotNull(actual.Error); Assert.Same(actual.Error, probe.ObservedError); Assert.Same(actual.Error, probe.Exit?.Error); }
-                if (scenario is "null-request" or "pre-cancel") { Assert.Null(probe.ObservedError); Assert.Null(probe.Exit); }
-                Assert.Equal(0, probe.HookDisposals); Assert.Equal(0, probe.HandlerDisposals);
+                {
+                    Assert.NotNull(actual.Error);
+                    Assert.Same(actual.Error, probe.ObservedError);
+                    Assert.Same(actual.Error, probe.Exit?.Error);
+                }
+                if (scenario is "null-request" or "pre-cancel")
+                {
+                    Assert.Null(probe.ObservedError);
+                    Assert.Null(probe.Exit);
+                }
+                Assert.Equal(0, probe.HookDisposals);
+                Assert.Equal(0, probe.HandlerDisposals);
                 snapshot = JsonSerializer.Serialize(new
                 {
                     phases = probe.Phases.ToArray(),
@@ -160,10 +232,16 @@ public sealed partial class GeneratorTests
                     token.IsCancellationRequested
                 });
             }
-            Assert.Equal(probe.HookConstructed ? 1 : 0, probe.HookDisposals); Assert.Equal(probe.HandlerConstructed ? 1 : 0, probe.HandlerDisposals);
+            Assert.Equal(probe.HookConstructed ? 1 : 0, probe.HookDisposals);
+            Assert.Equal(probe.HandlerConstructed ? 1 : 0, probe.HandlerDisposals);
             return snapshot;
         }
-        finally { probe.Cancellation.Dispose(); ReferenceSendProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; }
+        finally
+        {
+            probe.Cancellation.Dispose();
+            ReferenceSendProbe.Ambient.Value = ambient;
+            CultureInfo.CurrentCulture = culture;
+        }
     }
 
     [Theory]
@@ -177,26 +255,40 @@ public sealed partial class GeneratorTests
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence))
         {
-            var folder = Path.Combine(Path.GetDirectoryName(evidence)!, "hook-differential"); Directory.CreateDirectory(folder);
+            var folder = Path.Combine(Path.GetDirectoryName(evidence)!, "hook-differential");
+            Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, (isVoid ? "void-" : "response-") + scenario + ".json"),
-                JsonSerializer.Serialize(new { isVoid, scenario, golden, reference = JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) }));
+                JsonSerializer.Serialize(new
+                {
+                    isVoid,
+                    scenario,
+                    golden,
+                    reference = JsonSerializer.Deserialize<JsonElement>(reference),
+                    generated = JsonSerializer.Deserialize<JsonElement>(generated)
+                }));
         }
     }
 
     public static IEnumerable<object[]> SingleHookLifetimeCases()
     {
-        foreach (var isVoid in new[] { false, true }) foreach (var hook in new[] { ServiceLifetime.Scoped, ServiceLifetime.Transient, ServiceLifetime.Singleton })
-            foreach (var handler in new[] { ServiceLifetime.Scoped, ServiceLifetime.Transient, ServiceLifetime.Singleton }) yield return [isVoid, hook, handler];
+        foreach (var isVoid in new[] { false, true })
+            foreach (var hook in new[] { ServiceLifetime.Scoped, ServiceLifetime.Transient, ServiceLifetime.Singleton })
+                foreach (var handler in new[] { ServiceLifetime.Scoped, ServiceLifetime.Transient, ServiceLifetime.Singleton })
+                    yield return [isVoid, hook, handler];
     }
 
     private static string RunSingleHookLifetimes(SyncFixture f, bool isVoid, ServiceLifetime hookLifetime, ServiceLifetime handlerLifetime, bool generated)
     {
-        var probe = new ReferenceSendProbe(); var ambient = ReferenceSendProbe.Ambient.Value; var culture = CultureInfo.CurrentCulture;
+        var probe = new ReferenceSendProbe();
+        var ambient = ReferenceSendProbe.Ambient.Value;
+        var culture = CultureInfo.CurrentCulture;
         try
         {
-            IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe);
+            IServiceCollection services = new ServiceCollection();
+            services.AddSingleton(probe);
             var hook = f.Assembly.GetType("App.Hook`1")!.MakeGenericType(typeof(string));
-            services.Add(ServiceDescriptor.Describe(hook, hook, hookLifetime)); services.Add(ServiceDescriptor.Describe(f.Service, f.Service, handlerLifetime));
+            services.Add(ServiceDescriptor.Describe(hook, hook, hookLifetime));
+            services.Add(ServiceDescriptor.Describe(f.Service, f.Service, handlerLifetime));
             Assert.Same(services, f.Register.Invoke(null, [services]));
             var cleanup = new List<(int Hook, int Handler)>();
             using (var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
@@ -210,7 +302,8 @@ public sealed partial class GeneratorTests
                         {
                             var actual = generated ? InvokeSync(f, mediator!, Activator.CreateInstance(f.Request), default) :
                                 InvokeSingleHookReference(f, scope.ServiceProvider, Activator.CreateInstance(f.Request), default, isVoid);
-                            Assert.Null(actual.Error); Assert.Equal(isVoid ? null : (object)42, actual.Result);
+                            Assert.Null(actual.Error);
+                            Assert.Equal(isVoid ? null : (object)42, actual.Result);
                             Assert.Equal(hookLifetime == ServiceLifetime.Singleton ? 0 : s, probe.HookDisposals);
                             Assert.Equal(handlerLifetime == ServiceLifetime.Singleton ? 0 : s, probe.HandlerDisposals);
                         }
@@ -222,9 +315,20 @@ public sealed partial class GeneratorTests
             }
             Assert.Equal(hookLifetime == ServiceLifetime.Singleton ? 1 : 2, probe.HookDisposals);
             Assert.Equal(handlerLifetime == ServiceLifetime.Singleton ? 1 : 2, probe.HandlerDisposals);
-            return JsonSerializer.Serialize(new { phases = probe.Phases.ToArray(), scopeCleanup = cleanup.Select(c => new { c.Hook, c.Handler }), probe.HookDisposals, probe.HandlerDisposals });
+            return JsonSerializer.Serialize(new
+            {
+                phases = probe.Phases.ToArray(),
+                scopeCleanup = cleanup.Select(c => new { c.Hook, c.Handler }),
+                probe.HookDisposals,
+                probe.HandlerDisposals
+            });
         }
-        finally { probe.Cancellation.Dispose(); ReferenceSendProbe.Ambient.Value = ambient; CultureInfo.CurrentCulture = culture; }
+        finally
+        {
+            probe.Cancellation.Dispose();
+            ReferenceSendProbe.Ambient.Value = ambient;
+            CultureInfo.CurrentCulture = culture;
+        }
     }
 
     [Theory]
@@ -271,7 +375,8 @@ public sealed partial class GeneratorTests
     public void Enabled_single_Hook_body_edits_cache_callable_source_and_capability_changes_update_route()
     {
         var source = SingleHookBackendSource(false);
-        var before = SyncCompilation(source, "HookIncremental"); var driver = SyncDriver().RunGenerators(before);
+        var before = SyncCompilation(source, "HookIncremental");
+        var driver = SyncDriver().RunGenerators(before);
         var original = CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);
         Assert.Empty(driver.GetRunResult().Diagnostics);
         var body = before.ReplaceSyntaxTree(before.SyntaxTrees.Single(), CSharpSyntaxTree.ParseText(source.Replace("_probe.Before(request,token)!", "_probe.Before(request, token)!"), SyncParseOptions));

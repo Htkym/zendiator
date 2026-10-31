@@ -10,7 +10,11 @@ public sealed class PublicValueRequestProbe
     public readonly List<string> Resolved = [], Ended = [];
     public int Starts, SourceDisposals, Sends;
     public void Record(string phase, int marker, long pad, object? shared, int version) => Seen.Add(new(phase, marker, pad, shared, version));
-    public static void Check(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
+    public static void Check(bool value, string message)
+    {
+        if (!value)
+            throw new InvalidOperationException(message);
+    }
 }
 
 public sealed partial class GeneratorTests

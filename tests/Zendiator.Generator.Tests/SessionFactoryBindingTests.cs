@@ -61,7 +61,8 @@ public sealed partial class GeneratorTests
             Assert.Equal(sync ? BoundCompletionKind.Synchronous : BoundCompletionKind.ValueTask, session.Cleanup.Completion);
             Assert.Equal(!sync, session.Cleanup.RequiresSingleConsumption);
         }
-        else Assert.Null(session.Cleanup); // Disposable capability never grants ownership.
+        else
+            Assert.Null(session.Cleanup); // Disposable capability never grants ownership.
         var graph = Graph(driver);
         Assert.True(graph.IsValid, string.Join(",", graph.Facts.Select(f => f.Reason)));
         Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.Contains("Reads"));
@@ -128,7 +129,10 @@ public sealed partial class GeneratorTests
     {
         var driver = BindAcceptedSendLists(SessionFactoryFixture());
         var route = Assert.Single(Selection(driver).Pipelines);
-        var forged = route with { Stages = new(route.Stages.Select(s => s with { ServiceOwnership = FusionOwnership.BorrowedService })) };
+        var forged = route with
+        {
+            Stages = new(route.Stages.Select(s => s with { ServiceOwnership = FusionOwnership.BorrowedService }))
+        };
         var old = Graph(BindAcceptedSendLists(SessionFactoryFixture().Replace("Stage.Hook<OperationSession,Factory<string>>()", "Stage.Hook<OperationSession>()")));
         Assert.True(old.IsValid);
         Assert.Contains(CanonicalSendGraphValidator.Validate(forged, old.Schedule!), f => f.Reason == "SessionReceiverTypeOrOwnershipMismatch");
@@ -162,7 +166,8 @@ public sealed partial class GeneratorTests
     public void Owned_cleanup_binds_framework_implicit_and_explicit_Dispose_signatures(bool sync, bool explicitCleanup)
     {
         var source = SessionFactoryFixture(sync ? "SendSync" : "SendAsync");
-        if (explicitCleanup) source = sync
+        if (explicitCleanup)
+            source = sync
             ? source.Replace("public void Dispose(){}", "void IDisposable.Dispose(){}")
             : source.Replace("public ValueTask DisposeAsync()=>default;", "ValueTask IAsyncDisposable.DisposeAsync()=>default;");
         var driver = BindAcceptedSendLists(source);
@@ -193,10 +198,12 @@ public sealed partial class GeneratorTests
         var members = shape == "wrong-return" ? "int " + method + "();" :
             "int Other();" + (shape == "multiple-methods" ? "int Another();" : "");
         var source = SessionFactoryFixture(sync ? "SendSync" : "SendAsync");
-        if (shape == "wrong-return") source = sync
+        if (shape == "wrong-return")
+            source = sync
             ? source.Replace("public void Dispose(){}", "public int Dispose()=>1;")
             : source.Replace("public ValueTask DisposeAsync()=>default;", "public int DisposeAsync()=>1;");
-        else source = source.Replace("public void Dispose(){}", "public int Other()=>1; public int Another()=>2; public void Dispose(){}");
+        else
+            source = source.Replace("public void Dispose(){}", "public int Other()=>1; public int Another()=>2; public void Dispose(){}");
         var input = Compilation(source);
         input = input.AddSyntaxTrees(CSharpSyntaxTree.ParseText("namespace System { public interface " + name + " {" + members + "} }",
             (CSharpParseOptions)input.SyntaxTrees.First().Options));

@@ -60,14 +60,20 @@ internal static class StageContractBinding
         CapabilityCallbackEmission? Capability(BoundCallbackPhase phase) => capabilityCalls.TryGetValue(phase, out var value) ? value : null;
         var compilerOwned = false;
         void Reject(string key, string message) => facts.Add(new(key, anchor, message));
-        if (type.TypeKind == TypeKind.Error) { compilerOwned = true; return Value(); }
+        if (type.TypeKind == TypeKind.Error)
+        {
+            compilerOwned = true;
+            return Value();
+        }
         if (!compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
             Reject("InaccessibleStage", $"Stage {Name(type)} is inaccessible to generated code.");
-        if (type.IsRefLikeType) Reject("RefLikeCapture", $"Stage {Name(type)} cannot be held as a borrowed DI service.");
+        if (type.IsRefLikeType)
+            Reject("RefLikeCapture", $"Stage {Name(type)} cannot be held as a borrowed DI service.");
         if (type.IsAbstract || type.IsStatic || type.IsUnboundGenericType || HasOpenShape(type) && (open == null || !open.Contains(type)) ||
             type.TypeKind is not (TypeKind.Class or TypeKind.Struct))
             Reject("UnsupportedGenerationShape", $"Stage {Name(type)} requires a closed, concrete class or struct; open binding is not connected yet.");
-        if (facts.Count != before) return Value();
+        if (facts.Count != before)
+            return Value();
         var assembly = compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly;
         var stream = family == BoundDispatchFamily.Stream;
         var sync = family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync;
@@ -78,7 +84,8 @@ internal static class StageContractBinding
             foreach (var contract in type.AllInterfaces.Where(i => Same(i.OriginalDefinition, definition)))
                 matches.Add((contract, role));
         }
-        if (matches.Count == 0) Reject("StageContractMismatch", $"Stage {Name(type)} has no dedicated {kind} contract for {family}.");
+        if (matches.Count == 0)
+            Reject("StageContractMismatch", $"Stage {Name(type)} has no dedicated {kind} contract for {family}.");
         var relevant = matches.Where(m => RegistrationIdentity(m.Contract.TypeArguments[0], compilation) == RegistrationIdentity(request, compilation)).ToArray();
         if (matches.Count != 0 && relevant.Length == 0)
             Reject("StageTypeMismatch", $"Stage {Name(type)} has no contract for request {Name(request)}.");
@@ -121,7 +128,11 @@ internal static class StageContractBinding
                 Reject("AsyncHookOnSyncRoute", $"Stage {Name(type)} supplies an asynchronous callback on {family}; blocking conversion is unsupported.");
             var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
             var implementation = members.Length == 1 ? type.FindImplementationForInterfaceMember(members[0]) as IMethodSymbol : null;
-            if (implementation == null) { compilerOwned = true; continue; }
+            if (implementation == null)
+            {
+                compilerOwned = true;
+                continue;
+            }
             if (role.Stream && role.Wrapper && !CanonicalStreamContractBinding.Matches(contract, implementation, compilation))
             {
                 Reject("StageContractMismatch", $"Middleware {Name(type)} requires OpenAsync(request, IStreamUpstream<TRequest,TItem>, token) returning ValueTask<IAsyncEnumerator<TItem>>.");
@@ -133,15 +144,23 @@ internal static class StageContractBinding
                     compilerOwned = true;
                 scopedCallbacks[role.Phase] = new(Name(contract), members[0].Name);
             }
-            if (role.Wrapper) wrapperEmission = new(Name(type), Name(contract), members[0].Name, role.Completion);
+            if (role.Wrapper)
+                wrapperEmission = new(Name(type), Name(contract), members[0].Name, role.Completion);
             if (role.Stream && !role.Wrapper && (role.Completion is BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask))
                 streamEmission = new(Name(type), Name(contract), members[0].Name, role.Phase, type.IsValueType, role.Completion)
-                { InputItemName = typedStream ? streamItems?.Input.Name : null, OutputItemName = typedStream ? streamItems?.Output.Name : null };
+                {
+                    InputItemName = typedStream ? streamItems?.Input.Name : null,
+                    OutputItemName = typedStream ? streamItems?.Output.Name : null
+                };
             var callTarget = family == BoundDispatchFamily.SendAsync && kind == FusionStageKind.Hook &&
                 (role.Completion == BoundCompletionKind.ValueTask ||
                     role.Completion == BoundCompletionKind.Synchronous && role.Phase == BoundCallbackPhase.Before)
                 ? CanonicalAsyncCallBinding.Bind(type, members[0], implementation, compilation, Name) : null;
-            if (!role.Wrapper && !role.Stream && !role.ScopedObserver) capabilityCalls[role.Phase] = new(Name(contract), members[0].Name, role.Completion) { CallTarget = callTarget };
+            if (!role.Wrapper && !role.Stream && !role.ScopedObserver)
+                capabilityCalls[role.Phase] = new(Name(contract), members[0].Name, role.Completion)
+                {
+                    CallTarget = callTarget
+                };
             if (role.Completion == BoundCompletionKind.Synchronous && !role.ScopedObserver)
                 syncCallbacks[role.Phase] = new(Name(contract), members[0].Name);
             else if (role.Completion == BoundCompletionKind.ValueTask)
@@ -169,13 +188,18 @@ internal static class StageContractBinding
             ScopedObserver = facts.Count == before && !compilerOwned && callbacks.Count == 4 && scopedCallbacks.Count == 4
                 ? new(Name(type), scopedCallbacks[BoundCallbackPhase.ObserveBefore], scopedCallbacks[BoundCallbackPhase.ObserveSuccess],
                     scopedCallbacks[BoundCallbackPhase.ObserveException], scopedCallbacks[BoundCallbackPhase.ObserveFinally])
-                { ObserverIsValueType = type.IsValueType } : null,
+                {
+                    ObserverIsValueType = type.IsValueType
+                } : null,
             StreamItems = facts.Count == before && !compilerOwned && typedStream && callbacks.Count == 1 ? streamItems : null,
             StreamEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.Stream &&
                 kind == FusionStageKind.Hook && callbacks.Count == 1 ? streamEmission : null,
             StreamWrapperEmission = facts.Count == before && !compilerOwned && family == BoundDispatchFamily.Stream &&
                 kind == FusionStageKind.Wrapper && callbacks.Count == 1 && wrapperEmission != null
-                    ? wrapperEmission with { WrapperIsValueType = type.IsValueType } : null,
+                    ? wrapperEmission with
+                    {
+                        WrapperIsValueType = type.IsValueType
+                    } : null,
             SyncEmission = facts.Count == before && !compilerOwned && (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAllSync) &&
                 kind == FusionStageKind.Hook && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly) &&
                 callbacks.Count == 4 && syncCallbacks.Count == 4 &&
@@ -183,7 +207,9 @@ internal static class StageContractBinding
                 syncCallbacks.ContainsKey(BoundCallbackPhase.Exception) && syncCallbacks.ContainsKey(BoundCallbackPhase.Finally)
                     ? new(Name(type), syncCallbacks[BoundCallbackPhase.Before], syncCallbacks[BoundCallbackPhase.Success],
                         syncCallbacks[BoundCallbackPhase.Exception], syncCallbacks[BoundCallbackPhase.Finally])
-                    { HookIsValueType = type.IsValueType } : null,
+                    {
+                        HookIsValueType = type.IsValueType
+                    } : null,
             AsyncEmission = facts.Count == before && !compilerOwned && (family is BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllAsync) &&
                 kind == FusionStageKind.Hook && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly) &&
                 callbacks.Count == 4 && asyncCallbacks.Count == 4 &&
@@ -191,21 +217,30 @@ internal static class StageContractBinding
                 asyncCallbacks.ContainsKey(BoundCallbackPhase.Exception) && asyncCallbacks.ContainsKey(BoundCallbackPhase.Finally)
                     ? new(Name(type), asyncCallbacks[BoundCallbackPhase.Before], asyncCallbacks[BoundCallbackPhase.Success],
                         asyncCallbacks[BoundCallbackPhase.Exception], asyncCallbacks[BoundCallbackPhase.Finally])
-                    { HookIsValueType = type.IsValueType } : null,
+                    {
+                        HookIsValueType = type.IsValueType
+                    } : null,
             WrapperEmission = facts.Count == before && !compilerOwned && kind == FusionStageKind.Wrapper &&
                 (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAllAsync) && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly) &&
                 callbacks.Count == 1
-                    ? wrapperEmission! with { WrapperIsValueType = type.IsValueType } : null,
+                    ? wrapperEmission! with
+                    {
+                        WrapperIsValueType = type.IsValueType
+                    } : null,
             Capabilities = facts.Count == before && !compilerOwned && kind == FusionStageKind.Hook &&
                 (family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync or BoundDispatchFamily.SendAllSync or BoundDispatchFamily.SendAllAsync) && type.TypeKind is (TypeKind.Class or TypeKind.Struct) && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly) &&
                 capabilityCalls.Count > 0 && capabilityCalls.Count <= 4
-                    ? new(Name(type), Capability(BoundCallbackPhase.Before), Capability(BoundCallbackPhase.Success), Capability(BoundCallbackPhase.Exception), Capability(BoundCallbackPhase.Finally)) { HookIsValueType = type.IsValueType } : null
+                    ? new(Name(type), Capability(BoundCallbackPhase.Before), Capability(BoundCallbackPhase.Success), Capability(BoundCallbackPhase.Exception), Capability(BoundCallbackPhase.Finally))
+                    {
+                        HookIsValueType = type.IsValueType
+                    } : null
         };
     }
 
     internal static ITypeSymbol? StreamOutput(INamedTypeSymbol type, BoundStageModel stage)
     {
-        if (stage.Callbacks.Count != 1 || stage.StreamItems == null) return null;
+        if (stage.Callbacks.Count != 1 || stage.StreamItems == null)
+            return null;
         var contract = type.AllInterfaces.SingleOrDefault(i => Identity(i) == stage.Callbacks[0].Interface);
         return contract == null ? null : contract.TypeArguments.Length == 3 ? contract.TypeArguments[2] : contract.TypeArguments[1];
     }
@@ -227,9 +262,11 @@ internal static class StageContractBinding
     private static bool ContinuationMatches(INamedTypeSymbol contract, bool stream, bool sync,
         IAssemblySymbol? assembly, Compilation compilation)
     {
-        if (stream) return CanonicalStreamContractBinding.IsMiddleware(contract, compilation);
+        if (stream)
+            return CanonicalStreamContractBinding.IsMiddleware(contract, compilation);
         var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
-        if (members.Length != 1 || members[0].TypeParameters.Length != 1) return false;
+        if (members.Length != 1 || members[0].TypeParameters.Length != 1)
+            return false;
         var name = sync ? "ISendContinuation" : "IAsyncSendContinuation";
         var definition = assembly?.GetTypeByMetadataName("Zendiator." + name + "`" + contract.TypeArguments.Length);
         var constraints = members[0].TypeParameters[0].ConstraintTypes.OfType<INamedTypeSymbol>()

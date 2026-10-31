@@ -138,11 +138,13 @@ public sealed partial class GeneratorTests
         using var bytes = new MemoryStream();
         var emitted = output.Emit(bytes);
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-        if (folder != null) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+        if (folder != null)
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
         bytes.Position = 0;
         var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var result = await assembly.GetType("OpenSendWrapper.Entry")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()();
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
         using var json = JsonDocument.Parse(result);
         Assert.Equal(6, json.RootElement.GetProperty("pairs").GetInt32());
     }
@@ -170,7 +172,11 @@ public sealed partial class GeneratorTests
         var negativeDriver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(negative, "OpenSendWrapperRejected_" + Guid.NewGuid().ToString("N")), out var rejectedOutput, out var refused);
         SaveSendAllSync(folder == null ? null : Path.Combine(folder, "rejected"), negative, negativeDriver, rejectedOutput, refused);
         Assert.NotEmpty(refused);
-        Assert.All(refused, d => { Assert.Contains(d.Id, new[] { "ZEN0035", "ZEN0037" }); Assert.True(d.Location.IsInSource); });
+        Assert.All(refused, d =>
+        {
+            Assert.Contains(d.Id, new[] { "ZEN0035", "ZEN0037" });
+            Assert.True(d.Location.IsInSource);
+        });
         foreach (var name in new[] { "Undetermined", "Session", "Reversed" })
         {
             Assert.Null(rejectedOutput.GetTypeByMetadataName("OpenSendWrapper.Generated." + name + ".IZendiator"));

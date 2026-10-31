@@ -22,13 +22,16 @@ internal static class CanonicalAsyncCallBinding
             !compilation.IsSymbolAccessibleWithin(implementation.ContainingType, compilation.Assembly) ||
             !compilation.IsSymbolAccessibleWithin(implementation, compilation.Assembly) ||
             !SymbolEqualityComparer.Default.Equals(implementation.ReturnType, contract.ReturnType) ||
-            !Signature(implementation, contract)) return null;
+            !Signature(implementation, contract))
+            return null;
         var members = implementation.ContainingType.GetMembers(implementation.Name).OfType<IMethodSymbol>().ToArray();
         if (members.Any(m => m.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() ==
-            "System.Runtime.CompilerServices.OverloadResolutionPriorityAttribute"))) return null;
+            "System.Runtime.CompilerServices.OverloadResolutionPriorityAttribute")))
+            return null;
         var matches = members
             .Where(m => !m.IsStatic && m.Arity == 0 && Signature(m, contract)).ToArray();
-        if (matches.Length != 1 || !SymbolEqualityComparer.Default.Equals(matches[0], implementation)) return null;
+        if (matches.Length != 1 || !SymbolEqualityComparer.Default.Equals(matches[0], implementation))
+            return null;
         return new(name(receiver), name(implementation.ContainingType), implementation.Name,
             new(implementation.Parameters.Select(p => name(p.Type))), !receiver.IsSealed);
     }

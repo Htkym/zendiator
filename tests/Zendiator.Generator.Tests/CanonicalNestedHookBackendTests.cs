@@ -19,21 +19,37 @@ public sealed partial class GeneratorTests
         var afterContract = isVoid ? "ISendSuccessObserver<Ping>" : "ISendResponseTransform<Ping,int>";
         var after = isVoid ? "void ISendSuccessObserver<Ping>.After(Ping request,CancellationToken token)=>_probe.After(_owner,request,0,token);" :
             "int ISendResponseTransform<Ping,int>.After(Ping request,int response,CancellationToken token)=>_probe.After(_owner,request,response,token);";
-        var extra = ""; var outer = "Stage.Hook<Hook<Outer>>()"; var inner = "Stage.Hook<Hook<Inner>>()";
+        var extra = "";
+        var outer = "Stage.Hook<Hook<Outer>>()";
+        var inner = "Stage.Hook<Hook<Inner>>()";
         var handler = "typeof(Handler<string>)";
         if (shape is "outer-missing-before" or "inner-missing-finally")
         {
-            var contracts = new List<string>(); var methods = new List<string>();
-            if (shape != "outer-missing-before") { contracts.Add("ISendRequestTransform<Ping>"); methods.Add("Ping ISendRequestTransform<Ping>.Before(Ping request,CancellationToken token)=>request;"); }
-            contracts.Add(afterContract); methods.Add(isVoid ? "void ISendSuccessObserver<Ping>.After(Ping request,CancellationToken token){}" :
+            var contracts = new List<string>();
+            var methods = new List<string>();
+            if (shape != "outer-missing-before")
+            {
+                contracts.Add("ISendRequestTransform<Ping>");
+                methods.Add("Ping ISendRequestTransform<Ping>.Before(Ping request,CancellationToken token)=>request;");
+            }
+            contracts.Add(afterContract);
+            methods.Add(isVoid ? "void ISendSuccessObserver<Ping>.After(Ping request,CancellationToken token){}" :
                 "int ISendResponseTransform<Ping,int>.After(Ping request,int response,CancellationToken token)=>response;");
-            contracts.Add("ISendExceptionObserver<Ping>"); methods.Add("void ISendExceptionObserver<Ping>.OnException(Ping request,Exception error,CancellationToken token){}");
-            if (shape != "inner-missing-finally") { contracts.Add("ISendFinallyObserver<Ping>"); methods.Add("void ISendFinallyObserver<Ping>.Finally(Ping request,SendExitInfo exit,CancellationToken token){}"); }
+            contracts.Add("ISendExceptionObserver<Ping>");
+            methods.Add("void ISendExceptionObserver<Ping>.OnException(Ping request,Exception error,CancellationToken token){}");
+            if (shape != "inner-missing-finally")
+            {
+                contracts.Add("ISendFinallyObserver<Ping>");
+                methods.Add("void ISendFinallyObserver<Ping>.Finally(Ping request,SendExitInfo exit,CancellationToken token){}");
+            }
             extra = "public sealed class PartialHook : " + string.Join(",", contracts) + " { " + string.Join(" ", methods) + " }";
-            if (shape == "outer-missing-before") outer = "Stage.Hook<PartialHook>()";
-            else inner = "Stage.Hook<PartialHook>()";
+            if (shape == "outer-missing-before")
+                outer = "Stage.Hook<PartialHook>()";
+            else
+                inner = "Stage.Hook<PartialHook>()";
         }
-        if (shape == "third-hook") inner += ",Stage.Hook<Hook<Third>>()";
+        if (shape == "third-hook")
+            inner += ",Stage.Hook<Hook<Third>>()";
         if (shape is "handler-owned" or "handler-borrowed")
         {
             var ownership = shape == "handler-owned" ? "IOwnedSessionFactory" : "IBorrowedSessionFactory";
@@ -52,7 +68,8 @@ public sealed partial class GeneratorTests
                 "public sealed class Wrapper : ISendWrapper<Ping,int> { public int Invoke<TNext>(Ping request,TNext next,CancellationToken token) where TNext:ISendContinuation<Ping,int> =>next.Invoke(request,token); }";
             inner = "Stage.Wrapper<Wrapper>()";
         }
-        if (shape == "external") inner = isVoid ? "Stage.Hook<global::Zendiator.Generator.Tests.GeneratorTests.ExternalVoidFourPhaseHook<Ping>>()" :
+        if (shape == "external")
+            inner = isVoid ? "Stage.Hook<global::Zendiator.Generator.Tests.GeneratorTests.ExternalVoidFourPhaseHook<Ping>>()" :
             "Stage.Hook<global::Zendiator.Generator.Tests.GeneratorTests.ExternalFourPhaseHook<Ping,int>>()";
         if (shape == "struct")
         {
@@ -111,15 +128,23 @@ public sealed partial class GeneratorTests
         var types = NestedHookFixtureTypes(f);
         var method = typeof(CanonicalSendSyncReference).GetMethod(isVoid ? "SendTwoHooksVoid" : "SendTwoHooksResponse", BindingFlags.Static | BindingFlags.NonPublic)!;
         method = method.MakeGenericMethod(isVoid ? [f.Request, types[0], types[1], types[2]] : [f.Request, typeof(int), types[0], types[1], types[2]]);
-        try { return (method.Invoke(null, [provider, request, token]), null); }
-        catch (TargetInvocationException error) { return (null, error.InnerException); }
+        try
+        {
+            return (method.Invoke(null, [provider, request, token]), null);
+        }
+        catch (TargetInvocationException error)
+        {
+            return (null, error.InnerException);
+        }
     }
 
     private static void WriteNestedHookEvidence(string group, string name, object value)
     {
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
-        if (string.IsNullOrEmpty(evidence)) return;
-        var folder = Path.Combine(Path.GetDirectoryName(evidence)!, group); Directory.CreateDirectory(folder);
+        if (string.IsNullOrEmpty(evidence))
+            return;
+        var folder = Path.Combine(Path.GetDirectoryName(evidence)!, group);
+        Directory.CreateDirectory(folder);
         File.WriteAllText(Path.Combine(folder, name + ".json"), JsonSerializer.Serialize(value));
     }
 
@@ -132,14 +157,24 @@ public sealed partial class GeneratorTests
         var generated = RunNestedHookScenario(isVoid, scenario, golden, fixture, generated: true);
         Assert.Equal(reference, generated);
         WriteNestedHookEvidence("nested-hook-differential", (isVoid ? "void-" : "response-") + scenario,
-            new { isVoid, scenario, golden, reference = JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
+            new
+            {
+                isVoid,
+                scenario,
+                golden,
+                reference = JsonSerializer.Deserialize<JsonElement>(reference),
+                generated = JsonSerializer.Deserialize<JsonElement>(generated)
+            });
     }
 
     public static IEnumerable<object[]> NestedHookLifetimeCases()
     {
         var lifetimes = new[] { ServiceLifetime.Scoped, ServiceLifetime.Transient, ServiceLifetime.Singleton };
-        foreach (var isVoid in new[] { false, true }) foreach (var outer in lifetimes) foreach (var inner in lifetimes)
-            foreach (var handler in lifetimes) yield return [isVoid, outer, inner, handler];
+        foreach (var isVoid in new[] { false, true })
+            foreach (var outer in lifetimes)
+                foreach (var inner in lifetimes)
+                    foreach (var handler in lifetimes)
+                        yield return [isVoid, outer, inner, handler];
     }
 
     [Theory]
@@ -151,9 +186,18 @@ public sealed partial class GeneratorTests
         var fixture = NestedHookBackendFixture(isVoid);
         var reference = outer == ServiceLifetime.Transient || inner == ServiceLifetime.Transient || handler == ServiceLifetime.Transient ? null : RunNestedHookLifetimes(isVoid, outer, inner, handler, fixture);
         var generated = RunNestedHookLifetimes(isVoid, outer, inner, handler, fixture, generated: true);
-        if (reference is not null) Assert.Equal(reference, generated);
+        if (reference is not null)
+            Assert.Equal(reference, generated);
         WriteNestedHookEvidence("nested-hook-lifetimes", (isVoid ? "void-" : "response-") + outer + "-" + inner + "-" + handler,
-            new { isVoid, outer = outer.ToString(), inner = inner.ToString(), handler = handler.ToString(), reference = reference is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(reference), generated = JsonSerializer.Deserialize<JsonElement>(generated) });
+            new
+            {
+                isVoid,
+                outer = outer.ToString(),
+                inner = inner.ToString(),
+                handler = handler.ToString(),
+                reference = reference is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(reference),
+                generated = JsonSerializer.Deserialize<JsonElement>(generated)
+            });
     }
 
     [Theory]
@@ -185,13 +229,21 @@ public sealed partial class GeneratorTests
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         AssertCanonicalOutputRoles(driver.GetRunResult().Results.Single().GeneratedSources);
         WriteNestedHookEvidence("nested-hook-boundaries", (isVoid ? "void-" : "response-") + shape,
-            new { isVoid, shape, source, diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }), generatedExecution = true });
+            new
+            {
+                isVoid,
+                shape,
+                source,
+                diagnostics = diagnostics.Select(d => new { d.Id, message = d.GetMessage() }),
+                generatedExecution = true
+            });
     }
 
     [Fact]
     public void Enabled_two_Hook_body_edits_cache_source_but_order_and_capability_changes_invalidate_it()
     {
-        var source = NestedHookBackendSource(false); var before = SyncCompilation(source, "NestedHookIncremental");
+        var source = NestedHookBackendSource(false);
+        var before = SyncCompilation(source, "NestedHookIncremental");
         var driver = SyncDriver().RunGenerators(before);
         Assert.Empty(driver.GetRunResult().Diagnostics);
         var original = CanonicalRouteSource(driver.GetRunResult().Results.Single().GeneratedSources);

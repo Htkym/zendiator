@@ -10,9 +10,11 @@ public sealed partial class GeneratorTests
     private static AllGenericCase[] AllGenericWrapperCases => [AllGenericCases[0], AllGenericCases[2], AllGenericCases[5], AllGenericCases[7]];
     private static string AllGenericWrapperDeclaration(AllGenericCase c)
     {
-        var async = c.Async; var isVoid = c.Void;
+        var async = c.Async;
+        var isVoid = c.Void;
         var ret = async ? isVoid ? "ValueTask" : "ValueTask<int>" : isVoid ? "void" : "int";
-        var invoke = async ? "InvokeAsync" : "Invoke"; var prefix = async ? "IAsyncSend" : "ISend";
+        var invoke = async ? "InvokeAsync" : "Invoke";
+        var prefix = async ? "IAsyncSend" : "ISend";
         var next = (isVoid ? "" : "value=") + (async ? "await " : "") + "next." + invoke + "(r,t)" + (async ? ".ConfigureAwait(false)" : "") + ";";
         return $$"""
             public class W:{{prefix}}Wrapper<Ping{{(isVoid ? "" : ",int")}}>,{{(async ? "IAsyncDisposable" : "IDisposable")}}{
@@ -62,10 +64,13 @@ public sealed partial class GeneratorTests
     private static string AllClosedHandlerWrapperConsumerCase(AllGenericCase c)
     {
         var source = AllGenericConsumerCase(c).Replace(".ReferenceAll.Run", ".GenericReferenceAll.Run", StringComparison.Ordinal);
-        if (c.Name != "ARString") return source;
+        if (c.Name != "ARString")
+            return source;
         const string endMarker = "interleave=new{sync=reply.A,values};}";
-        var start = source.IndexOf("if(generated){dispatches++;", StringComparison.Ordinal); var end = source.IndexOf(endMarker, start, StringComparison.Ordinal);
-        Assert.True(start >= 0 && end > start); return source.Remove(start, end + endMarker.Length - start);
+        var start = source.IndexOf("if(generated){dispatches++;", StringComparison.Ordinal);
+        var end = source.IndexOf(endMarker, start, StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start);
+        return source.Remove(start, end + endMarker.Length - start);
     }
     private static string AllClosedHandlerWrapperTypeCheck()
     {
@@ -74,7 +79,8 @@ public sealed partial class GeneratorTests
     }
     private static string AllGenericWrapperSource(bool closedHandlers = false, bool genericComposition = false)
     {
-        var common = SendAllCompositionSource(false); common = common[..common.IndexOf("namespace AllMix {", StringComparison.Ordinal)];
+        var common = SendAllCompositionSource(false);
+        common = common[..common.IndexOf("namespace AllMix {", StringComparison.Ordinal)];
         var definitions = "namespace GenericCases{" + AllGenericRequestDefinition("Response", false) + AllGenericRequestDefinition("Command", true) + "}";
         return common + (genericComposition ? AllGenericCompositionProbeSource() : AllGenericWrapperProbeSource) + definitions + (closedHandlers ? AllClosedHandlerDefinitions(true) : "") + (genericComposition ? AllGenericCompositionDefinitions() : "") + string.Join("", AllGenericWrapperCases.Select(c => AllGenericModule(c, true) + (genericComposition ? AllGenericCompositionExtras(c) : closedHandlers ? AllClosedHandlerExtras(c, true) : ""))) + """
             namespace AllGeneric{
@@ -135,19 +141,54 @@ public sealed partial class GeneratorTests
     [Fact]
     public async Task AllGenericWrapper_four_profiles_preserve_retry_bypass_pending_and_failure_propagation()
     {
-        var source = AllGenericWrapperSource(); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllGenericWrapperRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); var folder = AllGenericFolder("wrapper-runtime"); SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); var contract = AssertAllGenericContract(output, driver, false, AllGenericWrapperCases);
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); if (folder != null) { File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); File.WriteAllText(Path.Combine(folder, "contract.json"), JsonSerializer.Serialize(contract)); }
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var result = await assembly.GetType("AllGeneric.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result); using var json = JsonDocument.Parse(result); Assert.Equal(10, json.RootElement.GetProperty("dispatches").GetInt32());
+        var source = AllGenericWrapperSource();
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllGenericWrapperRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        var folder = AllGenericFolder("wrapper-runtime");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var contract = AssertAllGenericContract(output, driver, false, AllGenericWrapperCases);
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+        {
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+            File.WriteAllText(Path.Combine(folder, "contract.json"), JsonSerializer.Serialize(contract));
+        }
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var result = await assembly.GetType("AllGeneric.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
+        using var json = JsonDocument.Parse(result);
+        Assert.Equal(10, json.RootElement.GetProperty("dispatches").GetInt32());
     }
     [Fact]
     public async Task AllClosedHandlerWrapper_four_profiles_preserve_DI_types_retry_bypass_pending_and_failure()
     {
-        var source = AllGenericWrapperSource(true); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllClosedHandlerWrapperRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); var folder = AllGenericFolder("handler-wrapper-runtime"); SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); var contract = AssertAllGenericContract(output, driver, false, AllGenericWrapperCases);
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); if (folder != null) { File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); File.WriteAllText(Path.Combine(folder, "contract.json"), JsonSerializer.Serialize(contract)); }
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var result = await assembly.GetType("AllGeneric.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result); using var json = JsonDocument.Parse(result); Assert.Equal(8, json.RootElement.GetProperty("dispatches").GetInt32()); Assert.Equal(0, json.RootElement.GetProperty("interleaveDispatches").GetInt32());
+        var source = AllGenericWrapperSource(true);
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllClosedHandlerWrapperRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        var folder = AllGenericFolder("handler-wrapper-runtime");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var contract = AssertAllGenericContract(output, driver, false, AllGenericWrapperCases);
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+        {
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+            File.WriteAllText(Path.Combine(folder, "contract.json"), JsonSerializer.Serialize(contract));
+        }
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var result = await assembly.GetType("AllGeneric.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
+        using var json = JsonDocument.Parse(result);
+        Assert.Equal(8, json.RootElement.GetProperty("dispatches").GetInt32());
+        Assert.Equal(0, json.RootElement.GetProperty("interleaveDispatches").GetInt32());
     }
 }

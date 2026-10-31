@@ -10,7 +10,9 @@ internal static class CatalogV1Reference
     private const string Algorithm = "zendiator.handler-contract/1";
     private static string Definition(INamedTypeSymbol type)
     {
-        var names = new Stack<string>(); for (var t = type.OriginalDefinition; t != null; t = t.ContainingType) names.Push(t.MetadataName);
+        var names = new Stack<string>();
+        for (var t = type.OriginalDefinition; t != null; t = t.ContainingType)
+            names.Push(t.MetadataName);
         return type.ContainingAssembly.Identity + "|" + (type.ContainingNamespace.IsGlobalNamespace ? "" : type.ContainingNamespace.ToDisplayString() + ".") + string.Join("+", names);
     }
     private static string TypeId(ITypeSymbol type, bool annotations = true) => type switch
@@ -25,7 +27,9 @@ internal static class CatalogV1Reference
     internal static string Fingerprint(Compilation compilation, INamedTypeSymbol type)
     {
         var rows = new List<string> { Algorithm, TypeId(type), type.DeclaredAccessibility.ToString(), type.TypeKind.ToString(), type.IsAbstract.ToString(), type.IsStatic.ToString(), type.IsRefLikeType.ToString() };
-        var owners = new Stack<INamedTypeSymbol>(); for (var t = type; t != null; t = t.ContainingType) owners.Push(t);
+        var owners = new Stack<INamedTypeSymbol>();
+        for (var t = type; t != null; t = t.ContainingType)
+            owners.Push(t);
         foreach (var p in owners.SelectMany(t => t.TypeParameters.OrderBy(p => p.Ordinal)))
             rows.Add(JsonSerializer.Serialize(new object[] { Definition((INamedTypeSymbol)p.ContainingSymbol), p.Ordinal, p.Variance.ToString(), p.HasReferenceTypeConstraint, p.ReferenceTypeConstraintNullableAnnotation.ToString(), p.HasValueTypeConstraint, p.HasUnmanagedTypeConstraint, p.HasNotNullConstraint, p.HasConstructorConstraint, p.AllowsRefLikeType, p.ConstraintTypes.Select(t => TypeId(t)).OrderBy(t => t, StringComparer.Ordinal).ToArray() }));
         var assembly = compilation.GetTypeByMetadataName("Zendiator.IRequestHandler\u00602")!.ContainingAssembly;

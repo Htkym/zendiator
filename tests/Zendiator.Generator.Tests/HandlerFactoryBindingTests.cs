@@ -38,7 +38,8 @@ public sealed partial class GeneratorTests
         var source = HandlerFactoryFixture(family, owned, asyncFactory, isVoid);
         var driver = family is "SendSync" or "SendAsync" ? BindAcceptedSendLists(source) : BindLists(source, "ZEN0037");
         var route = Assert.Single(Selection(driver).Pipelines);
-        var handler = route.Handlers[0]; var session = Assert.Single(handler.Sessions);
+        var handler = route.Handlers[0];
+        var session = Assert.Single(handler.Sessions);
         Assert.Equal(handler.Type, session.ResourceType);
         Assert.True(session.SuppliesCallbackReceiver);
         Assert.Equal(owned ? FusionOwnership.OwnedSession : FusionOwnership.BorrowedResource, handler.ServiceOwnership);
@@ -109,13 +110,17 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Handler_factory_body_edits_cache_but_ownership_completion_and_constraints_invalidate_binding()
     {
-        var source = HandlerFactoryFixture(); var driver = BindAcceptedSendLists(source); var original = Selection(driver);
+        var source = HandlerFactoryFixture();
+        var driver = BindAcceptedSendLists(source);
+        var original = Selection(driver);
         driver = driver.RunGenerators(Compilation(source.Replace(".Create(Ping r,CancellationToken c)=>new();", ".Create(Ping r,CancellationToken c)=>throw new Exception();")));
-        Assert.Equal(original, Selection(driver)); SelectionReason(driver, IncrementalStepRunReason.Cached);
+        Assert.Equal(original, Selection(driver));
+        SelectionReason(driver, IncrementalStepRunReason.Cached);
         foreach (var changed in new[] { HandlerFactoryFixture(owned: false), HandlerFactoryFixture(asyncFactory: true), source.Replace("where T:class", "where T:notnull") })
         {
             driver = driver.RunGenerators(Compilation(changed));
-            Assert.NotEqual(original, Selection(driver)); SelectionReason(driver, IncrementalStepRunReason.Modified);
+            Assert.NotEqual(original, Selection(driver));
+            SelectionReason(driver, IncrementalStepRunReason.Modified);
         }
     }
 
@@ -137,7 +142,8 @@ public sealed partial class GeneratorTests
         var driver = BindLists(source, "ZEN0037");
         var route = Assert.Single(Selection(driver).Pipelines);
         Assert.Equal(new[] { "global::App.B", "global::App.A" }, route.Handlers.Select(h => h.Name));
-        Assert.Empty(route.Handlers[0].Sessions); Assert.Single(route.Handlers[1].Sessions);
+        Assert.Empty(route.Handlers[0].Sessions);
+        Assert.Single(route.Handlers[1].Sessions);
         var explicitService = BindLists(source.Replace("typeof(B)", "HandlerEntry.Service<B>()"), "ZEN0037");
         Assert.Equal(route.Handlers.Select(h => h.Type), Assert.Single(Selection(explicitService).Pipelines).Handlers.Select(h => h.Type));
         var duplicate = BindLists(source.Replace("typeof(B)", "HandlerEntry.Service(typeof(A))"), "ZEN0035");

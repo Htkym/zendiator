@@ -46,7 +46,10 @@ internal sealed partial class SourceEmitter
         for (var i = 0; i < all.Notifications.Count; i++)
             Add("NotificationRoute" + i, all.Notifications[i].IsOpen, all.Notifications[i].Subscribers.Select(static s => s.Handler));
         for (var i = 0; i < routes.Count; i++)
-            routes[i] = routes[i] with { First = routes[i].Types.FirstOrDefault() };
+            routes[i] = routes[i] with
+            {
+                First = routes[i].Types.FirstOrDefault()
+            };
         return routes;
     }
 
@@ -54,7 +57,8 @@ internal sealed partial class SourceEmitter
     private static Dictionary<string, DependencySet> PlanDependencySets(GenerationModel model, bool singleService)
     {
         var sets = new Dictionary<string, DependencySet>(StringComparer.Ordinal);
-        if (singleService) return sets;
+        if (singleService)
+            return sets;
         var routes = AllRouteServices(model);
         var uses = routes.SelectMany(static r => r.Types).GroupBy(static t => t.Name, StringComparer.Ordinal)
             .ToDictionary(static g => g.Key, static g => g.Count(), StringComparer.Ordinal);
@@ -62,10 +66,12 @@ internal sealed partial class SourceEmitter
             .SelectMany(static t => new[] { t.Name, t.OpenName }), StringComparer.Ordinal);
         foreach (var route in routes)
         {
-            if (route.IsOpen) continue;
+            if (route.IsOpen)
+                continue;
             var owned = route.Types.Where(t => t.IsReferenceType && !t.IsRefLikeType && uses[t.Name] == 1
                 && !open.Contains(t.Name) && !open.Contains(t.OpenName)).ToList();
-            if (owned.Count < 2) continue;
+            if (owned.Count < 2)
+                continue;
             var first = route.First is { } type ? owned.FindIndex(t => t.Name == type.Name) : -1;
             var firstValidator = route.Validators.FirstOrDefault(v => owned.Any(t => t.Name == v.Name));
             var firstValidation = firstValidator == null ? -1 : owned.FindIndex(t => t.Name == firstValidator.Name);
@@ -136,7 +142,8 @@ internal sealed partial class SourceEmitter
                     }
                 """);
         }
-        if (!_model.Target.InheritServiceResolver || _dependencySets.Count == 0) return;
+        if (!_model.Target.InheritServiceResolver || _dependencySets.Count == 0)
+            return;
         b.AppendLine("""
                 /// <inheritdoc />
                 protected override object? GetGeneratedService(global::System.Type serviceType)

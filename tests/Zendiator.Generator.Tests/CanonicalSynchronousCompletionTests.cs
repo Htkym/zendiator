@@ -25,13 +25,22 @@ public sealed class SynchronousCompletionProbe : CapabilityProbe, IValueTaskSour
         SynchronizationContext.SetSynchronizationContext(new SynchronizationContext());
     }
     public new R Before<R>(int id, R request, R next, CancellationToken token) where R : class
-    { var result = base.Before(id, request, next, token); Mutate("before"); return result; }
+    {
+        var result = base.Before(id, request, next, token);
+        Mutate("before");
+        return result;
+    }
     private void Begin(object request, int value, CancellationToken token)
     {
-        base.Handle(request, value, token); _value = value; Mutate("handler");
-        if (Mode is "throw" or "throw-oce") throw Failure;
-        if (Mode == "success") _source.SetResult(value);
-        if (Mode == "source-oce") _source.SetException(Failure);
+        base.Handle(request, value, token);
+        _value = value;
+        Mutate("handler");
+        if (Mode is "throw" or "throw-oce")
+            throw Failure;
+        if (Mode == "success")
+            _source.SetResult(value);
+        if (Mode == "source-oce")
+            _source.SetException(Failure);
     }
     public new ValueTask<int> HandleAsync(object request, int value, CancellationToken token)
     {
@@ -44,10 +53,18 @@ public sealed class SynchronousCompletionProbe : CapabilityProbe, IValueTaskSour
         return Mode == "fault-oce" ? ValueTask.FromException(Failure) : new(this, _source.Version);
     }
     public void Complete()
-    { if (Mode == "pending-oce") _source.SetException(Failure); else _source.SetResult(_value); }
+    {
+        if (Mode == "pending-oce")
+            _source.SetException(Failure);
+        else
+            _source.SetResult(_value);
+    }
     private int Consume(short token)
     {
-        Consumptions++; ConsumptionAmbient = Ambient.Value; Mutate("get-result"); return _source.GetResult(token);
+        Consumptions++;
+        ConsumptionAmbient = Ambient.Value;
+        Mutate("get-result");
+        return _source.GetResult(token);
     }
     int IValueTaskSource<int>.GetResult(short token) => Consume(token);
     void IValueTaskSource.GetResult(short token) => Consume(token);
@@ -94,9 +111,11 @@ public sealed partial class GeneratorTests
             }
             """;
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "SyncBeforeBinding_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         var generated = driver.GetRunResult().Results.Single().GeneratedSources;
-        var route = Assert.Single(generated, IsCanonicalRoute); var model = output.GetSemanticModel(route.SyntaxTree);
+        var route = Assert.Single(generated, IsCanonicalRoute);
+        var model = output.GetSemanticModel(route.SyntaxTree);
         var before = route.SyntaxTree.GetRoot().DescendantNodes().OfType<MethodDeclarationSyntax>()
             .Where(m => m.Identifier.ValueText.StartsWith("Before", StringComparison.Ordinal)).OrderBy(m => m.Identifier.ValueText, StringComparer.Ordinal).ToArray();
         Assert.Equal(4, before.Length);
@@ -106,20 +125,33 @@ public sealed partial class GeneratorTests
             Assert.Contains(calls, m => m.ContainingType.TypeKind == TypeKind.Interface);
             Assert.Equal(i < 2, before[i].ToString().Contains("GetType()", StringComparison.Ordinal));
             var direct = calls.Where(m => m.ContainingType.TypeKind == TypeKind.Class).ToArray();
-            if (i >= 2) Assert.Empty(direct);
-            else Assert.Equal(i == 0 ? "Reimplemented" : "Virtual", Assert.Single(direct).ContainingType.Name);
+            if (i >= 2)
+                Assert.Empty(direct);
+            else
+                Assert.Equal(i == 0 ? "Reimplemented" : "Virtual", Assert.Single(direct).ContainingType.Name);
         }
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence))
         {
-            var path = Path.Combine(evidence, "sync-before-binding"); Directory.CreateDirectory(path); File.WriteAllText(Path.Combine(path, "input.cs"), source);
-            foreach (var item in generated) File.WriteAllText(Path.Combine(path, item.HintName), item.SourceText.ToString());
+            var path = Path.Combine(evidence, "sync-before-binding");
+            Directory.CreateDirectory(path);
+            File.WriteAllText(Path.Combine(path, "input.cs"), source);
+            foreach (var item in generated)
+                File.WriteAllText(Path.Combine(path, item.HintName), item.SourceText.ToString());
         }
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var bridge = assembly.GetType("App.Bridge")!;
-        var probe = new CapabilityProbe(); using var cancellation = probe.Cancellation;
-        IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe); bridge.GetMethod("Register")!.Invoke(null, [services]);
-        await using var provider = services.BuildServiceProvider(); await using var scope = provider.CreateAsyncScope();
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var bridge = assembly.GetType("App.Bridge")!;
+        var probe = new CapabilityProbe();
+        using var cancellation = probe.Cancellation;
+        IServiceCollection services = new ServiceCollection();
+        services.AddSingleton(probe);
+        bridge.GetMethod("Register")!.Invoke(null, [services]);
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
         var mediator = scope.ServiceProvider.GetRequiredService(CanonicalEntryService(assembly.GetType("App.Generated.Reads.Zendiator")!));
         var request = Activator.CreateInstance(assembly.GetType("App.Ping")!, [7]);
         var result = (ValueTask<int>)bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, request, cancellation.Token])!;
@@ -136,22 +168,27 @@ public sealed partial class GeneratorTests
     public async Task Plain_SendAsync_forwards_unconsumed_operation_and_synchronous_prefix(bool isVoid, bool withHooks)
     {
         var source = CapabilitySource(true, isVoid, "s---", true).Replace("CapabilityProbe", "SynchronousCompletionProbe");
-        if (!withHooks) source = source.Replace(",Stage.Hook<Hook0>(),Stage.Hook<Hook1>()", "");
+        if (!withHooks)
+            source = source.Replace(",Stage.Hook<Hook0>(),Stage.Hook<Hook1>()", "");
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "SyncCompletion_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
         Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes);
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence))
         {
-            var path = Path.Combine(evidence, "sync-completion-" + isVoid + "-" + withHooks); Directory.CreateDirectory(path);
+            var path = Path.Combine(evidence, "sync-completion-" + isVoid + "-" + withHooks);
+            Directory.CreateDirectory(path);
             File.WriteAllText(Path.Combine(path, "input.cs"), source);
             foreach (var generated in driver.GetRunResult().Results.Single().GeneratedSources)
                 File.WriteAllText(Path.Combine(path, generated.HintName), generated.SourceText.ToString());
         }
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
-        var bridge = assembly.GetType("App.Bridge")!; var requestType = assembly.GetType("App.Ping")!;
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var bridge = assembly.GetType("App.Bridge")!;
+        var requestType = assembly.GetType("App.Ping")!;
         var mediatorType = assembly.GetType("App.Generated.Reads.Zendiator")!;
         using var foreign = new CancellationTokenSource();
         foreach (var mode in new[] { "success", "pending", "throw", "throw-oce", "fault-oce", "source-oce", "pending-oce", "pre-cancel" })
@@ -162,14 +199,21 @@ public sealed partial class GeneratorTests
                 Failure = mode.Contains("oce", StringComparison.Ordinal)
                 ? new OperationCanceledException("foreign, uncanceled token", foreign.Token) : new InvalidOperationException("body")
             };
-            IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe); bridge.GetMethod("Register")!.Invoke(null, [services]);
-            await using var provider = services.BuildServiceProvider(); await using var scope = provider.CreateAsyncScope();
-            var mediator = scope.ServiceProvider.GetRequiredService(CanonicalEntryService(mediatorType)); var request = Activator.CreateInstance(requestType, [7]);
-            var priorAmbient = SynchronousCompletionProbe.Ambient.Value; var priorCulture = CultureInfo.CurrentCulture; var priorContext = SynchronizationContext.Current;
+            IServiceCollection services = new ServiceCollection();
+            services.AddSingleton(probe);
+            bridge.GetMethod("Register")!.Invoke(null, [services]);
+            await using var provider = services.BuildServiceProvider();
+            await using var scope = provider.CreateAsyncScope();
+            var mediator = scope.ServiceProvider.GetRequiredService(CanonicalEntryService(mediatorType));
+            var request = Activator.CreateInstance(requestType, [7]);
+            var priorAmbient = SynchronousCompletionProbe.Ambient.Value;
+            var priorCulture = CultureInfo.CurrentCulture;
+            var priorContext = SynchronizationContext.Current;
             try
             {
                 SynchronousCompletionProbe.Ambient.Value = "caller";
-                if (mode == "pre-cancel") probe.Cancellation.Cancel();
+                if (mode == "pre-cancel")
+                    probe.Cancellation.Cancel();
                 if (mode is "throw" or "throw-oce" or "pre-cancel")
                 {
                     var thrown = Assert.Throws<TargetInvocationException>(() =>
@@ -204,19 +248,34 @@ public sealed partial class GeneratorTests
                 SynchronizationContext.SetSynchronizationContext(priorContext);
                 var operation = AsyncTask(result, isVoid);
                 if (mode.StartsWith("pending", StringComparison.Ordinal))
-                { Assert.False(operation.IsCompleted); Assert.Equal(0, probe.Consumptions); probe.Complete(); }
+                {
+                    Assert.False(operation.IsCompleted);
+                    Assert.Equal(0, probe.Consumptions);
+                    probe.Complete();
+                }
                 var error = await Record.ExceptionAsync(() => operation.WaitAsync(TimeSpan.FromSeconds(10)));
                 if (mode is "success" or "pending")
-                { Assert.Null(error); if (!isVoid) Assert.Equal(withHooks ? 9 : 7, await (Task<int>)operation); }
-                else Assert.Same(probe.Failure, error);
+                {
+                    Assert.Null(error);
+                    if (!isVoid)
+                        Assert.Equal(withHooks ? 9 : 7, await (Task<int>)operation);
+                }
+                else
+                    Assert.Same(probe.Failure, error);
                 Assert.Equal(mode is "source-oce" or "pending-oce", operation.IsCanceled);
                 Assert.Equal(mode == "fault-oce", operation.IsFaulted);
                 var consumesSource = mode is "success" or "pending" or "source-oce" or "pending-oce";
                 Assert.Equal(consumesSource ? 1 : 0, probe.Consumptions);
-                if (mode is "success" or "source-oce") Assert.Equal("consumer", probe.ConsumptionAmbient);
+                if (mode is "success" or "source-oce")
+                    Assert.Equal("consumer", probe.ConsumptionAmbient);
             }
             finally
-            { SynchronousCompletionProbe.Ambient.Value = priorAmbient; CultureInfo.CurrentCulture = priorCulture; SynchronizationContext.SetSynchronizationContext(priorContext); probe.Cancellation.Dispose(); }
+            {
+                SynchronousCompletionProbe.Ambient.Value = priorAmbient;
+                CultureInfo.CurrentCulture = priorCulture;
+                SynchronizationContext.SetSynchronizationContext(priorContext);
+                probe.Cancellation.Dispose();
+            }
         }
     }
 }

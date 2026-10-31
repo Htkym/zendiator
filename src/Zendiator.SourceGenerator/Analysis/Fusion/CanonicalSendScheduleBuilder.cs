@@ -50,8 +50,10 @@ internal sealed class CanonicalSendScheduleBuilder
             Transfer("operation", SendValueKind.OperationRequest, branchOwner, SendValueKind.InputRequest, start, SendTransferCondition.BranchStart);
             Transfer("operation", SendValueKind.OperationToken, branchOwner, SendValueKind.StartToken, start, SendTransferCondition.BranchStart);
             Link(boundary, start);
-            if (span) Link(Site(-1, -1, SendExecutionPhase.DestinationGuard), start, SendOrderCondition.SpanDestination);
-            if (branch > 0) Link(Site(branch - 1, 0, SendExecutionPhase.ScopeExit), start, SendOrderCondition.AllBranchesSuccess);
+            if (span)
+                Link(Site(-1, -1, SendExecutionPhase.DestinationGuard), start, SendOrderCondition.SpanDestination);
+            if (branch > 0)
+                Link(Site(branch - 1, 0, SendExecutionPhase.ScopeExit), start, SendOrderCondition.AllBranchesSuccess);
             BuildScope(branch, 0, branchOwner, SendOwnerMultiplicity.Once, SendValueKind.InputRequest);
             Link(start, Site(branch, 0, SendExecutionPhase.ArgumentGuard));
         }
@@ -65,7 +67,10 @@ internal sealed class CanonicalSendScheduleBuilder
         Link(Site(_route.Handlers.Count - 1, 0, SendExecutionPhase.ScopeExit), returned, SendOrderCondition.AllBranchesSuccess);
         return CanonicalSendSessionBuilder.Attach(_route,
             new(new(_sites), new(_orders), new(_owners), new(_states), new(_scopes), new(_awaits), "operation-callback-v1", _async)
-            { Transfers = new(_transfers), ControlFlows = CanonicalSendControlBuilder.Build(_route) });
+            {
+                Transfers = new(_transfers),
+                ControlFlows = CanonicalSendControlBuilder.Build(_route)
+            });
     }
 
     private void BuildScope(int branch, int stageIndex, string parent, SendOwnerMultiplicity multiplicity, SendValueKind requestSource)
@@ -84,7 +89,8 @@ internal sealed class CanonicalSendScheduleBuilder
         for (var index = 0; index < entry.Length; index++)
         {
             Plain(branch, stageIndex, entry[index], anchor, owner, failure: SendFailureDisposition.UnwindEnteredOuter);
-            if (index > 0) Link(Site(branch, stageIndex, entry[index - 1]), Site(branch, stageIndex, entry[index]));
+            if (index > 0)
+                Link(Site(branch, stageIndex, entry[index - 1]), Site(branch, stageIndex, entry[index]));
         }
         var entered = Site(branch, stageIndex, SendExecutionPhase.Entered);
         var exit = Plain(branch, stageIndex, SendExecutionPhase.ScopeExit, anchor, owner, SendExecutionCondition.Entered);
@@ -144,15 +150,20 @@ internal sealed class CanonicalSendScheduleBuilder
         callbacks.TryGetValue(BoundCallbackPhase.Exception, out var error);
         callbacks.TryGetValue(BoundCallbackPhase.Finally, out var cleanup);
         Link(entered, before ?? invocation);
-        if (before != null) Link(before, invocation);
-        if (before != null) Transfer(owner, SendValueKind.BeforeResult, owner, SendValueKind.EffectiveRequest, before, SendTransferCondition.ProducerSuccess);
+        if (before != null)
+            Link(before, invocation);
+        if (before != null)
+            Transfer(owner, SendValueKind.BeforeResult, owner, SendValueKind.EffectiveRequest, before, SendTransferCondition.ProducerSuccess);
         Link(invocation, Site(branch, stageIndex + 1, SendExecutionPhase.ArgumentGuard));
         Link(Site(branch, stageIndex + 1, SendExecutionPhase.ScopeExit), success ?? cleanup ?? exit, SendOrderCondition.InnerSuccess);
-        if (success != null) Link(success, cleanup ?? exit, SendOrderCondition.InnerSuccess);
+        if (success != null)
+            Link(success, cleanup ?? exit, SendOrderCondition.InnerSuccess);
         foreach (var producer in new[] { before, invocation, success }.Where(p => p != null))
             Link(producer!, error ?? cleanup ?? exit, SendOrderCondition.Failure);
-        if (error != null) Link(error, cleanup ?? exit, SendOrderCondition.Unwind);
-        if (cleanup != null) Link(cleanup, exit, SendOrderCondition.Unwind);
+        if (error != null)
+            Link(error, cleanup ?? exit, SendOrderCondition.Unwind);
+        if (cleanup != null)
+            Link(cleanup, exit, SendOrderCondition.Unwind);
         _scopes.Add(new(owner, Scope(branch, stageIndex + 1), invocation, success, error, cleanup, SendExitPolicy.S01NestedHook));
         BuildScope(branch, stageIndex + 1, owner, multiplicity, SendValueKind.EffectiveRequest);
     }

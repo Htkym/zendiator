@@ -9,20 +9,62 @@ internal enum SendExecutionPhase
     Entered, Before, InvokeInner, InvokeWrapper, NextCall, InvokeHandler,
     Success, Exception, Finally, ScopeExit, DestinationCommit, OperationReturn
 }
-internal enum SendExecutionCondition { Always, SpanDestination, EachBranch, EachNext, InnerSuccess, FailureBeforeFinally, Entered }
-internal enum SendOrderCondition { Start, InnerSuccess, Failure, Unwind, EachNext, AllBranchesSuccess, SpanDestination }
-internal enum SendOwnerKind { Provider, Operation, Branch, Stage, WrapperNext, Handler, Service, Session }
-internal enum SendOwnerLifetime { Caller, Operation, Branch, Stage, NextInvocation }
-internal enum SendOwnerMultiplicity { Once, EachBranch, EachNext }
-internal enum SendAwaitContinuation { BeginInner, NormalUnwind, EndObserver, EndScope, TransferSession, ContinueSessionCleanup }
-internal enum SendFailureTarget { CurrentScope, OuterScope }
-internal enum SendFailureDisposition { EscapeOperation, UnwindEnteredOuter, ObserveCurrentOnceThenFinally, ReplaceAndFinallyWithoutObserver, ReplaceAndUnwindOuter, OpaqueWrapperDecides, UnwindAcquiredSessionsThenOuter, ReplaceAndContinueSessionCleanup }
-internal enum SendExitPolicy { HandlerEscape, OpaqueWrapperEscape, S01NestedHook }
-internal enum SendValueKind { OperationRequest, OperationToken, InputRequest, EffectiveRequest, StartToken, BeforeResult, NextRequestArgument, NextTokenArgument }
-internal enum SendTransferCondition { InvocationStart, Entered, ProducerSuccess, EachNextStart, BranchStart }
-internal enum SendControlTerminal { None, Entry, Success, Failure }
-internal enum SendControlOutcome { Always, Success, Failure }
-internal enum SendControlPredicate { Any, HasFailure, NoFailure, SpanDestination, NoSpanDestination, SessionPresent, SessionAbsent }
+internal enum SendExecutionCondition
+{
+    Always, SpanDestination, EachBranch, EachNext, InnerSuccess, FailureBeforeFinally, Entered
+}
+internal enum SendOrderCondition
+{
+    Start, InnerSuccess, Failure, Unwind, EachNext, AllBranchesSuccess, SpanDestination
+}
+internal enum SendOwnerKind
+{
+    Provider, Operation, Branch, Stage, WrapperNext, Handler, Service, Session
+}
+internal enum SendOwnerLifetime
+{
+    Caller, Operation, Branch, Stage, NextInvocation
+}
+internal enum SendOwnerMultiplicity
+{
+    Once, EachBranch, EachNext
+}
+internal enum SendAwaitContinuation
+{
+    BeginInner, NormalUnwind, EndObserver, EndScope, TransferSession, ContinueSessionCleanup
+}
+internal enum SendFailureTarget
+{
+    CurrentScope, OuterScope
+}
+internal enum SendFailureDisposition
+{
+    EscapeOperation, UnwindEnteredOuter, ObserveCurrentOnceThenFinally, ReplaceAndFinallyWithoutObserver, ReplaceAndUnwindOuter, OpaqueWrapperDecides, UnwindAcquiredSessionsThenOuter, ReplaceAndContinueSessionCleanup
+}
+internal enum SendExitPolicy
+{
+    HandlerEscape, OpaqueWrapperEscape, S01NestedHook
+}
+internal enum SendValueKind
+{
+    OperationRequest, OperationToken, InputRequest, EffectiveRequest, StartToken, BeforeResult, NextRequestArgument, NextTokenArgument
+}
+internal enum SendTransferCondition
+{
+    InvocationStart, Entered, ProducerSuccess, EachNextStart, BranchStart
+}
+internal enum SendControlTerminal
+{
+    None, Entry, Success, Failure
+}
+internal enum SendControlOutcome
+{
+    Always, Success, Failure
+}
+internal enum SendControlPredicate
+{
+    Any, HasFailure, NoFailure, SpanDestination, NoSpanDestination, SessionPresent, SessionAbsent
+}
 
 internal sealed record SendExecutionSiteId(int Branch, int Stage, SendExecutionPhase Phase, int Session = -1);
 internal sealed record SendExecutionSite(SendExecutionSiteId Id, string Anchor, string Owner,
@@ -51,8 +93,14 @@ internal sealed record SendSessionTransfer(string Source, string Destination, Se
 internal sealed record SendSessionCall(SendExecutionSiteId At, string Receiver, string? Result,
     bool PreserveIdentityAndToken, bool ReplacePreviousError, bool Aggregate)
 {
-    public string? RequestSlot { get; init; }
-    public string? TokenSlot { get; init; }
+    public string? RequestSlot
+    {
+        get; init;
+    }
+    public string? TokenSlot
+    {
+        get; init;
+    }
 }
 internal sealed record SendServiceResolution(SendExecutionSiteId At, string ServiceType, string ResultSlot);
 internal sealed record SendCallbackReceiver(SendExecutionSiteId At, string Receiver, string RequestSlot, string TokenSlot);
@@ -64,19 +112,43 @@ internal sealed record CanonicalSendExecutionSchedule(
     EquatableArray<SendExecutionScope> Scopes, EquatableArray<SendExecutionAwait> Awaits,
     string ContextModelId, bool EscapingOceIsCanceled)
 {
-    public EquatableArray<SendValueTransfer> Transfers { get; init; }
-    public EquatableArray<SendControlFlow> ControlFlows { get; init; }
-    public EquatableArray<SendSessionTransfer> SessionTransfers { get; init; }
-    public EquatableArray<SendSessionCall> SessionCalls { get; init; }
-    public EquatableArray<SendServiceResolution> ServiceResolutions { get; init; }
-    public EquatableArray<SendCallbackReceiver> CallbackReceivers { get; init; }
+    public EquatableArray<SendValueTransfer> Transfers
+    {
+        get; init;
+    }
+    public EquatableArray<SendControlFlow> ControlFlows
+    {
+        get; init;
+    }
+    public EquatableArray<SendSessionTransfer> SessionTransfers
+    {
+        get; init;
+    }
+    public EquatableArray<SendSessionCall> SessionCalls
+    {
+        get; init;
+    }
+    public EquatableArray<SendServiceResolution> ServiceResolutions
+    {
+        get; init;
+    }
+    public EquatableArray<SendCallbackReceiver> CallbackReceivers
+    {
+        get; init;
+    }
 }
 internal sealed record CanonicalExecutionGraphFact(string Reason, string Anchor);
 internal sealed record CanonicalExecutionGraphModel(BoundPipelineModel Contract, CanonicalSendExecutionSchedule? Schedule,
     EquatableArray<CanonicalExecutionGraphFact> Facts)
 {
-    public CanonicalScopedSyncProof? ScopedSync { get; init; }
-    public bool NativeStream { get; init; }
+    public CanonicalScopedSyncProof? ScopedSync
+    {
+        get; init;
+    }
+    public bool NativeStream
+    {
+        get; init;
+    }
     public bool IsValid => (NativeStream || ScopedSync != null || Schedule != null) && Facts.Count == 0;
 }
 internal sealed record CanonicalExecutionGraphCatalog(EquatableArray<EquatableArray<CanonicalExecutionGraphModel>> Compositions);

@@ -13,7 +13,8 @@ public sealed partial class GeneratorTests
     private static string TypedLookupSample()
     {
         using var stream = typeof(GeneratorTests).Assembly.GetManifestResourceStream("Zendiator.GenericLookup.Source")!;
-        using var reader = new StreamReader(stream); return reader.ReadToEnd();
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
     }
 
     private static string TypedLookupDeclarations(string sample)
@@ -169,8 +170,12 @@ public sealed partial class GeneratorTests
 
     private static string? TypedLookupFolder(string name)
     {
-        var root = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR"); if (string.IsNullOrEmpty(root)) return null;
-        var folder = Path.Combine(root, "typed-lookup-" + name); Directory.CreateDirectory(folder); return folder;
+        var root = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
+        if (string.IsNullOrEmpty(root))
+            return null;
+        var folder = Path.Combine(root, "typed-lookup-" + name);
+        Directory.CreateDirectory(folder);
+        return folder;
     }
 
     [Fact]
@@ -181,45 +186,112 @@ public sealed partial class GeneratorTests
         var empty = sample.Replace("GenericLookup", "GenericLookupEmpty").Replace("\"genericLookup\"", "\"genericLookupEmpty\"").Replace(closed, closed + "configuration.Pipeline(typeof(Lookup<>), DispatchFamily.SendAsync);configuration.Pipeline<StatusQuery>(DispatchFamily.SendAsync);configuration.Pipeline<RefreshInventory>(DispatchFamily.SendAsync);");
         var inputs = new[] { sample, TypedLookupRuntime, empty, TypedLookupEmptyCheck, OpenSendZeroPairSource(consumer: false, sentinel: false), OpenSendWrapperPairSource(orphan: false, consumer: false), OpenSendZeroCommon + OpenSendZeroDefinition("AV") };
         var compilation = SyncCompilation(sample, "TypedLookup_" + Guid.NewGuid().ToString("N")).AddSyntaxTrees(inputs.Skip(1).Select(s => CSharpSyntaxTree.ParseText(s, SyncParseOptions)));
-        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(compilation, out var output, out var diagnostics); var folder = TypedLookupFolder("runtime"); SaveSendAllSync(folder, sample, driver, output, diagnostics);
-        if (folder != null) for (var i = 0; i < inputs.Length; i++) File.WriteAllText(Path.Combine(folder, "input-" + i + ".cs"), inputs[i]);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(compilation, out var output, out var diagnostics);
+        var folder = TypedLookupFolder("runtime");
+        SaveSendAllSync(folder, sample, driver, output, diagnostics);
+        if (folder != null)
+            for (var i = 0; i < inputs.Length; i++)
+                File.WriteAllText(Path.Combine(folder, "input-" + i + ".cs"), inputs[i]);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         var catalog = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single().TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
         var model = CanonicalMultiEmissionNormalizer.Create(catalog, CanonicalExecutionGraphNormalizer.Create(catalog));
         foreach (var ns in new[] { "GenericLookup.Generated.App", "GenericLookupEmpty.Generated.App" })
         {
-            var composition = Assert.Single(model.Compositions, c => c.Namespace == ns); Assert.Equal(3, composition.Routes.Count); Assert.True(CanonicalRegistrationPlan.Compatible(composition));
-            var bound = Assert.Single(catalog.Compositions, c => c.GeneratedNamespace == ns); var open = Assert.Single(bound.Pipelines, r => r.RequestShape == BoundRequestShape.OpenAsyncReference); var handler = Assert.Single(open.Handlers);
-            Assert.True(handler.RequestReferenceResponse); Assert.True(handler.ResponseContract); Assert.NotEqual(handler, handler with { RequestReferenceResponse = false }); Assert.Equal(Assert.Single(open.SendGeneric!.Parameters), handler.AsyncEmission!.ResultName); Assert.Empty(handler.Sessions); Assert.Empty(open.Stages);
-            var closedRoute = Assert.Single(bound.Pipelines, r => r.RequestShape == BoundRequestShape.ClosedReference && r.ResultKind == FusionResultKind.Response); var closedHandler = Assert.Single(closedRoute.Handlers);
-            Assert.True(closedHandler.ResponseContract); Assert.False(closedHandler.RequestReferenceResponse); Assert.NotEqual(closedHandler, closedHandler with { ResponseContract = false }); Assert.Empty(closedHandler.Sessions); Assert.Empty(closedRoute.Stages);
-            var voidHandler = Assert.Single(Assert.Single(bound.Pipelines, r => r.ResultKind == FusionResultKind.Void).Handlers); Assert.False(voidHandler.ResponseContract); Assert.Null(voidHandler.AsyncEmission!.ResultName);
-            var api = output.GetTypeByMetadataName(ns + ".IZendiator")!; var mediator = output.GetTypeByMetadataName(ns + ".Zendiator")!; Assert.NotNull(api); Assert.NotNull(mediator); Assert.False(api.IsGenericType);
+            var composition = Assert.Single(model.Compositions, c => c.Namespace == ns);
+            Assert.Equal(3, composition.Routes.Count);
+            Assert.True(CanonicalRegistrationPlan.Compatible(composition));
+            var bound = Assert.Single(catalog.Compositions, c => c.GeneratedNamespace == ns);
+            var open = Assert.Single(bound.Pipelines, r => r.RequestShape == BoundRequestShape.OpenAsyncReference);
+            var handler = Assert.Single(open.Handlers);
+            Assert.True(handler.RequestReferenceResponse);
+            Assert.True(handler.ResponseContract);
+            Assert.NotEqual(handler, handler with
+            {
+                RequestReferenceResponse = false
+            });
+            Assert.Equal(Assert.Single(open.SendGeneric!.Parameters), handler.AsyncEmission!.ResultName);
+            Assert.Empty(handler.Sessions);
+            Assert.Empty(open.Stages);
+            var closedRoute = Assert.Single(bound.Pipelines, r => r.RequestShape == BoundRequestShape.ClosedReference && r.ResultKind == FusionResultKind.Response);
+            var closedHandler = Assert.Single(closedRoute.Handlers);
+            Assert.True(closedHandler.ResponseContract);
+            Assert.False(closedHandler.RequestReferenceResponse);
+            Assert.NotEqual(closedHandler, closedHandler with
+            {
+                ResponseContract = false
+            });
+            Assert.Empty(closedHandler.Sessions);
+            Assert.Empty(closedRoute.Stages);
+            var voidHandler = Assert.Single(Assert.Single(bound.Pipelines, r => r.ResultKind == FusionResultKind.Void).Handlers);
+            Assert.False(voidHandler.ResponseContract);
+            Assert.Null(voidHandler.AsyncEmission!.ResultName);
+            var api = output.GetTypeByMetadataName(ns + ".IZendiator")!;
+            var mediator = output.GetTypeByMetadataName(ns + ".Zendiator")!;
+            Assert.NotNull(api);
+            Assert.NotNull(mediator);
+            Assert.False(api.IsGenericType);
             foreach (var type in new[] { api, mediator })
             {
-                var methods = type.GetMembers("SendAsync").OfType<IMethodSymbol>().ToArray(); Assert.Equal(3, methods.Length); var generic = Assert.Single(methods, m => m.Arity == 1); var status = Assert.Single(methods, m => m.Parameters[0].Type.Name == "StatusQuery"); var command = Assert.Single(methods, m => m.Parameters[0].Type.Name == "RefreshInventory");
-                var parameter = Assert.Single(generic.TypeParameters); Assert.True(parameter.HasReferenceTypeConstraint); Assert.False(parameter.HasConstructorConstraint); Assert.Contains(parameter.ConstraintTypes, t => t.Name == "IEntity");
-                var result = Assert.IsAssignableFrom<INamedTypeSymbol>(generic.ReturnType); Assert.Equal("ValueTask", result.Name); var argument = Assert.Single(result.TypeArguments); Assert.True(SymbolEqualityComparer.Default.Equals(parameter, argument)); Assert.NotEqual(NullableAnnotation.Annotated, argument.NullableAnnotation);
+                var methods = type.GetMembers("SendAsync").OfType<IMethodSymbol>().ToArray();
+                Assert.Equal(3, methods.Length);
+                var generic = Assert.Single(methods, m => m.Arity == 1);
+                var status = Assert.Single(methods, m => m.Parameters[0].Type.Name == "StatusQuery");
+                var command = Assert.Single(methods, m => m.Parameters[0].Type.Name == "RefreshInventory");
+                var parameter = Assert.Single(generic.TypeParameters);
+                Assert.True(parameter.HasReferenceTypeConstraint);
+                Assert.False(parameter.HasConstructorConstraint);
+                Assert.Contains(parameter.ConstraintTypes, t => t.Name == "IEntity");
+                var result = Assert.IsAssignableFrom<INamedTypeSymbol>(generic.ReturnType);
+                Assert.Equal("ValueTask", result.Name);
+                var argument = Assert.Single(result.TypeArguments);
+                Assert.True(SymbolEqualityComparer.Default.Equals(parameter, argument));
+                Assert.NotEqual(NullableAnnotation.Annotated, argument.NullableAnnotation);
                 var statusResult = Assert.Single(Assert.IsAssignableFrom<INamedTypeSymbol>(status.ReturnType).TypeArguments);
-                Assert.True(SymbolEqualityComparer.Default.Equals(output.GetTypeByMetadataName(ns.Replace(".Generated.App", ".InventoryStatus")), statusResult)); Assert.Equal(NullableAnnotation.NotAnnotated, statusResult.NullableAnnotation); Assert.All(methods, m => Assert.False(m.IsAsync));
+                Assert.True(SymbolEqualityComparer.Default.Equals(output.GetTypeByMetadataName(ns.Replace(".Generated.App", ".InventoryStatus")), statusResult));
+                Assert.Equal(NullableAnnotation.NotAnnotated, statusResult.NullableAnnotation);
+                Assert.All(methods, m => Assert.False(m.IsAsync));
                 Assert.True(SymbolEqualityComparer.Default.Equals(output.GetTypeByMetadataName("System.Threading.Tasks.ValueTask"), command.ReturnType));
             }
         }
-        foreach (var ns in new[] { "OpenZeroPair.Generated.Omitted", "OpenSendWrapper.Generated.Pair", "OpenZero.AV.Generated.Omitted", "OpenZero.AV.Generated.Empty" }) Assert.NotNull(output.GetTypeByMetadataName(ns + ".IZendiator"));
-        Assert.Null(output.GetTypeByMetadataName("OpenZeroPair.Entry")); Assert.Null(output.GetTypeByMetadataName("OpenSendWrapper.PairEntry"));
-        var stable = driver.GetRunResult().Results.Single().GeneratedSources.Where(s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal) && s.SourceText.ToString().Contains("namespace GenericLookup.Generated.App")).ToDictionary(s => s.HintName, s => s.SourceText.ToString(), StringComparer.Ordinal); Assert.Equal(3, stable.Count);
-        var extended = TypedLookupExtended(sample); var extendedCompilation = compilation.ReplaceSyntaxTree(compilation.SyntaxTrees.First(), CSharpSyntaxTree.ParseText(extended, SyncParseOptions));
-        var extendedDriver = driver.RunGeneratorsAndUpdateCompilation(extendedCompilation, out var extendedOutput, out var extendedDiagnostics); SaveSendAllSync(TypedLookupFolder("extended"), extended, extendedDriver, extendedOutput, extendedDiagnostics);
-        Assert.Empty(extendedDiagnostics); Assert.Empty(extendedOutput.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        var extendedSources = extendedDriver.GetRunResult().Results.Single().GeneratedSources.ToDictionary(s => s.HintName, s => s.SourceText.ToString(), StringComparer.Ordinal); foreach (var source in stable) Assert.Equal(source.Value, extendedSources[source.Key]);
-        var extendedMethods = extendedOutput.GetTypeByMetadataName("GenericLookup.Generated.App.IZendiator")!.GetMembers("SendAsync").OfType<IMethodSymbol>().ToArray(); Assert.Equal(5, extendedMethods.Length); Assert.Equal(2, extendedMethods.Count(m => m.Arity == 1));
-        var arrayRequest = extendedOutput.GetTypeByMetadataName("GenericLookup.ArrayStatus")!; var arrayResult = Assert.Single(Assert.IsAssignableFrom<INamedTypeSymbol>(Assert.Single(extendedMethods, m => m.Parameters[0].Type.Name == "ArrayStatus").ReturnType).TypeArguments);
+        foreach (var ns in new[] { "OpenZeroPair.Generated.Omitted", "OpenSendWrapper.Generated.Pair", "OpenZero.AV.Generated.Omitted", "OpenZero.AV.Generated.Empty" })
+            Assert.NotNull(output.GetTypeByMetadataName(ns + ".IZendiator"));
+        Assert.Null(output.GetTypeByMetadataName("OpenZeroPair.Entry"));
+        Assert.Null(output.GetTypeByMetadataName("OpenSendWrapper.PairEntry"));
+        var stable = driver.GetRunResult().Results.Single().GeneratedSources.Where(s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal) && s.SourceText.ToString().Contains("namespace GenericLookup.Generated.App")).ToDictionary(s => s.HintName, s => s.SourceText.ToString(), StringComparer.Ordinal);
+        Assert.Equal(3, stable.Count);
+        var extended = TypedLookupExtended(sample);
+        var extendedCompilation = compilation.ReplaceSyntaxTree(compilation.SyntaxTrees.First(), CSharpSyntaxTree.ParseText(extended, SyncParseOptions));
+        var extendedDriver = driver.RunGeneratorsAndUpdateCompilation(extendedCompilation, out var extendedOutput, out var extendedDiagnostics);
+        SaveSendAllSync(TypedLookupFolder("extended"), extended, extendedDriver, extendedOutput, extendedDiagnostics);
+        Assert.Empty(extendedDiagnostics);
+        Assert.Empty(extendedOutput.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var extendedSources = extendedDriver.GetRunResult().Results.Single().GeneratedSources.ToDictionary(s => s.HintName, s => s.SourceText.ToString(), StringComparer.Ordinal);
+        foreach (var source in stable)
+            Assert.Equal(source.Value, extendedSources[source.Key]);
+        var extendedMethods = extendedOutput.GetTypeByMetadataName("GenericLookup.Generated.App.IZendiator")!.GetMembers("SendAsync").OfType<IMethodSymbol>().ToArray();
+        Assert.Equal(5, extendedMethods.Length);
+        Assert.Equal(2, extendedMethods.Count(m => m.Arity == 1));
+        var arrayRequest = extendedOutput.GetTypeByMetadataName("GenericLookup.ArrayStatus")!;
+        var arrayResult = Assert.Single(Assert.IsAssignableFrom<INamedTypeSymbol>(Assert.Single(extendedMethods, m => m.Parameters[0].Type.Name == "ArrayStatus").ReturnType).TypeArguments);
         Assert.True(SymbolEqualityComparer.IncludeNullability.Equals(Assert.Single(arrayRequest.AllInterfaces, i => i.OriginalDefinition.ToDisplayString() == "Zendiator.IRequest<TResponse>").TypeArguments[0], arrayResult));
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); if (folder != null) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); bytes.Position = 0;
-        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var runtime = await assembly.GetType("GenericLookup.TypedEntry")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var runtime = await assembly.GetType("GenericLookup.TypedEntry")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
         var registered = assembly.GetType("GenericLookupEmpty.EmptyEntry")!.GetMethod("Run")!.CreateDelegate<Func<string>>()();
-        if (folder != null) { File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime); File.WriteAllText(Path.Combine(folder, "empty-registration.json"), registered); }
-        using var json = JsonDocument.Parse(runtime); Assert.Equal(12, json.RootElement.GetProperty("dispatchAttempts").GetInt32()); Assert.Equal(10, json.RootElement.GetProperty("callbackInvocations").GetInt32());
+        if (folder != null)
+        {
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime);
+            File.WriteAllText(Path.Combine(folder, "empty-registration.json"), registered);
+        }
+        using var json = JsonDocument.Parse(runtime);
+        Assert.Equal(12, json.RootElement.GetProperty("dispatchAttempts").GetInt32());
+        Assert.Equal(10, json.RootElement.GetProperty("callbackInvocations").GetInt32());
     }
 
     [Fact]
@@ -227,7 +299,8 @@ public sealed partial class GeneratorTests
     {
         var declarations = TypedLookupDeclarations(TypedLookupSample());
         var syncRoot = CSharpSyntaxTree.ParseText(declarations, SyncParseOptions).GetCompilationUnitRoot();
-        var lookup = Assert.Single(syncRoot.DescendantNodes().OfType<ClassDeclarationSyntax>(), c => c.Identifier.ValueText == "LookupHandler"); var method = Assert.Single(lookup.Members.OfType<MethodDeclarationSyntax>());
+        var lookup = Assert.Single(syncRoot.DescendantNodes().OfType<ClassDeclarationSyntax>(), c => c.Identifier.ValueText == "LookupHandler");
+        var method = Assert.Single(lookup.Members.OfType<MethodDeclarationSyntax>());
         var syncMethod = method.WithIdentifier(SyntaxFactory.Identifier("Handle").WithTriviaFrom(method.Identifier)).WithReturnType(SyntaxFactory.ParseTypeName("T").WithTriviaFrom(method.ReturnType)).WithExpressionBody(null).WithBody(SyntaxFactory.Block(SyntaxFactory.ParseStatement("_ = store;"), SyntaxFactory.ParseStatement("throw new NotSupportedException();"))).WithSemicolonToken(default);
         var sync = syncRoot.ReplaceNode(method, syncMethod).ToFullString().Replace("IRequest<T>", "ISyncRequest<T>").Replace("IRequestHandler<Lookup<T>, T>", "ISyncRequestHandler<Lookup<T>, T>").Replace("typeof(Lookup<>), DispatchFamily.SendAsync", "typeof(Lookup<>), DispatchFamily.SendSync");
         foreach (var (name, source, expected) in new[]
@@ -238,10 +311,20 @@ public sealed partial class GeneratorTests
             ("closed-contract", declarations.Replace("StatusQuery : IRequest<InventoryStatus>", "StatusQuery : IRequest<InventoryStatus>, IRequest<object>"), "ZEN0037"),
         })
         {
-            var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "TypedLookupRejected_" + name + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); SaveSendAllSync(TypedLookupFolder(name), source, driver, output, diagnostics);
-            Assert.Contains(diagnostics, d => d.Id == expected); Assert.All(diagnostics, d => { Assert.Contains(d.Id, new[] { "ZEN0035", "ZEN0037" }); Assert.True(d.Location.IsInSource); }); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-            if (name == "closed-contract") Assert.Contains(diagnostics, d => source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length).Contains("Handlers<StatusQuery>"));
-            Assert.Null(output.GetTypeByMetadataName("GenericLookup.Generated.App.IZendiator")); Assert.Null(output.GetTypeByMetadataName("GenericLookup.Generated.App.ZendiatorGeneratedRegistrar")); Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal));
+            var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "TypedLookupRejected_" + name + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+            SaveSendAllSync(TypedLookupFolder(name), source, driver, output, diagnostics);
+            Assert.Contains(diagnostics, d => d.Id == expected);
+            Assert.All(diagnostics, d =>
+            {
+                Assert.Contains(d.Id, new[] { "ZEN0035", "ZEN0037" });
+                Assert.True(d.Location.IsInSource);
+            });
+            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+            if (name == "closed-contract")
+                Assert.Contains(diagnostics, d => source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length).Contains("Handlers<StatusQuery>"));
+            Assert.Null(output.GetTypeByMetadataName("GenericLookup.Generated.App.IZendiator"));
+            Assert.Null(output.GetTypeByMetadataName("GenericLookup.Generated.App.ZendiatorGeneratedRegistrar"));
+            Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal));
         }
         foreach (var (name, source) in new[]
         {
@@ -249,21 +332,37 @@ public sealed partial class GeneratorTests
             ("closed-value", declarations.Replace("InventoryStatus", "StatusValue").Replace("public sealed record StatusValue(int ActiveCount);", "public readonly record struct StatusValue(int ActiveCount);")),
         })
         {
-            var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "TypedLookupAccepted_" + name + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); SaveSendAllSync(TypedLookupFolder(name), source, driver, output, diagnostics);
+            var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "TypedLookupAccepted_" + name + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+            SaveSendAllSync(TypedLookupFolder(name), source, driver, output, diagnostics);
             Assert.Empty(diagnostics);
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-            var acceptedApi = output.GetTypeByMetadataName("GenericLookup.Generated.App.IZendiator")!; Assert.NotNull(acceptedApi); Assert.Equal(3, acceptedApi.GetMembers("SendAsync").Length);
-            var request = output.GetTypeByMetadataName("GenericLookup.StatusQuery")!; var result = Assert.Single(Assert.IsAssignableFrom<INamedTypeSymbol>(Assert.Single(acceptedApi.GetMembers("SendAsync").OfType<IMethodSymbol>(), m => m.Parameters[0].Type.Name == "StatusQuery").ReturnType).TypeArguments);
+            var acceptedApi = output.GetTypeByMetadataName("GenericLookup.Generated.App.IZendiator")!;
+            Assert.NotNull(acceptedApi);
+            Assert.Equal(3, acceptedApi.GetMembers("SendAsync").Length);
+            var request = output.GetTypeByMetadataName("GenericLookup.StatusQuery")!;
+            var result = Assert.Single(Assert.IsAssignableFrom<INamedTypeSymbol>(Assert.Single(acceptedApi.GetMembers("SendAsync").OfType<IMethodSymbol>(), m => m.Parameters[0].Type.Name == "StatusQuery").ReturnType).TypeArguments);
             Assert.True(SymbolEqualityComparer.IncludeNullability.Equals(Assert.Single(request.AllInterfaces, i => i.OriginalDefinition.ToDisplayString() == "Zendiator.IRequest<TResponse>").TypeArguments[0], result));
         }
         const string registration = "configuration.Handlers<RefreshInventory>(DispatchFamily.SendAsync, typeof(RefreshInventoryHandler));";
         var overlap = declarations.Replace(registration, registration + "configuration.Handlers<Lookup<Product>>(DispatchFamily.SendAsync, typeof(LookupHandler<Product>));");
-        var overlapDriver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(overlap, "TypedLookupOverlap_" + Guid.NewGuid().ToString("N")), out var overlapOutput, out var overlapDiagnostics); SaveSendAllSync(TypedLookupFolder("overlap"), overlap, overlapDriver, overlapOutput, overlapDiagnostics);
-        Assert.Contains(overlapDiagnostics, d => d.GetMessage().Contains("Explicit request patterns may overlap")); Assert.Empty(overlapOutput.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        Assert.Null(overlapOutput.GetTypeByMetadataName("GenericLookup.Generated.App.IZendiator")); Assert.Null(overlapOutput.GetTypeByMetadataName("GenericLookup.Generated.App.ZendiatorGeneratedRegistrar")); Assert.DoesNotContain(overlapDriver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal));
+        var overlapDriver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(overlap, "TypedLookupOverlap_" + Guid.NewGuid().ToString("N")), out var overlapOutput, out var overlapDiagnostics);
+        SaveSendAllSync(TypedLookupFolder("overlap"), overlap, overlapDriver, overlapOutput, overlapDiagnostics);
+        Assert.Contains(overlapDiagnostics, d => d.GetMessage().Contains("Explicit request patterns may overlap"));
+        Assert.Empty(overlapOutput.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        Assert.Null(overlapOutput.GetTypeByMetadataName("GenericLookup.Generated.App.IZendiator"));
+        Assert.Null(overlapOutput.GetTypeByMetadataName("GenericLookup.Generated.App.ZendiatorGeneratedRegistrar"));
+        Assert.DoesNotContain(overlapDriver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal));
         var constraints = declarations + "public sealed class WrongEntity;public static class BadConsumer {public static ValueTask<WrongEntity> Send(Generated.App.IZendiator mediator)=>mediator.SendAsync(new Lookup<WrongEntity>(\"bad\"));}";
-        var accepted = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(constraints, "TypedLookupCompiler_" + Guid.NewGuid().ToString("N")), out var compiler, out var generatorDiagnostics); SaveSendAllSync(TypedLookupFolder("constraints"), constraints, accepted, compiler, generatorDiagnostics); Assert.Empty(generatorDiagnostics);
-        var error = Assert.Single(compiler.GetDiagnostics(), d => d.Severity == DiagnosticSeverity.Error); Assert.Equal("CS0311", error.Id); Assert.Contains("WrongEntity", error.GetMessage()); Assert.True(error.Location.IsInSource); Assert.Equal("SendAsync", constraints.Substring(error.Location.SourceSpan.Start, error.Location.SourceSpan.Length));
-        var api = compiler.GetTypeByMetadataName("GenericLookup.Generated.App.IZendiator")!; Assert.NotNull(api); Assert.Equal(3, api.GetMembers("SendAsync").OfType<IMethodSymbol>().Count());
+        var accepted = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(constraints, "TypedLookupCompiler_" + Guid.NewGuid().ToString("N")), out var compiler, out var generatorDiagnostics);
+        SaveSendAllSync(TypedLookupFolder("constraints"), constraints, accepted, compiler, generatorDiagnostics);
+        Assert.Empty(generatorDiagnostics);
+        var error = Assert.Single(compiler.GetDiagnostics(), d => d.Severity == DiagnosticSeverity.Error);
+        Assert.Equal("CS0311", error.Id);
+        Assert.Contains("WrongEntity", error.GetMessage());
+        Assert.True(error.Location.IsInSource);
+        Assert.Equal("SendAsync", constraints.Substring(error.Location.SourceSpan.Start, error.Location.SourceSpan.Length));
+        var api = compiler.GetTypeByMetadataName("GenericLookup.Generated.App.IZendiator")!;
+        Assert.NotNull(api);
+        Assert.Equal(3, api.GetMembers("SendAsync").OfType<IMethodSymbol>().Count());
     }
 }

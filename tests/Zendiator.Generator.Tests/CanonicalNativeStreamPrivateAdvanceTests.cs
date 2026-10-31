@@ -285,7 +285,8 @@ public sealed partial class GeneratorTests
         var insertions = 0;
         await RunNativeStreamFixture("private-identity-leases-cleanup", source, generatedTransform: generated =>
         {
-            if (!generated.Contains("private void AttachIdentityLease()")) return generated;
+            if (!generated.Contains("private void AttachIdentityLease()"))
+                return generated;
             const string marker = "var lease = new IdentityLease();";
             Assert.Single(System.Text.RegularExpressions.Regex.Matches(generated, System.Text.RegularExpressions.Regex.Escape(marker)));
             insertions++;
@@ -383,7 +384,8 @@ public sealed partial class GeneratorTests
         const string marker = @"(child\.ReleasePrivateMove\(\);)(\s*CompleteParent\(moved, failure\);)";
         await RunNativeStreamFixture("private-release-window", source, generatedTransform: generated =>
         {
-            if (!generated.Contains("private void CompleteChild(")) return generated;
+            if (!generated.Contains("private void CompleteChild("))
+                return generated;
             Assert.Single(System.Text.RegularExpressions.Regex.Matches(generated, marker));
             insertions++;
             return System.Text.RegularExpressions.Regex.Replace(generated, marker,

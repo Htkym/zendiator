@@ -56,14 +56,18 @@ public sealed partial class GeneratorTests
                 baselineDiagnostics = await output.WithAnalyzers(ImmutableArray.Create(analyzer)).GetAnalyzerDiagnosticsAsync();
                 Assert.Empty(baselineDiagnostics.Value);
             }
-            finally { context.Unload(); }
+            finally
+            {
+                context.Unload();
+            }
         }
 
         using var bytes = new MemoryStream();
         var emit = output.Emit(bytes);
         Assert.True(emit.Success, string.Join("\n", emit.Diagnostics));
         var artifactRoot = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
-        if (string.IsNullOrEmpty(artifactRoot)) return;
+        if (string.IsNullOrEmpty(artifactRoot))
+            return;
         var directory = Path.Combine(artifactRoot, "canonical-lifetime");
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "input.cs"), CanonicalLifetimeSource);

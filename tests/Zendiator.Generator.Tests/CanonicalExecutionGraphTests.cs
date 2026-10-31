@@ -22,9 +22,11 @@ public sealed partial class GeneratorTests
             }
             """;
         var stages = full;
-        if (sync) stages = stages.Replace("IAsyncSendFinallyObserver<Ping>", "ISendFinallyObserver<Ping>")
+        if (sync)
+            stages = stages.Replace("IAsyncSendFinallyObserver<Ping>", "ISendFinallyObserver<Ping>")
             .Replace("public ValueTask FinallyAsync(Ping r,SendExitInfo e,CancellationToken c)=>default;", "public void Finally(Ping r,SendExitInfo e,CancellationToken c){}");
-        if (isVoid) stages = stages.Replace("ISendResponseTransform<Ping,int>", "ISendSuccessObserver<Ping>")
+        if (isVoid)
+            stages = stages.Replace("ISendResponseTransform<Ping,int>", "ISendSuccessObserver<Ping>")
             .Replace("public int After(Ping r,int result,CancellationToken c)=>result;", "public void After(Ping r,CancellationToken c){}");
         return source + stages + stages.Replace("class Full<T>", "class Tail<T>");
     }
@@ -37,7 +39,10 @@ public sealed partial class GeneratorTests
         schedule with
         {
             ControlFlows = new(schedule.ControlFlows.Select(f => f.Owner == owner
-            ? f with { Edges = new(f.Edges.Select(change).Where(e => e != null).Select(e => e!)) } : f))
+            ? f with
+            {
+                Edges = new(f.Edges.Select(change).Where(e => e != null).Select(e => e!))
+            } : f))
         };
 
     [Theory]
@@ -64,7 +69,11 @@ public sealed partial class GeneratorTests
         Assert.All(schedule.States.Where(s => s.StartsWithOriginalRequest), s => Assert.StartsWith("branch:", s.Owner));
         Assert.Equal(schedule.States.Count, schedule.States.Select(s => s.StartTokenSlot).Distinct().Count());
         Assert.All(schedule.States, s => Assert.Equal(isVoid, s.ResponseSlot == null));
-        Assert.All(schedule.Awaits, a => { Assert.True(a.ConsumeOnce); Assert.True(a.ConfigureAwaitFalse); });
+        Assert.All(schedule.Awaits, a =>
+        {
+            Assert.True(a.ConsumeOnce);
+            Assert.True(a.ConfigureAwaitFalse);
+        });
         Assert.Equal(sync ? 0 : (all ? 2 : 1) * 4, schedule.Awaits.Count);
         Assert.All(schedule.Awaits.Where(a => a.Producer.Phase == SendExecutionPhase.Finally), a => Assert.Equal("void", a.ResultType));
         Assert.All(schedule.Awaits.Where(a => a.Producer.Phase is SendExecutionPhase.InvokeHandler or SendExecutionPhase.InvokeWrapper),
@@ -75,7 +84,8 @@ public sealed partial class GeneratorTests
         // next is a dynamic template, never an unconditional edge starting the child.
         Assert.Contains(new SendExecutionOrder(Site(0, 1, SendExecutionPhase.NextCall), Site(0, 2, SendExecutionPhase.ArgumentGuard), SendOrderCondition.EachNext), schedule.Orders);
         Assert.DoesNotContain(schedule.Orders, e => e.Before == Site(0, 1, SendExecutionPhase.InvokeWrapper) && e.After == Site(0, 2, SendExecutionPhase.ArgumentGuard));
-        if (all) Assert.Contains(new SendExecutionOrder(Site(0, 0, SendExecutionPhase.ScopeExit), Site(1, -1, SendExecutionPhase.BranchStart), SendOrderCondition.AllBranchesSuccess), schedule.Orders);
+        if (all)
+            Assert.Contains(new SendExecutionOrder(Site(0, 0, SendExecutionPhase.ScopeExit), Site(1, -1, SendExecutionPhase.BranchStart), SendOrderCondition.AllBranchesSuccess), schedule.Orders);
     }
 
     [Fact]
@@ -85,13 +95,34 @@ public sealed partial class GeneratorTests
         var schedule = graph.Schedule!;
         var guarded = Assert.Single(schedule.Sites, s => s.Id == Site(0, 2, SendExecutionPhase.CancellationGuard));
         var entered = Assert.Single(schedule.Sites, s => s.Id == Site(0, 2, SendExecutionPhase.Entered));
-        AssertRejected(schedule with { Sites = new(schedule.Sites.Where(s => s != guarded)) }, "MissingSite:CancellationGuard");
-        AssertRejected(schedule with { Sites = new(schedule.Sites.Append(guarded)) }, "DuplicateSite");
-        AssertRejected(schedule with { Sites = new(schedule.Sites.Append(guarded with { Id = Site(0, 100, SendExecutionPhase.CancellationGuard) })) }, "UnexpectedSite:CancellationGuard");
-        AssertRejected(schedule with { Sites = new(schedule.Sites.Select(s => s == entered ? s with { Owner = "operation" } : s)) }, "SiteContractMismatch:Entered");
+        AssertRejected(schedule with
+        {
+            Sites = new(schedule.Sites.Where(s => s != guarded))
+        }, "MissingSite:CancellationGuard");
+        AssertRejected(schedule with
+        {
+            Sites = new(schedule.Sites.Append(guarded))
+        }, "DuplicateSite");
+        AssertRejected(schedule with
+        {
+            Sites = new(schedule.Sites.Append(guarded with
+            {
+                Id = Site(0, 100, SendExecutionPhase.CancellationGuard)
+            }))
+        }, "UnexpectedSite:CancellationGuard");
+        AssertRejected(schedule with
+        {
+            Sites = new(schedule.Sites.Select(s => s == entered ? s with { Owner = "operation" } : s))
+        }, "SiteContractMismatch:Entered");
         var order = Assert.Single(schedule.Orders, e => e.Before == Site(0, 2, SendExecutionPhase.CancellationGuard) && e.After == Site(0, 2, SendExecutionPhase.Resolve));
-        AssertRejected(schedule with { Orders = new(schedule.Orders.Select(e => e == order ? e with { Before = order.After, After = order.Before } : e)) }, "MissingOrder");
-        AssertRejected(schedule with { Orders = new(schedule.Orders.Append(order)) }, "UnexpectedOrder");
+        AssertRejected(schedule with
+        {
+            Orders = new(schedule.Orders.Select(e => e == order ? e with { Before = order.After, After = order.Before } : e))
+        }, "MissingOrder");
+        AssertRejected(schedule with
+        {
+            Orders = new(schedule.Orders.Append(order))
+        }, "UnexpectedOrder");
         void AssertRejected(CanonicalSendExecutionSchedule candidate, string reason) => Assert.Contains(CanonicalSendGraphValidator.Validate(graph.Contract, candidate), f => f.Reason == reason);
     }
 
@@ -131,20 +162,53 @@ public sealed partial class GeneratorTests
         var graph = Graph(BindAcceptedSendLists(GraphFixture(all: true)));
         var schedule = graph.Schedule!;
         var awaitSite = schedule.Awaits[0];
-        AssertRejected(schedule with { Awaits = new(schedule.Awaits.Append(awaitSite)) }, "DuplicateAwaitConsumer");
-        AssertRejected(schedule with { Awaits = new(schedule.Awaits.Select(a => a == awaitSite ? a with { ConsumeOnce = false } : a)) }, "AwaitConsumptionMismatch");
-        AssertRejected(schedule with { Awaits = new(schedule.Awaits.Select(a => a == awaitSite ? a with { ConfigureAwaitFalse = false } : a)) }, "AwaitConsumptionMismatch");
-        AssertRejected(schedule with { Awaits = new(schedule.Awaits.Where(a => a != awaitSite)) }, "MissingAwait");
-        AssertRejected(schedule with { Awaits = new(schedule.Awaits.Select(a => a == awaitSite ? a with { Normal = SendAwaitContinuation.BeginInner, RetainedSlots = new(new[] { "other/start-token" }) } : a)) }, "MissingAwait");
-        AssertRejected(schedule with { Awaits = new(schedule.Awaits.Select(a => a == awaitSite ? a with { ResultType = "wrong", Cancellation = SendFailureTarget.CurrentScope } : a)) }, "MissingAwait");
+        AssertRejected(schedule with
+        {
+            Awaits = new(schedule.Awaits.Append(awaitSite))
+        }, "DuplicateAwaitConsumer");
+        AssertRejected(schedule with
+        {
+            Awaits = new(schedule.Awaits.Select(a => a == awaitSite ? a with { ConsumeOnce = false } : a))
+        }, "AwaitConsumptionMismatch");
+        AssertRejected(schedule with
+        {
+            Awaits = new(schedule.Awaits.Select(a => a == awaitSite ? a with { ConfigureAwaitFalse = false } : a))
+        }, "AwaitConsumptionMismatch");
+        AssertRejected(schedule with
+        {
+            Awaits = new(schedule.Awaits.Where(a => a != awaitSite))
+        }, "MissingAwait");
+        AssertRejected(schedule with
+        {
+            Awaits = new(schedule.Awaits.Select(a => a == awaitSite ? a with { Normal = SendAwaitContinuation.BeginInner, RetainedSlots = new(new[] { "other/start-token" }) } : a))
+        }, "MissingAwait");
+        AssertRejected(schedule with
+        {
+            Awaits = new(schedule.Awaits.Select(a => a == awaitSite ? a with { ResultType = "wrong", Cancellation = SendFailureTarget.CurrentScope } : a))
+        }, "MissingAwait");
         var service = Assert.Single(schedule.Owners, o => o.Id == Service(0, 0));
-        AssertRejected(schedule with { Owners = new(schedule.Owners.Select(o => o == service ? o with { Cleanup = FusionCleanupKind.Sync } : o)) }, "BorrowedOwnerHasCleanup");
+        AssertRejected(schedule with
+        {
+            Owners = new(schedule.Owners.Select(o => o == service ? o with { Cleanup = FusionCleanupKind.Sync } : o))
+        }, "BorrowedOwnerHasCleanup");
         var next = Assert.Single(schedule.Owners, o => o.Id == Next(0, 1));
-        AssertRejected(schedule with { Owners = new(schedule.Owners.Select(o => o == next ? o with { Parent = o.Id } : o)) }, "OwnerCycle");
-        AssertRejected(schedule with { Owners = new(schedule.Owners.Select(o => o == next ? o with { Multiplicity = SendOwnerMultiplicity.Once } : o)) }, "MissingOwner");
+        AssertRejected(schedule with
+        {
+            Owners = new(schedule.Owners.Select(o => o == next ? o with { Parent = o.Id } : o))
+        }, "OwnerCycle");
+        AssertRejected(schedule with
+        {
+            Owners = new(schedule.Owners.Select(o => o == next ? o with { Multiplicity = SendOwnerMultiplicity.Once } : o))
+        }, "MissingOwner");
         var secondBranch = Assert.Single(schedule.States, s => s.Owner == Branch(1));
-        AssertRejected(schedule with { States = new(schedule.States.Select(s => s == secondBranch ? s with { InputRequestSlot = Scope(0, 0) + "/effective-request" } : s)) }, "MissingState");
-        AssertRejected(schedule with { EscapingOceIsCanceled = false }, "EscapingOceBoundaryMismatch");
+        AssertRejected(schedule with
+        {
+            States = new(schedule.States.Select(s => s == secondBranch ? s with { InputRequestSlot = Scope(0, 0) + "/effective-request" } : s))
+        }, "MissingState");
+        AssertRejected(schedule with
+        {
+            EscapingOceIsCanceled = false
+        }, "EscapingOceBoundaryMismatch");
         void AssertRejected(CanonicalSendExecutionSchedule candidate, string reason) => Assert.Contains(CanonicalSendGraphValidator.Validate(graph.Contract, candidate), f => f.Reason == reason);
     }
 
@@ -227,7 +291,10 @@ public sealed partial class GeneratorTests
     public void Send_owned_stages_without_session_acquisition_remain_invalid()
     {
         var valid = Graph(BindAcceptedSendLists(GraphFixture()));
-        var owned = valid.Contract with { Stages = new(valid.Contract.Stages.Select((s, i) => i == 0 ? s with { ServiceOwnership = FusionOwnership.OwnedSession } : s)) };
+        var owned = valid.Contract with
+        {
+            Stages = new(valid.Contract.Stages.Select((s, i) => i == 0 ? s with { ServiceOwnership = FusionOwnership.OwnedSession } : s))
+        };
         var rejected = CanonicalExecutionGraphNormalizer.Create(owned);
         Assert.False(rejected.IsValid);
         Assert.Null(rejected.Schedule);
@@ -243,22 +310,52 @@ public sealed partial class GeneratorTests
         Assert.Equal(new SendValueReference(Scope(0, 0), SendValueKind.BeforeResult), before.Source);
         Assert.Equal(new SendValueReference(Scope(0, 0), SendValueKind.EffectiveRequest), before.Destination);
         Assert.Equal(SendTransferCondition.ProducerSuccess, before.Condition);
-        AssertRejected(before, before with { Source = before.Source with { Kind = SendValueKind.InputRequest } }, "MissingValueTransfer");
-        AssertRejected(before, before with { Destination = before.Destination with { Owner = Scope(0, 2) } }, "MissingValueTransfer");
-        AssertRejected(before, before with { Condition = SendTransferCondition.Entered }, "BeforeResultTransferredWithoutSuccess");
+        AssertRejected(before, before with
+        {
+            Source = before.Source with
+            {
+                Kind = SendValueKind.InputRequest
+            }
+        }, "MissingValueTransfer");
+        AssertRejected(before, before with
+        {
+            Destination = before.Destination with
+            {
+                Owner = Scope(0, 2)
+            }
+        }, "MissingValueTransfer");
+        AssertRejected(before, before with
+        {
+            Condition = SendTransferCondition.Entered
+        }, "BeforeResultTransferredWithoutSuccess");
         var nextToken = Assert.Single(schedule.Transfers, t => t.At == Site(0, 1, SendExecutionPhase.NextCall) && t.Source.Kind == SendValueKind.NextTokenArgument);
-        AssertRejected(nextToken, nextToken with { Source = new(Scope(0, 1), SendValueKind.StartToken) }, "MissingValueTransfer");
+        AssertRejected(nextToken, nextToken with
+        {
+            Source = new(Scope(0, 1), SendValueKind.StartToken)
+        }, "MissingValueTransfer");
         var childRequest = Assert.Single(schedule.Transfers, t => t.At == Site(0, 2, SendExecutionPhase.ArgumentGuard) && t.Destination.Kind == SendValueKind.InputRequest);
         Assert.Equal(new SendValueReference(Next(0, 1), SendValueKind.InputRequest), childRequest.Source);
-        AssertRejected(childRequest, childRequest with { Source = new(Scope(0, 0), SendValueKind.EffectiveRequest) }, "MissingValueTransfer");
+        AssertRejected(childRequest, childRequest with
+        {
+            Source = new(Scope(0, 0), SendValueKind.EffectiveRequest)
+        }, "MissingValueTransfer");
         var branch = Assert.Single(schedule.Transfers, t => t.At == Site(1, -1, SendExecutionPhase.BranchStart) && t.Destination.Kind == SendValueKind.InputRequest);
         Assert.Equal(new SendValueReference("operation", SendValueKind.OperationRequest), branch.Source);
-        AssertRejected(branch, branch with { Source = new(Branch(0), SendValueKind.InputRequest) }, "MissingValueTransfer");
+        AssertRejected(branch, branch with
+        {
+            Source = new(Branch(0), SendValueKind.InputRequest)
+        }, "MissingValueTransfer");
         var token = Assert.Single(schedule.Transfers, t => t.At == Site(1, -1, SendExecutionPhase.BranchStart) && t.Destination.Kind == SendValueKind.StartToken);
         Assert.Equal(new SendValueReference("operation", SendValueKind.OperationToken), token.Source);
-        AssertRejected(token, token with { Destination = new(Branch(0), SendValueKind.StartToken) }, "MissingValueTransfer");
+        AssertRejected(token, token with
+        {
+            Destination = new(Branch(0), SendValueKind.StartToken)
+        }, "MissingValueTransfer");
         void AssertRejected(SendValueTransfer original, SendValueTransfer changed, string reason) =>
-            Assert.Contains(CanonicalSendGraphValidator.Validate(graph.Contract, schedule with { Transfers = new(schedule.Transfers.Select(t => t == original ? changed : t)) }), f => f.Reason == reason);
+            Assert.Contains(CanonicalSendGraphValidator.Validate(graph.Contract, schedule with
+            {
+                Transfers = new(schedule.Transfers.Select(t => t == original ? changed : t))
+            }), f => f.Reason == reason);
     }
 
     [Theory]
@@ -273,11 +370,17 @@ public sealed partial class GeneratorTests
         var owner = Scope(0, 0);
         var point = Point(owner, Site(0, 0, phase));
         var bad = ChangeControl(schedule, owner, e => e.From == point && e.Outcome == SendControlOutcome.Failure
-            ? e with { To = Point(owner, Site(0, 0, SendExecutionPhase.Entered)) } : e);
+            ? e with
+            {
+                To = Point(owner, Site(0, 0, SendExecutionPhase.Entered))
+            } : e);
         Assert.Equal(schedule.Orders, bad.Orders);
         Assert.Contains(CanonicalSendControlValidator.Validate(graph.Contract, bad), f => f.Reason == "EnteredNotDominatedByGuardsAndResolution");
         bad = ChangeControl(schedule, owner, e => e.From == point && e.Outcome == SendControlOutcome.Failure
-            ? e with { To = Point(owner, Site(0, 0, SendExecutionPhase.Before)) } : e);
+            ? e with
+            {
+                To = Point(owner, Site(0, 0, SendExecutionPhase.Before))
+            } : e);
         Assert.Contains(CanonicalSendControlValidator.Validate(graph.Contract, bad), f => f.Reason == "CallbackReachedBeforeEntered");
     }
 
@@ -293,13 +396,19 @@ public sealed partial class GeneratorTests
         var skip = ChangeControl(schedule, owner, e => e.From == after && e.Outcome == SendControlOutcome.Success ? e with { To = Exit(owner, true) } : e);
         Assert.Contains(CanonicalSendControlValidator.Validate(graph.Contract, skip), f => f.Reason == "EnteredScopeSkippedFinally");
         var repeat = ChangeControl(schedule, owner, e => e.From == cleanup && e.Outcome == SendControlOutcome.Success && e.Predicate == SendControlPredicate.NoFailure
-            ? e with { To = cleanup } : e);
+            ? e with
+            {
+                To = cleanup
+            } : e);
         Assert.Contains(CanonicalSendControlValidator.Validate(graph.Contract, repeat), f => f.Reason == "FinallyRepeated");
         var reenter = ChangeControl(schedule, owner, e => e.From == cleanup && e.Outcome == SendControlOutcome.Failure ? e with { To = observer } : e);
         Assert.Contains(CanonicalSendControlValidator.Validate(graph.Contract, reenter), f => f.Reason == "ObserverReenteredAfterFinally");
         var before = Point(owner, Site(0, 0, SendExecutionPhase.Before));
         var propagate = ChangeControl(schedule, owner, e => e.From == before && e.Outcome == SendControlOutcome.Failure
-            ? e with { To = Point(owner, Site(0, 0, SendExecutionPhase.InvokeInner)) } : e);
+            ? e with
+            {
+                To = Point(owner, Site(0, 0, SendExecutionPhase.InvokeInner))
+            } : e);
         Assert.Contains(CanonicalSendControlValidator.Validate(graph.Contract, propagate), f => f.Reason == "InvocationStartedAfterFailure");
         var handler = Scope(0, 3);
         var incomplete = ChangeControl(schedule, handler, e => e.From.Site?.Phase == SendExecutionPhase.InvokeHandler && e.Outcome == SendControlOutcome.Failure ? null : e);
@@ -318,7 +427,10 @@ public sealed partial class GeneratorTests
         Assert.Equal(schedule.Orders, bad.Orders);
         Assert.Contains(CanonicalSendControlValidator.Validate(graph.Contract, bad), f => f.Reason == "BranchStartedAfterFailure");
         var publish = ChangeControl(schedule, "operation", e => e.From == first && e.Outcome == SendControlOutcome.Success
-            ? e with { To = Point("operation", Site(-1, -1, SendExecutionPhase.OperationReturn)) } : e);
+            ? e with
+            {
+                To = Point("operation", Site(-1, -1, SendExecutionPhase.OperationReturn))
+            } : e);
         Assert.Contains(CanonicalSendControlValidator.Validate(graph.Contract, publish), f => f.Reason == "ResultPublishedBeforeAllBranchesSucceeded");
     }
 
@@ -361,9 +473,18 @@ public sealed partial class GeneratorTests
         var after = Point(owner, Site(0, 0, SendExecutionPhase.Success));
         var cleanup = Point(owner, Site(0, 0, SendExecutionPhase.Finally));
         // Entered -> After -> Before -> inner -> Finally. Every original failure path is retained.
-        var bad = ChangeControl(schedule, owner, e => e.From == entered ? e with { To = after } :
-            e.Outcome == SendControlOutcome.Success && e.From == after ? e with { To = before } :
-            e.Outcome == SendControlOutcome.Success && e.From == inner ? e with { To = cleanup } : e);
+        var bad = ChangeControl(schedule, owner, e => e.From == entered ? e with
+        {
+            To = after
+        } :
+            e.Outcome == SendControlOutcome.Success && e.From == after ? e with
+            {
+                To = before
+            } :
+            e.Outcome == SendControlOutcome.Success && e.From == inner ? e with
+            {
+                To = cleanup
+            } : e);
         Assert.Equal(schedule.Orders, bad.Orders);
         var facts = CanonicalSendControlValidator.Validate(graph.Contract, bad);
         Assert.Contains(facts, f => f.Reason == "SuccessNotDominatedByInnerSuccess");
@@ -389,9 +510,18 @@ public sealed partial class GeneratorTests
         var entered = Point(owner, Site(0, 0, SendExecutionPhase.Entered));
         var inner = Point(owner, Site(0, 0, SendExecutionPhase.InvokeInner));
         var cleanup = Point(owner, Site(0, 0, SendExecutionPhase.Finally));
-        var bad = ChangeControl(schedule, owner, e => e.From == entered ? e with { To = cleanup } :
-            e.From == cleanup && e.Outcome == SendControlOutcome.Success && e.Predicate == SendControlPredicate.NoFailure ? e with { To = inner } :
-            e.From == inner ? e with { To = Exit(owner, e.Outcome == SendControlOutcome.Success) } : e);
+        var bad = ChangeControl(schedule, owner, e => e.From == entered ? e with
+        {
+            To = cleanup
+        } :
+            e.From == cleanup && e.Outcome == SendControlOutcome.Success && e.Predicate == SendControlPredicate.NoFailure ? e with
+            {
+                To = inner
+            } :
+            e.From == inner ? e with
+            {
+                To = Exit(owner, e.Outcome == SendControlOutcome.Success)
+            } : e);
         Assert.Equal(schedule.Orders, bad.Orders);
         var facts = CanonicalSendControlValidator.Validate(graph.Contract, bad);
         Assert.Contains(facts, f => f.Reason == "FinallyNotDominatedByInnerCompletion");
@@ -412,8 +542,14 @@ public sealed partial class GeneratorTests
             ControlFlows = new(schedule.ControlFlows.Select(f => f.Owner != "operation" ? f : f with
             {
                 Edges = new(f.Edges.Where(e => e.From != returned).Select(e =>
-                        e.From == last && e.Outcome == SendControlOutcome.Success && e.Predicate == SendControlPredicate.SpanDestination ? e with { To = returned } :
-                        e.From == commit ? e with { To = Exit("operation", true) } : e)
+                        e.From == last && e.Outcome == SendControlOutcome.Success && e.Predicate == SendControlPredicate.SpanDestination ? e with
+                        {
+                            To = returned
+                        } :
+                        e.From == commit ? e with
+                        {
+                            To = Exit("operation", true)
+                        } : e)
                 .Append(new(returned, commit, SendControlOutcome.Always, SendControlPredicate.SpanDestination))
                 .Append(new(returned, Exit("operation", true), SendControlOutcome.Always, SendControlPredicate.NoSpanDestination)))
             }))

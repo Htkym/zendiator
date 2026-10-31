@@ -20,7 +20,10 @@ public readonly record struct Result<T, TError>
         IsSuccess = false;
     }
 
-    public bool IsSuccess { get; }
+    public bool IsSuccess
+    {
+        get;
+    }
 
     /// <summary>Gets the value on success.</summary>
     public T Value => IsSuccess ? _value! : throw new InvalidOperationException("Result is failure.");

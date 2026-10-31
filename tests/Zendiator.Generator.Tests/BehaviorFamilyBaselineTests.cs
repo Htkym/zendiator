@@ -142,7 +142,8 @@ public sealed class BehaviorFamilyBaselineTests
             Assert.Contains(mediator.Members.OfType<ClassDeclarationSyntax>(), node => node.Identifier.ValueText == "StreamRoute0Enumerable" && node.Modifiers.Any(SyntaxKind.SealedKeyword));
             Assert.Contains("StartCoreAsync", text);
         }
-        if (shape == "notification-empty") Assert.Contains("return default;", Assert.Single(methods).ToString());
+        if (shape == "notification-empty")
+            Assert.Contains("return default;", Assert.Single(methods).ToString());
         if (shape == "notification-single")
         {
             var method = Assert.Single(methods);
@@ -169,7 +170,8 @@ public sealed class BehaviorFamilyBaselineTests
     private static void SaveSnapshot(string id, string input, string generated)
     {
         var directory = Environment.GetEnvironmentVariable("ZENDIATOR_G01_SNAPSHOTS");
-        if (string.IsNullOrEmpty(directory)) return;
+        if (string.IsNullOrEmpty(directory))
+            return;
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, id + ".input.cs"), input);
         File.WriteAllText(Path.Combine(directory, id + ".generated.cs"), generated);

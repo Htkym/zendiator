@@ -6,7 +6,9 @@ internal static class CanonicalSendAllAsyncSourceEmitter
 {
     internal static string Emit(CanonicalSendAllAsyncCompositionEmission c)
     {
-        var branch = c.Branch; var request = branch.Handler.RequestName; var response = branch.Handler.ResultName;
+        var branch = c.Branch;
+        var request = branch.Handler.RequestName;
+        var response = branch.Handler.ResultName;
         var result = response == null ? "global::System.Threading.Tasks.ValueTask" : "global::System.Threading.Tasks.ValueTask<" + response + "[]>";
         var branchResult = response == null ? "global::System.Threading.Tasks.ValueTask" : "global::System.Threading.Tasks.ValueTask<" + response + ">";
         var typeParameters = branch.Generic?.TypeParameters ?? "";
@@ -36,9 +38,12 @@ internal static class CanonicalSendAllAsyncSourceEmitter
                     {
                         cancellationToken.ThrowIfCancellationRequested();
             """);
-        if (response != null) b.AppendLine($"            var results = new {response}[{c.Branches.Count}];");
-        for (var i = 0; i < c.Branches.Count; i++) b.AppendLine($"            {(response == null ? "" : $"results[{i}] = ")}await Branch{i}Async{typeParameters}(request, cancellationToken).ConfigureAwait(false);");
-        if (response != null) b.AppendLine("            return results;");
+        if (response != null)
+            b.AppendLine($"            var results = new {response}[{c.Branches.Count}];");
+        for (var i = 0; i < c.Branches.Count; i++)
+            b.AppendLine($"            {(response == null ? "" : $"results[{i}] = ")}await Branch{i}Async{typeParameters}(request, cancellationToken).ConfigureAwait(false);");
+        if (response != null)
+            b.AppendLine("            return results;");
         b.AppendLine("        }");
         for (var i = 0; i < c.Branches.Count; i++)
         {
@@ -53,13 +58,16 @@ internal static class CanonicalSendAllAsyncSourceEmitter
                         {{CanonicalCapabilitySourceEmitter.RequestGuard(branch.Handler.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
                         cancellationToken.ThrowIfCancellationRequested();
                 """);
-            if (response != null) b.AppendLine($"            {response} response;");
+            if (response != null)
+                b.AppendLine($"            {response} response;");
             CanonicalAsyncSourceEmitter.EmitHookScope(b, c.Branches[i], 0, "request");
-            if (response != null) b.AppendLine("            return response;");
+            if (response != null)
+                b.AppendLine("            return response;");
             b.AppendLine("        }");
         }
         b.AppendLine("    }");
         CanonicalRegistrationSourceEmitter.Emit(b, CanonicalRegistrationPlan.SendAllAsync(c));
-        b.AppendLine("}"); return b.ToString();
+        b.AppendLine("}");
+        return b.ToString();
     }
 }

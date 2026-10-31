@@ -32,10 +32,17 @@ public sealed class StreamLoggingBehavior<TRequest, TItem>(ILogger<StreamLogging
         public ValueTask<bool> MoveNextAsync() => cursor.MoveNextAsync();
         public async ValueTask DisposeAsync()
         {
-            if (_disposed) return;
+            if (_disposed)
+                return;
             _disposed = true;
-            try { await cursor.DisposeAsync().ConfigureAwait(false); }
-            finally { logger.LogInformation("Streamed {Request}", typeof(TRequest).Name); }
+            try
+            {
+                await cursor.DisposeAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                logger.LogInformation("Streamed {Request}", typeof(TRequest).Name);
+            }
         }
     }
 }

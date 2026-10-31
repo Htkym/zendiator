@@ -16,15 +16,20 @@ public sealed partial class GeneratorTests
         var text = "namespace GenericCases.Composition{";
         foreach (var c in AllGenericCases.Where(c => c.Argument == "int"))
         {
-            var module = AllGenericModule(c, true); var request = "global::GenericCases." + (c.Void ? "Command" : "Response") + "<T>";
+            var module = AllGenericModule(c, true);
+            var request = "global::GenericCases." + (c.Void ? "Command" : "Response") + "<T>";
             foreach (var (role, old, next) in new[] { ("Outer", "Hook0", "public class Hook1:"), ("Inner", "Hook1", "public sealed class GenericHook"), ("Wrap", "W", "public sealed class GenericW") })
             {
-                var start = module.IndexOf("public class " + old + ":", StringComparison.Ordinal); var end = module.IndexOf(next, start, StringComparison.Ordinal);
-                var name = role + CompositionFamily(c); var owned = CompositionMode(c, role).EndsWith("owned", StringComparison.Ordinal);
+                var start = module.IndexOf("public class " + old + ":", StringComparison.Ordinal);
+                var end = module.IndexOf(next, start, StringComparison.Ordinal);
+                var name = role + CompositionFamily(c);
+                var owned = CompositionMode(c, role).EndsWith("owned", StringComparison.Ordinal);
                 var declaration = module[start..end].Replace("public class " + old + ":", "public class " + name + "<T>:", StringComparison.Ordinal).Replace("public " + old + "(", "public " + name + "(", StringComparison.Ordinal)
                     .Replace("false,true", (owned ? "true" : "false") + ",false", StringComparison.Ordinal);
                 text += Regex.Replace(declaration, @"\bPing\b", request);
-                var factory = "F" + name; var resource = name + "<T>"; var label = "F" + role;
+                var factory = "F" + name;
+                var resource = name + "<T>";
+                var label = "F" + role;
                 text += $$"""
                     public sealed class {{factory}}<T>:I{{(c.Async ? "Async" : "")}}{{(owned ? "Owned" : "Borrowed")}}SessionFactory<{{request}},{{resource}}>,IDisposable{
                         private readonly Probe p;public {{factory}}(Probe p){this.p=p;p.Factories.Add("{{label}}");p.FactoryTypes.Add("{{label}}",GetType().ToString());}
@@ -35,7 +40,8 @@ public sealed partial class GeneratorTests
             }
             foreach (var id in new[] { 2, 1 })
             {
-                var name = "FHandler" + id + CompositionFamily(c); var resource = "global::GenericCases.Handlers." + CompositionFamily(c) + "<T,global::GenericCases.Tag" + id + ">";
+                var name = "FHandler" + id + CompositionFamily(c);
+                var resource = "global::GenericCases.Handlers." + CompositionFamily(c) + "<T,global::GenericCases.Tag" + id + ">";
                 text += $$"""
                     public sealed class {{name}}<T>:I{{(c.Async ? "Async" : "")}}{{(id == 2 ? "Owned" : "Borrowed")}}SessionFactory<{{request}},{{resource}}>,IDisposable{
                         private readonly Probe p;public {{name}}(Probe p){this.p=p;p.Factories.Add("GHF{{id}}");p.FactoryTypes.Add("GHF{{id}}",GetType().ToString());}
@@ -49,7 +55,8 @@ public sealed partial class GeneratorTests
     }
     private static string AllGenericCompositionConfiguration(IEnumerable<AllGenericCase> cases)
     {
-        var handlers = new List<string>(); var pipelines = new List<string>();
+        var handlers = new List<string>();
+        var pipelines = new List<string>();
         foreach (var c in cases)
         {
             var entries = new[] { 2, 1, 3 }.Select(id => id == 3 ? "typeof(" + ClosedHandlerName(c, id) + ")" : "HandlerEntry.Session<" + ClosedHandlerName(c, id) + "," + CompositionType(c, "FHandler" + id) + ">()");
@@ -66,8 +73,11 @@ public sealed partial class GeneratorTests
         {
             var k = c.Async ? "a" : "s";
             var reference = CanonicalCapabilityReference.Source(c.Async, c.Void, k, k, k, k, false, CompositionMode(c, "Outer"), AllGenericHandlerMode(c, id), true, CompositionMode(c, "Wrap"), CompositionMode(c, "Inner"));
-            reference = Regex.Replace(reference, @"\bOracle\b", "GenericReference" + id); reference = Regex.Replace(reference, @"\bHandler\b", "G" + id); reference = Regex.Replace(reference, @"\bHFactory\b", "GHF" + id);
-            foreach (var alias in aliases) reference = Regex.Replace(reference, @"\b" + alias.Key + @"\b", "C" + alias.Key);
+            reference = Regex.Replace(reference, @"\bOracle\b", "GenericReference" + id);
+            reference = Regex.Replace(reference, @"\bHandler\b", "G" + id);
+            reference = Regex.Replace(reference, @"\bHFactory\b", "GHF" + id);
+            foreach (var alias in aliases)
+                reference = Regex.Replace(reference, @"\b" + alias.Key + @"\b", "C" + alias.Key);
             text += reference.Replace("namespace App {", "", StringComparison.Ordinal)[..^1];
         }
         var ret = c.Async ? c.Void ? "ValueTask" : "ValueTask<int[]>" : c.Void ? "void" : "int[]";
@@ -76,16 +86,24 @@ public sealed partial class GeneratorTests
     }
     private static string AllGenericCompositionTypeCheck()
     {
-        var resources = new List<string>(); var factories = new List<string>();
+        var resources = new List<string>();
+        var factories = new List<string>();
         foreach (var c in AllGenericWrapperCases)
         {
             var order = new List<string>();
             foreach (var id in c.Name == "AVString" ? new[] { 2, 1 } : new[] { 2, 1, 3 })
             {
-                order.Add(CompositionType(c, "Outer")); order.Add(CompositionType(c, "Wrap"));
-                if (c.Name == "SVInt" && id == 1) continue;
-                order.Add(CompositionType(c, "Inner")); order.Add(ClosedHandlerName(c, id));
-                if (c.Name == "SRInt" && id == 1) { order.Add(CompositionType(c, "Inner")); order.Add(ClosedHandlerName(c, id)); }
+                order.Add(CompositionType(c, "Outer"));
+                order.Add(CompositionType(c, "Wrap"));
+                if (c.Name == "SVInt" && id == 1)
+                    continue;
+                order.Add(CompositionType(c, "Inner"));
+                order.Add(ClosedHandlerName(c, id));
+                if (c.Name == "SRInt" && id == 1)
+                {
+                    order.Add(CompositionType(c, "Inner"));
+                    order.Add(ClosedHandlerName(c, id));
+                }
             }
             resources.Add("\"" + c.Name + "\"=>new[]{" + string.Join(",", order.Select(t => "typeof(" + t + ").ToString()")) + "}");
             var roles = new[] { ("FOuter", "FOuter"), ("FWrap", "FWrap"), ("FInner", "FInner"), ("GHF2", "FHandler2"), ("GHF1", "FHandler1") }.Where(p => c.Name != "SVInt" || p.Item1 != "GHF1");
@@ -98,7 +116,8 @@ public sealed partial class GeneratorTests
         var text = AllClosedHandlerExtras(c, genericHook: true);
         foreach (var (name, resource, mode) in new[] { ("GF1", ClosedHandlerName(c with { Argument = "T" }, 1), AllGenericHandlerMode(c, 1)), ("GF2", ClosedHandlerName(c with { Argument = "T" }, 2), AllGenericHandlerMode(c, 2)), ("GKFactory", ClosedHookName(c with { Argument = "T" }), AllGenericHookMode(c)) })
         {
-            var start = text.IndexOf("public sealed class " + name + ":", StringComparison.Ordinal); var marker = "public void Dispose()=>p.FactoryEnds.Add(\"" + name + "\");";
+            var start = text.IndexOf("public sealed class " + name + ":", StringComparison.Ordinal);
+            var marker = "public void Dispose()=>p.FactoryEnds.Add(\"" + name + "\");";
             var end = text.IndexOf('}', text.IndexOf(marker, start, StringComparison.Ordinal) + marker.Length) + 1;
             var request = c.Request.Replace("<" + c.Argument + ">", "<T>", StringComparison.Ordinal);
             var declaration = $$"""
@@ -117,7 +136,8 @@ public sealed partial class GeneratorTests
     {
         var text = AllClosedHandlerConfiguration(cases, genericHook: true);
         foreach (var c in cases)
-            foreach (var name in new[] { "GF1", "GF2", "GKFactory" }) text = text.Replace("global::GenericCases." + c.Name + "." + name + ">", "global::GenericCases." + c.Name + "." + name + "<" + c.Argument + ">>", StringComparison.Ordinal);
+            foreach (var name in new[] { "GF1", "GF2", "GKFactory" })
+                text = text.Replace("global::GenericCases." + c.Name + "." + name + ">", "global::GenericCases." + c.Name + "." + name + "<" + c.Argument + ">>", StringComparison.Ordinal);
         return text;
     }
     private static string AllGenericCompositionVisibilityExtras(AllGenericCase c)
@@ -168,12 +188,18 @@ public sealed partial class GeneratorTests
         foreach (var c in new[] { AllGenericCases[0], AllGenericCases[5] })
             foreach (var entry in AllGenericCompositionGateEntries(c))
             {
-                var marker = "CompositionVisibility" + c.Name + entry.Name; var ns = "AllGeneric.Generated." + marker;
-                Assert.Equal(entry.Accepted, output.GetTypeByMetadataName(ns + ".IZendiator") != null); Assert.Equal(entry.Accepted, output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar") != null);
+                var marker = "CompositionVisibility" + c.Name + entry.Name;
+                var ns = "AllGeneric.Generated." + marker;
+                Assert.Equal(entry.Accepted, output.GetTypeByMetadataName(ns + ".IZendiator") != null);
+                Assert.Equal(entry.Accepted, output.GetTypeByMetadataName(ns + ".ZendiatorGeneratedRegistrar") != null);
                 Assert.Equal(entry.Accepted, files.Any(f => f.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal) && f.Text.Contains(ns + ".ZendiatorGeneratedRegistrar", StringComparison.Ordinal)));
-                var start = source.IndexOf("public static class " + marker + "Bridge", StringComparison.Ordinal); var end = source.IndexOf("});}", start, StringComparison.Ordinal);
+                var start = source.IndexOf("public static class " + marker + "Bridge", StringComparison.Ordinal);
+                var end = source.IndexOf("});}", start, StringComparison.Ordinal);
                 var found = diagnostics.Where(d => d.Location.SourceSpan.Start >= start && d.Location.SourceSpan.Start < end).ToArray();
-                if (entry.Accepted) Assert.Empty(found); else Assert.Equal(entry.Name.StartsWith("FactoryMismatch", StringComparison.Ordinal) ? "ZEN0026" : "ZEN0037", Assert.Single(found).Id);
+                if (entry.Accepted)
+                    Assert.Empty(found);
+                else
+                    Assert.Equal(entry.Name.StartsWith("FactoryMismatch", StringComparison.Ordinal) ? "ZEN0026" : "ZEN0037", Assert.Single(found).Id);
             }
         Assert.NotNull(output.GetTypeByMetadataName("AllGeneric.Generated.LegacyInternalComposition.IZendiator"));
     }
@@ -191,10 +217,28 @@ public sealed partial class GeneratorTests
     [Fact]
     public async Task AllGenericComposition_four_profiles_preserve_factory_types_owned_borrowed_pending_retry_bypass_and_stop()
     {
-        var source = AllGenericWrapperSource(true, true); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllGenericCompositionRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); var folder = AllGenericFolder("composition-runtime"); SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); var contract = AssertAllGenericContract(output, driver, false, AllGenericWrapperCases);
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); if (folder != null) { File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); File.WriteAllText(Path.Combine(folder, "contract.json"), JsonSerializer.Serialize(contract)); }
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var result = await assembly.GetType("AllGeneric.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result); using var json = JsonDocument.Parse(result); Assert.Equal(8, json.RootElement.GetProperty("dispatches").GetInt32()); Assert.Equal(0, json.RootElement.GetProperty("interleaveDispatches").GetInt32());
+        var source = AllGenericWrapperSource(true, true);
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "AllGenericCompositionRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        var folder = AllGenericFolder("composition-runtime");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var contract = AssertAllGenericContract(output, driver, false, AllGenericWrapperCases);
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+        {
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+            File.WriteAllText(Path.Combine(folder, "contract.json"), JsonSerializer.Serialize(contract));
+        }
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var result = await assembly.GetType("AllGeneric.Bridge")!.GetMethod("Run")!.CreateDelegate<Func<Task<string>>>()().WaitAsync(TimeSpan.FromSeconds(20));
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
+        using var json = JsonDocument.Parse(result);
+        Assert.Equal(8, json.RootElement.GetProperty("dispatches").GetInt32());
+        Assert.Equal(0, json.RootElement.GetProperty("interleaveDispatches").GetInt32());
     }
 }

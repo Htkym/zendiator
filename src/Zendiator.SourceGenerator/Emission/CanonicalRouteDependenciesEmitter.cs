@@ -10,14 +10,16 @@ internal static class CanonicalRouteDependenciesEmitter
 {
     internal static CanonicalRouteDependenciesPlan? Plan(CanonicalSyncCompositionEmission c, BoundDispatchFamily family)
     {
-        if (family != BoundDispatchFamily.SendAsync || c.RouteDependencyTypes.Count < 2) return null;
+        if (family != BoundDispatchFamily.SendAsync || c.RouteDependencyTypes.Count < 2)
+            return null;
         var name = "RouteDependencies_" + CanonicalSplitSourceEmitter.Id(family + "|" + c.Handler.RequestName);
         return new(name, "global::" + c.Namespace + ".Zendiator." + name, c.RouteDependencyTypes);
     }
 
     internal static void Emit(StringBuilder b, CanonicalRouteDependenciesPlan? plan)
     {
-        if (plan == null) return;
+        if (plan == null)
+            return;
         b.AppendLine("internal sealed class " + plan.Name + " {");
         for (var i = 0; i < plan.Types.Count; i++)
             b.AppendLine("internal readonly " + plan.Types[i] + " Service" + i + ";");
@@ -35,9 +37,11 @@ internal static class CanonicalRouteDependenciesEmitter
 
     internal static string Receiver(CanonicalRouteDependenciesPlan? plan, string type, bool isValueType)
     {
-        if (plan == null) return CanonicalServiceResolution.Emit(type, isValueType);
+        if (plan == null)
+            return CanonicalServiceResolution.Emit(type, isValueType);
         for (var i = 0; i < plan.Types.Count; i++)
-            if (StringComparer.Ordinal.Equals(plan.Types[i], type)) return "dependencies.Service" + i;
+            if (StringComparer.Ordinal.Equals(plan.Types[i], type))
+                return "dependencies.Service" + i;
         throw new InvalidOperationException("A route dependency carrier must contain every selected receiver.");
     }
 }

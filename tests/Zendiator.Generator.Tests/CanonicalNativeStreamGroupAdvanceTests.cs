@@ -272,7 +272,8 @@ public sealed partial class GeneratorTests
         var insertions = 0;
         await RunNativeStreamFixture("group-retired-generations", source, generatedTransform: generated =>
         {
-            if (!generated.Contains("_groupP0")) return generated;
+            if (!generated.Contains("_groupP0"))
+                return generated;
             var syntax = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(generated).GetRoot();
             var cursor = Assert.Single(syntax.DescendantNodes()
                 .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax>(), type => type.Identifier.ValueText == "Cursor5");

@@ -19,14 +19,16 @@ public sealed partial class GeneratorTests
     {
         var root = Environment.GetEnvironmentVariable("ZENDIATOR_N04_EVIDENCE");
         var folder = root == null ? "" : Path.Combine(root, profile);
-        if (folder.Length != 0) Directory.CreateDirectory(folder);
+        if (folder.Length != 0)
+            Directory.CreateDirectory(folder);
         return folder;
     }
 
     [Fact]
     public async Task MissingHandlerAttributeFix_ComposedApp_changes_only_the_closed_marker_and_regenerates_all_routes()
     {
-        var source = ComposedMissingMarkerSource(); var (workspace, document) = HandlerFixWorkspace(source);
+        var source = ComposedMissingMarkerSource();
+        var (workspace, document) = HandlerFixWorkspace(source);
         using (workspace)
         {
             var diagnostic = Assert.Single(await HandlerFixDiagnostics(document));
@@ -50,10 +52,23 @@ public sealed partial class GeneratorTests
             var folder = ComposedMarkerFolder("accepted");
             if (folder.Length != 0)
             {
-                File.WriteAllText(Path.Combine(folder, "missing-Program.cs"), source); File.WriteAllText(Path.Combine(folder, "fixed-Program.cs"), fixedSource);
-                foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), (await file.GetTextAsync()).ToString());
-                using var binary = new MemoryStream(); var emit = output.Emit(binary); Assert.True(emit.Success, string.Join("\n", emit.Diagnostics)); File.WriteAllBytes(Path.Combine(folder, "consumer.dll"), binary.ToArray());
-                File.WriteAllText(Path.Combine(folder, "result.json"), JsonSerializer.Serialize(new { markerOnly = true, routes = 7, actions = 1, staleActions = 0, generatorInstalledRequired = true, runtimeExecuted = false }));
+                File.WriteAllText(Path.Combine(folder, "missing-Program.cs"), source);
+                File.WriteAllText(Path.Combine(folder, "fixed-Program.cs"), fixedSource);
+                foreach (var file in generated)
+                    File.WriteAllText(Path.Combine(folder, file.HintName), (await file.GetTextAsync()).ToString());
+                using var binary = new MemoryStream();
+                var emit = output.Emit(binary);
+                Assert.True(emit.Success, string.Join("\n", emit.Diagnostics));
+                File.WriteAllBytes(Path.Combine(folder, "consumer.dll"), binary.ToArray());
+                File.WriteAllText(Path.Combine(folder, "result.json"), JsonSerializer.Serialize(new
+                {
+                    markerOnly = true,
+                    routes = 7,
+                    actions = 1,
+                    staleActions = 0,
+                    generatorInstalledRequired = true,
+                    runtimeExecuted = false
+                }));
             }
         }
     }
@@ -75,12 +90,17 @@ public sealed partial class GeneratorTests
             using (workspace)
             {
                 var diagnostic = Assert.Single(await HandlerFixDiagnostics(document));
-                Assert.True(workspace.TryApplyChanges(document.Project.AddAnalyzerReference(new HandlerFixGeneratorReference()).Solution)); document = workspace.CurrentSolution.GetDocument(document.Id)!;
-                Assert.Empty(await HandlerFixActions(document, diagnostic)); Assert.Equal(invalid, (await document.GetTextAsync()).ToString());
-                var folder = ComposedMarkerFolder(profile); if (folder.Length != 0) File.WriteAllText(Path.Combine(folder, "input.cs"), invalid);
+                Assert.True(workspace.TryApplyChanges(document.Project.AddAnalyzerReference(new HandlerFixGeneratorReference()).Solution));
+                document = workspace.CurrentSolution.GetDocument(document.Id)!;
+                Assert.Empty(await HandlerFixActions(document, diagnostic));
+                Assert.Equal(invalid, (await document.GetTextAsync()).ToString());
+                var folder = ComposedMarkerFolder(profile);
+                if (folder.Length != 0)
+                    File.WriteAllText(Path.Combine(folder, "input.cs"), invalid);
             }
         }
-        var tree = CSharpSyntaxTree.ParseText(source, SyncParseOptions); var root = tree.GetRoot();
+        var tree = CSharpSyntaxTree.ParseText(source, SyncParseOptions);
+        var root = tree.GetRoot();
         var wrapper = root.DescendantNodes().OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "CountCache");
         var withoutWrapper = root.RemoveNode(wrapper, SyntaxRemoveOptions.KeepExteriorTrivia)!.ToFullString();
         var (changedWorkspace, changedDocument) = HandlerFixWorkspace(withoutWrapper);
@@ -89,7 +109,8 @@ public sealed partial class GeneratorTests
             changedWorkspace.AddDocument(changedDocument.Project.Id, "Wrapper.cs", SourceText.From("using Zendiator; namespace ComposedApp {" + wrapper.ToFullString() + "}"));
             changedDocument = changedWorkspace.CurrentSolution.GetDocument(changedDocument.Id)!;
             var diagnostic = Assert.Single(await HandlerFixDiagnostics(changedDocument));
-            Assert.True(changedWorkspace.TryApplyChanges(changedDocument.Project.AddAnalyzerReference(new HandlerFixGeneratorReference()).Solution)); changedDocument = changedWorkspace.CurrentSolution.GetDocument(changedDocument.Id)!;
+            Assert.True(changedWorkspace.TryApplyChanges(changedDocument.Project.AddAnalyzerReference(new HandlerFixGeneratorReference()).Solution));
+            changedDocument = changedWorkspace.CurrentSolution.GetDocument(changedDocument.Id)!;
             var action = Assert.Single(await HandlerFixActions(changedDocument, diagnostic));
             var other = changedDocument.Project.Documents.Single(d => d.Name == "Wrapper.cs");
             Assert.True(changedWorkspace.TryApplyChanges(other.WithText(SourceText.From("namespace ComposedApp { public sealed class CountCache<T> {} }")).Project.Solution));
@@ -97,7 +118,9 @@ public sealed partial class GeneratorTests
             changedDocument = await ApplyHandlerFix(changedWorkspace, changedDocument, action);
             Assert.Equal(withoutWrapper, (await changedDocument.GetTextAsync()).ToString());
             Assert.Empty(await HandlerFixActions(changedDocument, diagnostic));
-            var folder = ComposedMarkerFolder("other-document-changed"); if (folder.Length != 0) File.WriteAllText(Path.Combine(folder, "unchanged-Program.cs"), withoutWrapper);
+            var folder = ComposedMarkerFolder("other-document-changed");
+            if (folder.Length != 0)
+                File.WriteAllText(Path.Combine(folder, "unchanged-Program.cs"), withoutWrapper);
         }
     }
 }

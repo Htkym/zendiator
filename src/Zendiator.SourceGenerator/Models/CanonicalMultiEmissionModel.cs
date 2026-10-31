@@ -4,10 +4,22 @@ internal sealed record CanonicalMultiRouteEmission(string Key, int HandlerOrdina
     CanonicalSyncCompositionEmission Registration, CanonicalSyncCompositionEmission? Sync,
     CanonicalAsyncCompositionEmission? Async, CanonicalWrapperCompositionEmission? Wrapper, CanonicalCapabilityCompositionEmission? Capability)
 {
-    public CanonicalStreamPublicComposition? Stream { get; init; }
-    public CanonicalSendAllSyncCompositionEmission? SendAllSync { get; init; }
-    public CanonicalSendAllAsyncCompositionEmission? SendAllAsync { get; init; }
-    public string? StreamStableKey { get; init; }
+    public CanonicalStreamPublicComposition? Stream
+    {
+        get; init;
+    }
+    public CanonicalSendAllSyncCompositionEmission? SendAllSync
+    {
+        get; init;
+    }
+    public CanonicalSendAllAsyncCompositionEmission? SendAllAsync
+    {
+        get; init;
+    }
+    public string? StreamStableKey
+    {
+        get; init;
+    }
     public BoundDispatchFamily? Family => Sync != null ? BoundDispatchFamily.SendSync :
         Async != null ? BoundDispatchFamily.SendAsync : Wrapper != null ? Wrapper.Family :
         Stream != null ? BoundDispatchFamily.Stream : SendAllSync != null ? BoundDispatchFamily.SendAllSync :

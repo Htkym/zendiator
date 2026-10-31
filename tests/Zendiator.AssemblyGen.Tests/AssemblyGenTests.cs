@@ -36,7 +36,8 @@ public sealed class AssemblyGenTests
         await using var scope = provider.CreateAsyncScope();
         var mediator = scope.ServiceProvider.GetRequiredService<NativeMediator>();
         var items = new List<int>();
-        await foreach (var i in mediator.StreamAsync(new AsmNumbers(3))) items.Add(i);
+        await foreach (var i in mediator.StreamAsync(new AsmNumbers(3)))
+            items.Add(i);
         Assert.Equal([0, 1, 2], items);
         Assert.Equal(["s-before", "s-after"], scope.ServiceProvider.GetRequiredService<Trace>().Events);
     }

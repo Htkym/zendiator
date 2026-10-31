@@ -385,7 +385,8 @@ public sealed partial class GeneratorTests
         var insertions = 0;
         await RunNativeStreamFixture("identity-lease-partial-busy-handoff", source, generatedTransform: generated =>
         {
-            if (!generated.Contains("private void AttachIdentityLease()")) return generated;
+            if (!generated.Contains("private void AttachIdentityLease()"))
+                return generated;
             const string marker = "var lease = new IdentityLease();";
             Assert.Single(System.Text.RegularExpressions.Regex.Matches(generated, System.Text.RegularExpressions.Regex.Escape(marker)));
             insertions++;

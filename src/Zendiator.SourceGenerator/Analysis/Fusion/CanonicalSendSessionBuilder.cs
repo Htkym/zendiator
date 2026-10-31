@@ -9,16 +9,23 @@ internal static class CanonicalSendSessionBuilder
 {
     internal static CanonicalSendExecutionSchedule Attach(BoundPipelineModel route, CanonicalSendExecutionSchedule schedule)
     {
-        var sites = schedule.Sites.ToList(); var owners = schedule.Owners.ToList();
-        var orders = schedule.Orders.ToList(); var awaits = schedule.Awaits.ToList();
-        var flows = schedule.ControlFlows.ToList(); var transfers = new List<SendSessionTransfer>();
+        var sites = schedule.Sites.ToList();
+        var owners = schedule.Owners.ToList();
+        var orders = schedule.Orders.ToList();
+        var awaits = schedule.Awaits.ToList();
+        var flows = schedule.ControlFlows.ToList();
+        var transfers = new List<SendSessionTransfer>();
         var calls = new List<SendSessionCall>();
-        var resolutions = new List<SendServiceResolution>(); var receivers = new List<SendCallbackReceiver>();
+        var resolutions = new List<SendServiceResolution>();
+        var receivers = new List<SendCallbackReceiver>();
         for (var b = 0; b < route.Handlers.Count; b++)
             for (var s = 0; s <= route.Stages.Count; s++)
             {
-                var sessions = Sessions(route, b, s); if (sessions.Count == 0) continue;
-                var owner = Scope(b, s); var anchor = s == route.Stages.Count ? route.Handlers[b].Anchor : route.Stages[s].Anchor;
+                var sessions = Sessions(route, b, s);
+                if (sessions.Count == 0)
+                    continue;
+                var owner = Scope(b, s);
+                var anchor = s == route.Stages.Count ? route.Handlers[b].Anchor : route.Stages[s].Anchor;
                 var scopeOwner = owners.Single(o => o.Id == owner);
                 var callbackSession = sessions.Count == 1 && sessions[0].SuppliesCallbackReceiver;
                 var state = schedule.States.Single(st => st.Owner == owner);
@@ -34,7 +41,11 @@ internal static class CanonicalSendSessionBuilder
                             state.StartTokenSlot));
                 }
                 for (var a = 0; a < awaits.Count; a++)
-                    if (awaits[a].Owner == owner) awaits[a] = awaits[a] with { RetainedSlots = new(awaits[a].RetainedSlots.Concat(retained)) };
+                    if (awaits[a].Owner == owner)
+                        awaits[a] = awaits[a] with
+                        {
+                            RetainedSlots = new(awaits[a].RetainedSlots.Concat(retained))
+                        };
                 SendExecutionSiteId Id(int i, SendExecutionPhase phase) => SessionSite(b, s, i, phase);
                 SendControlPoint Node(int i, SendExecutionPhase phase) => Point(owner, Id(i, phase));
                 var entered = Site(b, s, SendExecutionPhase.Entered);
@@ -48,26 +59,41 @@ internal static class CanonicalSendSessionBuilder
                 for (var e = 0; e < edges.Count; e++)
                 {
                     var edge = edges[e];
-                    if (edge.To == Point(owner, entered)) edges[e] = edge with { To = Point(owner, first) };
+                    if (edge.To == Point(owner, entered))
+                        edges[e] = edge with
+                        {
+                            To = Point(owner, first)
+                        };
                     else if (edge.To.Terminal is SendControlTerminal.Success or SendControlTerminal.Failure &&
                         edge.From.Site?.Phase is not (SendExecutionPhase.ArgumentGuard or SendExecutionPhase.CancellationGuard or SendExecutionPhase.Resolve))
-                        edges[e] = edge with { To = cleanupStart };
+                        edges[e] = edge with
+                        {
+                            To = cleanupStart
+                        };
                 }
                 for (var i = 0; i < sessions.Count; i++)
                 {
-                    var binding = sessions[i]; var resource = Session(b, s, i);
-                    if (!callbackSession) owners.Add(new(resource + "/factory", "provider", SendOwnerKind.Service, SendOwnerLifetime.Caller,
+                    var binding = sessions[i];
+                    var resource = Session(b, s, i);
+                    if (!callbackSession)
+                        owners.Add(new(resource + "/factory", "provider", SendOwnerKind.Service, SendOwnerLifetime.Caller,
                         scopeOwner.Multiplicity, true, FusionCleanupKind.None, false));
                     owners.Add(new(resource, owner, SendOwnerKind.Session, SendOwnerLifetime.Stage, scopeOwner.Multiplicity,
                         binding.Ownership == FusionOwnership.BorrowedResource,
                         binding.Cleanup == null ? FusionCleanupKind.None : binding.Cleanup.Completion == BoundCompletionKind.ValueTask ? FusionCleanupKind.Async : FusionCleanupKind.Sync, false));
                     Add(i, SendExecutionPhase.SessionGuard);
-                    if (!callbackSession) Add(i, SendExecutionPhase.ResolveSessionFactory, producer: binding.FactoryServiceType);
+                    if (!callbackSession)
+                        Add(i, SendExecutionPhase.ResolveSessionFactory, producer: binding.FactoryServiceType);
                     Add(i, SendExecutionPhase.AcquireSession, binding.Acquire, SendFailureDisposition.UnwindAcquiredSessionsThenOuter);
                     calls.Add(new(Id(i, SendExecutionPhase.AcquireSession), callbackSession ? Service(b, s) + "/resolved" : resource + "/factory/resolved", resource + "/factory-result", true, true, false)
-                    { RequestSlot = state.InputRequestSlot, TokenSlot = state.StartTokenSlot });
-                    if (callbackSession) Add(i, SendExecutionPhase.ValidateSessionResult);
-                    Add(i, SendExecutionPhase.CommitSession); Add(i, SendExecutionPhase.DetachSession);
+                    {
+                        RequestSlot = state.InputRequestSlot,
+                        TokenSlot = state.StartTokenSlot
+                    });
+                    if (callbackSession)
+                        Add(i, SendExecutionPhase.ValidateSessionResult);
+                    Add(i, SendExecutionPhase.CommitSession);
+                    Add(i, SendExecutionPhase.DetachSession);
                     var phases = callbackSession
                         ? new[] { SendExecutionPhase.SessionGuard, SendExecutionPhase.AcquireSession, SendExecutionPhase.ValidateSessionResult, SendExecutionPhase.CommitSession }
                         : new[] { SendExecutionPhase.SessionGuard, SendExecutionPhase.ResolveSessionFactory, SendExecutionPhase.AcquireSession, SendExecutionPhase.CommitSession };
@@ -77,10 +103,12 @@ internal static class CanonicalSendSessionBuilder
                         orders.Add(new(Id(i, phases[p]), next, SendOrderCondition.Start));
                         var pure = phases[p] == SendExecutionPhase.CommitSession;
                         edges.Add(new(Node(i, phases[p]), Point(owner, next), pure ? SendControlOutcome.Always : SendControlOutcome.Success, SendControlPredicate.Any));
-                        if (!pure) edges.Add(new(Node(i, phases[p]), cleanupStart, SendControlOutcome.Failure, SendControlPredicate.Any));
+                        if (!pure)
+                            edges.Add(new(Node(i, phases[p]), cleanupStart, SendControlOutcome.Failure, SendControlPredicate.Any));
                     }
                     transfers.Add(new(resource + "/factory-result", resource + "/live", Id(i, SendExecutionPhase.CommitSession)));
-                    if (callbackSession) transfers.Add(new("null", resource + "/factory-result", Id(i, SendExecutionPhase.CommitSession)));
+                    if (callbackSession)
+                        transfers.Add(new("null", resource + "/factory-result", Id(i, SendExecutionPhase.CommitSession)));
                     transfers.Add(new(resource + "/live", resource + "/detached", Id(i, SendExecutionPhase.DetachSession)));
                     transfers.Add(new("null", resource + "/live", Id(i, SendExecutionPhase.DetachSession)));
                     if (binding.Ownership == FusionOwnership.OwnedSession)

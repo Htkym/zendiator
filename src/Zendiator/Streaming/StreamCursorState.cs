@@ -523,7 +523,9 @@ public abstract class StreamCursorState : IAsyncDisposable
         private ManualResetValueTaskSourceCore<bool> _core;
         private int _lifecycle = Ready;
 
-        public MoveCompletion() { }
+        public MoveCompletion()
+        {
+        }
 
         /// <summary>Claims an unused or fully consumed and retired generation.</summary>
         public bool TryPrepare(out ValueTask<bool> operation)
@@ -550,7 +552,10 @@ public abstract class StreamCursorState : IAsyncDisposable
                     return _core.GetStatus(_core.Version) != ValueTaskSourceStatus.Pending
                         || Volatile.Read(ref _lifecycle) != 0;
                 }
-                catch (InvalidOperationException) { return Volatile.Read(ref _lifecycle) != 0; }
+                catch (InvalidOperationException)
+                {
+                    return Volatile.Read(ref _lifecycle) != 0;
+                }
             }
         }
 
@@ -559,8 +564,10 @@ public abstract class StreamCursorState : IAsyncDisposable
         {
             try
             {
-                if (error is null) _core.SetResult(result);
-                else _core.SetException(error);
+                if (error is null)
+                    _core.SetResult(result);
+                else
+                    _core.SetException(error);
             }
             finally
             {
@@ -573,7 +580,10 @@ public abstract class StreamCursorState : IAsyncDisposable
         {
             if (_core.GetStatus(token) == ValueTaskSourceStatus.Pending)
                 throw new InvalidOperationException("Await the pending Stream completion before consuming it.");
-            try { return _core.GetResult(token); }
+            try
+            {
+                return _core.GetResult(token);
+            }
             finally
             {
                 if ((Interlocked.Or(ref _lifecycle, Consumed) & Retired) != 0)
@@ -599,7 +609,10 @@ public abstract class StreamCursorState : IAsyncDisposable
 
         internal DisposeCompletion() => Task = AwaitCompletionAsync(_completion.Task);
 
-        internal Task Task { get; }
+        internal Task Task
+        {
+            get;
+        }
 
         internal void Complete(Exception? error) => _completion.TrySetResult(error);
 

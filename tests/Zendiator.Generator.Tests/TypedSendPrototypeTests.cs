@@ -101,18 +101,22 @@ public sealed partial class GeneratorTests
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "TypedSend_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
         Assert.Empty(diagnostics);
         var root = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
-        var folder = string.IsNullOrEmpty(root) ? null : Path.Combine(root, negative ? "typed-send-negative" : "typed-send-runtime"); if (folder != null) Directory.CreateDirectory(folder);
+        var folder = string.IsNullOrEmpty(root) ? null : Path.Combine(root, negative ? "typed-send-negative" : "typed-send-runtime");
+        if (folder != null)
+            Directory.CreateDirectory(folder);
         var names = negative ? new[] { "Good", "RequestMismatch", "PublicMismatch", "Unsupported", "NullableMismatch", "CompilerOwned" } : new[] { "Good" };
         var bindings = new Dictionary<string, TypedSendPrototypeBinding.Result>();
         foreach (var name in names)
         {
             var declaration = output.GetTypeByMetadataName("TypedFixture." + name)!;
-            var bound = TypedSendPrototypeBinding.Bind(output, declaration); bindings.Add(name, bound);
+            var bound = TypedSendPrototypeBinding.Bind(output, declaration);
+            bindings.Add(name, bound);
             if (bound.Model != null)
             {
                 var text = TypedSendPrototypeEmitter.Emit(bound.Model);
                 output = output.AddSyntaxTrees(CSharpSyntaxTree.ParseText(text, SyncParseOptions, name + ".prototype.g.cs"));
-                if (folder != null) File.WriteAllText(Path.Combine(folder, name + ".prototype.g.cs"), text);
+                if (folder != null)
+                    File.WriteAllText(Path.Combine(folder, name + ".prototype.g.cs"), text);
             }
         }
         if (folder != null)
@@ -120,38 +124,85 @@ public sealed partial class GeneratorTests
             SaveSendAllSync(folder, source, driver, output, diagnostics);
             File.WriteAllText(Path.Combine(folder, "binding.json"), JsonSerializer.Serialize(bindings.Select(p => new { name = p.Key, p.Value.Model, p.Value.CompilerOwnsError, diagnostic = p.Value.Diagnostic == null ? null : new { p.Value.Diagnostic.Id, message = p.Value.Diagnostic.GetMessage(), span = p.Value.Diagnostic.Location.SourceSpan.ToString(), anchor = source.Substring(p.Value.Diagnostic.Location.SourceSpan.Start, p.Value.Diagnostic.Location.SourceSpan.Length), severity = p.Value.Diagnostic.Severity.ToString() } })));
         }
-        var good = bindings["Good"]; Assert.Null(good.Diagnostic); Assert.False(good.CompilerOwnsError); var model = Assert.IsType<TypedSendPrototypeModel>(good.Model);
-        Assert.Equal("global::TypedFixture.Outer", model.ExternalRequest.Name); Assert.Equal("global::TypedFixture.Inner", model.HandlerRequest.Name); Assert.Equal("int", model.HandlerResponse.Name); Assert.Equal("string", model.PublicResponse.Name);
-        Assert.Equal(model.ExternalRequest, model.RequestMap.SavedRequest); Assert.Equal(model.HandlerRequest, model.ResponseMap.SavedRequest); Assert.NotEqual(model.RequestMap.SavedRequest.Identity, model.ResponseMap.SavedRequest.Identity);
-        Assert.Equal(model.HandlerResponse, model.ResponseMap.Input); Assert.Equal(model.PublicResponse, model.ResponseMap.Output); Assert.Contains("nullable=NotAnnotated", model.PublicResponse.Identity);
+        var good = bindings["Good"];
+        Assert.Null(good.Diagnostic);
+        Assert.False(good.CompilerOwnsError);
+        var model = Assert.IsType<TypedSendPrototypeModel>(good.Model);
+        Assert.Equal("global::TypedFixture.Outer", model.ExternalRequest.Name);
+        Assert.Equal("global::TypedFixture.Inner", model.HandlerRequest.Name);
+        Assert.Equal("int", model.HandlerResponse.Name);
+        Assert.Equal("string", model.PublicResponse.Name);
+        Assert.Equal(model.ExternalRequest, model.RequestMap.SavedRequest);
+        Assert.Equal(model.HandlerRequest, model.ResponseMap.SavedRequest);
+        Assert.NotEqual(model.RequestMap.SavedRequest.Identity, model.ResponseMap.SavedRequest.Identity);
+        Assert.Equal(model.HandlerResponse, model.ResponseMap.Input);
+        Assert.Equal(model.PublicResponse, model.ResponseMap.Output);
+        Assert.Contains("nullable=NotAnnotated", model.PublicResponse.Identity);
         // Existing normal generated entry points are compile sentinels only. Their runtime matrices are not replayed.
-        foreach (var ns in new[] { "OpenResponse.Generated.Composition", "OpenVoid.Generated.Composition", "OpenSentinel.Generated.ClosedComposition", "OpenSentinel.Generated.ScopedComposition" }) Assert.NotNull(output.GetTypeByMetadataName(ns + ".IZendiator"));
+        foreach (var ns in new[] { "OpenResponse.Generated.Composition", "OpenVoid.Generated.Composition", "OpenSentinel.Generated.ClosedComposition", "OpenSentinel.Generated.ScopedComposition" })
+            Assert.NotNull(output.GetTypeByMetadataName(ns + ".IZendiator"));
         Assert.Null(output.GetTypeByMetadataName("TypedFixture.Generated.Good.IZendiator"));
         if (negative)
         {
             foreach (var (name, id) in new[] { ("RequestMismatch", "ZEN0026"), ("PublicMismatch", "ZEN0026"), ("Unsupported", "ZEN0035"), ("NullableMismatch", "ZEN0026") })
             {
-                var result = bindings[name]; Assert.Null(result.Model); Assert.False(result.CompilerOwnsError); var diagnostic = Assert.IsAssignableFrom<Diagnostic>(result.Diagnostic);
-                Assert.Equal(id, diagnostic.Id); Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity); Assert.Equal(name, source.Substring(diagnostic.Location.SourceSpan.Start, diagnostic.Location.SourceSpan.Length)); Assert.Empty(diagnostic.AdditionalLocations);
+                var result = bindings[name];
+                Assert.Null(result.Model);
+                Assert.False(result.CompilerOwnsError);
+                var diagnostic = Assert.IsAssignableFrom<Diagnostic>(result.Diagnostic);
+                Assert.Equal(id, diagnostic.Id);
+                Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+                Assert.Equal(name, source.Substring(diagnostic.Location.SourceSpan.Start, diagnostic.Location.SourceSpan.Length));
+                Assert.Empty(diagnostic.AdditionalLocations);
                 Assert.Null(output.GetTypeByMetadataName("Zendiator.Generated.SendTypeConnectionPrototype.__ZendiatorTypedSend_" + name));
             }
-            Assert.Contains("inner handler request", bindings["RequestMismatch"].Diagnostic!.GetMessage()); Assert.Contains("public response", bindings["PublicMismatch"].Diagnostic!.GetMessage()); Assert.Contains("nullability", bindings["NullableMismatch"].Diagnostic!.GetMessage());
-            Assert.True(bindings["CompilerOwned"].CompilerOwnsError); Assert.Null(bindings["CompilerOwned"].Model); Assert.Null(bindings["CompilerOwned"].Diagnostic);
-            var errors = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray(); Assert.NotEmpty(errors); Assert.All(errors, d => { Assert.Equal("CS0246", d.Id); Assert.Equal("MissingRequest", source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length)); });
-            if (folder != null) File.WriteAllText(Path.Combine(folder, "negative-result.json"), JsonSerializer.Serialize(new { logicalInputs = 1, drivers = 1, rejectedRouteOwned = 4, compilerOwned = 1, generatedPrototype = 1, normalGeneratedCompositions = 4, dispatches = 0, compiler = errors.Select(d => new { d.Id, message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }) }));
+            Assert.Contains("inner handler request", bindings["RequestMismatch"].Diagnostic!.GetMessage());
+            Assert.Contains("public response", bindings["PublicMismatch"].Diagnostic!.GetMessage());
+            Assert.Contains("nullability", bindings["NullableMismatch"].Diagnostic!.GetMessage());
+            Assert.True(bindings["CompilerOwned"].CompilerOwnsError);
+            Assert.Null(bindings["CompilerOwned"].Model);
+            Assert.Null(bindings["CompilerOwned"].Diagnostic);
+            var errors = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
+            Assert.NotEmpty(errors);
+            Assert.All(errors, d =>
+            {
+                Assert.Equal("CS0246", d.Id);
+                Assert.Equal("MissingRequest", source.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length));
+            });
+            if (folder != null)
+                File.WriteAllText(Path.Combine(folder, "negative-result.json"), JsonSerializer.Serialize(new
+                {
+                    logicalInputs = 1,
+                    drivers = 1,
+                    rejectedRouteOwned = 4,
+                    compilerOwned = 1,
+                    generatedPrototype = 1,
+                    normalGeneratedCompositions = 4,
+                    dispatches = 0,
+                    compiler = errors.Select(d => new { d.Id, message = d.GetMessage(), span = d.Location.SourceSpan.ToString() })
+                }));
         }
-        else Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        else
+            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         return (output, driver, folder);
     }
 
     [Fact]
     public void TypedSendPrototype_distinct_request_ports_entered_failures_and_DI_scope_match_reference()
     {
-        var compiled = CompileTypedSendPrototype(false); using var bytes = new MemoryStream(); var emitted = compiled.Output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-        if (compiled.Folder != null) File.WriteAllBytes(Path.Combine(compiled.Folder, "generated.dll"), bytes.ToArray()); bytes.Position = 0;
-        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var result = assembly.GetType("TypedFixture.Entry")!.GetMethod("Run")!.CreateDelegate<Func<string>>()();
-        if (compiled.Folder != null) File.WriteAllText(Path.Combine(compiled.Folder, "runtime.json"), result);
-        using var json = JsonDocument.Parse(result); Assert.Equal(6, json.RootElement.GetProperty("dispatches").GetInt32());
+        var compiled = CompileTypedSendPrototype(false);
+        using var bytes = new MemoryStream();
+        var emitted = compiled.Output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (compiled.Folder != null)
+            File.WriteAllBytes(Path.Combine(compiled.Folder, "generated.dll"), bytes.ToArray());
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var result = assembly.GetType("TypedFixture.Entry")!.GetMethod("Run")!.CreateDelegate<Func<string>>()();
+        if (compiled.Folder != null)
+            File.WriteAllText(Path.Combine(compiled.Folder, "runtime.json"), result);
+        using var json = JsonDocument.Parse(result);
+        Assert.Equal(6, json.RootElement.GetProperty("dispatches").GetInt32());
     }
 
     [Fact]

@@ -11,7 +11,8 @@ internal sealed partial class GenerationAnalysis
     {
         var varying = new List<int>();
         for (var i = 0; i < binding.PatternMap.Length; i++)
-            if (binding.PatternMap[i] >= 0) varying.Add(i);
+            if (binding.PatternMap[i] >= 0)
+                varying.Add(i);
         var reqArgs = new string[binding.PatternMap.Length];
         for (var i = 0; i < reqArgs.Length; i++)
             reqArgs[i] = binding.PatternMap[i] >= 0 ? def.TypeParameters[i].Name : Name(binding.PatternFixed[i]);
@@ -20,11 +21,13 @@ internal sealed partial class GenerationAnalysis
         if (!isVoid)
         {
             var mapArgs = new ITypeSymbol[binding.Definition.TypeParameters.Length];
-            for (var j = 0; j < mapArgs.Length; j++) mapArgs[j] = def.TypeParameters[binding.HandlerToDef[j]];
+            for (var j = 0; j < mapArgs.Length; j++)
+                mapArgs[j] = def.TypeParameters[binding.HandlerToDef[j]];
             respDisplay = Name(Substitute(binding.ResponsePattern, binding.Definition, mapArgs, compilation));
         }
         var hArgs = new string[binding.Definition.TypeParameters.Length];
-        for (var j = 0; j < hArgs.Length; j++) hArgs[j] = def.TypeParameters[binding.HandlerToDef[j]].Name;
+        for (var j = 0; j < hArgs.Length; j++)
+            hArgs[j] = def.TypeParameters[binding.HandlerToDef[j]].Name;
         var route = new Route(def, template, binding.Definition, isVoid: isVoid, isSync: isSync) { IsOpen = true };
         foreach (var vi in varying)
         {
@@ -42,15 +45,19 @@ internal sealed partial class GenerationAnalysis
 
     private bool Covers(OpenBinding binding, INamedTypeSymbol closed)
     {
-        if (!Same(closed.OriginalDefinition, binding.RequestDefinition)) return false;
+        if (!Same(closed.OriginalDefinition, binding.RequestDefinition))
+            return false;
         var cargs = closed.TypeArguments;
-        if (cargs.Length != binding.PatternMap.Length) return false;
+        if (cargs.Length != binding.PatternMap.Length)
+            return false;
         for (var i = 0; i < binding.PatternMap.Length; i++)
         {
-            if (binding.PatternMap[i] < 0 && !Same(binding.PatternFixed[i], cargs[i])) return false;
+            if (binding.PatternMap[i] < 0 && !Same(binding.PatternFixed[i], cargs[i]))
+                return false;
         }
         var hargs = new ITypeSymbol[binding.HandlerToDef.Length];
-        for (var j = 0; j < hargs.Length; j++) hargs[j] = cargs[binding.HandlerPosition[j]];
+        for (var j = 0; j < hargs.Length; j++)
+            hargs[j] = cargs[binding.HandlerPosition[j]];
         return SatisfiesConstraints(binding.Definition, hargs, compilation);
     }
 

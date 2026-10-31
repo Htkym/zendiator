@@ -19,15 +19,26 @@ internal static class CanonicalMultiSourceEmitter
         }
         private static SyntaxToken Rename(SyntaxToken token, string value) => SyntaxFactory.Identifier(token.LeadingTrivia, value, token.TrailingTrivia);
         public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node)
-        { var result = (MethodDeclarationSyntax)base.VisitMethodDeclaration(node)!; return node.Modifiers.Any(SyntaxKind.PrivateKeyword) && _methods.TryGetValue(node.Identifier.ValueText, out var name) ? result.WithIdentifier(Rename(result.Identifier, name)) : result; }
+        {
+            var result = (MethodDeclarationSyntax)base.VisitMethodDeclaration(node)!;
+            return node.Modifiers.Any(SyntaxKind.PrivateKeyword) && _methods.TryGetValue(node.Identifier.ValueText, out var name) ? result.WithIdentifier(Rename(result.Identifier, name)) : result;
+        }
         public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node)
-        { var result = (StructDeclarationSyntax)base.VisitStructDeclaration(node)!; return _types.TryGetValue(node.Identifier.ValueText, out var name) ? result.WithIdentifier(Rename(result.Identifier, name)) : result; }
+        {
+            var result = (StructDeclarationSyntax)base.VisitStructDeclaration(node)!;
+            return _types.TryGetValue(node.Identifier.ValueText, out var name) ? result.WithIdentifier(Rename(result.Identifier, name)) : result;
+        }
         public override SyntaxNode? VisitConstructorDeclaration(ConstructorDeclarationSyntax node)
-        { var result = (ConstructorDeclarationSyntax)base.VisitConstructorDeclaration(node)!; return _types.TryGetValue(node.Identifier.ValueText, out var name) ? result.WithIdentifier(Rename(result.Identifier, name)) : result; }
+        {
+            var result = (ConstructorDeclarationSyntax)base.VisitConstructorDeclaration(node)!;
+            return _types.TryGetValue(node.Identifier.ValueText, out var name) ? result.WithIdentifier(Rename(result.Identifier, name)) : result;
+        }
         public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
         {
-            if (node.Parent is not (QualifiedNameSyntax or AliasQualifiedNameSyntax or MemberAccessExpressionSyntax) && _types.TryGetValue(node.Identifier.ValueText, out var type)) return node.WithIdentifier(Rename(node.Identifier, type));
-            if (node.Parent is InvocationExpressionSyntax call && ReferenceEquals(call.Expression, node) && _methods.TryGetValue(node.Identifier.ValueText, out var method)) return node.WithIdentifier(Rename(node.Identifier, method));
+            if (node.Parent is not (QualifiedNameSyntax or AliasQualifiedNameSyntax or MemberAccessExpressionSyntax) && _types.TryGetValue(node.Identifier.ValueText, out var type))
+                return node.WithIdentifier(Rename(node.Identifier, type));
+            if (node.Parent is InvocationExpressionSyntax call && ReferenceEquals(call.Expression, node) && _methods.TryGetValue(node.Identifier.ValueText, out var method))
+                return node.WithIdentifier(Rename(node.Identifier, method));
             return base.VisitIdentifierName(node);
         }
         public override SyntaxNode? VisitGenericName(GenericNameSyntax node)

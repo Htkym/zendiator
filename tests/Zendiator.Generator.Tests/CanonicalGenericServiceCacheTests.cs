@@ -18,7 +18,8 @@ public sealed partial class GeneratorTests
         {
             Lookups.AddOrUpdate(serviceType, 1, static (_, count) => count + 1);
             var resolved = provider.GetService(serviceType);
-            if (resolved is not null) AfterResolution?.Invoke(serviceType, resolved);
+            if (resolved is not null)
+                AfterResolution?.Invoke(serviceType, resolved);
             return resolved;
         }
     }
@@ -91,7 +92,8 @@ public sealed partial class GeneratorTests
 
     private static void WriteGenericCacheAllocationEvidence(GenericCacheFixture fixture)
     {
-        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR"))) return;
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR")))
+            return;
         var probe = new MultiLifetimeProbe();
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton(probe);
@@ -112,7 +114,14 @@ public sealed partial class GeneratorTests
                 var before = GC.GetAllocatedBytesForCurrentThread();
                 Exercise(keys, measuredOperations);
                 var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-                samples.Add(new { keys, sample, operations = measuredOperations, managedBytes = allocated, bytesPerOperation = (double)allocated / measuredOperations });
+                samples.Add(new
+                {
+                    keys,
+                    sample,
+                    operations = measuredOperations,
+                    managedBytes = allocated,
+                    bytesPerOperation = (double)allocated / measuredOperations
+                });
             }
         }
         MultiEvidence("generic-service-cache", "allocation-0-1-4-5-keys", new
@@ -184,7 +193,8 @@ public sealed partial class GeneratorTests
                 }
                 if (type == fixture.Handlers[4] || type == fixture.Handlers[5])
                 {
-                    if (Interlocked.Increment(ref promotingActivations) == 2) promotionEntered.TrySetResult();
+                    if (Interlocked.Increment(ref promotingActivations) == 2)
+                        promotionEntered.TrySetResult();
                     Assert.True(promotionRelease.Wait(TimeSpan.FromSeconds(10)));
                 }
             };
@@ -237,7 +247,10 @@ public sealed partial class GeneratorTests
                 var pending = stalled is null ? promoters : promoters.Append(stalled);
                 await Task.WhenAll(pending).WaitAsync(TimeSpan.FromSeconds(10));
             }
-            finally { scope.Dispose(); }
+            finally
+            {
+                scope.Dispose();
+            }
         }
         Assert.Equal(probe.Created.Count, probe.Released.Count);
         Assert.All(probe.Created, receiver => Assert.Contains(probe.Released, released => ReferenceEquals(receiver, released)));
@@ -276,14 +289,21 @@ public sealed partial class GeneratorTests
                 probe.BeforeConstruct = null;
                 Assert.Equal(11, fixture.Dispatch(mediator, 0, 11));
             };
-            try { Assert.Equal(12, fixture.Dispatch(mediator, 0, 12)); }
-            finally { probe.BeforeConstruct = null; }
+            try
+            {
+                Assert.Equal(12, fixture.Dispatch(mediator, 0, 12));
+            }
+            finally
+            {
+                probe.BeforeConstruct = null;
+            }
             Assert.Equal(2, probe.Created.Count);
             first = probe.Calls[0];
             Assert.Same(probe.Created[0], first);
             Assert.NotSame(probe.Created[1], first);
             Assert.All(probe.Calls, receiver => Assert.Same(first, receiver));
-            for (var key = 1; key <= 4; key++) Assert.Equal(key, fixture.Dispatch(mediator, key, key));
+            for (var key = 1; key <= 4; key++)
+                Assert.Equal(key, fixture.Dispatch(mediator, key, key));
             Assert.Equal(13, fixture.Dispatch(mediator, 0, 13));
             Assert.Same(first, probe.Calls[^1]);
             Assert.Equal(3, tracked.Lookups[fixture.Handlers[0]]);

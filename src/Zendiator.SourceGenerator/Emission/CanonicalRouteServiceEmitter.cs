@@ -32,7 +32,8 @@ internal static class CanonicalRouteServiceEmitter
             access.Expression.ToString() != "global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions" ||
             access.Name.Identifier.ValueText != "GetRequiredService" ||
             call.ArgumentList.Arguments.FirstOrDefault()?.Expression is not IdentifierNameSyntax provider ||
-            provider.Identifier.ValueText != receiver) return null;
+            provider.Identifier.ValueText != receiver)
+            return null;
         return access.Name is GenericNameSyntax generic && generic.TypeArgumentList.Arguments.Count == 1 && call.ArgumentList.Arguments.Count == 1
             ? generic.TypeArgumentList.Arguments[0]
             : call.ArgumentList.Arguments.Count == 2 && call.ArgumentList.Arguments[1].Expression is TypeOfExpressionSyntax of ? of.Type : null;
@@ -47,7 +48,8 @@ internal static class CanonicalRouteServiceEmitter
         var fragment = Fragment(root, ns, mediator, registrar, file.BoxedDependencies, file.LazyClosedServiceCache);
         var b = CanonicalSplitSourceEmitter.Header(fragment.Externs);
         b.Append("namespace ").Append(fragment.Namespace).AppendLine(" {");
-        foreach (var member in ns.Members.Where(m => m != mediator && m != registrar)) b.AppendLine(member.ToFullString());
+        foreach (var member in ns.Members.Where(m => m != mediator && m != registrar))
+            b.AppendLine(member.ToFullString());
         CanonicalSplitSourceEmitter.Mediator(b, fragment.Dependencies, fragment.LazyClosedServiceCache, Route(ns, mediator));
         b.AppendLine(fragment.Registrar).AppendLine("}");
         return CanonicalSplitSourceEmitter.File(file.HintName, b.ToString(), root, ns, mediator, fragment);
@@ -69,7 +71,8 @@ internal static class CanonicalRouteServiceEmitter
         {
             if (file.Api != null)
             {
-                foreach (var helper in file.StreamHelpers) connected.Add((file.Api.Namespace, helper));
+                foreach (var helper in file.StreamHelpers)
+                    connected.Add((file.Api.Namespace, helper));
                 continue;
             }
             var root = CSharpSyntaxTree.ParseText(file.Source).GetCompilationUnitRoot();
@@ -93,10 +96,14 @@ internal static class CanonicalRouteServiceEmitter
     internal static CanonicalSourceFile Stream(CanonicalSourceFile file, EquatableArray<CanonicalStreamResolverConnection> connected)
     {
         var selected = connected.SingleOrDefault(c => c.HintName == file.HintName);
-        if (selected == null) return file;
+        if (selected == null)
+            return file;
         var root = CSharpSyntaxTree.ParseText(file.Source).GetCompilationUnitRoot();
         var rewritten = new StreamServices(selected.Dependencies.Where(type => !type.Open).Select(type => SyntaxFactory.ParseTypeName(type.TypeName))).Visit(root)!;
-        return file with { Source = rewritten.NormalizeWhitespace().ToFullString() };
+        return file with
+        {
+            Source = rewritten.NormalizeWhitespace().ToFullString()
+        };
     }
 
     private sealed class StreamServices(IEnumerable<TypeSyntax> closed) : CSharpSyntaxRewriter
@@ -174,7 +181,8 @@ internal static class CanonicalRouteServiceEmitter
         b.AppendLine("object? global::System.IServiceProvider.GetService(global::System.Type serviceType) {");
         foreach (var type in closed)
             b.AppendLine("if (serviceType == typeof(" + type.TypeName + ")) return Service_" + CanonicalSplitSourceEmitter.Id(type.TypeName) + "();");
-        if (open.Length != 0) b.AppendLine($$"""
+        if (open.Length != 0)
+            b.AppendLine($$"""
             if (serviceType.IsConstructedGenericType && ({{string.Join(" || ", open.Select(t => "serviceType.GetGenericTypeDefinition() == typeof(" + t.TypeName + ")"))}})) {
                 return GenericService(serviceType);
             }

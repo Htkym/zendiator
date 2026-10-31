@@ -27,9 +27,13 @@ public sealed partial class GeneratorTests
             }
             """;
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "MediatorValueDispatch_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var result = assembly.GetType("App.GenericDispatchCases")!.GetMethod("Mutable")!.Invoke(null, null);
         Assert.Equal(new[] { 1, 1 }, Assert.IsType<int[]>(result));
     }
@@ -52,10 +56,15 @@ public sealed partial class GeneratorTests
             }
             """;
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "MediatorDispatch_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         Assert.Contains(driver.GetRunResult().Results.Single().GeneratedSources, f => f.HintName.StartsWith("Zendiator.Dispatch.", StringComparison.Ordinal));
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var cases = assembly.GetType("App.DispatchCases")!;
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var cases = assembly.GetType("App.DispatchCases")!;
         Assert.Equal(99, await (Task<int>)cases.GetMethod("Custom")!.Invoke(null, null)!);
         Assert.Equal(17, cases.GetMethod("Unrelated")!.Invoke(null, null));
         await Assert.ThrowsAsync<NullReferenceException>(() => (Task<int>)cases.GetMethod("Null")!.Invoke(null, null)!);
@@ -81,9 +90,13 @@ public sealed partial class GeneratorTests
             }
             """;
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "MediatorProviderOverload_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         Assert.Equal(17, assembly.GetType("App.OverloadCases")!.GetMethod("Unrelated")!.Invoke(null, null));
     }
 }

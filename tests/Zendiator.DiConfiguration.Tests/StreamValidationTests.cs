@@ -28,7 +28,8 @@ public sealed class StreamValidationTests
     private static async Task<int[]> Read(IAsyncEnumerable<int> stream)
     {
         var values = new List<int>();
-        await foreach (var value in stream) values.Add(value);
+        await foreach (var value in stream)
+            values.Add(value);
         return values.ToArray();
     }
 
@@ -141,7 +142,10 @@ public sealed class StreamValidationTests
             Assert.Equal(0, trace.FirstDisposals);
             Assert.Equal(0, trace.LastDisposals);
         }
-        finally { await scope.DisposeAsync(); }
+        finally
+        {
+            await scope.DisposeAsync();
+        }
         Assert.Equal(2, trace.FirstDisposals);
         Assert.Equal(2, trace.MiddleDisposals);
         Assert.Equal(2, trace.LastDisposals);

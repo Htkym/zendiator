@@ -12,7 +12,8 @@ public sealed partial class GeneratorTests
 {
     private static string ScopedObserverModule(bool isVoid)
     {
-        var ns = isVoid ? "ScopedVoid" : "ScopedResponse"; var ret = isVoid ? "void" : "int";
+        var ns = isVoid ? "ScopedVoid" : "ScopedResponse";
+        var ret = isVoid ? "void" : "int";
         var success = isVoid ? "IScopedSendSuccessObserver<Request>" : "IScopedSendResponseObserver<Request,int>";
         return $$"""
             namespace {{ns}} {
@@ -141,57 +142,136 @@ public sealed partial class GeneratorTests
         """;
 
     private static string? ScopedEvidenceFolder(string name)
-    { var path = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR"); if (string.IsNullOrEmpty(path)) return null; path = Path.Combine(path, "scoped-send-" + name); Directory.CreateDirectory(path); return path; }
+    {
+        var path = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
+        if (string.IsNullOrEmpty(path))
+            return null;
+        path = Path.Combine(path, "scoped-send-" + name);
+        Directory.CreateDirectory(path);
+        return path;
+    }
 
     private static void AssertScopedObserverOutput(Compilation output, GeneratorDriver driver)
     {
         foreach (var ns in new[] { "ScopedResponse", "ScopedVoid" })
         {
-            var api = output.GetTypeByMetadataName(ns + ".Generated.Composition.IZendiator"); Assert.NotNull(api);
-            var send = Assert.Single(api.GetMembers("Send").OfType<IMethodSymbol>()); Assert.Equal(ScopedKind.ScopedValue, send.Parameters[0].ScopedKind); Assert.True(send.Parameters[0].Type.IsRefLikeType);
+            var api = output.GetTypeByMetadataName(ns + ".Generated.Composition.IZendiator");
+            Assert.NotNull(api);
+            var send = Assert.Single(api.GetMembers("Send").OfType<IMethodSymbol>());
+            Assert.Equal(ScopedKind.ScopedValue, send.Parameters[0].ScopedKind);
+            Assert.True(send.Parameters[0].Type.IsRefLikeType);
             var mediator = output.GetTypeByMetadataName(ns + ".Generated.Composition.Zendiator")!;
             var publicMethod = Assert.Single(mediator.GetMembers("Send").OfType<IMethodSymbol>());
             var target = CanonicalRouteEntry(output, publicMethod);
-            Assert.All(new[] { publicMethod, target }, m => { Assert.Equal(ScopedKind.ScopedValue, m.Parameters[0].ScopedKind); Assert.True(m.Parameters[0].Type.IsRefLikeType); });
+            Assert.All(new[] { publicMethod, target }, m =>
+            {
+                Assert.Equal(ScopedKind.ScopedValue, m.Parameters[0].ScopedKind);
+                Assert.True(m.Parameters[0].Type.IsRefLikeType);
+            });
             Assert.All(new[] { mediator, target.ContainingType }.SelectMany(t => t.GetMembers().OfType<IFieldSymbol>()), f => Assert.False(f.Type.IsRefLikeType));
             var observer = output.GetTypeByMetadataName(ns + ".Observer")!;
-            Assert.All(observer.AllInterfaces.Where(i => i.Name.StartsWith("IScopedSend", StringComparison.Ordinal)).SelectMany(i => i.GetMembers().OfType<IMethodSymbol>()), m => { Assert.True(m.ReturnsVoid); Assert.Equal(ScopedKind.ScopedValue, m.Parameters[0].ScopedKind); });
+            Assert.All(observer.AllInterfaces.Where(i => i.Name.StartsWith("IScopedSend", StringComparison.Ordinal)).SelectMany(i => i.GetMembers().OfType<IMethodSymbol>()), m =>
+            {
+                Assert.True(m.ReturnsVoid);
+                Assert.Equal(ScopedKind.ScopedValue, m.Parameters[0].ScopedKind);
+            });
         }
-        foreach (var ns in new[] { "OldClass", "OldValue" }) Assert.NotNull(output.GetTypeByMetadataName(ns + ".Generated.Composition.IZendiator"));
+        foreach (var ns in new[] { "OldClass", "OldValue" })
+            Assert.NotNull(output.GetTypeByMetadataName(ns + ".Generated.Composition.IZendiator"));
         var catalog = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single().TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
-        var routes = catalog.Compositions.Where(c => c.Key is "ScopedResponse" or "ScopedVoid").SelectMany(c => c.Pipelines).ToArray(); Assert.Equal(2, routes.Length);
-        Assert.All(routes, r => { Assert.Equal(BoundRequestShape.ClosedRefLike, r.RequestShape); var stage = Assert.Single(r.Stages); Assert.NotNull(stage.ScopedObserver); Assert.Null(stage.SyncEmission); Assert.Null(stage.Capabilities); Assert.All(stage.Callbacks, c => { Assert.True(CanonicalScopedSyncNormalizer.IsObservation(c.Phase)); Assert.Equal("ScopedValue", c.Parameters[0].ScopedKind); }); });
-        var registrars = output.SyntaxTrees.SelectMany(t => t.GetRoot().DescendantNodes().OfType<ClassDeclarationSyntax>()).Where(c => c.Identifier.ValueText == "ZendiatorGeneratedRegistrar" && c.Ancestors().OfType<NamespaceDeclarationSyntax>().Any(n => n.Name.ToString().StartsWith("ScopedResponse.Generated.", StringComparison.Ordinal) || n.Name.ToString().StartsWith("ScopedVoid.Generated.", StringComparison.Ordinal))).ToArray(); Assert.Equal(2, registrars.Length);
+        var routes = catalog.Compositions.Where(c => c.Key is "ScopedResponse" or "ScopedVoid").SelectMany(c => c.Pipelines).ToArray();
+        Assert.Equal(2, routes.Length);
+        Assert.All(routes, r =>
+        {
+            Assert.Equal(BoundRequestShape.ClosedRefLike, r.RequestShape);
+            var stage = Assert.Single(r.Stages);
+            Assert.NotNull(stage.ScopedObserver);
+            Assert.Null(stage.SyncEmission);
+            Assert.Null(stage.Capabilities);
+            Assert.All(stage.Callbacks, c =>
+            {
+                Assert.True(CanonicalScopedSyncNormalizer.IsObservation(c.Phase));
+                Assert.Equal("ScopedValue", c.Parameters[0].ScopedKind);
+            });
+        });
+        var registrars = output.SyntaxTrees.SelectMany(t => t.GetRoot().DescendantNodes().OfType<ClassDeclarationSyntax>()).Where(c => c.Identifier.ValueText == "ZendiatorGeneratedRegistrar" && c.Ancestors().OfType<NamespaceDeclarationSyntax>().Any(n => n.Name.ToString().StartsWith("ScopedResponse.Generated.", StringComparison.Ordinal) || n.Name.ToString().StartsWith("ScopedVoid.Generated.", StringComparison.Ordinal))).ToArray();
+        Assert.Equal(2, registrars.Length);
         Assert.All(registrars.SelectMany(r => r.DescendantNodes().OfType<InvocationExpressionSyntax>()).Where(i => i.Expression is MemberAccessExpressionSyntax m && m.Name.Identifier.ValueText is "Handlers" or "Pipeline"), i => Assert.IsType<TypeOfExpressionSyntax>(i.ArgumentList.Arguments[0].Expression));
     }
 
     [Fact]
     public void ScopedSendObserver_Type_registration_stackalloc_and_entered_boundaries_match_reference()
     {
-        var source = ScopedObserverSource(); var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "ScopedRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics); var folder = ScopedEvidenceFolder("runtime"); SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)); AssertScopedObserverOutput(output, driver);
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics)); if (folder != null) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray()); bytes.Position = 0;
-        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes); var result = assembly.GetType("ScopedFixture.Entry")!.GetMethod("Run")!.CreateDelegate<Func<string>>()(); if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
-        using var json = JsonDocument.Parse(result); Assert.Equal(12, json.RootElement.GetProperty("dispatches").GetInt32());
+        var source = ScopedObserverSource();
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "ScopedRuntime_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        var folder = ScopedEvidenceFolder("runtime");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        AssertScopedObserverOutput(output, driver);
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        if (folder != null)
+            File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var result = assembly.GetType("ScopedFixture.Entry")!.GetMethod("Run")!.CreateDelegate<Func<string>>()();
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), result);
+        using var json = JsonDocument.Parse(result);
+        Assert.Equal(12, json.RootElement.GetProperty("dispatches").GetInt32());
     }
 
     [Fact]
     public void ScopedSendObserver_ref_safety_compiler_errors_preserve_unrelated_generated_compositions()
     {
-        var source = ScopedObserverSource(true); var compilation = SyncCompilation(source, "ScopedNegative_" + Guid.NewGuid().ToString("N")); var safety = CSharpSyntaxTree.ParseText(ScopedCompilerSafetySource, (CSharpParseOptions)compilation.SyntaxTrees.First().Options, "compiler-safety.cs");
-        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(compilation.AddSyntaxTrees(safety), out var output, out var diagnostics); var folder = ScopedEvidenceFolder("negative"); SaveSendAllSync(folder, source, driver, output, diagnostics); if (folder != null) File.WriteAllText(Path.Combine(folder, "compiler-safety-input.cs"), ScopedCompilerSafetySource);
+        var source = ScopedObserverSource(true);
+        var compilation = SyncCompilation(source, "ScopedNegative_" + Guid.NewGuid().ToString("N"));
+        var safety = CSharpSyntaxTree.ParseText(ScopedCompilerSafetySource, (CSharpParseOptions)compilation.SyntaxTrees.First().Options, "compiler-safety.cs");
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(compilation.AddSyntaxTrees(safety), out var output, out var diagnostics);
+        var folder = ScopedEvidenceFolder("negative");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "compiler-safety-input.cs"), ScopedCompilerSafetySource);
         AssertScopedObserverOutput(output, driver);
-        foreach (var name in new[] { "StructObserver", "WrongFamily", "Multiple" }) { Assert.Null(output.GetTypeByMetadataName("ScopedRejected.Generated." + name + ".IZendiator")); Assert.Null(output.GetTypeByMetadataName("ScopedRejected.Generated." + name + ".ZendiatorGeneratedRegistrar")); }
-        Assert.NotEmpty(diagnostics); Assert.Contains(diagnostics, d => d.Id == "ZEN0034");
-        var errors = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray(); Assert.NotEmpty(errors); Assert.All(errors, e => Assert.Same(safety, e.Location.SourceTree));
+        foreach (var name in new[] { "StructObserver", "WrongFamily", "Multiple" })
+        {
+            Assert.Null(output.GetTypeByMetadataName("ScopedRejected.Generated." + name + ".IZendiator"));
+            Assert.Null(output.GetTypeByMetadataName("ScopedRejected.Generated." + name + ".ZendiatorGeneratedRegistrar"));
+        }
+        Assert.NotEmpty(diagnostics);
+        Assert.Contains(diagnostics, d => d.Id == "ZEN0034");
+        var errors = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
+        Assert.NotEmpty(errors);
+        Assert.All(errors, e => Assert.Same(safety, e.Location.SourceTree));
         foreach (var method in new[] { "Heap", "Box", "Closure", "Escape" })
         {
-            var start = ScopedCompilerSafetySource.IndexOf(method, StringComparison.Ordinal); var end = ScopedCompilerSafetySource.IndexOf(';', start); Assert.Contains(errors, e => e.Location.SourceSpan.Start >= start && e.Location.SourceSpan.Start <= end);
+            var start = ScopedCompilerSafetySource.IndexOf(method, StringComparison.Ordinal);
+            var end = ScopedCompilerSafetySource.IndexOf(';', start);
+            Assert.Contains(errors, e => e.Location.SourceSpan.Start >= start && e.Location.SourceSpan.Start <= end);
         }
         // Other declaration/body errors stop Emit before async liveness analysis. Remove only their input tree,
         // retaining every generated tree from this one Driver run, to exercise the actual await-live rejection.
-        var awaitOnly = output.RemoveSyntaxTrees(safety); Assert.Empty(awaitOnly.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
-        using var bytes = new MemoryStream(); var emitted = awaitOnly.Emit(bytes); Assert.False(emitted.Success); Assert.Contains(emitted.Diagnostics, d => d.Id == "CS4007" && d.GetMessage().Contains("Request", StringComparison.Ordinal));
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "negative-result.json"), JsonSerializer.Serialize(new { generatorInputs = 1, generatorDrivers = 1, inputSyntaxTrees = 2, compilerOnlyEmitProjection = 1, generatedTreesRetained = true, safety = errors.Select(d => new { d.Id, message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }), awaitLive = emitted.Diagnostics.Select(d => new { d.Id, message = d.GetMessage(), severity = d.Severity.ToString() }), unrelatedGeneratedCompositions = 4, rejectedCompositions = 3, dispatches = 0 }));
+        var awaitOnly = output.RemoveSyntaxTrees(safety);
+        Assert.Empty(awaitOnly.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        using var bytes = new MemoryStream();
+        var emitted = awaitOnly.Emit(bytes);
+        Assert.False(emitted.Success);
+        Assert.Contains(emitted.Diagnostics, d => d.Id == "CS4007" && d.GetMessage().Contains("Request", StringComparison.Ordinal));
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "negative-result.json"), JsonSerializer.Serialize(new
+            {
+                generatorInputs = 1,
+                generatorDrivers = 1,
+                inputSyntaxTrees = 2,
+                compilerOnlyEmitProjection = 1,
+                generatedTreesRetained = true,
+                safety = errors.Select(d => new { d.Id, message = d.GetMessage(), span = d.Location.SourceSpan.ToString() }),
+                awaitLive = emitted.Diagnostics.Select(d => new { d.Id, message = d.GetMessage(), severity = d.Severity.ToString() }),
+                unrelatedGeneratedCompositions = 4,
+                rejectedCompositions = 3,
+                dispatches = 0
+            }));
     }
 }

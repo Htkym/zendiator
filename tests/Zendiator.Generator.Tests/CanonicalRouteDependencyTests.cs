@@ -28,7 +28,8 @@ public sealed class RouteDependencyProbe
     {
         Before.Enqueue((role, receiver));
         Trace.Enqueue("before:" + role);
-        if (role == 0 && OuterError is { } failure) throw failure;
+        if (role == 0 && OuterError is { } failure)
+            throw failure;
         return new(request);
     }
 
@@ -129,10 +130,13 @@ public sealed partial class GeneratorTests
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence))
         {
-            var folder = Path.Combine(evidence, "route-dependency-" + key); Directory.CreateDirectory(folder);
+            var folder = Path.Combine(evidence, "route-dependency-" + key);
+            Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, "input.cs"), input);
-            foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
-            if (emitted.Success) File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
+            foreach (var file in generated)
+                File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
+            if (emitted.Success)
+                File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
             File.WriteAllText(Path.Combine(folder, "compile.json"), JsonSerializer.Serialize(new
             {
                 candidateOnly = true,
@@ -146,7 +150,8 @@ public sealed partial class GeneratorTests
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error));
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
         AssertCanonicalOutputRoles(generated, routes: key == "eligible" ? 2 : 1);
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var mediator = assembly.GetType("RouteCapture.Generated.Routes.Zendiator")!;
         var bridge = assembly.GetType("RouteCapture.Bridge")!;
         return new(mediator, assembly.GetType("RouteCapture.Outer")!, assembly.GetType("RouteCapture.Handler")!,
@@ -160,7 +165,10 @@ public sealed partial class GeneratorTests
 
     private static IServiceCollection RouteDependencyServices(RouteDependencyFixture fixture, RouteDependencyProbe probe)
     {
-        IServiceCollection services = new ServiceCollection(); services.AddSingleton(probe); fixture.Register(services); return services;
+        IServiceCollection services = new ServiceCollection();
+        services.AddSingleton(probe);
+        fixture.Register(services);
+        return services;
     }
 
     private static object RouteDependencyMediator(RouteDependencyFixture f, IServiceProvider provider) => provider.GetRequiredService(CanonicalEntryService(f.Mediator));
@@ -174,7 +182,8 @@ public sealed partial class GeneratorTests
     [Fact]
     public async Task Route_dependencies_capture_eagerly_per_route_and_DI_owns_unused_receivers()
     {
-        var f = RouteDependencyRuntimeFixture(); var p = new RouteDependencyProbe();
+        var f = RouteDependencyRuntimeFixture();
+        var p = new RouteDependencyProbe();
         using (var provider = RouteDependencyServices(f, p).BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
         using (var scope = provider.CreateScope())
         {
@@ -233,7 +242,9 @@ public sealed partial class GeneratorTests
     [Fact]
     public async Task Route_dependencies_do_not_publish_null_or_replace_an_outer_construction_failure_with_a_reentrant_winner()
     {
-        var f = RouteDependencyRuntimeFixture(); var nullProbe = new RouteDependencyProbe(); var attempts = 0;
+        var f = RouteDependencyRuntimeFixture();
+        var nullProbe = new RouteDependencyProbe();
+        var attempts = 0;
         var services = RouteDependencyServices(f, nullProbe);
         services.AddTransient(f.Outer, _ => ++attempts == 1 ? null! : f.New(nullProbe, 0));
         using (var provider = services.BuildServiceProvider())
@@ -253,7 +264,9 @@ public sealed partial class GeneratorTests
         }
         AssertRouteDependencyDisposal(nullProbe);
 
-        var p = new RouteDependencyProbe(); object mediatorForFactory = null!; var nativeCalls = 0;
+        var p = new RouteDependencyProbe();
+        object mediatorForFactory = null!;
+        var nativeCalls = 0;
         var outerFailure = new InvalidOperationException("outer graph fails after nested winner");
         services = RouteDependencyServices(f, p);
         services.AddTransient(f.Outer, _ =>
@@ -284,12 +297,16 @@ public sealed partial class GeneratorTests
     [Fact]
     public async Task Route_dependencies_concurrent_first_calls_invoke_one_completed_winner_and_DI_disposes_losers()
     {
-        var f = RouteDependencyRuntimeFixture(); var p = new RouteDependencyProbe();
-        using var entered = new CountdownEvent(2); using var release = new ManualResetEventSlim();
+        var f = RouteDependencyRuntimeFixture();
+        var p = new RouteDependencyProbe();
+        using var entered = new CountdownEvent(2);
+        using var release = new ManualResetEventSlim();
         var services = RouteDependencyServices(f, p);
         services.AddTransient(f.Outer, _ =>
         {
-            entered.Signal(); Assert.True(release.Wait(TimeSpan.FromSeconds(10))); return f.New(p, 0);
+            entered.Signal();
+            Assert.True(release.Wait(TimeSpan.FromSeconds(10)));
+            return f.New(p, 0);
         });
         using (var provider = services.BuildServiceProvider())
         using (var scope = provider.CreateScope())
@@ -323,8 +340,10 @@ public sealed partial class GeneratorTests
     [Fact]
     public async Task Route_dependencies_stay_inside_async_cancellation_and_caller_context_boundaries()
     {
-        var f = RouteDependencyRuntimeFixture(); var p = new RouteDependencyProbe();
-        using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
+        var f = RouteDependencyRuntimeFixture();
+        var p = new RouteDependencyProbe();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
         using (var provider = RouteDependencyServices(f, p).BuildServiceProvider())
         using (var scope = provider.CreateScope())
         {
@@ -337,7 +356,14 @@ public sealed partial class GeneratorTests
         }
 
         using var duringConstruction = new CancellationTokenSource();
-        p = new RouteDependencyProbe { DuringConstruction = role => { if (role == 0) duringConstruction.Cancel(); } };
+        p = new RouteDependencyProbe
+        {
+            DuringConstruction = role =>
+        {
+            if (role == 0)
+                duringConstruction.Cancel();
+        }
+        };
         using (var provider = RouteDependencyServices(f, p).BuildServiceProvider())
         using (var scope = provider.CreateScope())
         {
@@ -350,13 +376,19 @@ public sealed partial class GeneratorTests
         }
         AssertRouteDependencyDisposal(p);
 
-        p = new RouteDependencyProbe(); var failure = new InvalidOperationException("native construction failure");
+        p = new RouteDependencyProbe();
+        var failure = new InvalidOperationException("native construction failure");
         var services = RouteDependencyServices(f, p);
-        services.AddTransient(f.Outer, _ => { RouteDependencyProbe.Ambient.Value = "factory"; throw failure; });
+        services.AddTransient(f.Outer, _ =>
+        {
+            RouteDependencyProbe.Ambient.Value = "factory";
+            throw failure;
+        });
         var prior = RouteDependencyProbe.Ambient.Value;
         try
         {
-            using var provider = services.BuildServiceProvider(); using var scope = provider.CreateScope();
+            using var provider = services.BuildServiceProvider();
+            using var scope = provider.CreateScope();
             var mediator = RouteDependencyMediator(f, scope.ServiceProvider);
             RouteDependencyProbe.Ambient.Value = "caller";
             var operation = f.Ping(mediator, 3, default);
@@ -365,7 +397,10 @@ public sealed partial class GeneratorTests
             Assert.Equal("caller", RouteDependencyProbe.Ambient.Value);
             Assert.Empty(p.Before);
         }
-        finally { RouteDependencyProbe.Ambient.Value = prior; }
+        finally
+        {
+            RouteDependencyProbe.Ambient.Value = prior;
+        }
     }
 
     [Fact]
@@ -374,7 +409,8 @@ public sealed partial class GeneratorTests
         var eligible = RouteDependencyRuntimeFixture();
         Assert.Equal(2, eligible.Carriers.Length);
         Assert.All(eligible.Carriers, carrier => Assert.Single(carrier.GetConstructors()));
-        IServiceCollection services = new ServiceCollection(); eligible.Register(services);
+        IServiceCollection services = new ServiceCollection();
+        eligible.Register(services);
         Assert.All(eligible.Carriers, carrier => Assert.Contains(services, descriptor => descriptor.ServiceType == carrier &&
             descriptor.ImplementationType == carrier && descriptor.Lifetime == ServiceLifetime.Transient));
         foreach (var shape in new[] { "no-hook", "value-hook", "sync-before" })

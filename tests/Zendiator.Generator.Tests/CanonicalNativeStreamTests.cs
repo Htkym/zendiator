@@ -53,13 +53,15 @@ public sealed partial class GeneratorTests
         var evidence = Environment.GetEnvironmentVariable("ZENDIATOR_CANONICAL_EVIDENCE_DIR");
         if (!string.IsNullOrEmpty(evidence))
         {
-            var folder = Path.Combine(evidence, "native-stream-" + name); Directory.CreateDirectory(folder);
+            var folder = Path.Combine(evidence, "native-stream-" + name);
+            Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, "input.cs"), source);
             foreach (var file in driver.GetRunResult().Results.Single().GeneratedSources)
                 File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
             if (generatedTransform is not null)
             {
-                var transformedFolder = Path.Combine(folder, "execution-transformed"); Directory.CreateDirectory(transformedFolder);
+                var transformedFolder = Path.Combine(folder, "execution-transformed");
+                Directory.CreateDirectory(transformedFolder);
                 foreach (var file in transformedSources)
                     File.WriteAllText(Path.Combine(transformedFolder, file.Key), file.Value);
             }

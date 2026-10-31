@@ -14,24 +14,31 @@ internal static class CanonicalMultiEmissionNormalizer
             var c = catalog.Compositions[i];
             if (c.Pipelines.Count < 2 || c.GeneratedNamespace == null || c.Errors.Count != 0 || c.CompilerOwnsHandlerError ||
                 c.Facts.Count != c.Pipelines.Count || c.Facts.Any(f => f.Key != "IncompleteExecutionContract") ||
-                catalog.Compositions.Count(x => x.Identity == c.Identity || x.Key == c.Key || x.GeneratedNamespace == c.GeneratedNamespace) != 1) continue;
+                catalog.Compositions.Count(x => x.Identity == c.Identity || x.Key == c.Key || x.GeneratedNamespace == c.GeneratedNamespace) != 1)
+                continue;
             if (c.Handlers.Any(h => !c.Pipelines.Any(r => HasHandler(r, h))) ||
                 c.Pipelines.Select(r => r.Family + "|" + r.RequestRuntimeIdentity).Distinct(StringComparer.Ordinal).Count() != c.Pipelines.Count ||
                 c.Pipelines.Any(r => r.RequestShape == BoundRequestShape.ClosedRefLike ||
-                    r.ResultKind == FusionResultKind.Response && r.Handlers.Any(h => !h.ResponseContract))) continue;
+                    r.ResultKind == FusionResultKind.Response && r.Handlers.Any(h => !h.ResponseContract)))
+                continue;
             var routes = new List<CanonicalMultiRouteEmission>();
             foreach (var route in c.Pipelines)
             {
                 var graph = execution.Compositions[i].SingleOrDefault(g => g.Contract.Anchor == route.Anchor);
-                if (graph?.IsValid != true) break;
+                if (graph?.IsValid != true)
+                    break;
                 if (route.Family == BoundDispatchFamily.Stream)
                 {
                     var acceptedStream = streams == null ? null : CanonicalStreamPublicConnection.MixedRoute(catalog, c, route, streams, i);
-                    if (acceptedStream == null) break;
+                    if (acceptedStream == null)
+                        break;
                     var streamKey = c.Identity + "|" + route.Family + "|" + route.Request + "|" + route.Result;
                     routes.Add(new(streamKey, route.HandlerListOrdinal, route.PipelineListOrdinal,
                         acceptedStream.Registration, null, null, null, null)
-                    { Stream = acceptedStream, StreamStableKey = c.Identity + "|" + route.Family + "|" + route.Request });
+                    {
+                        Stream = acceptedStream,
+                        StreamStableKey = c.Identity + "|" + route.Family + "|" + route.Request
+                    });
                     continue;
                 }
                 var projected = new CompositionSelectionCatalog(new(new[] { c with {
@@ -44,14 +51,26 @@ internal static class CanonicalMultiEmissionNormalizer
                 var capability = CanonicalCapabilityEmissionNormalizer.Create(projected, graphs, sync, async, wrapper);
                 var sendAll = CanonicalSendAllSyncEmissionNormalizer.Create(projected, graphs).Compositions.SingleOrDefault();
                 var allAsync = CanonicalSendAllAsyncEmissionNormalizer.Create(projected, graphs).Compositions.SingleOrDefault();
-                var s = sync.Compositions.SingleOrDefault(); var a = async.Compositions.SingleOrDefault(); var w = wrapper.Compositions.SingleOrDefault(); var h = capability.Compositions.SingleOrDefault();
-                if ((s == null ? 0 : 1) + (a == null ? 0 : 1) + (w == null ? 0 : 1) + (h == null ? 0 : 1) + (sendAll == null ? 0 : 1) + (allAsync == null ? 0 : 1) != 1) break;
-                var registration = (s ?? (a == null ? null : CanonicalAsyncEmissionNormalizer.Registration(a)) ?? w?.Registration ?? h?.Registration ?? sendAll?.Registration ?? allAsync!.Registration) with { Index = i };
+                var s = sync.Compositions.SingleOrDefault();
+                var a = async.Compositions.SingleOrDefault();
+                var w = wrapper.Compositions.SingleOrDefault();
+                var h = capability.Compositions.SingleOrDefault();
+                if ((s == null ? 0 : 1) + (a == null ? 0 : 1) + (w == null ? 0 : 1) + (h == null ? 0 : 1) + (sendAll == null ? 0 : 1) + (allAsync == null ? 0 : 1) != 1)
+                    break;
+                var registration = (s ?? (a == null ? null : CanonicalAsyncEmissionNormalizer.Registration(a)) ?? w?.Registration ?? h?.Registration ?? sendAll?.Registration ?? allAsync!.Registration) with
+                {
+                    Index = i
+                };
                 var key = c.Identity + "|" + route.Family + "|" + route.Request + "|" + route.Result;
-                routes.Add(new(key, route.HandlerListOrdinal, route.PipelineListOrdinal, registration, s, a, w, h) { SendAllSync = sendAll, SendAllAsync = allAsync });
+                routes.Add(new(key, route.HandlerListOrdinal, route.PipelineListOrdinal, registration, s, a, w, h)
+                {
+                    SendAllSync = sendAll,
+                    SendAllAsync = allAsync
+                });
             }
             var composition = new CanonicalMultiCompositionEmission(i, c.GeneratedNamespace, new(routes));
-            if (routes.Count == c.Pipelines.Count && CanonicalRegistrationPlan.Compatible(composition)) result.Add(composition);
+            if (routes.Count == c.Pipelines.Count && CanonicalRegistrationPlan.Compatible(composition))
+                result.Add(composition);
         }
         return new(new(result));
     }
@@ -66,7 +85,11 @@ internal static class CanonicalMultiEmissionNormalizer
         model.Compositions.SelectMany(c => c.Routes.Where(r => r.Stream != null).OrderBy(r => r.Key, StringComparer.Ordinal).Select(r =>
             new CanonicalRouteText(r.Key, c.Namespace, r.Registration.Handler.RequestName, BoundDispatchFamily.Stream,
                 CanonicalStreamPublicConnection.Source(r.Stream!))
-            { StableKey = r.StreamStableKey!, BoxedDependencies = r.Stream!.BoxedDependencies, LazyClosedServiceCache = r.Stream.LazyClosedServiceCache }));
+            {
+                StableKey = r.StreamStableKey!,
+                BoxedDependencies = r.Stream!.BoxedDependencies,
+                LazyClosedServiceCache = r.Stream.LazyClosedServiceCache
+            }));
 
     internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalMultiEmissionModel model,
         EquatableArray<CanonicalSyncCallSite?> current, CancellationToken ct) =>

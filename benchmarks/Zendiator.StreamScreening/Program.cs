@@ -31,8 +31,16 @@ internal static class Program
     {
         try
         {
-            if (args is ["prepare", var directory]) { Prepare(Path.GetFullPath(directory)); return 0; }
-            if (args is ["prepare-zero", var zeroDirectory]) { Prepare(Path.GetFullPath(zeroDirectory), "zero-hook-sentinel"); return 0; }
+            if (args is ["prepare", var directory])
+            {
+                Prepare(Path.GetFullPath(directory));
+                return 0;
+            }
+            if (args is ["prepare-zero", var zeroDirectory])
+            {
+                Prepare(Path.GetFullPath(zeroDirectory), "zero-hook-sentinel");
+                return 0;
+            }
             if (args is ["run", var assembly, var shape, var launchText, var rawPath])
             {
                 if (!FixtureSources.Shapes.Contains(shape) || !int.TryParse(launchText, out var launch) || launch is < 1 or > 3)
@@ -65,21 +73,33 @@ internal static class Program
                     partialFile.Position = 0;
                     raw = await run(launch).ConfigureAwait(false);
                 }
-                finally { ScreeningRun.RawSink = null; }
+                finally
+                {
+                    ScreeningRun.RawSink = null;
+                }
                 using var document = JsonDocument.Parse(raw);
                 if (document.RootElement.GetProperty("shape").GetString() != shape)
                     throw new InvalidOperationException("Consumer shape differs.");
                 var result = JsonSerializer.Serialize(new
                 {
-                    shape, launch, consumerSha256 = pin, harnessSha256 = Hash(typeof(Program).Assembly.Location),
+                    shape,
+                    launch,
+                    consumerSha256 = pin,
+                    harnessSha256 = Hash(typeof(Program).Assembly.Location),
                     environment = new
                     {
-                        runtime = Environment.Version.ToString(), os = RuntimeInformation.OSDescription,
+                        runtime = Environment.Version.ToString(),
+                        os = RuntimeInformation.OSDescription,
                         vmBootId = File.ReadAllText("/proc/sys/kernel/random/boot_id").Trim(),
-                        architecture = RuntimeInformation.ProcessArchitecture.ToString(), processors = Environment.ProcessorCount,
-                        serverGC = System.Runtime.GCSettings.IsServerGC, tieredCompilation = 1, tieredPGO = 1, readyToRun = 0
+                        architecture = RuntimeInformation.ProcessArchitecture.ToString(),
+                        processors = Environment.ProcessorCount,
+                        serverGC = System.Runtime.GCSettings.IsServerGC,
+                        tieredCompilation = 1,
+                        tieredPGO = 1,
+                        readyToRun = 0
                     },
-                    consumer = document.RootElement.Clone(), exitCode = 0,
+                    consumer = document.RootElement.Clone(),
+                    exitCode = 0,
                     providerAndWorkerDisposalCompleted = true
                 });
                 using var output = new FileStream(rawPath, FileMode.CreateNew);
@@ -98,7 +118,8 @@ internal static class Program
 
     private static void Prepare(string directory, string? onlyShape = null)
     {
-        if (Directory.Exists(directory)) throw new IOException("Preparation root already exists.");
+        if (Directory.Exists(directory))
+            throw new IOException("Preparation root already exists.");
         Directory.CreateDirectory(directory);
         var platform = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator);
         var paths = platform.Concat(new[]
@@ -121,7 +142,8 @@ internal static class Program
             GeneratorDriver driver = CSharpGeneratorDriver.Create([new ZendiatorGenerator().AsSourceGenerator()], parseOptions: Parse);
             driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out var output, out var diagnostics);
             var generated = driver.GetRunResult().Results.Single().GeneratedSources;
-            foreach (var file in generated) File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
+            foreach (var file in generated)
+                File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
             File.WriteAllText(Path.Combine(folder, "generator-diagnostics.json"), JsonSerializer.Serialize(diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), text = d.ToString() })));
             if (diagnostics.Any(d => d.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error))
                 throw new InvalidOperationException("Unexpected SG diagnostics: " + string.Join(";", diagnostics.Select(d => d.ToString())));
@@ -132,20 +154,30 @@ internal static class Program
             output = output.AddSyntaxTrees(CSharpSyntaxTree.ParseText(bridge + entry, Parse));
             var problems = output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error).ToArray();
             File.WriteAllText(Path.Combine(folder, "compiler-diagnostics.json"), JsonSerializer.Serialize(problems.Select(d => new { d.Id, severity = d.Severity.ToString(), text = d.ToString() })));
-            if (problems.Length != 0) throw new InvalidOperationException(string.Join(";", problems.Select(d => d.ToString())));
+            if (problems.Length != 0)
+                throw new InvalidOperationException(string.Join(";", problems.Select(d => d.ToString())));
             using var dll = new FileStream(Path.Combine(folder, "consumer.dll"), FileMode.CreateNew);
             var emitted = output.Emit(dll);
-            File.WriteAllText(Path.Combine(folder, "emit-diagnostics.json"), JsonSerializer.Serialize(new { emitted.Success, diagnostics = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), text = d.ToString() }) }));
+            File.WriteAllText(Path.Combine(folder, "emit-diagnostics.json"), JsonSerializer.Serialize(new
+            {
+                emitted.Success,
+                diagnostics = emitted.Diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString(), text = d.ToString() })
+            }));
             if (!emitted.Success || emitted.Diagnostics.Any(d => d.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error))
                 throw new InvalidOperationException(string.Join(";", emitted.Diagnostics.Select(d => d.ToString())));
             dll.Dispose();
             File.WriteAllText(Path.Combine(folder, "compile.json"), JsonSerializer.Serialize(new
             {
-                shape, emitCount = 1, preflightAndMeasurementCopies = 2, productionEnabled = false, streamProtocol = "native-typed-pull-v1",
+                shape,
+                emitCount = 1,
+                preflightAndMeasurementCopies = 2,
+                productionEnabled = false,
+                streamProtocol = "native-typed-pull-v1",
                 sourceSha256 = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(source))),
                 dllSha256 = Hash(Path.Combine(folder, "consumer.dll")),
                 diagnostics = diagnostics.Select(d => new { d.Id, severity = d.Severity.ToString() }),
-                compilerWarnings = 0, compilerErrors = 0,
+                compilerWarnings = 0,
+                compilerErrors = 0,
                 references = paths.Select(path => new { path, sha256 = Hash(path) })
             }));
         }

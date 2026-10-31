@@ -47,27 +47,33 @@ internal sealed partial class GenerationAnalysis
             var matchedVoid = false;
             foreach (var route in routes)
             {
-                if (route.IsVoid) continue;
+                if (route.IsVoid)
+                    continue;
                 INamedTypeSymbol closed;
                 if (isOpenBehavior)
                 {
-                    if (!validAsync) continue;
+                    if (!validAsync)
+                        continue;
                     if (route.IsOpen)
                     {
-                        if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation)) continue;
+                        if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation))
+                            continue;
                         route.Behaviors.Add(definition);
                         route.BehaviorDisplays.Add(ClosedGenericName(definition, new[] { route.RequestDisplay, route.ResponseDisplay }));
                         route.BehaviorContractDisplays.Add($"global::Zendiator.IPipelineBehavior<{route.RequestDisplay}, {route.ResponseDisplay}>");
                         matched = true;
                         continue;
                     }
-                    if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation)) continue;
+                    if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation))
+                        continue;
                     closed = definition.Construct(route.Request, route.Response);
                 }
                 else
                 {
-                    if (!validAsync || route.IsOpen) continue;
-                    if (!Same(contracts[0].TypeArguments[0], route.Request) || !Same(contracts[0].TypeArguments[1], route.Response)) continue;
+                    if (!validAsync || route.IsOpen)
+                        continue;
+                    if (!Same(contracts[0].TypeArguments[0], route.Request) || !Same(contracts[0].TypeArguments[1], route.Response))
+                        continue;
                     closed = type;
                 }
                 route.Behaviors.Add(closed);
@@ -75,27 +81,33 @@ internal sealed partial class GenerationAnalysis
             }
             foreach (var route in routes)
             {
-                if (!route.IsVoid) continue;
+                if (!route.IsVoid)
+                    continue;
                 INamedTypeSymbol closed;
                 if (isOpenBehavior)
                 {
-                    if (!validVoid) continue;
+                    if (!validVoid)
+                        continue;
                     if (route.IsOpen)
                     {
-                        if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation)) continue;
+                        if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation))
+                            continue;
                         route.Behaviors.Add(definition);
                         route.BehaviorDisplays.Add(ClosedGenericName(definition, new[] { route.RequestDisplay }));
                         route.BehaviorContractDisplays.Add($"global::Zendiator.IPipelineBehavior<{route.RequestDisplay}>");
                         matchedVoid = true;
                         continue;
                     }
-                    if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation)) continue;
+                    if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation))
+                        continue;
                     closed = definition.Construct(route.Request);
                 }
                 else
                 {
-                    if (!validVoid || route.IsOpen) continue;
-                    if (!Same(voidContracts[0].TypeArguments[0], route.Request)) continue;
+                    if (!validVoid || route.IsOpen)
+                        continue;
+                    if (!Same(voidContracts[0].TypeArguments[0], route.Request))
+                        continue;
                     closed = type;
                 }
                 route.Behaviors.Add(closed);
@@ -106,13 +118,16 @@ internal sealed partial class GenerationAnalysis
             {
                 if (route.IsVoid)
                 {
-                    if (!validVoid) continue;
+                    if (!validVoid)
+                        continue;
                     foreach (var branch in route.Branches)
                     {
                         if (route.IsOpen)
                         {
-                            if (!isOpenBehavior) continue;
-                            if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation)) continue;
+                            if (!isOpenBehavior)
+                                continue;
+                            if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation))
+                                continue;
                             branch.Behaviors.Add(definition);
                             branch.BehaviorDisplays.Add(ClosedGenericName(definition, new[] { route.RequestDisplay }));
                             branch.BehaviorContractDisplays.Add($"global::Zendiator.IPipelineBehavior<{route.RequestDisplay}>");
@@ -120,13 +135,15 @@ internal sealed partial class GenerationAnalysis
                         }
                         else if (isOpenBehavior)
                         {
-                            if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation)) continue;
+                            if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation))
+                                continue;
                             branch.Behaviors.Add(definition.Construct(route.Request));
                             matchedMulti = true;
                         }
                         else
                         {
-                            if (!Same(voidContracts[0].TypeArguments[0], route.Request)) continue;
+                            if (!Same(voidContracts[0].TypeArguments[0], route.Request))
+                                continue;
                             branch.Behaviors.Add(type);
                             matchedMulti = true;
                         }
@@ -134,13 +151,16 @@ internal sealed partial class GenerationAnalysis
                 }
                 else
                 {
-                    if (!validAsync) continue;
+                    if (!validAsync)
+                        continue;
                     foreach (var branch in route.Branches)
                     {
                         if (route.IsOpen)
                         {
-                            if (!isOpenBehavior) continue;
-                            if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation)) continue;
+                            if (!isOpenBehavior)
+                                continue;
+                            if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation))
+                                continue;
                             branch.Behaviors.Add(definition);
                             branch.BehaviorDisplays.Add(ClosedGenericName(definition, new[] { route.RequestDisplay, route.ResponseDisplay }));
                             branch.BehaviorContractDisplays.Add($"global::Zendiator.IPipelineBehavior<{route.RequestDisplay}, {route.ResponseDisplay}>");
@@ -148,13 +168,15 @@ internal sealed partial class GenerationAnalysis
                         }
                         else if (isOpenBehavior)
                         {
-                            if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation)) continue;
+                            if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation))
+                                continue;
                             branch.Behaviors.Add(definition.Construct(route.Request, route.Response));
                             matchedMulti = true;
                         }
                         else
                         {
-                            if (!Same(contracts[0].TypeArguments[0], route.Request) || !Same(contracts[0].TypeArguments[1], route.Response)) continue;
+                            if (!Same(contracts[0].TypeArguments[0], route.Request) || !Same(contracts[0].TypeArguments[1], route.Response))
+                                continue;
                             branch.Behaviors.Add(type);
                             matchedMulti = true;
                         }
@@ -166,12 +188,16 @@ internal sealed partial class GenerationAnalysis
             {
                 if (route.IsVoid)
                 {
-                    if (!validSyncVoid) continue;
+                    if (!validSyncVoid)
+                        continue;
                     if (route.IsOpen)
                     {
-                        if (!isOpenBehavior) continue;
-                        if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation)) continue;
-                        if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType) continue;
+                        if (!isOpenBehavior)
+                            continue;
+                        if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation))
+                            continue;
+                        if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType)
+                            continue;
                         route.Behaviors.Add(definition);
                         route.BehaviorDisplays.Add(ClosedGenericName(definition, new[] { route.RequestDisplay }));
                         route.BehaviorContractDisplays.Add($"global::Zendiator.ISyncPipelineBehavior<{route.RequestDisplay}>");
@@ -179,26 +205,33 @@ internal sealed partial class GenerationAnalysis
                     }
                     else if (isOpenBehavior)
                     {
-                        if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation)) continue;
-                        if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType) continue;
+                        if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation))
+                            continue;
+                        if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType)
+                            continue;
                         route.Behaviors.Add(definition.Construct(route.Request));
                         matchedSync = true;
                     }
                     else
                     {
-                        if (!Same(syncVoidContracts[0].TypeArguments[0], route.Request)) continue;
+                        if (!Same(syncVoidContracts[0].TypeArguments[0], route.Request))
+                            continue;
                         route.Behaviors.Add(type);
                         matchedSync = true;
                     }
                 }
                 else
                 {
-                    if (!validSyncResponse) continue;
+                    if (!validSyncResponse)
+                        continue;
                     if (route.IsOpen)
                     {
-                        if (!isOpenBehavior) continue;
-                        if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation)) continue;
-                        if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType) continue;
+                        if (!isOpenBehavior)
+                            continue;
+                        if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation))
+                            continue;
+                        if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType)
+                            continue;
                         route.Behaviors.Add(definition);
                         route.BehaviorDisplays.Add(ClosedGenericName(definition, new[] { route.RequestDisplay, route.ResponseDisplay }));
                         route.BehaviorContractDisplays.Add($"global::Zendiator.ISyncPipelineBehavior<{route.RequestDisplay}, {route.ResponseDisplay}>");
@@ -206,14 +239,17 @@ internal sealed partial class GenerationAnalysis
                     }
                     else if (isOpenBehavior)
                     {
-                        if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation)) continue;
-                        if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType) continue;
+                        if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation))
+                            continue;
+                        if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType)
+                            continue;
                         route.Behaviors.Add(definition.Construct(route.Request, route.Response));
                         matchedSync = true;
                     }
                     else
                     {
-                        if (!Same(syncContracts[0].TypeArguments[0], route.Request) || !Same(syncContracts[0].TypeArguments[1], route.Response)) continue;
+                        if (!Same(syncContracts[0].TypeArguments[0], route.Request) || !Same(syncContracts[0].TypeArguments[1], route.Response))
+                            continue;
                         route.Behaviors.Add(type);
                         matchedSync = true;
                     }
@@ -223,14 +259,18 @@ internal sealed partial class GenerationAnalysis
             {
                 if (route.IsVoid)
                 {
-                    if (!validSyncVoid) continue;
+                    if (!validSyncVoid)
+                        continue;
                     foreach (var branch in route.Branches)
                     {
                         if (route.IsOpen)
                         {
-                            if (!isOpenBehavior) continue;
-                            if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation)) continue;
-                            if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType) continue;
+                            if (!isOpenBehavior)
+                                continue;
+                            if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation))
+                                continue;
+                            if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType)
+                                continue;
                             branch.Behaviors.Add(definition);
                             branch.BehaviorDisplays.Add(ClosedGenericName(definition, new[] { route.RequestDisplay }));
                             branch.BehaviorContractDisplays.Add($"global::Zendiator.ISyncPipelineBehavior<{route.RequestDisplay}>");
@@ -238,14 +278,17 @@ internal sealed partial class GenerationAnalysis
                         }
                         else if (isOpenBehavior)
                         {
-                            if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation)) continue;
-                            if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType) continue;
+                            if (!SatisfiesConstraints(definition, new[] { route.Request }, compilation))
+                                continue;
+                            if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType)
+                                continue;
                             branch.Behaviors.Add(definition.Construct(route.Request));
                             matchedSync = true;
                         }
                         else
                         {
-                            if (!Same(syncVoidContracts[0].TypeArguments[0], route.Request)) continue;
+                            if (!Same(syncVoidContracts[0].TypeArguments[0], route.Request))
+                                continue;
                             branch.Behaviors.Add(type);
                             matchedSync = true;
                         }
@@ -253,14 +296,18 @@ internal sealed partial class GenerationAnalysis
                 }
                 else
                 {
-                    if (!validSyncResponse) continue;
+                    if (!validSyncResponse)
+                        continue;
                     foreach (var branch in route.Branches)
                     {
                         if (route.IsOpen)
                         {
-                            if (!isOpenBehavior) continue;
-                            if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation)) continue;
-                            if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType) continue;
+                            if (!isOpenBehavior)
+                                continue;
+                            if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation))
+                                continue;
+                            if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType)
+                                continue;
                             branch.Behaviors.Add(definition);
                             branch.BehaviorDisplays.Add(ClosedGenericName(definition, new[] { route.RequestDisplay, route.ResponseDisplay }));
                             branch.BehaviorContractDisplays.Add($"global::Zendiator.ISyncPipelineBehavior<{route.RequestDisplay}, {route.ResponseDisplay}>");
@@ -268,14 +315,17 @@ internal sealed partial class GenerationAnalysis
                         }
                         else if (isOpenBehavior)
                         {
-                            if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation)) continue;
-                            if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType) continue;
+                            if (!SatisfiesConstraints(definition, new[] { route.Request, route.Response }, compilation))
+                                continue;
+                            if (route.Request.IsRefLikeType && !definition.TypeParameters[0].AllowsRefLikeType)
+                                continue;
                             branch.Behaviors.Add(definition.Construct(route.Request, route.Response));
                             matchedSync = true;
                         }
                         else
                         {
-                            if (!Same(syncContracts[0].TypeArguments[0], route.Request) || !Same(syncContracts[0].TypeArguments[1], route.Response)) continue;
+                            if (!Same(syncContracts[0].TypeArguments[0], route.Request) || !Same(syncContracts[0].TypeArguments[1], route.Response))
+                                continue;
                             branch.Behaviors.Add(type);
                             matchedSync = true;
                         }

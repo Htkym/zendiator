@@ -3,7 +3,10 @@ namespace Zendiator.DiConfiguration.Tests;
 // Notifications retain the legacy registration backend, separately from marked native routes.
 public sealed class MixedNotificationHandler : INotificationHandler<MixedNoteFirst>, INotificationHandler<MixedNoteSecond>
 {
-    public int NotificationResult { get; private set; }
+    public int NotificationResult
+    {
+        get; private set;
+    }
     public ValueTask HandleAsync(MixedNoteFirst notification, CancellationToken cancellationToken) => default;
     ValueTask INotificationHandler<MixedNoteSecond>.HandleAsync(MixedNoteSecond notification, CancellationToken cancellationToken)
     {

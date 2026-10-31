@@ -11,11 +11,15 @@ public sealed class AllocStreamHandler : IStreamSourceHandler<AllocStream, int, 
 public struct AllocCursor(int count, CancellationToken token) : IAsyncEnumerator<int>
 {
     private int _next;
-    public int Current { get; private set; }
+    public int Current
+    {
+        get; private set;
+    }
     public ValueTask<bool> MoveNextAsync()
     {
         token.ThrowIfCancellationRequested();
-        if (_next == count) return new(false);
+        if (_next == count)
+            return new(false);
         Current = _next++;
         return new(true);
     }

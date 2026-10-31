@@ -460,7 +460,8 @@ internal static class CanonicalStreamPendingTaskEmitter
 
     private static string Name(CanonicalStreamFallbackModel model, string name)
     {
-        while (model.Generic?.Parameters.Contains(name) == true) name = "_" + name;
+        while (model.Generic?.Parameters.Contains(name) == true)
+            name = "_" + name;
         return name;
     }
 }

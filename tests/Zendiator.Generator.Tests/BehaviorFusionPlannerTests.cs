@@ -150,9 +150,18 @@ public sealed class BehaviorFusionPlannerTests
         var input = Input(FusionDispatchKind.SendAsync, Hook("A"));
         var plan = BehaviorFusionPlanner.Create(input);
         Assert.Equal(plan, BehaviorFusionPlanner.Create(Input(FusionDispatchKind.SendAsync, Hook("A"))));
-        Assert.NotEqual(plan, BehaviorFusionPlanner.Create(input with { DeclaredStages = new(new[] { Hook("A", FusionCapabilities.Success) }) }));
-        Assert.NotEqual(plan, BehaviorFusionPlanner.Create(input with { GenericConstraints = new(new[] { "where T : class" }) }));
-        Assert.NotEqual(plan, BehaviorFusionPlanner.Create(input with { GuardSites = new(new[] { new FusionGuardSite(0, FusionSitePhase.StageEntry, FusionGuardKind.Cancellation) }) }));
+        Assert.NotEqual(plan, BehaviorFusionPlanner.Create(input with
+        {
+            DeclaredStages = new(new[] { Hook("A", FusionCapabilities.Success) })
+        }));
+        Assert.NotEqual(plan, BehaviorFusionPlanner.Create(input with
+        {
+            GenericConstraints = new(new[] { "where T : class" })
+        }));
+        Assert.NotEqual(plan, BehaviorFusionPlanner.Create(input with
+        {
+            GuardSites = new(new[] { new FusionGuardSite(0, FusionSitePhase.StageEntry, FusionGuardKind.Cancellation) })
+        }));
     }
 
     [Fact]
@@ -173,7 +182,10 @@ public sealed class BehaviorFusionPlannerTests
         };
         foreach (var (input, site) in invalidGuards)
         {
-            var plan = BehaviorFusionPlanner.Create(input with { GuardSites = new(new[] { site }) });
+            var plan = BehaviorFusionPlanner.Create(input with
+            {
+                GuardSites = new(new[] { site })
+            });
             Assert.Contains(plan.Core.DiagnosticFacts, fact => fact.Key == "UnsupportedGuardSiteCombination");
             Assert.Null(plan.Send);
             Assert.Null(plan.Stream);
@@ -184,7 +196,10 @@ public sealed class BehaviorFusionPlannerTests
             (stream, 1, FusionSitePhase.Item), (stream, 2, FusionSitePhase.FirstMove) })
         {
             var site = new FusionResolutionSite(index, phase, Type("Service"), FusionOwnership.BorrowedService);
-            var plan = BehaviorFusionPlanner.Create(input with { ResolutionSites = new(new[] { site }) });
+            var plan = BehaviorFusionPlanner.Create(input with
+            {
+                ResolutionSites = new(new[] { site })
+            });
             Assert.Contains(plan.Core.DiagnosticFacts, fact => fact.Key == "UnsupportedResolutionSiteCombination");
             Assert.Null(plan.Send);
             Assert.Null(plan.Stream);
@@ -218,7 +233,12 @@ public sealed class BehaviorFusionPlannerTests
     [Fact]
     public void Void_and_zero_hook_ref_like_sync_keep_a_typed_empty_plan()
     {
-        var input = Input(FusionDispatchKind.SendAllSyncBranch) with { Request = Type("Span", true), ResultKind = FusionResultKind.Void, Result = null };
+        var input = Input(FusionDispatchKind.SendAllSyncBranch) with
+        {
+            Request = Type("Span", true),
+            ResultKind = FusionResultKind.Void,
+            Result = null
+        };
         var plan = BehaviorFusionPlanner.Create(input);
         Assert.Empty(plan.Core.DiagnosticFacts);
         Assert.Empty(plan.Core.Segments);
@@ -234,7 +254,11 @@ public sealed class BehaviorFusionPlannerTests
         {
             foreach (var result in new[] { FusionResultKind.Response, FusionResultKind.Void })
             {
-                var input = Input(kind, Hook("A")) with { ResultKind = result, Result = result == FusionResultKind.Void ? null : Item };
+                var input = Input(kind, Hook("A")) with
+                {
+                    ResultKind = result,
+                    Result = result == FusionResultKind.Void ? null : Item
+                };
                 var plan = BehaviorFusionPlanner.Create(input);
                 Assert.Empty(plan.Core.DiagnosticFacts);
                 Assert.NotNull(plan.Send);

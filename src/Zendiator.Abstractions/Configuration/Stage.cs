@@ -24,12 +24,26 @@ public enum StageKind
 /// <summary>An explicit stage declaration. Its position in the pipeline defines order.</summary>
 public readonly record struct Stage
 {
-    private Stage(Type type, StageKind kind, Type? factoryType = null) { Type = type; Kind = kind; FactoryType = factoryType; }
+    private Stage(Type type, StageKind kind, Type? factoryType = null)
+    {
+        Type = type;
+        Kind = kind;
+        FactoryType = factoryType;
+    }
     /// <summary>Gets the declared callback type, resolved from DI or returned by FactoryType.</summary>
-    public Type? Type { get; }
+    public Type? Type
+    {
+        get;
+    }
     /// <summary>Gets the borrowed DI factory type, or null for a directly borrowed service.</summary>
-    public Type? FactoryType { get; }
-    public StageKind Kind { get; }
+    public Type? FactoryType
+    {
+        get;
+    }
+    public StageKind Kind
+    {
+        get;
+    }
     public static Stage Hook<T>() => Hook(typeof(T));
     /// <summary>Declares a session hook from one explicit Owned or Borrowed factory contract.</summary>
     public static Stage Hook<TSession, TFactory>() where TSession : class => new(typeof(TSession), StageKind.Hook, typeof(TFactory));

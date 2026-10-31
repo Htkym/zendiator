@@ -37,7 +37,8 @@ public sealed partial class GeneratorTests
         var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source), out var output, out var diagnostics);
         Assert.Equal(expectedIds.OrderBy(x => x), diagnostics.Select(d => d.Id).OrderBy(x => x));
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error && !d.Id.StartsWith("ZEN", StringComparison.Ordinal)));
-        if (expectedIds.Length != 0) AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
+        if (expectedIds.Length != 0)
+            AssertNoCanonicalOutput(driver.GetRunResult().Results.Single().GeneratedSources);
         return driver;
     }
     private static GeneratorDriver BindAcceptedSendLists(string source, int routes = 1, bool legacy = true)
@@ -185,8 +186,10 @@ public sealed partial class GeneratorTests
             public ref struct RefStage;
             public abstract class AbstractStage : ISendRequestTransform<Ping> { public Ping Before(Ping r,CancellationToken c)=>r; }
             """;
-        if (stages == "Stages()") source = source.Replace("public static class Startup {", "public static class Startup { public static Stage[] Stages()=>new[]{Stage.Hook<Last>()};");
-        if (stages == "Stage.Hook<Hidden>()") source = source.Replace("public static class Startup {", "public static class Startup { private sealed class Hidden : ISendRequestTransform<Ping> { public Ping Before(Ping r,CancellationToken c)=>r; }");
+        if (stages == "Stages()")
+            source = source.Replace("public static class Startup {", "public static class Startup { public static Stage[] Stages()=>new[]{Stage.Hook<Last>()};");
+        if (stages == "Stage.Hook<Hidden>()")
+            source = source.Replace("public static class Startup {", "public static class Startup { private sealed class Hidden : ISendRequestTransform<Ping> { public Ping Before(Ping r,CancellationToken c)=>r; }");
         BindLists(source, ids);
     }
 
@@ -253,9 +256,11 @@ public sealed partial class GeneratorTests
     public void Handler_order_cardinality_and_authoritative_sites_are_diagnosed(string body, string id)
     {
         var source = ListFixture(body) + "public sealed record Event : INotification;";
-        if (body.Contains("Event")) source = source.Replace("[GenerateZendiator] public sealed partial class Zendiator;", "");
+        if (body.Contains("Event"))
+            source = source.Replace("[GenerateZendiator] public sealed partial class Zendiator;", "");
         var driver = BindLists(source, id);
-        if (id == "ZEN0028") Assert.Single(Assert.Single(driver.GetRunResult().Diagnostics).AdditionalLocations);
+        if (id == "ZEN0028")
+            Assert.Single(Assert.Single(driver.GetRunResult().Diagnostics).AdditionalLocations);
     }
 
     [Fact]
@@ -269,7 +274,8 @@ public sealed partial class GeneratorTests
         BindLists(open, "ZEN0035");
         var internalRequest = source.Replace("public readonly record struct Ping", "internal readonly record struct Ping")
             .Replace("public sealed class Handler", "internal sealed class Handler");
-        foreach (var n in new[] { "A", "B", "C" }) internalRequest = internalRequest.Replace("public sealed class " + n, "internal sealed class " + n);
+        foreach (var n in new[] { "A", "B", "C" })
+            internalRequest = internalRequest.Replace("public sealed class " + n, "internal sealed class " + n);
         internalRequest = internalRequest.Replace("public sealed class Mixed", "internal sealed class Mixed")
             .Replace("public sealed class Last", "internal sealed class Last").Replace("public sealed class Opaque", "internal sealed class Opaque");
         BindLists(internalRequest, "ZEN0035");
@@ -281,7 +287,8 @@ public sealed partial class GeneratorTests
         var hiddenResponse = source.Replace("IRequest<int>", "IRequest<HiddenResult>").Replace("IRequestHandler<Ping,int>", "IRequestHandler<Ping,HiddenResult>")
             .Replace("ValueTask<int> HandleAsync", "ValueTask<HiddenResult> HandleAsync").Replace("=> new(1)", "=> new(new HiddenResult())")
             .Replace("public sealed class Handler", "internal sealed class Handler") + "internal sealed class HiddenResult;";
-        foreach (var n in new[] { "A", "B", "C" }) hiddenResponse = hiddenResponse.Replace("public sealed class " + n, "internal sealed class " + n);
+        foreach (var n in new[] { "A", "B", "C" })
+            hiddenResponse = hiddenResponse.Replace("public sealed class " + n, "internal sealed class " + n);
         BindLists(hiddenResponse, "ZEN0035");
     }
 
@@ -373,9 +380,11 @@ public sealed partial class GeneratorTests
                 public ValueTask<int> InvokeAsync<N>(Ping r,N n,CancellationToken c) where N:IAsyncSendContinuation<Ping,int> => n.InvokeAsync(r,c);
             }
             """;
-        if (sync) source = source.Replace("IRequest<int>", "ISyncRequest<int>").Replace("IRequestHandler<Ping,int>", "ISyncRequestHandler<Ping,int>")
+        if (sync)
+            source = source.Replace("IRequest<int>", "ISyncRequest<int>").Replace("IRequestHandler<Ping,int>", "ISyncRequestHandler<Ping,int>")
             .Replace("ValueTask<int> HandleAsync", "int Handle").Replace("=> new(1);", "=> 1;");
-        if (isVoid) source = source.Replace("IRequest<int>", "IRequest").Replace("ISyncRequest<int>", "ISyncRequest")
+        if (isVoid)
+            source = source.Replace("IRequest<int>", "IRequest").Replace("ISyncRequest<int>", "ISyncRequest")
             .Replace("IRequestHandler<Ping,int>", "IRequestHandler<Ping>").Replace("ISyncRequestHandler<Ping,int>", "ISyncRequestHandler<Ping>")
             .Replace("ValueTask<int> HandleAsync", "ValueTask HandleAsync").Replace("int Handle(", "void Handle(")
             .Replace("=> new(1);", "=> default;").Replace("=> 1;", "{}")

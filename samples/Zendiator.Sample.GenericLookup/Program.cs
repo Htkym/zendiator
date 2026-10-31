@@ -51,7 +51,10 @@ public sealed class App;
 
 public interface IEntity
 {
-    string Id { get; }
+    string Id
+    {
+        get;
+    }
 }
 
 public sealed record Product(string Id, string Name) : IEntity;

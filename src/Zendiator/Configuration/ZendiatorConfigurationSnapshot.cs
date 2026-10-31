@@ -44,45 +44,90 @@ public sealed class ZendiatorConfigurationSnapshot
     }
 
     /// <summary>Gets the generation namespace, or null for the default.</summary>
-    public string? Namespace { get; }
+    public string? Namespace
+    {
+        get;
+    }
 
-    public ServiceLifetime ServiceLifetime { get; }
+    public ServiceLifetime ServiceLifetime
+    {
+        get;
+    }
 
     /// <summary>Gets the optional Handler, Behavior and Validator registration lifetime override.</summary>
-    public ServiceLifetime? DependencyLifetime { get; }
+    public ServiceLifetime? DependencyLifetime
+    {
+        get;
+    }
 
     /// <summary>Gets marker types with their assemblies, sorted by marker type.</summary>
-    public IReadOnlyList<(string MarkerType, string Assembly)> AssemblyMarkers { get; }
+    public IReadOnlyList<(string MarkerType, string Assembly)> AssemblyMarkers
+    {
+        get;
+    }
 
     /// <summary>Gets the sorted assembly identities from direct assembly registration.</summary>
-    public IReadOnlyList<string> Assemblies { get; }
+    public IReadOnlyList<string> Assemblies
+    {
+        get;
+    }
 
     /// <summary>Gets behaviors ordered by order, then type.</summary>
-    public IReadOnlyList<(string BehaviorType, int Order)> Behaviors { get; }
+    public IReadOnlyList<(string BehaviorType, int Order)> Behaviors
+    {
+        get;
+    }
 
     /// <summary>Gets the sorted notification type names.</summary>
-    public IReadOnlyList<string> Notifications { get; }
+    public IReadOnlyList<string> Notifications
+    {
+        get;
+    }
 
     /// <summary>Gets handler orders sorted by handler type.</summary>
-    public IReadOnlyList<(string HandlerType, int Order)> HandlerOrders { get; }
+    public IReadOnlyList<(string HandlerType, int Order)> HandlerOrders
+    {
+        get;
+    }
 
     /// <summary>Gets whether marked local handlers were selected for a 0.5 composition.</summary>
-    public bool UseLocalHandlers { get; }
+    public bool UseLocalHandlers
+    {
+        get;
+    }
 
     /// <summary>Gets marker types selecting generated catalogs. Runtime records assembly identity without reading attributes.</summary>
-    public IReadOnlyList<Type> CatalogMarkers { get; }
+    public IReadOnlyList<Type> CatalogMarkers
+    {
+        get;
+    }
 
     /// <summary>Gets explicitly selected handler identities, sorted by identity.</summary>
-    public IReadOnlyList<string> Handlers { get; }
+    public IReadOnlyList<string> Handlers
+    {
+        get;
+    }
 
     /// <summary>Gets declared pipelines with their original stage order.</summary>
-    public IReadOnlyList<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)> Pipelines { get; }
+    public IReadOnlyList<(Type Request, DispatchFamily? Family, IReadOnlyList<Stage> Stages)> Pipelines
+    {
+        get;
+    }
     /// <summary>Gets authoritative route handler lists with their original order.</summary>
-    public IReadOnlyList<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)> RouteHandlers { get; }
+    public IReadOnlyList<(Type Request, DispatchFamily Family, IReadOnlyList<HandlerEntry> Handlers)> RouteHandlers
+    {
+        get;
+    }
     /// <summary>Gets explicit final item types for type-changing Stream pipelines.</summary>
-    public IReadOnlyList<(Type Request, Type Item)> StreamOutputs { get; }
+    public IReadOnlyList<(Type Request, Type Item)> StreamOutputs
+    {
+        get;
+    }
     /// <summary>Gets root Stream preprocessing lists in declaration and callback order.</summary>
-    public IReadOnlyList<(Type Request, IReadOnlyList<Type> BeforeTypes)> StreamBefore { get; }
+    public IReadOnlyList<(Type Request, IReadOnlyList<Type> BeforeTypes)> StreamBefore
+    {
+        get;
+    }
 
     /// <summary>Returns the normalized structural fingerprint. Equal configurations share one generated unit.</summary>
     public string GetFingerprint()
@@ -99,7 +144,8 @@ public sealed class ZendiatorConfigurationSnapshot
             "notifications=" + string.Join(",", Notifications),
             "orders=" + string.Join(",", HandlerOrders.Select(static entry => entry.HandlerType + ":" + entry.Order)),
         };
-        if (CatalogMarkers.Count != 0) parts.Add("catalogs=" + string.Join(",", CatalogMarkers.Select(static type => type.Assembly.FullName).OrderBy(static identity => identity, StringComparer.Ordinal)));
+        if (CatalogMarkers.Count != 0)
+            parts.Add("catalogs=" + string.Join(",", CatalogMarkers.Select(static type => type.Assembly.FullName).OrderBy(static identity => identity, StringComparer.Ordinal)));
         if (UseLocalHandlers || Handlers.Count != 0)
             parts.Add("localHandlers=" + UseLocalHandlers + ";handlers=" + string.Join(",", Handlers));
         if (Pipelines.Count != 0)

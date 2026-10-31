@@ -127,35 +127,58 @@ public sealed partial class GeneratorTests
         var compilation = SyncCompilation(source, "OpenAllVoid_" + Guid.NewGuid().ToString("N"))
             .AddSyntaxTrees(CSharpSyntaxTree.ParseText(OpenSendAllSyncSource(), SyncParseOptions));
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(compilation, out var output, out var diagnostics);
-        var folder = OpenSendAllSyncFolder("void-runtime"); SaveSendAllSync(folder, source, driver, output, diagnostics);
-        Assert.Empty(diagnostics); Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+        var folder = OpenSendAllSyncFolder("void-runtime");
+        SaveSendAllSync(folder, source, driver, output, diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         AssertOpenSendAllSyncOutput(output, driver);
-        var api = output.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.IZendiator")!; Assert.NotNull(api); Assert.False(api.IsGenericType);
+        var api = output.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.IZendiator")!;
+        Assert.NotNull(api);
+        Assert.False(api.IsGenericType);
         var mediator = output.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.Zendiator")!;
         var publicMethod = Assert.Single(mediator.GetMembers("SendAll").OfType<IMethodSymbol>());
         var implementation = CanonicalRouteEntry(output, publicMethod);
-        var branches = CanonicalEntryMethods(implementation, "Branch").ToArray(); Assert.Equal(2, branches.Length);
+        var branches = CanonicalEntryMethods(implementation, "Branch").ToArray();
+        Assert.Equal(2, branches.Length);
         foreach (var method in new[] { Assert.Single(api.GetMembers("SendAll").OfType<IMethodSymbol>()), publicMethod }.Concat(branches))
         {
-            Assert.True(method.ReturnsVoid); Assert.False(method.IsAsync); Assert.Equal(2, method.Arity);
-            Assert.All(method.TypeParameters, p => { Assert.True(p.HasReferenceTypeConstraint); Assert.True(p.HasConstructorConstraint); });
-            Assert.Contains(method.TypeParameters, p => p.ConstraintTypes.Any(t => t.Name == "ILeft")); Assert.Contains(method.TypeParameters, p => p.ConstraintTypes.Any(t => t.Name == "IRight"));
+            Assert.True(method.ReturnsVoid);
+            Assert.False(method.IsAsync);
+            Assert.Equal(2, method.Arity);
+            Assert.All(method.TypeParameters, p =>
+            {
+                Assert.True(p.HasReferenceTypeConstraint);
+                Assert.True(p.HasConstructorConstraint);
+            });
+            Assert.Contains(method.TypeParameters, p => p.ConstraintTypes.Any(t => t.Name == "ILeft"));
+            Assert.Contains(method.TypeParameters, p => p.ConstraintTypes.Any(t => t.Name == "IRight"));
         }
         var catalog = Assert.IsType<CompositionSelectionCatalog>(Assert.Single(driver.GetRunResult().Results.Single().TrackedSteps["CompositionSelectionModel"].SelectMany(s => s.Outputs)).Value);
         var route = Assert.Single(Assert.Single(catalog.Compositions, c => c.Key == "openAllVoid").Pipelines);
         var emission = Assert.Single(CanonicalSendAllSyncEmissionNormalizer.Create(catalog, CanonicalExecutionGraphNormalizer.Create(catalog)).Compositions, c => c.Registration.Namespace == "OpenAllVoid.Generated.Composition");
-        Assert.Equal(2, emission.Branches.Count); Assert.All(emission.Branches, b => { Assert.Equal(route.SendGeneric, b.Generic); Assert.Equal(route.SendOpenRegistration, b.OpenRegistration); });
+        Assert.Equal(2, emission.Branches.Count);
+        Assert.All(emission.Branches, b =>
+        {
+            Assert.Equal(route.SendGeneric, b.Generic);
+            Assert.Equal(route.SendOpenRegistration, b.OpenRegistration);
+        });
         Assert.Equal(new[] { "global::OpenAllVoid.ZHandler<,>", "global::OpenAllVoid.AHandler<,>" }, route.SendOpenRegistration!.HandlerDefinitionNames);
-        using var bytes = new MemoryStream(); var emitted = output.Emit(bytes); Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
         if (folder != null)
         {
             File.WriteAllBytes(Path.Combine(folder, "generated.dll"), bytes.ToArray());
-            for (var i = 0; i < compilation.SyntaxTrees.Count(); i++) File.WriteAllText(Path.Combine(folder, "input-" + i + ".cs"), compilation.SyntaxTrees.ElementAt(i).ToString());
+            for (var i = 0; i < compilation.SyntaxTrees.Count(); i++)
+                File.WriteAllText(Path.Combine(folder, "input-" + i + ".cs"), compilation.SyntaxTrees.ElementAt(i).ToString());
         }
-        bytes.Position = 0; var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var runtime = assembly.GetType("OpenAllVoid.Entry")!.GetMethod("Run")!.CreateDelegate<Func<string>>()();
-        if (folder != null) File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime);
-        using var json = JsonDocument.Parse(runtime); Assert.Equal(6, json.RootElement.GetProperty("dispatches").GetInt32());
+        if (folder != null)
+            File.WriteAllText(Path.Combine(folder, "runtime.json"), runtime);
+        using var json = JsonDocument.Parse(runtime);
+        Assert.Equal(6, json.RootElement.GetProperty("dispatches").GetInt32());
     }
 
     [Fact]
@@ -192,12 +215,15 @@ public sealed partial class GeneratorTests
         {
             var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(invalid, "OpenAllVoidRejected_" + name + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
             SaveSendAllSync(OpenSendAllSyncFolder("void-" + name), invalid, driver, output, diagnostics);
-            Assert.NotEmpty(diagnostics); Assert.All(diagnostics, d => Assert.Equal("ZEN0035", d.Id));
+            Assert.NotEmpty(diagnostics);
+            Assert.All(diagnostics, d => Assert.Equal("ZEN0035", d.Id));
             if (name == "unbound")
             {
-                var error = Assert.Single(diagnostics, d => invalid.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length) == "typeof(Unbound<,,>)"); Assert.Empty(error.AdditionalLocations);
+                var error = Assert.Single(diagnostics, d => invalid.Substring(d.Location.SourceSpan.Start, d.Location.SourceSpan.Length) == "typeof(Unbound<,,>)");
+                Assert.Empty(error.AdditionalLocations);
             }
-            Assert.Null(output.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.IZendiator")); Assert.Null(output.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.ZendiatorGeneratedRegistrar"));
+            Assert.Null(output.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.IZendiator"));
+            Assert.Null(output.GetTypeByMetadataName("OpenAllVoid.Generated.Composition.ZendiatorGeneratedRegistrar"));
             Assert.DoesNotContain(driver.GetRunResult().Results.Single().GeneratedSources, s => s.HintName.EndsWith("Interceptors.g.cs", StringComparison.Ordinal));
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         }

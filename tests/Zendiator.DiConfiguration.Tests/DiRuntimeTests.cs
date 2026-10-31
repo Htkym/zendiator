@@ -223,12 +223,15 @@ public sealed class DiRuntimeTests
         var stream = mediator.StreamAsync(new DiNumbers(4));
         Assert.Equal(0, DiNumbersHandler.Calls);
         var items = new List<int>();
-        await foreach (var i in stream) items.Add(i);
+        await foreach (var i in stream)
+            items.Add(i);
         Assert.Equal([0, 1, 2, 3], items);
         Assert.Equal(1, DiNumbersHandler.Calls);
         Assert.Equal(1, DiStreamBehavior<DiNumbers, int>.Calls);
         // Second enumeration re-resolves (no static leakage, per-enumeration pipeline).
-        await foreach (var _ in mediator.StreamAsync(new DiNumbers(1))) { }
+        await foreach (var _ in mediator.StreamAsync(new DiNumbers(1)))
+        {
+        }
         Assert.Equal(2, DiNumbersHandler.Calls);
     }
 }

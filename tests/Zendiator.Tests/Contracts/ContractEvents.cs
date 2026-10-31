@@ -21,15 +21,24 @@ internal sealed class ContractEvents(string family, int invocation, int branch =
         {
             var snapshot = typeof(R).IsValueType ? new ContractRequest(typeof(R), request, 0)
                 : new ContractRequest(typeof(R), null, request is null ? 0 : Id(request));
-            if (token.CanBeCanceled && !_tokens.ContainsKey(token)) _tokens.Add(token, _tokens.Count + 1);
+            if (token.CanBeCanceled && !_tokens.ContainsKey(token))
+                _tokens.Add(token, _tokens.Count + 1);
             _events.Add(new(family, branch, invocation, stage, kind, snapshot,
                 token.CanBeCanceled ? _tokens[token] : 0, error is null ? 0 : Id(error), service is null ? 0 : Id(service), resolution, Ambient.Value,
                 CultureInfo.CurrentCulture.Name, SynchronizationContext.Current?.GetType().Name, detail));
         }
     }
     private int Id(object value)
-    { if (!_objects.TryGetValue(value, out var id)) _objects.Add(value, id = _objects.Count + 1); return id; }
-    public ContractEvent[] Snapshot() { lock (_events) return [.. _events]; }
+    {
+        if (!_objects.TryGetValue(value, out var id))
+            _objects.Add(value, id = _objects.Count + 1);
+        return id;
+    }
+    public ContractEvent[] Snapshot()
+    {
+        lock (_events)
+            return [.. _events];
+    }
     public string[] Phases() => Snapshot().Select(e => e.Stage + "." + e.Kind).ToArray();
 }
 
@@ -42,22 +51,51 @@ internal static class ContractAwait
     public static async Task<VoidAwaitObservation> Observe(Func<ValueTask> call, Action? release = null)
     {
         ValueTask value;
-        try { value = call(); }
-        catch (Exception error) { return new(true, false, false, false, error); }
-        var completed = value.IsCompletedSuccessfully; var canceled = value.IsCanceled; var faulted = value.IsFaulted;
+        try
+        {
+            value = call();
+        }
+        catch (Exception error)
+        {
+            return new(true, false, false, false, error);
+        }
+        var completed = value.IsCompletedSuccessfully;
+        var canceled = value.IsCanceled;
+        var faulted = value.IsFaulted;
         release?.Invoke();
-        try { await value; return new(false, completed, canceled, faulted, null); }
-        catch (Exception error) { return new(false, completed, canceled, faulted, error); }
+        try
+        {
+            await value;
+            return new(false, completed, canceled, faulted, null);
+        }
+        catch (Exception error)
+        {
+            return new(false, completed, canceled, faulted, error);
+        }
     }
     public static async Task<AwaitObservation<T>> Observe<T>(Func<ValueTask<T>> call, Action? release = null)
     {
         ValueTask<T> value;
-        try { value = call(); }
-        catch (Exception error) { return new(true, false, false, false, default, error); }
-        var completed = value.IsCompletedSuccessfully; var canceled = value.IsCanceled; var faulted = value.IsFaulted;
+        try
+        {
+            value = call();
+        }
+        catch (Exception error)
+        {
+            return new(true, false, false, false, default, error);
+        }
+        var completed = value.IsCompletedSuccessfully;
+        var canceled = value.IsCanceled;
+        var faulted = value.IsFaulted;
         release?.Invoke();
-        try { return new(false, completed, canceled, faulted, await value, null); }
-        catch (Exception error) { return new(false, completed, canceled, faulted, default, error); }
+        try
+        {
+            return new(false, completed, canceled, faulted, await value, null);
+        }
+        catch (Exception error)
+        {
+            return new(false, completed, canceled, faulted, default, error);
+        }
     }
 }
 
@@ -73,7 +111,8 @@ internal sealed class ContractOnce<T> : IValueTaskSource<T>, IValueTaskSource
     public void Fail(Exception error) => _core.SetException(error);
     public T GetResult(short token)
     {
-        if (Interlocked.Increment(ref _consumptions) != 1) throw new InvalidOperationException("Double consumption.");
+        if (Interlocked.Increment(ref _consumptions) != 1)
+            throw new InvalidOperationException("Double consumption.");
         return _core.GetResult(token);
     }
     void IValueTaskSource.GetResult(short token) => GetResult(token);

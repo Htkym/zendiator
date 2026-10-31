@@ -31,7 +31,8 @@ internal sealed partial class CompositionListBinding
             return;
         }
         var requestName = Name(request.WithNullableAnnotation(NullableAnnotation.NotAnnotated));
-        if (request.IsUnboundGenericType) request = request.OriginalDefinition;
+        if (request.IsUnboundGenericType)
+            request = request.OriginalDefinition;
         if (arguments.Any(a => a.NameColon != null || a.RefKindKeyword != default))
         {
             Reject("UnsupportedGenerationShape", anchor, "StreamBefore requires a known request type and direct positional literal typeof entries.");
@@ -70,10 +71,12 @@ internal sealed partial class CompositionListBinding
         out EquatableArray<string> anchors)
     {
         anchors = default;
-        if (family != BoundDispatchFamily.Stream || _streamBeforeDeclarations.Count == 0) return null;
+        if (family != BoundDispatchFamily.Stream || _streamBeforeDeclarations.Count == 0)
+            return null;
         var matches = _streamBeforeDeclarations.Where(d => MatchesBeforeRequest(d.Request, request)).ToArray();
         anchors = new(matches.Select(d => d.Anchor));
-        foreach (var declaration in matches) _matchedStreamBefore.Add(declaration.Anchor);
+        foreach (var declaration in matches)
+            _matchedStreamBefore.Add(declaration.Anchor);
         return matches.Length == 1 ? matches[0] : null;
     }
 
@@ -84,7 +87,8 @@ internal sealed partial class CompositionListBinding
     private (EquatableArray<BoundStreamBeforeEmission> Calls, BoundStreamBeforeRegistration? Registration)
         BindStreamBefore(BeforeDeclaration? declaration, INamedTypeSymbol request, CanonicalStreamOpenBinding? open)
     {
-        if (declaration == null || HasDeclarationError(declaration.Anchor)) return default;
+        if (declaration == null || HasDeclarationError(declaration.Anchor))
+            return default;
         var calls = new List<BoundStreamBeforeEmission>();
         var services = new List<string>();
         var closed = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -98,7 +102,8 @@ internal sealed partial class CompositionListBinding
                 Reject("UnsupportedGenerationShape", supplied.Anchor, closure.Error!);
                 continue;
             }
-            if (!Eligible(receiver, supplied.Anchor, "StreamBefore", open: open)) continue;
+            if (!Eligible(receiver, supplied.Anchor, "StreamBefore", open: open))
+                continue;
             if (closed.TryGetValue(Key(receiver), out var prior))
             {
                 Reject("UnsupportedGenerationShape", supplied.Anchor, "StreamBefore entries close to the same service type.", prior);
@@ -106,11 +111,13 @@ internal sealed partial class CompositionListBinding
             }
             closed.Add(Key(receiver), supplied.Anchor);
             var call = BindStreamBeforeCallback(receiver, request, supplied.Anchor, open);
-            if (call == null) continue;
+            if (call == null)
+                continue;
             calls.Add(call);
             services.Add(open == null ? call.ServiceName : DefinitionName(receiver));
         }
-        if (Facts.Count != initialFacts || calls.Count != declaration.Entries.Length) return default;
+        if (Facts.Count != initialFacts || calls.Count != declaration.Entries.Length)
+            return default;
         return (new(calls), new(declaration.RequestName,
             new(declaration.Entries.Select(e => Name(e.Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated)))),
             new(services), declaration.Ordinal));

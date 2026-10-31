@@ -9,17 +9,35 @@ internal sealed record CanonicalRouteGraph(CanonicalRouteInput Input, CanonicalE
 internal sealed record CanonicalRouteBackend(CanonicalRouteGraph Route, CanonicalSyncCompositionEmission? Sync,
     CanonicalAsyncCompositionEmission? Async, CanonicalWrapperCompositionEmission? Wrapper, CanonicalCapabilityCompositionEmission? Capability)
 {
-    public CanonicalSendAllSyncCompositionEmission? SendAllSync { get; init; }
-    public CanonicalSendAllAsyncCompositionEmission? SendAllAsync { get; init; }
-    public CanonicalStreamFallbackModel? StreamCanonical { get; init; }
+    public CanonicalSendAllSyncCompositionEmission? SendAllSync
+    {
+        get; init;
+    }
+    public CanonicalSendAllAsyncCompositionEmission? SendAllAsync
+    {
+        get; init;
+    }
+    public CanonicalStreamFallbackModel? StreamCanonical
+    {
+        get; init;
+    }
 }
 internal sealed record CanonicalRouteText(string Key, string Namespace, string RequestName, BoundDispatchFamily? Family, string Source)
 {
     public string StableKey { get; init; } = "";
-    public EquatableArray<string> BoxedDependencies { get; init; }
-    public bool LazyClosedServiceCache { get; init; }
+    public EquatableArray<string> BoxedDependencies
+    {
+        get; init;
+    }
+    public bool LazyClosedServiceCache
+    {
+        get; init;
+    }
     // Candidate text must never enter the public registration/partial-route emitter.
-    public CanonicalSourceFile? StreamCanonicalFile { get; init; }
+    public CanonicalSourceFile? StreamCanonicalFile
+    {
+        get; init;
+    }
 }
 
 // Semantic binding refreshes current symbols/locations. Structural values stop unrelated graph/template work.
@@ -61,7 +79,8 @@ internal static class CanonicalRouteIncremental
     }
     internal static CanonicalRouteBackend Lower(CanonicalRouteGraph row)
     {
-        if (row.Graph == null) return new(row, null, null, null, null);
+        if (row.Graph == null)
+            return new(row, null, null, null, null);
         var catalog = new CompositionSelectionCatalog(new(new[] { row.Input.Composition }));
         var graphs = new CanonicalExecutionGraphCatalog(new(new[] { new EquatableArray<CanonicalExecutionGraphModel>(new[] { row.Graph! }) }));
         var sync = CanonicalSyncEmissionNormalizer.Create(catalog, graphs);

@@ -61,29 +61,6 @@ jobs:
         working-directory: benchmarks/Zendiator.BeforeRelayBenchmarks
         run: dotnet ./bin/Release/net10.0/Zendiator.BeforeRelayBenchmarks.dll --example
 
-      - name: Format check
-        shell: pwsh
-        run: |
-          foreach ($p in @(
-            "src/Zendiator.Abstractions/Zendiator.Abstractions.csproj",
-            "src/Zendiator/Zendiator.csproj",
-            "src/Zendiator.SourceGenerator/Zendiator.SourceGenerator.csproj",
-            "tests/Zendiator.Tests/Zendiator.Tests.csproj",
-            "tests/Zendiator.AssemblyGen.Tests/Zendiator.AssemblyGen.Tests.csproj",
-            "tests/Zendiator.Configuration.Tests/Zendiator.Configuration.Tests.csproj",
-            "tests/Zendiator.DiConfiguration.Tests/Zendiator.DiConfiguration.Tests.csproj",
-            "tests/Zendiator.Generator.Tests/Zendiator.Generator.Tests.csproj",
-            "tests/Zendiator.Allocation.Tests/Zendiator.Allocation.Tests.csproj",
-            "tests/Zendiator.CachePolicy.Tests/Zendiator.CachePolicy.Tests.csproj",
-            "samples/Zendiator.Sample.Contracts/Zendiator.Sample.Contracts.csproj",
-            "samples/Zendiator.Sample.Application/Zendiator.Sample.Application.csproj",
-            "samples/Zendiator.Sample.Host/Zendiator.Sample.Host.csproj",
-            "benchmarks/Zendiator.UseCaseBenchmarks/Zendiator.UseCaseBenchmarks.csproj",
-            "benchmarks/Zendiator.BeforeRelayBenchmarks/Zendiator.BeforeRelayBenchmarks.csproj")) {
-            dotnet format $p --verify-no-changes --no-restore
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
-
       - name: Pack
         run: |
           dotnet pack src/Zendiator.Abstractions/Zendiator.Abstractions.csproj -c Release --no-build -o artifacts/packages
@@ -91,6 +68,49 @@ jobs:
           dotnet pack src/Zendiator/Zendiator.csproj -c Release --no-build -o artifacts/packages
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           dotnet pack src/Zendiator.CodeFixes/Zendiator.CodeFixes.csproj -c Release --no-build -o artifacts/packages
+
+      - name: Restore remaining project dependencies for formatting
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$solution = Get-Content 'Zendiator.slnx' -Raw
+          $solutionProjects = @($solution.SelectNodes('//Project') | ForEach-Object { $_.Path })
+          $projects = @(git ls-files -- '*.csproj')
+          if ($LASTEXITCODE -ne 0) { throw 'Project enumeration failed' }
+          $feed = (Resolve-Path artifacts/packages).Path
+          $packages = Join-Path $env:RUNNER_TEMP 'format-consumer-packages'
+          $config = Join-Path $env:RUNNER_TEMP 'format.NuGet.Config'
+          $escapedFeed = [System.Security.SecurityElement]::Escape($feed)
+          @"
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local" value="$escapedFeed" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+          </configuration>
+          "@ | Set-Content $config -Encoding UTF8
+          foreach ($project in $projects | Where-Object { $_ -notin $solutionProjects }) {
+            [xml]$xml = Get-Content $project -Raw
+            $consumesPackage = @($xml.SelectNodes('//PackageReference') | Where-Object { $_.Include -eq 'Zendiator' }).Count -gt 0
+            if ($consumesPackage) {
+              dotnet restore $project --packages $packages --configfile $config
+            } else {
+              dotnet restore $project
+            }
+            if ($LASTEXITCODE -ne 0) { throw "Additional project restore failed: $project" }
+          }
+
+      - name: Format check
+        shell: pwsh
+        run: |
+          $projects = @(git ls-files -- '*.csproj')
+          if ($LASTEXITCODE -ne 0 -or $projects.Count -eq 0) { throw 'No tracked C# projects found' }
+          foreach ($project in $projects) {
+            dotnet format $project --verify-no-changes --no-restore
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
       - name: Verify package contents
         shell: pwsh
