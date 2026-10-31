@@ -79,7 +79,6 @@ internal sealed record BoundStreamOpenRegistration(string RequestDefinitionName,
     public string? HandlerFactoryDefinitionName { get; init; }
     public EquatableArray<string> HandlerDefinitionNames { get; init; }
 }
-// Nullable-aware identities and callable C# names are retained separately from receiver shape.
 internal sealed record BoundStreamItemType(string Identity, string Name, bool IsValueType);
 internal sealed record BoundStreamStageItems(BoundStreamItemType Input, BoundStreamItemType Output);
 internal sealed record BoundStreamItemFlow(BoundStreamItemType Source, BoundStreamItemType Final,

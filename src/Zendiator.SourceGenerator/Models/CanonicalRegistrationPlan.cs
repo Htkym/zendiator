@@ -4,7 +4,6 @@ using System.Linq;
 
 namespace Zendiator.SourceGenerator;
 
-// Registration facts stay separate from executable members and their private names.
 internal sealed record CanonicalBranchRegistration(string HandlerName, string? FactoryName);
 internal sealed record CanonicalRouteRegistration(CanonicalSyncCompositionEmission Registration, BoundDispatchFamily Family,
     int HandlerOrdinal, int PipelineOrdinal, BoundStreamOpenRegistration? Open,

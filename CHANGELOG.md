@@ -10,7 +10,6 @@
 - Let eligible plain `SendAsync` routes return the handler's original `ValueTask`. Dependency resolution and synchronous callback failures, including cancellation, can now throw during the call; synchronous ambient changes can be visible to the caller.
 - Register one Scoped `IZendiator` entry and Transient defaults for user dependencies. Each Mediator reuses captured dependencies. Eligible closed asynchronous Hook routes acquire a route-local receiver set before the first Hook, including receivers left unused by an outer failure. Transient captures can differ across routes; construction exceptions can occur earlier. Native DI retains activation and disposal ownership. Use after scope disposal is unsupported.
 - Keep closed dependency storage inline by default, with explicit `ClosedServiceCacheMode.LazyBlocks` for suitable sparse compositions. Open generic captures use a small cache before dictionary promotion. Neither layout guarantees faster dispatch for every workload.
-- Split generated outputs and share registration analysis. Some parsing and the legacy renderer remain; generation-time improvements have not been established.
 - Add the separately installed `Zendiator.CodeFixes` package for the missing-handler-marker fix and document-scoped Fix All. It does not automate semantic migration.
 
 See [getting started and migration](docs/getting-started-0.5.0.md) and

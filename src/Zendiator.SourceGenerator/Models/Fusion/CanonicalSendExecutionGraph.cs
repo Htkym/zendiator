@@ -81,7 +81,6 @@ internal sealed record CanonicalExecutionGraphModel(BoundPipelineModel Contract,
 }
 internal sealed record CanonicalExecutionGraphCatalog(EquatableArray<EquatableArray<CanonicalExecutionGraphModel>> Compositions);
 
-// Shared names carry no scheduling, completeness or ownership policy.
 internal static class SendExecutionNames
 {
     internal static SendExecutionSiteId Site(int branch, int stage, SendExecutionPhase phase) => new(branch, stage, phase);

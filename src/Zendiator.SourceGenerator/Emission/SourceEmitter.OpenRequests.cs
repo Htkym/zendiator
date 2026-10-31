@@ -6,7 +6,6 @@ internal sealed partial class SourceEmitter
 {
     private void EmitOpenRoute(StringBuilder b, EmissionRoute route, int index)
     {
-        // Each closed service type has its own lazy dependency slot on the mediator.
         var tp = string.Join(", ", route.OpenTypeParams);
         b.AppendLine($$"""
                 /// <summary>Dispatches the request through its configured pipeline.</summary>

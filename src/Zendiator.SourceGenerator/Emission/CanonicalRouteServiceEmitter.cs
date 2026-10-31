@@ -144,7 +144,6 @@ internal static class CanonicalRouteServiceEmitter
     {
         var dependencies = Dependencies(ns).ToArray();
         var boxed = new HashSet<string>(boxedDependencies.Select(type => TypeKey(SyntaxFactory.ParseTypeName(type))), StringComparer.Ordinal);
-        // CanonicalServiceResolution preserves the bound value-type flag in the nongeneric lookup shape.
         foreach (var call in mediator.DescendantNodes().OfType<InvocationExpressionSyntax>())
             if (call.Expression is MemberAccessExpressionSyntax { Name: IdentifierNameSyntax } && ServiceType(call, "_provider") is { } type)
                 boxed.Add(TypeKey(type));

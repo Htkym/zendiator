@@ -155,7 +155,6 @@ internal static class CanonicalSendGraphValidator
 
         void Compare<T>(IEnumerable<T> expected, IEnumerable<T> actual, string kind)
         {
-            // Multiset equality catches duplicates as well as missing and extra obligations.
             var remaining = expected.ToList();
             foreach (var value in actual)
             {

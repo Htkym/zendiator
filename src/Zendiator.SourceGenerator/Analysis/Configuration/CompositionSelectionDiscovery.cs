@@ -36,7 +36,6 @@ internal static class CompositionSelectionDiscovery
             if (semantic.GetSymbolInfo(invocation, ct).Symbol is not IMethodSymbol method ||
                 !Same(method.ContainingType, entryType)) continue;
             var lambda = invocation.ArgumentList.Arguments.Select(a => a.Expression).OfType<LambdaExpressionSyntax>().SingleOrDefault();
-            // During migration, old nongeneric configuration remains the legacy adapter.
             var explicitDefault = method.Arity == 0 && lambda != null && lambda.DescendantNodes().OfType<InvocationExpressionSyntax>().Any(call =>
                 semantic.GetSymbolInfo(call, ct).Symbol is IMethodSymbol operation && Same(operation.ContainingType, configuration) &&
                 operation.Name is "UseLocalHandlers" or "UseCatalogFrom" or "AddHandler" or "Pipeline" or "StreamPipeline" or "Handlers" or "StreamBefore");
@@ -90,7 +89,7 @@ internal static class CompositionSelectionDiscovery
             var catalogMarkerNames = new List<string>();
             var catalogAssemblies = new Dictionary<IAssemblySymbol, string>(SymbolEqualityComparer.Default);
             var lists = new CompositionListBinding(compilation, semantic, marked, Select, ct);
-            if (explicitDefault) SelectLocal(); // The new default composition has implicit local membership.
+            if (explicitDefault) SelectLocal(); // The default composition has implicit local membership.
             var parameter = lambda switch
             {
                 SimpleLambdaExpressionSyntax simple => simple.Parameter,

@@ -38,9 +38,8 @@ internal sealed record FusionDiagnosticFact(string Key, int StageIndex);
 internal sealed record FusionSegment(int Start, int Length);
 
 /// <summary>
-/// For an explicitly classified canonical prototype, Send stages are outer-to-inner entry
-/// order and Stream stages are source-to-consumer item order (C01). RouteKey is a local
-/// semantic label, not a persistent identity or a key for retaining source locations.
+/// For canonical prototypes, Send stages are outer-to-inner and Stream stages source-to-consumer.
+/// RouteKey is local, not a persistent identity or a key for source locations.
 /// </summary>
 internal sealed record FusionPlanInput(
     string RouteKey,
@@ -55,8 +54,7 @@ internal sealed record FusionPlanInput(
     EquatableArray<FusionResolutionSite> ResolutionSites,
     string ContextModelId)
 {
-    // Unspecified never authorizes a projection. A prototype origin is not proof of
-    // production canonical completeness; legacy wrapper order is not the C01 contract.
+    // Neither an unspecified, prototype nor legacy origin proves canonical execution guarantees.
     public FusionContractOrigin ContractOrigin { get; init; }
 }
 

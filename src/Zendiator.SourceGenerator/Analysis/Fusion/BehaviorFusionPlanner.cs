@@ -42,7 +42,6 @@ internal static class BehaviorFusionPlanner
                     EnterAfterGuardAndResolution: true, InnerStatePerContinuationInvocation: true));
             return new(core, new(core, new(scopes), input.DeclaredStages.Count), null);
         }
-        // Stream stages are ordered from source to consumer.
         var flow = segments.Select(s => new StreamItemSegment(s,
             new(Enumerable.Range(s.Start, s.Length))));
         var transitions = Enumerable.Range(0, input.DeclaredStages.Count)

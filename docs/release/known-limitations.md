@@ -131,12 +131,7 @@ protocols must not be combined into a single-version ranking. The native Zendiat
 cursor and competitors' compiler iterators are part of their complete product
 paths, so a difference cannot be attributed to dispatch alone.
 
-## Generator and CodeFix boundaries
-
-Some initial parsing, private-name/type rewriting and API projection parsing remain.
-The legacy renderer still serves features outside the canonical backend. Complete
-renderer unification and removal of all parsing have not been implemented, and the
-generation-time benefit of the changes has not been established.
+## CodeFix boundaries
 
 The optional [CodeFix package](../../src/Zendiator.CodeFixes/README.md) adds a missing
 handler marker and supports Fix All in the current document. It does not migrate

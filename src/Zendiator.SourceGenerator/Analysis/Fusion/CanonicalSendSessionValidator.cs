@@ -12,7 +12,7 @@ internal sealed record SendSessionPathEvidence(string Owner, EquatableArray<int>
 internal sealed record SendSessionInspection(EquatableArray<CanonicalExecutionGraphFact> Facts, EquatableArray<SendSessionPathEvidence> Paths);
 
 /// <summary>
-/// Executes candidate operands and conditional paths against D03/D04 ownership obligations.
+/// Checks candidate operands and conditional paths against session ownership obligations.
 /// It never calls a builder or RequiredSend*. Callee outcomes summarize separately validated inner scopes.
 /// No arbitrary factory or wrapper body is analyzed; exclusive transfer is an explicit caller contract.
 /// </summary>

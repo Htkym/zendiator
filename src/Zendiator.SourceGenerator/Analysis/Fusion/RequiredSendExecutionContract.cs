@@ -5,7 +5,7 @@ using static Zendiator.SourceGenerator.SendExecutionNames;
 namespace Zendiator.SourceGenerator;
 
 /// <summary>
-/// S01/G01 obligations derived from bound contracts, without inspecting a candidate schedule.
+/// Derives execution obligations from bound contracts, independently of a candidate schedule.
 /// The matrix walks declaration positions, independently of the builder's recursive scope traversal.
 /// </summary>
 internal sealed class RequiredSendExecutionContract
@@ -123,7 +123,6 @@ internal sealed class RequiredSendExecutionContract
         Transfers.Add(new(new(Scope(b, s), SendValueKind.InputRequest), new(Scope(b, s), SendValueKind.EffectiveRequest), Site(b, s, SendExecutionPhase.Entered), SendTransferCondition.Entered));
         Sites.Add(new(Site(b, s, SendExecutionPhase.InvokeInner), stage.Anchor, Scope(b, s), SendExecutionCondition.Always,
             BoundCompletionKind.Synchronous, null, null, SendFailureDisposition.ObserveCurrentOnceThenFinally));
-        // Presence is per capability; missing callbacks create no callback or await obligation.
         if (Has(BoundCallbackPhase.Before))
         {
             Transfers.Add(new(new(Scope(b, s), SendValueKind.BeforeResult), new(Scope(b, s), SendValueKind.EffectiveRequest), Site(b, s, SendExecutionPhase.Before), SendTransferCondition.ProducerSuccess));

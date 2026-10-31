@@ -181,7 +181,6 @@ internal sealed partial class CompositionListBinding
                 "Each route requires one authoritative Pipeline list and one authoritative Handlers list.", prior.Declaration.Anchor);
             resolved.Add((declaration, family));
         }
-        // Handler-only routes also retain their branch order. Matched lists belong to one route.
         foreach (var (declaration, family) in resolved.Where(d => !d.Declaration.HandlerList ||
             !resolved.Any(p => !p.Declaration.HandlerList && p.Family == d.Family && Key(p.Declaration.Request) == Key(d.Declaration.Request))))
         {

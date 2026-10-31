@@ -4,7 +4,7 @@ using static Zendiator.SourceGenerator.SendExecutionNames;
 
 namespace Zendiator.SourceGenerator;
 
-/// <summary>D04 requirements from explicit factory contracts; never reads a candidate or its CFG.</summary>
+/// <summary>Derives ownership requirements from factory contracts, independently of the candidate CFG.</summary>
 internal static class RequiredSendSessionContract
 {
     internal static void Append(BoundPipelineModel route, RequiredSendExecutionContract required)
