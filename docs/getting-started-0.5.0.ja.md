@@ -1,10 +1,10 @@
-# 0.5.0候補の使い方
+# 0.5.0の使い方
 
-このガイドは、未公開の0.5.0候補packageで同期処理・非同期処理・Streamを使う例です。NuGetで公開済みの0.4.0を使う場合は、[README](https://github.com/Htkym/zendiator/blob/v0.4.0/README.ja.md)を参照してください。
+このガイドは、0.5.0のpackageで同期処理・非同期処理・Streamを使う例です。NuGetで公開済みの0.4.0を使う場合は、[README](https://github.com/Htkym/zendiator/blob/v0.4.0/README.ja.md)を参照してください。
 
 ## 準備と実行
 
-.NET 10 SDKとC# 14を使います。`Zendiator`と`Zendiator.Abstractions`の候補packageを同じフォルダーに用意します。この例のバージョンは`0.5.0-u01`です。候補packageはNuGet.orgには公開していません。
+.NET 10 SDKとC# 14を使います。この例のバージョンは`0.5.0`です。NuGet.orgで公開されるまでは、同じ版のローカルビルド済み`Zendiator`と`Zendiator.Abstractions`を同じフォルダーに用意します。
 
 新しいフォルダーに、次のプロジェクトファイルと`Program.cs`を保存します。[サンプルのファイル](../samples/Zendiator.Sample.GettingStarted/)をコピーしても実行できます。Zendiatorのソースプロジェクトへの`ProjectReference`は使いません。
 
@@ -19,7 +19,7 @@
     <LangVersion>14.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ZendiatorPackageVersion Condition="'$(ZendiatorPackageVersion)' == ''">0.5.0-u01</ZendiatorPackageVersion>
+    <ZendiatorPackageVersion Condition="'$(ZendiatorPackageVersion)' == ''">0.5.0</ZendiatorPackageVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Zendiator" Version="$(ZendiatorPackageVersion)" />
@@ -271,11 +271,11 @@ dotnet build $project -c Release --no-restore -p:ZendiatorPackageVersion=$versio
 
 ## 0.4.0から移るとき
 
-0.5.0候補では、Handlerの属性と明示的な登録を使います。0.4.0のinterface実装やアセンブリ指定だけに依存した登録は、そのまま移せません。
+0.5.0では、Handlerの属性と明示的な登録を使います。0.4.0のinterface実装やアセンブリ指定だけに依存した登録は、そのまま移せません。
 
 Behaviorの並びは`Pipeline`の順序付きリストで指定します。この例のHookは、要求の変換、応答の変換、Streamの項目処理という専用の契約を実装しています。既存Behaviorのretryやcacheなどの意味を、自動でHookへ置き換えるものではありません。継続の呼び出しを制御するBehaviorを移す際は、`Stage.Wrapper<T>()`の契約と対象経路を確認してください。
 
-この例は、型引数を持たないclassのrequest、`int`または`string`の応答、`int`のStream、DIが所有するHandlerとHookを使います。ほかの型や経路を網羅する例ではありません。0.5.0候補のAPIと公開範囲は開発中です。
+この例は、型引数を持たないclassのrequest、`int`または`string`の応答、`int`のStream、DIが所有するHandlerとHookを使います。ほかの型や経路を網羅する例ではありません。更新前に[リリースノート](release/0.5.0-release-notes.ja.md)と既知の制限を確認してください。
 
 ### ジェネリック要求のWrapperと非ジェネリック要求を併用する
 
@@ -353,7 +353,7 @@ var closedResult = await mediator.SendAsync(new ClosedQuery(7), CancellationToke
 
 プロジェクト内で定義したHandlerを属性なしで明示登録すると、ZEN0035で登録箇所が示されます。ZEN0035はほかの生成条件の不備にも使います。診断文が属性不足を示している場合は、上の`AddNumbersHandler`のようにクラス宣言へ`[ZendiatorHandler]`を付けてください。
 
-`Zendiator.CodeFixes`は任意で追加するパッケージです。利用する場合は、`Zendiator`と同じ候補バージョンを用意し、プロジェクトの`ZendiatorPackageVersion`をそのバージョンに合わせてください。[導入例](../src/Zendiator.CodeFixes/README.md)のように`PrivateAssets="all"`を指定します。CodeFixの候補パッケージはNuGet.orgには公開していません。
+`Zendiator.CodeFixes`は任意で追加するパッケージです。利用する場合は、`Zendiator`と同じ候補バージョンを用意し、プロジェクトの`ZendiatorPackageVersion`をそのバージョンに合わせてください。[導入例](../src/Zendiator.CodeFixes/README.md)のように`PrivateAssets="all"`を指定します。NuGet.orgで公開されるまでは、同じ版のローカルビルド済みpackageを使ってください。
 
 CodeFixの対象は属性不足と判断できるZEN0035だけです。Fix Allの対象は現在の文書だけです。
 

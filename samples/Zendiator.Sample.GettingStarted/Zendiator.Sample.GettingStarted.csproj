@@ -5,7 +5,7 @@
     <LangVersion>14.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ZendiatorPackageVersion Condition="'$(ZendiatorPackageVersion)' == ''">0.5.0-u01</ZendiatorPackageVersion>
+    <ZendiatorPackageVersion Condition="'$(ZendiatorPackageVersion)' == ''">0.5.0</ZendiatorPackageVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Zendiator" Version="$(ZendiatorPackageVersion)" />

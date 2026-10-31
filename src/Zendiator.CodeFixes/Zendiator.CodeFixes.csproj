@@ -6,7 +6,7 @@
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <DevelopmentDependency>true</DevelopmentDependency>
     <Description>Optional C# code fixes for explicit Zendiator handler registrations.</Description>
-    <PackageReleaseNotes>Development CodeFix package. Actual IDE validation and publication are tracked separately.</PackageReleaseNotes>
+    <PackageReleaseNotes>Optional Zendiator 0.5.0 code fixes: add a missing handler marker and apply Fix All in the current document. Use matching package versions; pipeline and lifetime migration remains manual.</PackageReleaseNotes>
     <ImplicitUsings>disable</ImplicitUsings>
     <IsRoslynComponent>true</IsRoslynComponent>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>

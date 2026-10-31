@@ -41,6 +41,12 @@ jobs:
       - name: Restore
         run: dotnet restore Zendiator.slnx
 
+      - name: Verify tracked package locks
+        shell: pwsh
+        run: |
+          git diff --exit-code -- benchmarks/Zendiator.UseCaseBenchmarks/packages.lock.json benchmarks/Zendiator.BeforeRelayBenchmarks/packages.lock.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Build
         run: dotnet build Zendiator.slnx -c Release --no-restore
 
@@ -89,32 +95,9 @@ jobs:
       - name: Verify package contents
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
-          $tmp = Join-Path $env:RUNNER_TEMP "pkg-inspect"
-          Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
-          Expand-Archive "artifacts/packages/Zendiator.$version.nupkg" "$tmp/main" -Force
-          $analyzer = "$tmp/main/analyzers/dotnet/cs/Zendiator.SourceGenerator.dll"
-          if (-not (Test-Path $analyzer)) { throw "generator analyzer missing from package" }
-          $nuspec = Get-Content "$tmp/main/Zendiator.nuspec" -Raw
-          foreach ($banned in @("MessagePipe", "CodeAnalysis", "Zendiator.CodeFixes")) {
-            if ($nuspec -match $banned) { throw "banned dependency in nuspec: $banned" }
-          }
-          if ($nuspec -notmatch 'dependency id="Zendiator.Abstractions"') { throw "Abstractions dependency missing" }
-          if (Get-ChildItem "$tmp/main" -Filter Zendiator.CodeFixes.dll -Recurse) { throw "optional CodeFix assembly bundled in main package" }
-
-          Expand-Archive "artifacts/packages/Zendiator.CodeFixes.$version.nupkg" "$tmp/codefix" -Force
-          $codeFixAssembly = [IO.Path]::GetFullPath("$tmp/codefix/analyzers/dotnet/cs/Zendiator.CodeFixes.dll")
-          $codeFixDlls = @(Get-ChildItem "$tmp/codefix" -Filter *.dll -Recurse)
-          if ($codeFixDlls.Count -ne 1 -or $codeFixDlls[0].FullName -ne $codeFixAssembly) { throw "CodeFix package must contain only its C# analyzer assembly" }
-          if ((Test-Path "$tmp/codefix/lib") -or (Test-Path "$tmp/codefix/runtimes")) { throw "runtime assets in optional CodeFix package" }
-          [xml]$codeFixNuspec = Get-Content "$tmp/codefix/Zendiator.CodeFixes.nuspec" -Raw
-          if ($codeFixNuspec.SelectNodes("//*[local-name()='dependency']").Count -ne 0) { throw "dependencies in optional CodeFix package" }
-          if ($codeFixNuspec.package.metadata.developmentDependency -ne "true") { throw "CodeFix developmentDependency missing" }
-          if ($codeFixNuspec.package.metadata.readme -ne "README.md") { throw "CodeFix package readme metadata missing" }
-          $sourceReadme = (Get-FileHash "src/Zendiator.CodeFixes/README.md" -Algorithm SHA256).Hash
-          $packedReadme = (Get-FileHash "$tmp/codefix/README.md" -Algorithm SHA256).Hash
-          if ($sourceReadme -ne $packedReadme) { throw "CodeFix package readme differs from source" }
+          $sourceCommit = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/Verify-ReleasePackages.ps1 -SourceCommit $sourceCommit
 
       - name: Run sample
         run: dotnet run --project samples/Zendiator.Sample.Host -c Release --no-build

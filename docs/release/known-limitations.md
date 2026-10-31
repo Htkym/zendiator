@@ -1,10 +1,10 @@
-# Known limitations for the 0.5.0 candidate
+# Known limitations for 0.5.0
 
-0.5.0 is unreleased and changes the handler, composition and Stream contracts.
+0.5.0 changes the handler, composition and Stream contracts.
 Start with [getting started](../getting-started-0.5.0.md) and the
 [Stream migration guide](../streaming-0.5.0.ja.md). Historical 0.4.0 APIs and results
 are described in the [0.4.0 release notes](0.4.0-release-notes.md); they are not
-compatibility promises for this candidate.
+compatibility promises for 0.5.0.
 
 ## Dependency capture and lifetime
 
@@ -56,23 +56,29 @@ in explicit operation state.
 
 ## Stream ownership and use
 
-`StreamAsync` returns standard `IAsyncEnumerable<T>`. Each enumeration has an
-independent owner. Source creation and `GetAsyncEnumerator` do not acquire user
-dependencies or start handler I/O; activation begins on the first move. An
-unconsumed standalone source still allocates its first owner.
+`StreamAsync` returns standard `IAsyncEnumerable<T>`. Guarded enumerations have
+independent owners and acquire dependencies and input on the first move. A flat
+iterator route without Before, hooks, middleware or owned sessions and with two
+noncancelable tokens instead acquires its input at `GetAsyncEnumerator`. The
+producer's operation contract applies to this direct path, and the consumer must
+await disposal even after EOF or failure. Forward the actual cancellation tokens;
+do not remove cancellation to select the direct path. See the
+[input and lifetime guide](../streaming-iterators.md#choose-an-input-contract).
+An unconsumed guarded standalone source still allocates its first owner.
 
 Use each enumerator sequentially. Await a pending move before another move or
-disposal; overlapping operations throw without canceling or joining the first
-operation. Pending disposal rejects new moves and shares completion with repeated
-disposal. Cancellation cannot immediately stop I/O that ignores its token.
+disposal. On guarded paths, overlapping operations throw without canceling or
+joining the first operation; pending disposal rejects new moves and shares
+completion with repeated disposal. Cancellation cannot immediately stop I/O that
+ignores its token.
 
-`Current` is valid after a successful move until the next accepted operation. EOF,
+On guarded paths, `Current` is valid after a successful move until the next accepted operation. EOF,
 failure and disposal invalidate it. Custom cursors and `ValueTask` sources must obey
 the .NET awaiter and single-consumption contracts; duplicate continuation delivery
 and continuation registration that throws after accepting the callback are not
 supported recovery paths.
 
-Owned cursors and sessions are cleaned up once in reverse ownership order. Cleanup
+On guarded paths, owned cursors and sessions are cleaned up once in reverse ownership order. Cleanup
 failure takes precedence under ordinary `try/finally` rules. Borrowed DI services,
 the provider and sink are not disposed by the generated owner. Middleware can reopen
 its upstream only after normal EOF and completed cleanup; failure or early disposal
@@ -118,8 +124,9 @@ showed lower time and allocation in that workload. Synchronous-completion and Ea
 intervals still included no improvement; Early accepted its first input. These results
 do not establish gains for a pending source, five middleware stages, real I/O or HTTP.
 
-Historical 0.4.0 tables and limited development comparisons are not a complete
-comparison of the final 0.5.0 candidate. Results from different source versions or
+The [README comparison](../../README.md#performance) reports selected workloads
+from the measured 0.5.0 candidate, including unfavorable time and allocation
+results. Historical 0.4.0 tables and other limited comparisons are separate evidence. Results from different source versions or
 protocols must not be combined into a single-version ranking. The native Zendiator
 cursor and competitors' compiler iterators are part of their complete product
 paths, so a difference cannot be attributed to dispatch alone.

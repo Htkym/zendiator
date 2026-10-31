@@ -1,7 +1,8 @@
 # Getting started with 0.5.0
 
-0.5.0 has not been released. To use this API, obtain matching locally built
-Zendiator packages.
+Use matching 0.5.0 core packages. Before they are published to NuGet.org, obtain
+matching locally built packages and use your local package feed. See the
+[release notes](release/0.5.0-release-notes.md) before upgrading from 0.4.0.
 
 ## Run the sample
 
@@ -187,7 +188,8 @@ operations and Stream enumeration, including cleanup, have finished.
 
 ## Repair a missing handler marker
 
-Add the optional CodeFix package at the same candidate version as `Zendiator`:
+Add the optional CodeFix package at the same version as `Zendiator`. Before
+publication, restore matching locally built packages from your local feed:
 
 ```xml
 <PackageReference Include="Zendiator.CodeFixes"
