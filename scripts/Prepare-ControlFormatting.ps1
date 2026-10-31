@@ -10,6 +10,8 @@ foreach ($file in $tracked) {
     New-Item -ItemType Directory -Force (Split-Path $destination) | Out-Null
     Copy-Item $file $destination
 }
+[ordered]@{ sourceCommit = $env:GITHUB_SHA; completed = $false; state = 'incomplete-or-failed; inspect job log and reports' } | ConvertTo-Json | Set-Content (Join-Path $out 'summary.json')
+try {
 $verifier = Join-Path $env:RUNNER_TEMP 'control-format-verifier'
 Copy-Item 'scripts/FormatTokenCheck' $verifier -Recurse
 $verifierProject = Join-Path $verifier 'FormatTokenCheck.csproj'
@@ -37,12 +39,16 @@ foreach ($project in $projects) {
 foreach ($project in $projects) {
     dotnet format style $project --diagnostics IDE2001 --no-restore --verbosity normal
     if ($LASTEXITCODE -ne 0) { throw "IDE2001 formatting failed: $project" }
+    dotnet format whitespace $project --no-restore
+    if ($LASTEXITCODE -ne 0) { throw "Whitespace formatting failed: $project" }
 }
 if ($nonPilotBefore -eq (Get-FileHash $nonPilot -Algorithm SHA256).Hash) { throw 'Known non-pilot inline statements were not formatted' }
 Check-Tokens 'all-source-token-check'
 foreach ($project in $projects) {
     dotnet format style $project --diagnostics IDE2001 --no-restore --verify-no-changes
     if ($LASTEXITCODE -ne 0) { throw "IDE2001 verification failed: $project" }
+    dotnet format whitespace $project --no-restore --verify-no-changes
+    if ($LASTEXITCODE -ne 0) { throw "Whitespace verification failed: $project" }
 }
 $changed = @(git diff --name-only)
 if ($LASTEXITCODE -ne 0) { throw 'git diff failed' }
@@ -51,5 +57,11 @@ git diff --check
 if ($LASTEXITCODE -ne 0) { throw 'git diff --check failed' }
 git diff --binary --output="$out/control-format.patch" -- '*.cs'
 if ($LASTEXITCODE -ne 0) { throw 'Patch generation failed' }
-[ordered]@{ sourceCommit = $env:GITHUB_SHA; sdk = (dotnet --version); completed = $true; changedFiles = $changed; scope = 'IDE2001 only; all solution C# projects, including tests/samples/benchmarks'; tests = 'Not run: this job produces a reviewed formatting proposal, not release acceptance' } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $out 'summary.json')
+[ordered]@{ sourceCommit = $env:GITHUB_SHA; sdk = (dotnet --version); completed = $true; changedFiles = $changed; scope = 'IDE2001 plus whitespace formatting; all solution C# projects, including tests/samples/benchmarks'; tests = 'Not run: this job produces a reviewed formatting proposal, not release acceptance' } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $out 'summary.json')
 "IDE2001 proposal: $($changed.Count) changed source files; token checks passed; no commit or push." >> $env:GITHUB_STEP_SUMMARY
+
+} finally {
+    if (-not (Test-Path (Join-Path $out 'control-format.patch'))) {
+        git diff --binary --output="$out/diagnostic-partial.patch" -- '*.cs'
+    }
+}
