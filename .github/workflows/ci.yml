@@ -2,20 +2,41 @@ name: CI
 
 on:
   push:
-    branches: [main, feature/0.5.0]
+    branches: ['**']
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6.0.0
         with:
           dotnet-version: 10.0.x
+
+      - name: Record validation environment
+        shell: pwsh
+        run: |
+          "Commit: $env:GITHUB_SHA" >> $env:GITHUB_STEP_SUMMARY
+          "Run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID (attempt $env:GITHUB_RUN_ATTEMPT)" >> $env:GITHUB_STEP_SUMMARY
+          "Runner: $env:RUNNER_OS / $env:RUNNER_ARCH" >> $env:GITHUB_STEP_SUMMARY
+          dotnet --info
+          "SDK: $(dotnet --version)" >> $env:GITHUB_STEP_SUMMARY
+          dotnet --list-runtimes
 
       - name: Restore
         run: dotnet restore Zendiator.slnx
@@ -112,3 +133,12 @@ jobs:
         run: |
           $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
           ./scripts/aot-matrix-test.ps1 -PackageVersion $version -PackagesDir artifacts/packages
+
+      - name: Record validation outcome
+        if: always()
+        shell: pwsh
+        env:
+          VALIDATION_STATUS: ${{ job.status }}
+        run: |
+          "Validation: $env:VALIDATION_STATUS" >> $env:GITHUB_STEP_SUMMARY
+          "Individual results and failures: see this run's step logs. Strict performance measurement and package publication are not part of this workflow." >> $env:GITHUB_STEP_SUMMARY
