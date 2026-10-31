@@ -52,7 +52,7 @@ CodeFixを使う場合は、`Zendiator`と同じ候補版の`Zendiator.CodeFixes
 
 ## 性能比較
 
-以下は後述の対象ソースについて2026-10-31に完了した測定の観測値です。現在のブランチHEADを再測定した値ではありません。0.5.0候補の一部の処理を同じ測定環境で比較しました。各セルは **平均時間 / 割当量（B/op）** です。時間とメモリは別の指標であり、どのライブラリも条件によって結果が変わります。表は全条件を網羅していません。
+[測定対象の0.5.0候補](https://github.com/Htkym/zendiator/commit/927827653e229b01afdd8bb97c00b9093ad049ab)について、2026-10-31に一部の利用場面を同じ環境で比較しました。各セルは **平均時間 / 割当量（B/op）** です。時間とメモリは別の指標であり、表は全条件を網羅していません。
 
 |ケース|Zendiator 候補|Immediate.Handlers 4.2.0|MediatR 14.2.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
 |---|---:|---:|---:|---:|---:|---:|
@@ -66,12 +66,12 @@ CodeFixを使う場合は、`Zendiator`と同じ候補版の`Zendiator.CodeFixes
 |Stream 1024件 / Behavior 5 / 非同期|165.82 μs / 116,562 B|263.09 μs / 1,754 B|490.69 μs / 4,726 B|261.25 μs / 2,339 B|245.04 μs / 1,755 B|289.13 μs / 2,539 B|
 |Stream途中終了 / 16件入力 / Behavior 5 / 同期|415.19 ns / 1,216 B|291.92 ns / 1,104 B|813.08 ns / 3,592 B|372.38 ns / 1,688 B|308.40 ns / 1,104 B|624.94 ns / 1,808 B|
 |Stream途中終了 / 16件入力 / Behavior 5 / 非同期|1.81 μs / 1,656 B|1.96 μs / 1,752 B|2.99 μs / 4,720 B|2.08 μs / 2,336 B|1.92 μs / 1,752 B|2.37 μs / 2,536 B|
-|Behavior短絡 / 3段 / WarmDispatch|7.09 ns / 0 B|3.99 ns / 0 B|78.10 ns / 704 B|51.94 ns / 496 B|27.93 ns / 0 B|54.64 ns / 384 B|
-|H成功 / FirstSend|739.22 ns / 480 B|1.24 μs / 504 B|1.21 μs / 1,352 B|1.04 μs / 808 B|1.01 μs / 560 B|1.71 μs / 856 B|
-|H成功 / WarmSend|24.33 ns / 0 B|45.00 ns / 0 B|492.60 ns / 944 B|440.95 ns / 496 B|61.58 ns / 0 B|451.39 ns / 480 B|
-|H失敗 / ColdOuterFailure|6.54 μs / 2,520 B|8.09 μs / 3,809 B|6.55 μs / 3,448 B|5.87 μs / 3,216 B|6.00 μs / 2,968 B|9.57 μs / 4,872 B|
+|Behavior短絡 / 3段 / 繰り返し|7.09 ns / 0 B|3.99 ns / 0 B|78.10 ns / 704 B|51.94 ns / 496 B|27.93 ns / 0 B|54.64 ns / 384 B|
+|非同期Hook成功 / 初回|739.22 ns / 480 B|1.24 μs / 504 B|1.21 μs / 1,352 B|1.04 μs / 808 B|1.01 μs / 560 B|1.71 μs / 856 B|
+|非同期Hook成功 / 繰り返し|24.33 ns / 0 B|45.00 ns / 0 B|492.60 ns / 944 B|440.95 ns / 496 B|61.58 ns / 0 B|451.39 ns / 480 B|
+|非同期Hook失敗 / 初回・外側|6.54 μs / 2,520 B|8.09 μs / 3,809 B|6.55 μs / 3,448 B|5.87 μs / 3,216 B|6.00 μs / 2,968 B|9.57 μs / 4,872 B|
 
-新規scopeの行は作成・初回解決・送信・破棄を含みます。Streamの数値は1要素あたりではなく、生成・消費・後始末を含む操作全体の値です。途中終了は16件入力のうち1件を消費して停止します。同期／非同期は列挙側の完了パターンを分けています。Hは非同期Hook経路の成功・外側失敗を測るシナリオです。FirstSend、WarmSend、ColdOuterFailureは測定範囲が異なるため、これらの差を単純な例外処理コストとは解釈できません。N/Aは対象の比較結果がないことを示し、ゼロではありません。
+新規scopeの時間は作成・初回解決・送信・破棄を含みます。Streamは後始末を含む操作全体の値で、途中終了は16件入力のうち1件を消費して停止します。同期／非同期は列挙側の完了パターンを分けています。初回・繰り返し・外側Hook失敗は測定範囲が異なるため、その差を単純な例外処理コストとは解釈できません。N/Aは対象の比較結果がないことを示し、ゼロではありません。
 
 ### 結果を見る際の注意
 
@@ -85,13 +85,11 @@ CodeFixを使う場合は、`Zendiator`と同じ候補版の`Zendiator.CodeFixes
 
 ### 測定条件
 
-対象ソース: `927827653e229b01afdd8bb97c00b9093ad049ab`（0.5.0候補）。Windows 11 x64、Intel Core Ultra 7 258V、SDK 10.0.403、.NET 10.0.14、DI 10.0.12、BenchmarkDotNet 0.15.8、Release、affinity mask 1。20 warmups、12 measurements、要求iteration時間500 ms、各ケース1 launchです。
+Windows 11 x64、Intel Core Ultra 7 258V、.NET 10.0.14、BenchmarkDotNet 0.15.8、Release。ウォームアップ20回、測定12回、要求測定時間500 ms、各ケース1 launchです。測定日時はケース間で異なり、1 launchでは独立した再実行による再現性や、条件を揃えた変更前後の改善を証明できません。
 
-測定は中断前と復旧後の異なる実行時間帯に分かれています。1 launchでは独立した再実行による再現性や、厳密に制御した変更前後の改善を証明できません。数ns級の微差では、測定オーバーヘッド調整の影響を受けやすい点にも注意が必要です。Handlerは意図的に軽量にしてあり、APIやDI登録の形もライブラリ間で異なります。これらの測定結果は実アプリの起動時間やHTTP・非同期I/Oの応答時間を予測する値ではありません。標準列挙とtyped terminalも別の処理として評価してください。
+数ns級の微差はオーバーヘッド調整の影響を受けやすく、軽量な処理を使ったこの測定から実アプリの起動時間やHTTP・非同期I/Oの応答時間は予測できません。APIやDI登録の形はライブラリ間で異なり、標準列挙とtyped terminalも別の処理です。Foundatioはintercepted経路の値で、native runtimeのopen generic経路とは異なります。
 
-Foundatioの表内結果はintercepted経路による値です。この経路は別のopen generic比較で用いるnative runtime経路とは異なります。過去の0.4.0結果はこの表に混ぜておらず、この表は0.5.0候補の全構成を代表する順位でもありません。
-
-測定範囲の読み方は[ベンチマークの説明](benchmarks/README.md#read-the-comparison)と[Streamの比較境界](benchmarks/README.md#stream-comparison-boundaries)を参照してください。そこにある0.4.0の表・旧測定データは今回の数値の出典ではありません。現在のfixtureを実行するだけでは、ここに固定したソース・依存版・測定順の一致も保証されません。
+[測定範囲](benchmarks/README.md#read-the-comparison)と[Streamの比較](benchmarks/README.md#stream-comparison-boundaries)も参照してください。リンク先の過去の0.4.0データは別の測定です。
 
 ## 制限と移行
 
@@ -99,4 +97,5 @@ Foundatioの表内結果はintercepted経路による値です。この経路は
 - [0.4.0リリースノート](docs/release/0.4.0-release-notes.ja.md)
 - [公開済み0.4.0の使い方](https://github.com/Htkym/zendiator/blob/v0.4.0/README.ja.md)
 - [MediatRからの移行](docs/migrating-from-mediatr.ja.md)
+
 

@@ -7,7 +7,7 @@ ordered pipelines. Call through the generated `IZendiator`; the source generator
 binds selected handlers, hooks and middleware without runtime assembly scanning or
 reflective invocation on typed routes.
 
-This branch describes the **unreleased 0.5.0 candidate**. It contains breaking API
+This guide covers the **unreleased 0.5.0 candidate**. It contains breaking API
 changes. For the published 0.4.0 API, use the
 [0.4.0 release notes](docs/release/0.4.0-release-notes.md) and its matching package.
 
@@ -163,7 +163,7 @@ For preprocessing that needs no request replacement or cursor lifetime, see
 [Before versus middleware](docs/streaming-iterators.md#choose-before-or-middleware).
 
 `StreamSource(...).ConsumeAsync(...)` is an optional terminal over the same pipeline.
-It creates a fresh private owner and awaits sink callbacks sequentially. A `false`
+It awaits sink callbacks sequentially. A `false`
 result stops normally. Value-type sinks are passed by value, so put accumulated
 results in a class sink or shared reference state. A typed terminal is not an
 `IAsyncEnumerable` and does not guarantee lower time or allocation.
@@ -194,12 +194,7 @@ with 0.4.0 is not promised.
 
 ## Performance
 
-These observations are from the measurement completed on 2026-10-31 for the
-source snapshot below; they are not a new measurement of the current branch
-HEAD. Selected 0.5.0 candidate workloads were compared on the same machine. Each
-cell shows **mean time / allocated bytes per operation (B/op)**. Time and memory
-are separate metrics. Results vary by workload for every library, and this table
-does not cover every workload.
+Selected workloads for the [measured 0.5.0 candidate](https://github.com/Htkym/zendiator/commit/927827653e229b01afdd8bb97c00b9093ad049ab) were compared on the same machine on 2026-10-31. Each cell shows **mean time / allocated bytes per operation (B/op)**. Time and memory are separate metrics, and the table does not cover every workload.
 
 |Case|Zendiator candidate|Immediate.Handlers 4.2.0|MediatR 14.2.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
 |---|---:|---:|---:|---:|---:|---:|
@@ -213,19 +208,12 @@ does not cover every workload.
 |Stream 1024 items / 5 behaviors / async|165.82 μs / 116,562 B|263.09 μs / 1,754 B|490.69 μs / 4,726 B|261.25 μs / 2,339 B|245.04 μs / 1,755 B|289.13 μs / 2,539 B|
 |Stream early break / 16-item input / 5 behaviors / sync|415.19 ns / 1,216 B|291.92 ns / 1,104 B|813.08 ns / 3,592 B|372.38 ns / 1,688 B|308.40 ns / 1,104 B|624.94 ns / 1,808 B|
 |Stream early break / 16-item input / 5 behaviors / async|1.81 μs / 1,656 B|1.96 μs / 1,752 B|2.99 μs / 4,720 B|2.08 μs / 2,336 B|1.92 μs / 1,752 B|2.37 μs / 2,536 B|
-|Behavior short-circuit / 3 stages / WarmDispatch|7.09 ns / 0 B|3.99 ns / 0 B|78.10 ns / 704 B|51.94 ns / 496 B|27.93 ns / 0 B|54.64 ns / 384 B|
-|H success / FirstSend|739.22 ns / 480 B|1.24 μs / 504 B|1.21 μs / 1,352 B|1.04 μs / 808 B|1.01 μs / 560 B|1.71 μs / 856 B|
-|H success / WarmSend|24.33 ns / 0 B|45.00 ns / 0 B|492.60 ns / 944 B|440.95 ns / 496 B|61.58 ns / 0 B|451.39 ns / 480 B|
-|H failure / ColdOuterFailure|6.54 μs / 2,520 B|8.09 μs / 3,809 B|6.55 μs / 3,448 B|5.87 μs / 3,216 B|6.00 μs / 2,968 B|9.57 μs / 4,872 B|
+|Behavior short-circuit / 3 stages / repeated calls|7.09 ns / 0 B|3.99 ns / 0 B|78.10 ns / 704 B|51.94 ns / 496 B|27.93 ns / 0 B|54.64 ns / 384 B|
+|Async Hook success / first call|739.22 ns / 480 B|1.24 μs / 504 B|1.21 μs / 1,352 B|1.04 μs / 808 B|1.01 μs / 560 B|1.71 μs / 856 B|
+|Async Hook success / repeated calls|24.33 ns / 0 B|45.00 ns / 0 B|492.60 ns / 944 B|440.95 ns / 496 B|61.58 ns / 0 B|451.39 ns / 480 B|
+|Async Hook failure / first call, outer Hook|6.54 μs / 2,520 B|8.09 μs / 3,809 B|6.55 μs / 3,448 B|5.87 μs / 3,216 B|6.00 μs / 2,968 B|9.57 μs / 4,872 B|
 
-The new-scope row includes creation, first resolution, Send and disposal. Stream
-figures cover the whole operation rather than one item, including creation,
-consumption and cleanup. Early break consumes one item from a 16-item input.
-Sync/async separates the enumeration completion patterns. H measures successful
-and outer-failure asynchronous Hook paths. FirstSend, WarmSend and
-ColdOuterFailure have different measurement boundaries, so their differences are
-not simply the cost of throwing an exception. N/A means no applicable comparison
-result, not zero.
+New-scope timings include creation, first resolution, Send and disposal. Stream timings cover the entire operation, including cleanup; early break consumes one item from a 16-item input. Sync/async distinguishes enumeration completion patterns. First-call, repeated-call and outer-Hook-failure workloads have different boundaries, so their differences are not simply exception costs. N/A means no applicable comparison result, not zero.
 
 ### Interpreting the results
 
@@ -248,38 +236,20 @@ general speed superiority or universal performance improvement.
 
 ### Measurement conditions
 
-Measured source: `927827653e229b01afdd8bb97c00b9093ad049ab` (0.5.0 candidate).
-Windows 11 x64, Intel Core Ultra 7 258V, SDK 10.0.403, .NET 10.0.14, DI 10.0.12,
-BenchmarkDotNet 0.15.8, Release, affinity mask 1, 20 warmups, 12 measurements,
-requested 500 ms iterations, and one launch per case.
+Windows 11 x64, Intel Core Ultra 7 258V, .NET 10.0.14, BenchmarkDotNet 0.15.8, Release; 20 warmups, 12 measurements, requested 500 ms iterations, one launch per case. Cases were measured at different times; one launch does not establish independent-run reproducibility or a controlled before/after improvement.
 
-Measurements span two execution periods, before an interruption and after
-recovery. One launch does not establish independent-run reproducibility or a
-controlled before/after improvement. Differences of a few nanoseconds are also
-sensitive to benchmark overhead adjustment. Handlers are deliberately lightweight;
-API and DI registration shapes differ between libraries. These results do not
-predict application startup time, HTTP latency or asynchronous I/O latency.
-Standard enumeration and typed terminals are separate workloads.
+Small differences of a few nanoseconds are sensitive to overhead adjustment. These lightweight workloads do not predict application startup, HTTP or asynchronous I/O latency. API and DI registration shapes differ between libraries; standard enumeration and typed terminals are different workloads. Foundatio uses its intercepted path here, not its native runtime open-generic path.
 
-Foundatio's results in this table use its intercepted path, distinct from the
-native runtime path used in a separate open-generic comparison. Historical 0.4.0
-results are not mixed into this table, and this table is not a release-wide
-ranking of all 0.5.0 candidate compositions.
-
-See the [benchmark measurement boundaries](benchmarks/README.md#read-the-comparison)
-and [Stream comparison boundaries](benchmarks/README.md#stream-comparison-boundaries).
-The historical 0.4.0 table and data there are not the source of these numbers.
-Running the current fixture alone does not guarantee matching the pinned source,
-dependencies and execution order used here.
+See [workload boundaries](benchmarks/README.md#read-the-comparison) and [Stream comparisons](benchmarks/README.md#stream-comparison-boundaries). The historical 0.4.0 data on that page is a separate measurement.
 
 ## Native AOT and limitations
 
-Generated typed dispatch does not use reflective invocation. Package-based
-consumers cover smoke tests and Native AOT on win-x64. Open-generic DI closures over
-value types have a known Native AOT limitation; other RIDs are unverified.
+Native AOT has been verified on win-x64. Open-generic DI closures over value types
+have a known Native AOT limitation; other RIDs are unverified.
 See [known limitations](docs/release/known-limitations.md) before deploying.
 
 For migration from MediatR, use the
 [migration guide](docs/migrating-from-mediatr.md), together with the current
 [0.5.0 registration guide](docs/getting-started-0.5.0.md).
+
 
