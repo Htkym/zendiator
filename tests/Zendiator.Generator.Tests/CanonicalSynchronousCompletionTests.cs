@@ -18,6 +18,8 @@ public sealed class SynchronousCompletionProbe : CapabilityProbe, IValueTaskSour
     public Exception Failure = null!;
     public int Consumptions;
     public string? ConsumptionAmbient;
+    public readonly List<string> ResolvedRoles = [];
+    public Action<int, object, CancellationToken>? BeforeAction;
     private static void Mutate(string phase)
     {
         Ambient.Value = phase;
@@ -27,6 +29,7 @@ public sealed class SynchronousCompletionProbe : CapabilityProbe, IValueTaskSour
     public new R Before<R>(int id, R request, R next, CancellationToken token) where R : class
     {
         var result = base.Before(id, request, next, token);
+        BeforeAction?.Invoke(id, request, token);
         Mutate("before");
         return result;
     }
@@ -167,7 +170,8 @@ public sealed partial class GeneratorTests
     [InlineData(true, true)]
     public async Task Plain_SendAsync_forwards_unconsumed_operation_and_synchronous_prefix(bool isVoid, bool withHooks)
     {
-        var source = CapabilitySource(true, isVoid, "s---", true).Replace("CapabilityProbe", "SynchronousCompletionProbe");
+        var source = CapabilitySource(true, isVoid, "s---", true).Replace("CapabilityProbe", "SynchronousCompletionProbe")
+            .Replace("_p=p;", "_p=p;_p.ResolvedRoles.Add(GetType().Name);");
         if (!withHooks)
             source = source.Replace(",Stage.Hook<Hook0>(),Stage.Hook<Hook1>()", "");
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "SyncCompletion_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
@@ -191,14 +195,17 @@ public sealed partial class GeneratorTests
         var requestType = assembly.GetType("App.Ping")!;
         var mediatorType = assembly.GetType("App.Generated.Reads.Zendiator")!;
         using var foreign = new CancellationTokenSource();
-        foreach (var mode in new[] { "success", "pending", "throw", "throw-oce", "fault-oce", "source-oce", "pending-oce", "pre-cancel" })
+        var scenarios = new[] { "success", "pending", "throw", "throw-oce", "fault-oce", "source-oce", "pending-oce", "pre-cancel" }.ToList();
+        if (withHooks) scenarios.AddRange(["before-cancel", "before-null-cancel", "before-error", "reentrant"]);
+        foreach (var mode in scenarios)
         {
             var probe = new SynchronousCompletionProbe
             {
-                Mode = mode,
+                Mode = mode == "reentrant" ? "success" : mode,
                 Failure = mode.Contains("oce", StringComparison.Ordinal)
                 ? new OperationCanceledException("foreign, uncanceled token", foreign.Token) : new InvalidOperationException("body")
             };
+            var token = probe.Cancellation.Token;
             IServiceCollection services = new ServiceCollection();
             services.AddSingleton(probe);
             bridge.GetMethod("Register")!.Invoke(null, [services]);
@@ -212,12 +219,60 @@ public sealed partial class GeneratorTests
             try
             {
                 SynchronousCompletionProbe.Ambient.Value = "caller";
+                if (mode is "before-cancel" or "before-null-cancel" or "before-error")
+                {
+                    probe.CancelPhase = mode == "before-error" ? null : "h0.before";
+                    probe.NullBefore = mode == "before-null-cancel";
+                    if (mode == "before-error") probe.Failures["h0.before"] = probe.Failure;
+                    var thrown = Assert.Throws<TargetInvocationException>(() => bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, request, token]));
+                    if (mode == "before-null-cancel") Assert.IsType<ArgumentNullException>(thrown.InnerException);
+                    else if (mode == "before-cancel") Assert.Equal(token, Assert.IsAssignableFrom<OperationCanceledException>(thrown.InnerException).CancellationToken);
+                    else Assert.Same(probe.Failure, thrown.InnerException);
+                    Assert.Equal(new[] { "h0.before" }, probe.Trace);
+                    Assert.All(probe.Calls, c => Assert.Equal(token, c.Token));
+                    Assert.Equal(new[] { "Hook0" }, probe.ResolvedRoles);
+                    Assert.Equal(mode == "before-error" ? "caller" : "before", SynchronousCompletionProbe.Ambient.Value);
+                    Assert.Equal(0, probe.Consumptions);
+                    continue;
+                }
+                if (mode == "reentrant")
+                {
+                    var entered = false;
+                    probe.BeforeAction = (id, _, observedToken) =>
+                    {
+                        if (id != 0 || entered) return;
+                        entered = true;
+                        Assert.Equal(token, observedToken);
+                        var nestedRequest = Activator.CreateInstance(requestType, [40]);
+                        var nested = bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, nestedRequest, CancellationToken.None])!;
+                        Assert.Equal(0, probe.Consumptions);
+                        if (isVoid) ((ValueTask)nested).GetAwaiter().GetResult();
+                        else Assert.Equal(42, ((ValueTask<int>)nested).GetAwaiter().GetResult());
+                        probe.Cancellation.Cancel();
+                    };
+                    var thrown = Assert.Throws<TargetInvocationException>(() => bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, request, token]));
+                    Assert.Equal(token, Assert.IsAssignableFrom<OperationCanceledException>(thrown.InnerException).CancellationToken);
+                    Assert.True(entered);
+                    Assert.Equal(new[] { "h0.before", "h0.before", "h1.before", "handler" }, probe.Trace);
+                    Assert.Equal(token, probe.Calls[0].Token);
+                    Assert.All(probe.Calls.Skip(1), c => Assert.Equal(CancellationToken.None, c.Token));
+                    Assert.Equal(new[] { "Hook0", "Hook1", "Handler" }, probe.ResolvedRoles);
+                    Assert.Equal(1, probe.Consumptions);
+                    Assert.Equal("before", SynchronousCompletionProbe.Ambient.Value);
+                    continue;
+                }
                 if (mode == "pre-cancel")
                     probe.Cancellation.Cancel();
+                if (mode == "pre-cancel")
+                {
+                    var nullError = Assert.Throws<TargetInvocationException>(() => bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, null, token]));
+                    Assert.IsType<ArgumentNullException>(nullError.InnerException);
+                    Assert.Empty(probe.ResolvedRoles);
+                }
                 if (mode is "throw" or "throw-oce" or "pre-cancel")
                 {
                     var thrown = Assert.Throws<TargetInvocationException>(() =>
-                        bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, request, probe.Cancellation.Token]));
+                        bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, request, token]));
                     if (mode == "pre-cancel")
                     {
                         var canceled = Assert.IsAssignableFrom<OperationCanceledException>(thrown.InnerException);
@@ -233,7 +288,8 @@ public sealed partial class GeneratorTests
                     Assert.Equal(0, probe.Consumptions);
                     continue;
                 }
-                var result = bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, request, probe.Cancellation.Token])!;
+                var result = bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, request, token])!;
+                Assert.All(probe.Calls, c => Assert.Equal(token, c.Token));
                 Assert.Equal("handler", SynchronousCompletionProbe.Ambient.Value);
                 Assert.Equal("fr-FR", CultureInfo.CurrentCulture.Name);
                 Assert.NotSame(priorContext, SynchronizationContext.Current);
