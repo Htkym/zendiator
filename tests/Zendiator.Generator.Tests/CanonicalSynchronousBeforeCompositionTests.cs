@@ -64,7 +64,8 @@ public sealed partial class GeneratorTests
                         using var cancellation=new CancellationTokenSource();
                         foreach(var token in new[]{CancellationToken.None,cancellation.Token}){
                             probe.Token=token;var value=(Payload)probe.Value;
-                            if(!ReferenceEquals(value,await mediator.SendAsync(new Query<Payload,Tag>(value),token)))
+                            Payload response=await mediator.SendAsync(new Query<Payload,Tag>(value),token);
+                            if(!ReferenceEquals(value,response))
                                 throw new InvalidOperationException("Generic response identity mismatch");
                             await mediator.SendAsync(new Command<Payload,Tag>(value),token);
                         }

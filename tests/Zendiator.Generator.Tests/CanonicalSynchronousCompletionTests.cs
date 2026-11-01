@@ -196,7 +196,8 @@ public sealed partial class GeneratorTests
         var mediatorType = assembly.GetType("App.Generated.Reads.Zendiator")!;
         using var foreign = new CancellationTokenSource();
         var scenarios = new[] { "success", "pending", "throw", "throw-oce", "fault-oce", "source-oce", "pending-oce", "pre-cancel" }.ToList();
-        if (withHooks) scenarios.AddRange(["before-cancel", "before-null-cancel", "before-error", "reentrant"]);
+        if (withHooks)
+            scenarios.AddRange(["before-cancel", "before-null-cancel", "before-error", "reentrant"]);
         foreach (var mode in scenarios)
         {
             var probe = new SynchronousCompletionProbe
@@ -223,11 +224,15 @@ public sealed partial class GeneratorTests
                 {
                     probe.CancelPhase = mode == "before-error" ? null : "h0.before";
                     probe.NullBefore = mode == "before-null-cancel";
-                    if (mode == "before-error") probe.Failures["h0.before"] = probe.Failure;
+                    if (mode == "before-error")
+                        probe.Failures["h0.before"] = probe.Failure;
                     var thrown = Assert.Throws<TargetInvocationException>(() => bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, request, token]));
-                    if (mode == "before-null-cancel") Assert.IsType<ArgumentNullException>(thrown.InnerException);
-                    else if (mode == "before-cancel") Assert.Equal(token, Assert.IsAssignableFrom<OperationCanceledException>(thrown.InnerException).CancellationToken);
-                    else Assert.Same(probe.Failure, thrown.InnerException);
+                    if (mode == "before-null-cancel")
+                        Assert.IsType<ArgumentNullException>(thrown.InnerException);
+                    else if (mode == "before-cancel")
+                        Assert.Equal(token, Assert.IsAssignableFrom<OperationCanceledException>(thrown.InnerException).CancellationToken);
+                    else
+                        Assert.Same(probe.Failure, thrown.InnerException);
                     Assert.Equal(new[] { "h0.before" }, probe.Trace);
                     Assert.All(probe.Calls, c => Assert.Equal(token, c.Token));
                     Assert.Equal(new[] { "Hook0" }, probe.ResolvedRoles);
@@ -240,14 +245,17 @@ public sealed partial class GeneratorTests
                     var entered = false;
                     probe.BeforeAction = (id, _, observedToken) =>
                     {
-                        if (id != 0 || entered) return;
+                        if (id != 0 || entered)
+                            return;
                         entered = true;
                         Assert.Equal(token, observedToken);
                         var nestedRequest = Activator.CreateInstance(requestType, [40]);
                         var nested = bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, nestedRequest, CancellationToken.None])!;
                         Assert.Equal(0, probe.Consumptions);
-                        if (isVoid) ((ValueTask)nested).GetAwaiter().GetResult();
-                        else Assert.Equal(42, ((ValueTask<int>)nested).GetAwaiter().GetResult());
+                        if (isVoid)
+                            ((ValueTask)nested).GetAwaiter().GetResult();
+                        else
+                            Assert.Equal(42, ((ValueTask<int>)nested).GetAwaiter().GetResult());
                         probe.Cancellation.Cancel();
                     };
                     var thrown = Assert.Throws<TargetInvocationException>(() => bridge.GetMethod("Dispatch")!.Invoke(null, [mediator, request, token]));
