@@ -50,7 +50,14 @@ public sealed class MediatorLifetimeAnalyzerTests
     public void Generator_and_lifetime_diagnostic_ids_do_not_overlap()
     {
         var definitions = typeof(ZendiatorGenerator).Assembly.GetType("Zendiator.SourceGenerator.GeneratorDiagnostics", throwOnError: true)!;
-        var rules = (DiagnosticDescriptor[])definitions.GetField("Rules", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetValue(null)!;
+        var rules = definitions.GetFields(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
+            .SelectMany(field => field.GetValue(null) switch
+            {
+                DiagnosticDescriptor descriptor => new[] { descriptor },
+                DiagnosticDescriptor[] descriptors => descriptors,
+                _ => Array.Empty<DiagnosticDescriptor>()
+            })
+            .Distinct<DiagnosticDescriptor>(ReferenceEqualityComparer.Instance);
         var ids = rules.Concat(new MediatorLifetimeAnalyzer().SupportedDiagnostics).Select(rule => rule.Id).ToArray();
         Assert.Equal(ids.Length, ids.Distinct(StringComparer.Ordinal).Count());
     }

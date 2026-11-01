@@ -37,7 +37,8 @@ internal static class GeneratedNamespace
     internal static string? DefaultGeneratedNamespace(string? assemblyName)
     {
         var name = assemblyName;
-        if (name is not { Length: > 0 } || string.IsNullOrWhiteSpace(name)) return null;
+        if (name is not { Length: > 0 } || string.IsNullOrWhiteSpace(name))
+            return null;
         var clean = name.Split('.').Select(static part =>
         {
             var chars = part.Select(static c => char.IsLetterOrDigit(c) || c == '_' ? c : '_').ToArray();
@@ -50,10 +51,12 @@ internal static class GeneratedNamespace
     internal static bool IsValidNamespace(string ns)
     {
         var parts = ns.Split('.');
-        if (parts.Length == 0) return false;
+        if (parts.Length == 0)
+            return false;
         foreach (var part in parts)
         {
-            if (part.Length == 0 || !SyntaxFacts.IsValidIdentifier(part)) return false;
+            if (part.Length == 0 || !SyntaxFacts.IsValidIdentifier(part))
+                return false;
         }
         return true;
     }

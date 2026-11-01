@@ -4,5 +4,8 @@ namespace Zendiator.Sample.Contracts;
 public readonly ref struct ParseYear : ISyncRequest<int>
 {
     public ParseYear(ReadOnlySpan<byte> data) => Data = data;
-    public ReadOnlySpan<byte> Data { get; }
+    public ReadOnlySpan<byte> Data
+    {
+        get;
+    }
 }

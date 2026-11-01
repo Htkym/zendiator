@@ -17,11 +17,11 @@ using I = Immediate.Handlers.Shared;
 namespace Competitive;
 public sealed record Ping0(int Value = 41, Probe? Probe = null) : IWork, Z.IRequest<int>, M.IRequest<int>, G.IRequest<int>, D.IRequest<Ping0, ValueTask<int>>;
 public sealed record Stream0(int Count, bool Asynchronous, Probe? Probe = null) : IWork, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Stream0, int>;
-public sealed class ZPing0 : Z.IRequestHandler<Ping0,int> { public ValueTask<int> HandleAsync(Ping0 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.ZendiatorHandler] public sealed class ZPing0 : Z.IRequestHandler<Ping0,int> { public ValueTask<int> HandleAsync(Ping0 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MPing0 : M.IRequestHandler<Ping0,int> { public Task<int> Handle(Ping0 r,CancellationToken t) => Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class GPing0 : G.IRequestHandler<Ping0,int> { public ValueTask<int> Handle(Ping0 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DPing0 : D.IRequestHandler<Ping0,ValueTask<int>> { public ValueTask<int> Handle(Ping0 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
-public sealed class ZStream0 : Z.IStreamRequestHandler<Stream0,int> { public IAsyncEnumerable<int> HandleAsync(Stream0 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
+[Z.ZendiatorHandler] public sealed class ZStream0 : Z.IStreamSourceHandler<Stream0,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Stream0 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MStream0 : M.IStreamRequestHandler<Stream0,int> { public IAsyncEnumerable<int> Handle(Stream0 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GStream0 : G.IStreamRequestHandler<Stream0,int> { public IAsyncEnumerable<int> Handle(Stream0 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DStream0 : DS.IStreamRequestHandler<Stream0,int> { public IAsyncEnumerable<int> Handle(Stream0 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
@@ -31,11 +31,11 @@ public static partial class IPing0 { private static ValueTask<int> HandleAsync(P
 public static partial class IStream0 { private static IAsyncEnumerable<int> HandleAsync(Stream0 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed record Ping1(int Value = 41, Probe? Probe = null) : ILevel1, Z.IRequest<int>, M.IRequest<int>, G.IRequest<int>, D.IRequest<Ping1, ValueTask<int>>;
 public sealed record Stream1(int Count, bool Asynchronous, Probe? Probe = null) : ILevel1, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Stream1, int>;
-public sealed class ZPing1 : Z.IRequestHandler<Ping1,int> { public ValueTask<int> HandleAsync(Ping1 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.ZendiatorHandler] public sealed class ZPing1 : Z.IRequestHandler<Ping1,int> { public ValueTask<int> HandleAsync(Ping1 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MPing1 : M.IRequestHandler<Ping1,int> { public Task<int> Handle(Ping1 r,CancellationToken t) => Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class GPing1 : G.IRequestHandler<Ping1,int> { public ValueTask<int> Handle(Ping1 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DPing1 : D.IRequestHandler<Ping1,ValueTask<int>> { public ValueTask<int> Handle(Ping1 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
-public sealed class ZStream1 : Z.IStreamRequestHandler<Stream1,int> { public IAsyncEnumerable<int> HandleAsync(Stream1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
+[Z.ZendiatorHandler] public sealed class ZStream1 : Z.IStreamSourceHandler<Stream1,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Stream1 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MStream1 : M.IStreamRequestHandler<Stream1,int> { public IAsyncEnumerable<int> Handle(Stream1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GStream1 : G.IStreamRequestHandler<Stream1,int> { public IAsyncEnumerable<int> Handle(Stream1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DStream1 : DS.IStreamRequestHandler<Stream1,int> { public IAsyncEnumerable<int> Handle(Stream1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
@@ -49,11 +49,11 @@ public static partial class IPing1 { private static ValueTask<int> HandleAsync(P
 public static partial class IStream1 { private static IAsyncEnumerable<int> HandleAsync(Stream1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed record Ping3(int Value = 41, Probe? Probe = null) : ILevel3, Z.IRequest<int>, M.IRequest<int>, G.IRequest<int>, D.IRequest<Ping3, ValueTask<int>>;
 public sealed record Stream3(int Count, bool Asynchronous, Probe? Probe = null) : ILevel3, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Stream3, int>;
-public sealed class ZPing3 : Z.IRequestHandler<Ping3,int> { public ValueTask<int> HandleAsync(Ping3 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.ZendiatorHandler] public sealed class ZPing3 : Z.IRequestHandler<Ping3,int> { public ValueTask<int> HandleAsync(Ping3 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MPing3 : M.IRequestHandler<Ping3,int> { public Task<int> Handle(Ping3 r,CancellationToken t) => Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class GPing3 : G.IRequestHandler<Ping3,int> { public ValueTask<int> Handle(Ping3 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DPing3 : D.IRequestHandler<Ping3,ValueTask<int>> { public ValueTask<int> Handle(Ping3 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
-public sealed class ZStream3 : Z.IStreamRequestHandler<Stream3,int> { public IAsyncEnumerable<int> HandleAsync(Stream3 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
+[Z.ZendiatorHandler] public sealed class ZStream3 : Z.IStreamSourceHandler<Stream3,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Stream3 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MStream3 : M.IStreamRequestHandler<Stream3,int> { public IAsyncEnumerable<int> Handle(Stream3 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GStream3 : G.IStreamRequestHandler<Stream3,int> { public IAsyncEnumerable<int> Handle(Stream3 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DStream3 : DS.IStreamRequestHandler<Stream3,int> { public IAsyncEnumerable<int> Handle(Stream3 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
@@ -75,11 +75,11 @@ public static partial class IPing3 { private static ValueTask<int> HandleAsync(P
 public static partial class IStream3 { private static IAsyncEnumerable<int> HandleAsync(Stream3 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed record Ping5(int Value = 41, Probe? Probe = null) : ILevel5, Z.IRequest<int>, M.IRequest<int>, G.IRequest<int>, D.IRequest<Ping5, ValueTask<int>>;
 public sealed record Stream5(int Count, bool Asynchronous, Probe? Probe = null) : ILevel5, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Stream5, int>;
-public sealed class ZPing5 : Z.IRequestHandler<Ping5,int> { public ValueTask<int> HandleAsync(Ping5 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.ZendiatorHandler] public sealed class ZPing5 : Z.IRequestHandler<Ping5,int> { public ValueTask<int> HandleAsync(Ping5 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MPing5 : M.IRequestHandler<Ping5,int> { public Task<int> Handle(Ping5 r,CancellationToken t) => Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class GPing5 : G.IRequestHandler<Ping5,int> { public ValueTask<int> Handle(Ping5 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DPing5 : D.IRequestHandler<Ping5,ValueTask<int>> { public ValueTask<int> Handle(Ping5 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
-public sealed class ZStream5 : Z.IStreamRequestHandler<Stream5,int> { public IAsyncEnumerable<int> HandleAsync(Stream5 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
+[Z.ZendiatorHandler] public sealed class ZStream5 : Z.IStreamSourceHandler<Stream5,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Stream5 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MStream5 : M.IStreamRequestHandler<Stream5,int> { public IAsyncEnumerable<int> Handle(Stream5 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GStream5 : G.IStreamRequestHandler<Stream5,int> { public IAsyncEnumerable<int> Handle(Stream5 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DStream5 : DS.IStreamRequestHandler<Stream5,int> { public IAsyncEnumerable<int> Handle(Stream5 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
@@ -109,8 +109,8 @@ public static partial class IPing5 { private static ValueTask<int> HandleAsync(P
 public static partial class IStream5 { private static IAsyncEnumerable<int> HandleAsync(Stream5 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class ZBehavior1<T,R> : Z.IPipelineBehavior<T,R> where T : Z.IRequest<R>, ILevel1
 { public ValueTask<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IRequestContinuation<T,R> { Work.Enter(r,1); return next.InvokeAsync(r,t); } }
-public sealed class ZSBehavior1<T,R> : Z.IStreamPipelineBehavior<T,R> where T : Z.IStreamRequest<R>, ILevel1
-{ public async IAsyncEnumerable<R> HandleAsync<TNext>(T r,TNext next,[EnumeratorCancellation] CancellationToken t) where TNext:struct,Z.IStreamContinuation<T,R> { Work.Enter(r,1); await foreach(var item in next.InvokeAsync(r,t).WithCancellation(t).ConfigureAwait(false)) yield return item; } }
+public sealed class ZSBehavior1<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, ILevel1
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Enter(r,1); return next.OpenAsync(r,t); } }
 public sealed class MBehavior1<T,R> : M.IPipelineBehavior<T,R> where T : notnull,IWork
 { public Task<R> Handle(T r,M.RequestHandlerDelegate<R> next,CancellationToken t) { Work.Enter(r,1); return next(t); } }
 public sealed class MSBehavior1<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
@@ -125,8 +125,8 @@ public sealed class ISBehavior1<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override async IAsyncEnumerable<R> HandleAsync(T r,[EnumeratorCancellation] CancellationToken t) { Work.Enter(r,1); await foreach(var item in Next(r,t).WithCancellation(t).ConfigureAwait(false)) yield return item; } }
 public sealed class ZBehavior2<T,R> : Z.IPipelineBehavior<T,R> where T : Z.IRequest<R>, ILevel2
 { public ValueTask<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IRequestContinuation<T,R> { Work.Enter(r,2); return next.InvokeAsync(r,t); } }
-public sealed class ZSBehavior2<T,R> : Z.IStreamPipelineBehavior<T,R> where T : Z.IStreamRequest<R>, ILevel2
-{ public async IAsyncEnumerable<R> HandleAsync<TNext>(T r,TNext next,[EnumeratorCancellation] CancellationToken t) where TNext:struct,Z.IStreamContinuation<T,R> { Work.Enter(r,2); await foreach(var item in next.InvokeAsync(r,t).WithCancellation(t).ConfigureAwait(false)) yield return item; } }
+public sealed class ZSBehavior2<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, ILevel2
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Enter(r,2); return next.OpenAsync(r,t); } }
 public sealed class MBehavior2<T,R> : M.IPipelineBehavior<T,R> where T : notnull,IWork
 { public Task<R> Handle(T r,M.RequestHandlerDelegate<R> next,CancellationToken t) { Work.Enter(r,2); return next(t); } }
 public sealed class MSBehavior2<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
@@ -141,8 +141,8 @@ public sealed class ISBehavior2<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override async IAsyncEnumerable<R> HandleAsync(T r,[EnumeratorCancellation] CancellationToken t) { Work.Enter(r,2); await foreach(var item in Next(r,t).WithCancellation(t).ConfigureAwait(false)) yield return item; } }
 public sealed class ZBehavior3<T,R> : Z.IPipelineBehavior<T,R> where T : Z.IRequest<R>, ILevel3
 { public ValueTask<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IRequestContinuation<T,R> { Work.Enter(r,3); return next.InvokeAsync(r,t); } }
-public sealed class ZSBehavior3<T,R> : Z.IStreamPipelineBehavior<T,R> where T : Z.IStreamRequest<R>, ILevel3
-{ public async IAsyncEnumerable<R> HandleAsync<TNext>(T r,TNext next,[EnumeratorCancellation] CancellationToken t) where TNext:struct,Z.IStreamContinuation<T,R> { Work.Enter(r,3); await foreach(var item in next.InvokeAsync(r,t).WithCancellation(t).ConfigureAwait(false)) yield return item; } }
+public sealed class ZSBehavior3<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, ILevel3
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Enter(r,3); return next.OpenAsync(r,t); } }
 public sealed class MBehavior3<T,R> : M.IPipelineBehavior<T,R> where T : notnull,IWork
 { public Task<R> Handle(T r,M.RequestHandlerDelegate<R> next,CancellationToken t) { Work.Enter(r,3); return next(t); } }
 public sealed class MSBehavior3<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
@@ -157,8 +157,8 @@ public sealed class ISBehavior3<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override async IAsyncEnumerable<R> HandleAsync(T r,[EnumeratorCancellation] CancellationToken t) { Work.Enter(r,3); await foreach(var item in Next(r,t).WithCancellation(t).ConfigureAwait(false)) yield return item; } }
 public sealed class ZBehavior4<T,R> : Z.IPipelineBehavior<T,R> where T : Z.IRequest<R>, ILevel4
 { public ValueTask<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IRequestContinuation<T,R> { Work.Enter(r,4); return next.InvokeAsync(r,t); } }
-public sealed class ZSBehavior4<T,R> : Z.IStreamPipelineBehavior<T,R> where T : Z.IStreamRequest<R>, ILevel4
-{ public async IAsyncEnumerable<R> HandleAsync<TNext>(T r,TNext next,[EnumeratorCancellation] CancellationToken t) where TNext:struct,Z.IStreamContinuation<T,R> { Work.Enter(r,4); await foreach(var item in next.InvokeAsync(r,t).WithCancellation(t).ConfigureAwait(false)) yield return item; } }
+public sealed class ZSBehavior4<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, ILevel4
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Enter(r,4); return next.OpenAsync(r,t); } }
 public sealed class MBehavior4<T,R> : M.IPipelineBehavior<T,R> where T : notnull,IWork
 { public Task<R> Handle(T r,M.RequestHandlerDelegate<R> next,CancellationToken t) { Work.Enter(r,4); return next(t); } }
 public sealed class MSBehavior4<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
@@ -173,8 +173,8 @@ public sealed class ISBehavior4<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override async IAsyncEnumerable<R> HandleAsync(T r,[EnumeratorCancellation] CancellationToken t) { Work.Enter(r,4); await foreach(var item in Next(r,t).WithCancellation(t).ConfigureAwait(false)) yield return item; } }
 public sealed class ZBehavior5<T,R> : Z.IPipelineBehavior<T,R> where T : Z.IRequest<R>, ILevel5
 { public ValueTask<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IRequestContinuation<T,R> { Work.Enter(r,5); return next.InvokeAsync(r,t); } }
-public sealed class ZSBehavior5<T,R> : Z.IStreamPipelineBehavior<T,R> where T : Z.IStreamRequest<R>, ILevel5
-{ public async IAsyncEnumerable<R> HandleAsync<TNext>(T r,TNext next,[EnumeratorCancellation] CancellationToken t) where TNext:struct,Z.IStreamContinuation<T,R> { Work.Enter(r,5); await foreach(var item in next.InvokeAsync(r,t).WithCancellation(t).ConfigureAwait(false)) yield return item; } }
+public sealed class ZSBehavior5<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, ILevel5
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Enter(r,5); return next.OpenAsync(r,t); } }
 public sealed class MBehavior5<T,R> : M.IPipelineBehavior<T,R> where T : notnull,IWork
 { public Task<R> Handle(T r,M.RequestHandlerDelegate<R> next,CancellationToken t) { Work.Enter(r,5); return next(t); } }
 public sealed class MSBehavior5<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
@@ -189,7 +189,7 @@ public sealed class ISBehavior5<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override async IAsyncEnumerable<R> HandleAsync(T r,[EnumeratorCancellation] CancellationToken t) { Work.Enter(r,5); await foreach(var item in Next(r,t).WithCancellation(t).ConfigureAwait(false)) yield return item; } }
 public static class FreshScopes { public const int Count = 16384; }
 public sealed record Relay1(int Count, bool Asynchronous, Probe? Probe = null) : IRelayLevel1, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Relay1, int>;
-public sealed class ZRelay1 : Z.IStreamRequestHandler<Relay1,int> { public IAsyncEnumerable<int> HandleAsync(Relay1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
+[Z.ZendiatorHandler] public sealed class ZRelay1 : Z.IStreamSourceHandler<Relay1,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Relay1 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MRelay1 : M.IStreamRequestHandler<Relay1,int> { public IAsyncEnumerable<int> Handle(Relay1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GRelay1 : G.IStreamRequestHandler<Relay1,int> { public IAsyncEnumerable<int> Handle(Relay1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DRelay1 : DS.IStreamRequestHandler<Relay1,int> { public IAsyncEnumerable<int> Handle(Relay1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
@@ -198,7 +198,7 @@ public static partial class IRelay1 { private static IAsyncEnumerable<int> Handl
 public sealed class DRBehavior1_1 : DS.IStreamPipelineBehavior<Relay1,int>
 { public required DS.IStreamRequestHandler<Relay1,int> NextPipeline {get;set;} public IAsyncEnumerable<int> Handle(Relay1 r,CancellationToken t) { Work.Relay(r,1); return NextPipeline.Handle(r,t); } }
 public sealed record Relay5(int Count, bool Asynchronous, Probe? Probe = null) : IRelayLevel5, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Relay5, int>;
-public sealed class ZRelay5 : Z.IStreamRequestHandler<Relay5,int> { public IAsyncEnumerable<int> HandleAsync(Relay5 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
+[Z.ZendiatorHandler] public sealed class ZRelay5 : Z.IStreamSourceHandler<Relay5,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Relay5 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MRelay5 : M.IStreamRequestHandler<Relay5,int> { public IAsyncEnumerable<int> Handle(Relay5 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GRelay5 : G.IStreamRequestHandler<Relay5,int> { public IAsyncEnumerable<int> Handle(Relay5 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DRelay5 : DS.IStreamRequestHandler<Relay5,int> { public IAsyncEnumerable<int> Handle(Relay5 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
@@ -214,40 +214,40 @@ public sealed class DRBehavior5_4 : DS.IStreamPipelineBehavior<Relay5,int>
 { public required DS.IStreamRequestHandler<Relay5,int> NextPipeline {get;set;} public IAsyncEnumerable<int> Handle(Relay5 r,CancellationToken t) { Work.Relay(r,4); return NextPipeline.Handle(r,t); } }
 public sealed class DRBehavior5_5 : DS.IStreamPipelineBehavior<Relay5,int>
 { public required DS.IStreamRequestHandler<Relay5,int> NextPipeline {get;set;} public IAsyncEnumerable<int> Handle(Relay5 r,CancellationToken t) { Work.Relay(r,5); return NextPipeline.Handle(r,t); } }
-public sealed class ZRBehavior1<T,R> : Z.IStreamPipelineBehavior<T,R> where T : Z.IStreamRequest<R>, IRelayLevel1
-{ public IAsyncEnumerable<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamContinuation<T,R> { Work.Relay(r,1); return next.InvokeAsync(r,t); } }
+public sealed class ZRBehavior1<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, IRelayLevel1
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Relay(r,1); return next.OpenAsync(r,t); } }
 public sealed class MRBehavior1<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
 { public IAsyncEnumerable<R> Handle(T r,M.StreamHandlerDelegate<R> next,CancellationToken t) { Work.Relay(r,1); return next(); } }
 public sealed class GRBehavior1<T,R> : G.IStreamPipelineBehavior<T,R> where T : G.IStreamMessage,IWork
 { public IAsyncEnumerable<R> Handle(T r,G.StreamHandlerDelegate<T,R> next,CancellationToken t) { Work.Relay(r,1); return next(r,t); } }
 public sealed class IRBehavior1<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override IAsyncEnumerable<R> HandleAsync(T r,CancellationToken t) { Work.Relay(r,1); return Next(r,t); } }
-public sealed class ZRBehavior2<T,R> : Z.IStreamPipelineBehavior<T,R> where T : Z.IStreamRequest<R>, IRelayLevel2
-{ public IAsyncEnumerable<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamContinuation<T,R> { Work.Relay(r,2); return next.InvokeAsync(r,t); } }
+public sealed class ZRBehavior2<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, IRelayLevel2
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Relay(r,2); return next.OpenAsync(r,t); } }
 public sealed class MRBehavior2<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
 { public IAsyncEnumerable<R> Handle(T r,M.StreamHandlerDelegate<R> next,CancellationToken t) { Work.Relay(r,2); return next(); } }
 public sealed class GRBehavior2<T,R> : G.IStreamPipelineBehavior<T,R> where T : G.IStreamMessage,IWork
 { public IAsyncEnumerable<R> Handle(T r,G.StreamHandlerDelegate<T,R> next,CancellationToken t) { Work.Relay(r,2); return next(r,t); } }
 public sealed class IRBehavior2<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override IAsyncEnumerable<R> HandleAsync(T r,CancellationToken t) { Work.Relay(r,2); return Next(r,t); } }
-public sealed class ZRBehavior3<T,R> : Z.IStreamPipelineBehavior<T,R> where T : Z.IStreamRequest<R>, IRelayLevel3
-{ public IAsyncEnumerable<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamContinuation<T,R> { Work.Relay(r,3); return next.InvokeAsync(r,t); } }
+public sealed class ZRBehavior3<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, IRelayLevel3
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Relay(r,3); return next.OpenAsync(r,t); } }
 public sealed class MRBehavior3<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
 { public IAsyncEnumerable<R> Handle(T r,M.StreamHandlerDelegate<R> next,CancellationToken t) { Work.Relay(r,3); return next(); } }
 public sealed class GRBehavior3<T,R> : G.IStreamPipelineBehavior<T,R> where T : G.IStreamMessage,IWork
 { public IAsyncEnumerable<R> Handle(T r,G.StreamHandlerDelegate<T,R> next,CancellationToken t) { Work.Relay(r,3); return next(r,t); } }
 public sealed class IRBehavior3<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override IAsyncEnumerable<R> HandleAsync(T r,CancellationToken t) { Work.Relay(r,3); return Next(r,t); } }
-public sealed class ZRBehavior4<T,R> : Z.IStreamPipelineBehavior<T,R> where T : Z.IStreamRequest<R>, IRelayLevel4
-{ public IAsyncEnumerable<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamContinuation<T,R> { Work.Relay(r,4); return next.InvokeAsync(r,t); } }
+public sealed class ZRBehavior4<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, IRelayLevel4
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Relay(r,4); return next.OpenAsync(r,t); } }
 public sealed class MRBehavior4<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
 { public IAsyncEnumerable<R> Handle(T r,M.StreamHandlerDelegate<R> next,CancellationToken t) { Work.Relay(r,4); return next(); } }
 public sealed class GRBehavior4<T,R> : G.IStreamPipelineBehavior<T,R> where T : G.IStreamMessage,IWork
 { public IAsyncEnumerable<R> Handle(T r,G.StreamHandlerDelegate<T,R> next,CancellationToken t) { Work.Relay(r,4); return next(r,t); } }
 public sealed class IRBehavior4<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override IAsyncEnumerable<R> HandleAsync(T r,CancellationToken t) { Work.Relay(r,4); return Next(r,t); } }
-public sealed class ZRBehavior5<T,R> : Z.IStreamPipelineBehavior<T,R> where T : Z.IStreamRequest<R>, IRelayLevel5
-{ public IAsyncEnumerable<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamContinuation<T,R> { Work.Relay(r,5); return next.InvokeAsync(r,t); } }
+public sealed class ZRBehavior5<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, IRelayLevel5
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Relay(r,5); return next.OpenAsync(r,t); } }
 public sealed class MRBehavior5<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
 { public IAsyncEnumerable<R> Handle(T r,M.StreamHandlerDelegate<R> next,CancellationToken t) { Work.Relay(r,5); return next(); } }
 public sealed class GRBehavior5<T,R> : G.IStreamPipelineBehavior<T,R> where T : G.IStreamMessage,IWork
@@ -255,13 +255,13 @@ public sealed class GRBehavior5<T,R> : G.IStreamPipelineBehavior<T,R> where T : 
 public sealed class IRBehavior5<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override IAsyncEnumerable<R> HandleAsync(T r,CancellationToken t) { Work.Relay(r,5); return Next(r,t); } }
 public sealed record Void0(Counter Counter, Probe? Probe = null) : IWork, Z.IRequest, M.IRequest, G.IRequest, D.IRequest<Void0,ValueTask<ValueTuple>>;
-public sealed class ZVoid0 : Z.IRequestHandler<Void0> { public ValueTask HandleAsync(Void0 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
+[Z.ZendiatorHandler] public sealed class ZVoid0 : Z.IRequestHandler<Void0> { public ValueTask HandleAsync(Void0 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class MVoid0 : M.IRequestHandler<Void0> { public Task Handle(Void0 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return Task.CompletedTask; } }
 public sealed class GVoid0 : G.IRequestHandler<Void0> { public ValueTask<G.Unit> Handle(Void0 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class DVoid0 : D.IRequestHandler<Void0,ValueTask<ValueTuple>> { public ValueTask<ValueTuple> Handle(Void0 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 [I.Handler] [I.Behaviors()] public static partial class IVoid0 { private static ValueTask HandleAsync(Void0 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed record Void1(Counter Counter, Probe? Probe = null) : ILevel1, Z.IRequest, M.IRequest, G.IRequest, D.IRequest<Void1,ValueTask<ValueTuple>>;
-public sealed class ZVoid1 : Z.IRequestHandler<Void1> { public ValueTask HandleAsync(Void1 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
+[Z.ZendiatorHandler] public sealed class ZVoid1 : Z.IRequestHandler<Void1> { public ValueTask HandleAsync(Void1 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class MVoid1 : M.IRequestHandler<Void1> { public Task Handle(Void1 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return Task.CompletedTask; } }
 public sealed class GVoid1 : G.IRequestHandler<Void1> { public ValueTask<G.Unit> Handle(Void1 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class DVoid1 : D.IRequestHandler<Void1,ValueTask<ValueTuple>> { public ValueTask<ValueTuple> Handle(Void1 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
@@ -269,7 +269,7 @@ public sealed class DVoid1 : D.IRequestHandler<Void1,ValueTask<ValueTuple>> { pu
 public sealed class DVBehavior1_1 : D.IPipelineBehavior<Void1,ValueTask<ValueTuple>>
 { public required D.IRequestHandler<Void1,ValueTask<ValueTuple>> NextPipeline {get;set;} public ValueTask<ValueTuple> Handle(Void1 r,CancellationToken t) { Work.Enter(r,1); return NextPipeline.Handle(r,t); } }
 public sealed record Void3(Counter Counter, Probe? Probe = null) : ILevel3, Z.IRequest, M.IRequest, G.IRequest, D.IRequest<Void3,ValueTask<ValueTuple>>;
-public sealed class ZVoid3 : Z.IRequestHandler<Void3> { public ValueTask HandleAsync(Void3 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
+[Z.ZendiatorHandler] public sealed class ZVoid3 : Z.IRequestHandler<Void3> { public ValueTask HandleAsync(Void3 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class MVoid3 : M.IRequestHandler<Void3> { public Task Handle(Void3 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return Task.CompletedTask; } }
 public sealed class GVoid3 : G.IRequestHandler<Void3> { public ValueTask<G.Unit> Handle(Void3 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class DVoid3 : D.IRequestHandler<Void3,ValueTask<ValueTuple>> { public ValueTask<ValueTuple> Handle(Void3 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
@@ -281,7 +281,7 @@ public sealed class DVBehavior3_2 : D.IPipelineBehavior<Void3,ValueTask<ValueTup
 public sealed class DVBehavior3_3 : D.IPipelineBehavior<Void3,ValueTask<ValueTuple>>
 { public required D.IRequestHandler<Void3,ValueTask<ValueTuple>> NextPipeline {get;set;} public ValueTask<ValueTuple> Handle(Void3 r,CancellationToken t) { Work.Enter(r,3); return NextPipeline.Handle(r,t); } }
 public sealed record Void5(Counter Counter, Probe? Probe = null) : ILevel5, Z.IRequest, M.IRequest, G.IRequest, D.IRequest<Void5,ValueTask<ValueTuple>>;
-public sealed class ZVoid5 : Z.IRequestHandler<Void5> { public ValueTask HandleAsync(Void5 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
+[Z.ZendiatorHandler] public sealed class ZVoid5 : Z.IRequestHandler<Void5> { public ValueTask HandleAsync(Void5 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class MVoid5 : M.IRequestHandler<Void5> { public Task Handle(Void5 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return Task.CompletedTask; } }
 public sealed class GVoid5 : G.IRequestHandler<Void5> { public ValueTask<G.Unit> Handle(Void5 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class DVoid5 : D.IRequestHandler<Void5,ValueTask<ValueTuple>> { public ValueTask<ValueTuple> Handle(Void5 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
@@ -308,11 +308,11 @@ public sealed class ZVBehavior5<T> : Z.IPipelineBehavior<T> where T:Z.IRequest,I
 { public ValueTask HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IRequestContinuation<T> { Work.Enter(r,5); return next.InvokeAsync(r,t); } }
 public sealed record ClosedGeneric<T>(int Value=41, Probe? Probe=null) : IWork,Z.IRequest<int>,M.IRequest<int>,D.IRequest<ClosedGeneric<T>,ValueTask<int>>;
 public sealed record OpenGeneric<T>(int Value=41, Probe? Probe=null) : IWork,Z.IRequest<int>,M.IRequest<int>,D.IRequest<OpenGeneric<T>,ValueTask<int>>;
-public sealed class ZClosed : Z.IRequestHandler<ClosedGeneric<int>,int> { public ValueTask<int> HandleAsync(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.ZendiatorHandler] public sealed class ZClosed : Z.IRequestHandler<ClosedGeneric<int>,int> { public ValueTask<int> HandleAsync(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MClosed : M.IRequestHandler<ClosedGeneric<int>,int> { public Task<int> Handle(ClosedGeneric<int> r,CancellationToken t)=>Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DClosed : D.IRequestHandler<ClosedGeneric<int>,ValueTask<int>> { public ValueTask<int> Handle(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 [I.Handler][I.Behaviors()] public static partial class IClosed { private static ValueTask<int> HandleAsync(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
-public sealed class ZOpen<T> : Z.IRequestHandler<OpenGeneric<T>,int> { public ValueTask<int> HandleAsync(OpenGeneric<T> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.ZendiatorHandler] public sealed class ZOpen<T> : Z.IRequestHandler<OpenGeneric<T>,int> { public ValueTask<int> HandleAsync(OpenGeneric<T> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MOpen<T> : M.IRequestHandler<OpenGeneric<T>,int> { public Task<int> Handle(OpenGeneric<T> r,CancellationToken t)=>Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DOpen<T> : D.IRequestHandler<OpenGeneric<T>,ValueTask<int>> { public ValueTask<int> Handle(OpenGeneric<T> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 #if PROBE_IMMEDIATE_OPEN
@@ -422,25 +422,27 @@ public static class Registration
         switch(library)
         {
             case "Zendiator":
-                s.AddZendiator(c => {
-                    c.Namespace = "Competitive.Generated";
-                    c.ServiceLifetime = lifetime == "Singleton" ? ServiceLifetime.Singleton : lifetime == "Transient" ? ServiceLifetime.Transient : ServiceLifetime.Scoped;
-                    c.RegisterServicesFromAssemblyContaining<Ping0>();
-c.AddOpenBehavior(typeof(ZBehavior1<,>), order: 1); c.AddOpenStreamBehavior(typeof(ZSBehavior1<,>), order: 11);
-c.AddOpenBehavior(typeof(ZVBehavior1<>), order: 21);
-c.AddOpenStreamBehavior(typeof(ZRBehavior1<,>), order: 31);
-c.AddOpenBehavior(typeof(ZBehavior2<,>), order: 2); c.AddOpenStreamBehavior(typeof(ZSBehavior2<,>), order: 12);
-c.AddOpenBehavior(typeof(ZVBehavior2<>), order: 22);
-c.AddOpenStreamBehavior(typeof(ZRBehavior2<,>), order: 32);
-c.AddOpenBehavior(typeof(ZBehavior3<,>), order: 3); c.AddOpenStreamBehavior(typeof(ZSBehavior3<,>), order: 13);
-c.AddOpenBehavior(typeof(ZVBehavior3<>), order: 23);
-c.AddOpenStreamBehavior(typeof(ZRBehavior3<,>), order: 33);
-c.AddOpenBehavior(typeof(ZBehavior4<,>), order: 4); c.AddOpenStreamBehavior(typeof(ZSBehavior4<,>), order: 14);
-c.AddOpenBehavior(typeof(ZVBehavior4<>), order: 24);
-c.AddOpenStreamBehavior(typeof(ZRBehavior4<,>), order: 34);
-c.AddOpenBehavior(typeof(ZBehavior5<,>), order: 5); c.AddOpenStreamBehavior(typeof(ZSBehavior5<,>), order: 15);
-c.AddOpenBehavior(typeof(ZVBehavior5<>), order: 25);
-c.AddOpenStreamBehavior(typeof(ZRBehavior5<,>), order: 35);
+                if (lifetime is not ("Default" or "Scoped"))
+                    throw new NotSupportedException("The canonical comparison composition uses a Scoped mediator.");
+                s.AddZendiator<App>(c => {
+                    c.Handlers<Ping0>(Z.DispatchFamily.SendAsync,typeof(ZPing0));
+                    c.Pipeline<Ping0>(Z.DispatchFamily.SendAsync);
+                    c.Handlers<Ping1>(Z.DispatchFamily.SendAsync,typeof(ZPing1));
+                    c.Pipeline<Ping1>(Z.DispatchFamily.SendAsync,Z.Stage.Hook<CanonicalBefore1<Ping1>>());
+                    c.Handlers<Ping3>(Z.DispatchFamily.SendAsync,typeof(ZPing3));
+                    c.Pipeline<Ping3>(Z.DispatchFamily.SendAsync,Z.Stage.Hook<CanonicalBefore1<Ping3>>(),Z.Stage.Hook<CanonicalBefore2<Ping3>>(),Z.Stage.Hook<CanonicalBefore3<Ping3>>());
+                    c.Handlers<Ping5>(Z.DispatchFamily.SendAsync,typeof(ZPing5));
+                    c.Pipeline<Ping5>(Z.DispatchFamily.SendAsync,Z.Stage.Hook<CanonicalBefore1<Ping5>>(),Z.Stage.Hook<CanonicalBefore2<Ping5>>(),Z.Stage.Hook<CanonicalBefore3<Ping5>>(),Z.Stage.Hook<CanonicalBefore4<Ping5>>(),Z.Stage.Hook<CanonicalBefore5<Ping5>>());
+                    c.Handlers<Void0>(Z.DispatchFamily.SendAsync,typeof(ZVoid0));
+                    c.Pipeline<Void0>(Z.DispatchFamily.SendAsync);
+                    c.Handlers<Void1>(Z.DispatchFamily.SendAsync,typeof(ZVoid1));
+                    c.Pipeline<Void1>(Z.DispatchFamily.SendAsync,Z.Stage.Hook<CanonicalBefore1<Void1>>());
+                    c.Handlers<Void3>(Z.DispatchFamily.SendAsync,typeof(ZVoid3));
+                    c.Pipeline<Void3>(Z.DispatchFamily.SendAsync,Z.Stage.Hook<CanonicalBefore1<Void3>>(),Z.Stage.Hook<CanonicalBefore2<Void3>>(),Z.Stage.Hook<CanonicalBefore3<Void3>>());
+                    c.Handlers<Void5>(Z.DispatchFamily.SendAsync,typeof(ZVoid5));
+                    c.Pipeline<Void5>(Z.DispatchFamily.SendAsync,Z.Stage.Hook<CanonicalBefore1<Void5>>(),Z.Stage.Hook<CanonicalBefore2<Void5>>(),Z.Stage.Hook<CanonicalBefore3<Void5>>(),Z.Stage.Hook<CanonicalBefore4<Void5>>(),Z.Stage.Hook<CanonicalBefore5<Void5>>());
+                    c.Handlers<ClosedGeneric<int>>(Z.DispatchFamily.SendAsync,typeof(ZClosed));
+                    c.Handlers(typeof(OpenGeneric<>),Z.DispatchFamily.SendAsync,typeof(ZOpen<>));
                 });
                 break;
             case "MediatRHistorical":
@@ -525,6 +527,30 @@ if (library == "Mediator" && lifetime != "Default" && lifetime != MediatorLifeti
     throw new NotSupportedException("Mediator lifetime must match its compile-time generation configuration.");
 RegistrationAudit.Record(s, library, lifetime, "before-provider");
 return s.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }); } }
+[Z.ZendiatorComposition("competitiveStreams")] public sealed class BenchmarkStreams;
+public static class StreamRegistration
+{
+    public static ServiceProvider Create()
+    {
+        var s = new ServiceCollection();
+        s.AddLogging();
+        s.AddZendiator<BenchmarkStreams>(c => {
+c.Handlers<Stream0>(Z.DispatchFamily.Stream,typeof(ZStream0));
+c.Pipeline<Stream0>(Z.DispatchFamily.Stream);
+c.Handlers<Stream1>(Z.DispatchFamily.Stream,typeof(ZStream1));
+c.Pipeline<Stream1>(Z.DispatchFamily.Stream,Z.Stage.Wrapper<ZSBehavior1<Stream1,int>>());
+c.Handlers<Stream3>(Z.DispatchFamily.Stream,typeof(ZStream3));
+c.Pipeline<Stream3>(Z.DispatchFamily.Stream,Z.Stage.Wrapper<ZSBehavior3<Stream3,int>>(),Z.Stage.Wrapper<ZSBehavior2<Stream3,int>>(),Z.Stage.Wrapper<ZSBehavior1<Stream3,int>>());
+c.Handlers<Stream5>(Z.DispatchFamily.Stream,typeof(ZStream5));
+c.Pipeline<Stream5>(Z.DispatchFamily.Stream,Z.Stage.Wrapper<ZSBehavior5<Stream5,int>>(),Z.Stage.Wrapper<ZSBehavior4<Stream5,int>>(),Z.Stage.Wrapper<ZSBehavior3<Stream5,int>>(),Z.Stage.Wrapper<ZSBehavior2<Stream5,int>>(),Z.Stage.Wrapper<ZSBehavior1<Stream5,int>>());
+c.Handlers<Relay1>(Z.DispatchFamily.Stream,typeof(ZRelay1));
+c.Pipeline<Relay1>(Z.DispatchFamily.Stream,Z.Stage.Wrapper<ZRBehavior1<Relay1,int>>());
+c.Handlers<Relay5>(Z.DispatchFamily.Stream,typeof(ZRelay5));
+c.Pipeline<Relay5>(Z.DispatchFamily.Stream,Z.Stage.Wrapper<ZRBehavior5<Relay5,int>>(),Z.Stage.Wrapper<ZRBehavior4<Relay5,int>>(),Z.Stage.Wrapper<ZRBehavior3<Relay5,int>>(),Z.Stage.Wrapper<ZRBehavior2<Relay5,int>>(),Z.Stage.Wrapper<ZRBehavior1<Relay5,int>>());
+        });
+        return s.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+    }
+}
 [MemoryDiagnoser]
 public class DirectSend0
 {
@@ -633,15 +659,15 @@ public class ZendiatorSend0
 {
     private ServiceProvider provider = null!;
     private IServiceScope scope = null!;
-    private Competitive.Generated.IZendiator entry = null!;
+    private Competitive.Generated.App.IZendiator entry = null!;
     private readonly Ping0 request = new();
     private IServiceScope[] fresh = [];
     private int used;
     private bool firstSendStarted;
     private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
-    public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); ChildEvidence.Record("ZendiatorSend0", Lifetime); }
+    public IEnumerable<string> Lifetimes => ["Default","Scoped"];
+    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>(); ChildEvidence.Record("ZendiatorSend0", Lifetime); }
     [GlobalCleanup] public void Cleanup()
     {
         scope.Dispose(); provider.Dispose();
@@ -650,18 +676,18 @@ public class ZendiatorSend0
     }
     public ValueTask<int> Invoke(Ping0 r,CancellationToken t=default) => entry.SendAsync(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
-    [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); return Invoke(request); }
+    [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>(); return Invoke(request); }
     [Benchmark] public async ValueTask<int> ScopeK1()
     {
         using var local=provider.CreateScope();
-        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>();
+        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>();
         var r=request; var t=CancellationToken.None;
         return await entry.SendAsync(r,t);
     }
     public async ValueTask<int> ScopeMany(int count)
     {
         using var local=provider.CreateScope();
-        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>();
+        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>();
         var r=request; var t=CancellationToken.None; int sum=0;
         for(int i=0;i<count;i++) sum+=await entry.SendAsync(r,t);
         return sum;
@@ -669,7 +695,7 @@ public class ZendiatorSend0
     [Benchmark] public ValueTask<int> ScopeK10() => ScopeMany(10);
     [Benchmark] public ValueTask<int> ScopeK100() => ScopeMany(100);
     [Benchmark] public int ScopeOnly() { using var local=provider.CreateScope(); return 1; }
-    [Benchmark] public int ScopeResolve() { using var local=provider.CreateScope(); GC.KeepAlive(local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>()); return 1; }
+    [Benchmark] public int ScopeResolve() { using var local=provider.CreateScope(); GC.KeepAlive(local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>()); return 1; }
     // Each FirstSend invocation takes its own scope, created before the measured iteration starts.
     [IterationSetup(Target=nameof(FirstSend))] public void CreateFresh()
     {
@@ -701,7 +727,7 @@ public class ZendiatorSend0
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
         var local=fresh[used++];
-        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>();
+        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>();
         var r=request; var t=CancellationToken.None;
         return entry.SendAsync(r,t);
     }
@@ -711,13 +737,17 @@ public class ZendiatorStream0
 {
     private ServiceProvider provider = null!;
     private IServiceScope scope = null!;
-    private Competitive.Generated.IZendiator entry = null!;
+    private Competitive.Generated.BenchmarkStreams.IZendiator entry = null!;
     private Stream0 request = null!;
+    private readonly StreamBenchmarkSink typedSink = new();
     [Params(0,1,16,1024)] public int Count {get;set;}
     [Params(false,true)] public bool Asynchronous {get;set;}
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorStream0", "Default"); }
+    [GlobalSetup] public void Setup() { provider=StreamRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.BenchmarkStreams.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorStream0", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public IAsyncEnumerable<int> Invoke(Stream0 r,CancellationToken t=default) => entry.StreamAsync(r,t);
+    public ValueTask InvokeTyped<TSink>(Stream0 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamSource(r,t).ConsumeAsync(sink);
+    [Benchmark] public async ValueTask<int> FullTyped() { typedSink.Reset(false); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.Sum; }
+    [Benchmark] public async ValueTask<int> EarlyBreakTyped() { typedSink.Reset(true); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.First; }
     [Benchmark] public IAsyncEnumerable<int> Creation() => Invoke(request);
     [Benchmark] public async ValueTask<int> Full() { int sum=0; await foreach(var item in Invoke(request).ConfigureAwait(false)) sum+=item; return sum; }
     [Benchmark] public async ValueTask<bool> First() { await using var e=Invoke(request).GetAsyncEnumerator(); return await e.MoveNextAsync(); }
@@ -736,15 +766,15 @@ public class ZendiatorSend1
 {
     private ServiceProvider provider = null!;
     private IServiceScope scope = null!;
-    private Competitive.Generated.IZendiator entry = null!;
+    private Competitive.Generated.App.IZendiator entry = null!;
     private readonly Ping1 request = new();
     private IServiceScope[] fresh = [];
     private int used;
     private bool firstSendStarted;
     private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
-    public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); ChildEvidence.Record("ZendiatorSend1", Lifetime); }
+    public IEnumerable<string> Lifetimes => ["Default","Scoped"];
+    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>(); ChildEvidence.Record("ZendiatorSend1", Lifetime); }
     [GlobalCleanup] public void Cleanup()
     {
         scope.Dispose(); provider.Dispose();
@@ -753,18 +783,18 @@ public class ZendiatorSend1
     }
     public ValueTask<int> Invoke(Ping1 r,CancellationToken t=default) => entry.SendAsync(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
-    [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); return Invoke(request); }
+    [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>(); return Invoke(request); }
     [Benchmark] public async ValueTask<int> ScopeK1()
     {
         using var local=provider.CreateScope();
-        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>();
+        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>();
         var r=request; var t=CancellationToken.None;
         return await entry.SendAsync(r,t);
     }
     public async ValueTask<int> ScopeMany(int count)
     {
         using var local=provider.CreateScope();
-        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>();
+        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>();
         var r=request; var t=CancellationToken.None; int sum=0;
         for(int i=0;i<count;i++) sum+=await entry.SendAsync(r,t);
         return sum;
@@ -772,7 +802,7 @@ public class ZendiatorSend1
     [Benchmark] public ValueTask<int> ScopeK10() => ScopeMany(10);
     [Benchmark] public ValueTask<int> ScopeK100() => ScopeMany(100);
     [Benchmark] public int ScopeOnly() { using var local=provider.CreateScope(); return 1; }
-    [Benchmark] public int ScopeResolve() { using var local=provider.CreateScope(); GC.KeepAlive(local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>()); return 1; }
+    [Benchmark] public int ScopeResolve() { using var local=provider.CreateScope(); GC.KeepAlive(local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>()); return 1; }
     // Each FirstSend invocation takes its own scope, created before the measured iteration starts.
     [IterationSetup(Target=nameof(FirstSend))] public void CreateFresh()
     {
@@ -804,7 +834,7 @@ public class ZendiatorSend1
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
         var local=fresh[used++];
-        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>();
+        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>();
         var r=request; var t=CancellationToken.None;
         return entry.SendAsync(r,t);
     }
@@ -814,13 +844,17 @@ public class ZendiatorStream1
 {
     private ServiceProvider provider = null!;
     private IServiceScope scope = null!;
-    private Competitive.Generated.IZendiator entry = null!;
+    private Competitive.Generated.BenchmarkStreams.IZendiator entry = null!;
     private Stream1 request = null!;
+    private readonly StreamBenchmarkSink typedSink = new();
     [Params(0,1,16,1024)] public int Count {get;set;}
     [Params(false,true)] public bool Asynchronous {get;set;}
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorStream1", "Default"); }
+    [GlobalSetup] public void Setup() { provider=StreamRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.BenchmarkStreams.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorStream1", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public IAsyncEnumerable<int> Invoke(Stream1 r,CancellationToken t=default) => entry.StreamAsync(r,t);
+    public ValueTask InvokeTyped<TSink>(Stream1 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamSource(r,t).ConsumeAsync(sink);
+    [Benchmark] public async ValueTask<int> FullTyped() { typedSink.Reset(false); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.Sum; }
+    [Benchmark] public async ValueTask<int> EarlyBreakTyped() { typedSink.Reset(true); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.First; }
     [Benchmark] public IAsyncEnumerable<int> Creation() => Invoke(request);
     [Benchmark] public async ValueTask<int> Full() { int sum=0; await foreach(var item in Invoke(request).ConfigureAwait(false)) sum+=item; return sum; }
     [Benchmark] public async ValueTask<bool> First() { await using var e=Invoke(request).GetAsyncEnumerator(); return await e.MoveNextAsync(); }
@@ -839,15 +873,15 @@ public class ZendiatorSend3
 {
     private ServiceProvider provider = null!;
     private IServiceScope scope = null!;
-    private Competitive.Generated.IZendiator entry = null!;
+    private Competitive.Generated.App.IZendiator entry = null!;
     private readonly Ping3 request = new();
     private IServiceScope[] fresh = [];
     private int used;
     private bool firstSendStarted;
     private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
-    public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); ChildEvidence.Record("ZendiatorSend3", Lifetime); }
+    public IEnumerable<string> Lifetimes => ["Default","Scoped"];
+    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>(); ChildEvidence.Record("ZendiatorSend3", Lifetime); }
     [GlobalCleanup] public void Cleanup()
     {
         scope.Dispose(); provider.Dispose();
@@ -856,18 +890,18 @@ public class ZendiatorSend3
     }
     public ValueTask<int> Invoke(Ping3 r,CancellationToken t=default) => entry.SendAsync(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
-    [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); return Invoke(request); }
+    [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>(); return Invoke(request); }
     [Benchmark] public async ValueTask<int> ScopeK1()
     {
         using var local=provider.CreateScope();
-        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>();
+        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>();
         var r=request; var t=CancellationToken.None;
         return await entry.SendAsync(r,t);
     }
     public async ValueTask<int> ScopeMany(int count)
     {
         using var local=provider.CreateScope();
-        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>();
+        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>();
         var r=request; var t=CancellationToken.None; int sum=0;
         for(int i=0;i<count;i++) sum+=await entry.SendAsync(r,t);
         return sum;
@@ -875,7 +909,7 @@ public class ZendiatorSend3
     [Benchmark] public ValueTask<int> ScopeK10() => ScopeMany(10);
     [Benchmark] public ValueTask<int> ScopeK100() => ScopeMany(100);
     [Benchmark] public int ScopeOnly() { using var local=provider.CreateScope(); return 1; }
-    [Benchmark] public int ScopeResolve() { using var local=provider.CreateScope(); GC.KeepAlive(local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>()); return 1; }
+    [Benchmark] public int ScopeResolve() { using var local=provider.CreateScope(); GC.KeepAlive(local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>()); return 1; }
     // Each FirstSend invocation takes its own scope, created before the measured iteration starts.
     [IterationSetup(Target=nameof(FirstSend))] public void CreateFresh()
     {
@@ -907,7 +941,7 @@ public class ZendiatorSend3
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
         var local=fresh[used++];
-        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>();
+        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>();
         var r=request; var t=CancellationToken.None;
         return entry.SendAsync(r,t);
     }
@@ -917,13 +951,17 @@ public class ZendiatorStream3
 {
     private ServiceProvider provider = null!;
     private IServiceScope scope = null!;
-    private Competitive.Generated.IZendiator entry = null!;
+    private Competitive.Generated.BenchmarkStreams.IZendiator entry = null!;
     private Stream3 request = null!;
+    private readonly StreamBenchmarkSink typedSink = new();
     [Params(0,1,16,1024)] public int Count {get;set;}
     [Params(false,true)] public bool Asynchronous {get;set;}
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorStream3", "Default"); }
+    [GlobalSetup] public void Setup() { provider=StreamRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.BenchmarkStreams.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorStream3", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public IAsyncEnumerable<int> Invoke(Stream3 r,CancellationToken t=default) => entry.StreamAsync(r,t);
+    public ValueTask InvokeTyped<TSink>(Stream3 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamSource(r,t).ConsumeAsync(sink);
+    [Benchmark] public async ValueTask<int> FullTyped() { typedSink.Reset(false); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.Sum; }
+    [Benchmark] public async ValueTask<int> EarlyBreakTyped() { typedSink.Reset(true); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.First; }
     [Benchmark] public IAsyncEnumerable<int> Creation() => Invoke(request);
     [Benchmark] public async ValueTask<int> Full() { int sum=0; await foreach(var item in Invoke(request).ConfigureAwait(false)) sum+=item; return sum; }
     [Benchmark] public async ValueTask<bool> First() { await using var e=Invoke(request).GetAsyncEnumerator(); return await e.MoveNextAsync(); }
@@ -942,15 +980,15 @@ public class ZendiatorSend5
 {
     private ServiceProvider provider = null!;
     private IServiceScope scope = null!;
-    private Competitive.Generated.IZendiator entry = null!;
+    private Competitive.Generated.App.IZendiator entry = null!;
     private readonly Ping5 request = new();
     private IServiceScope[] fresh = [];
     private int used;
     private bool firstSendStarted;
     private int completedFirstSendIterations;
     [ParamsSource(nameof(Lifetimes))] public string Lifetime {get;set;} = "Default";
-    public IEnumerable<string> Lifetimes => ["Default","Scoped","Singleton"];
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); ChildEvidence.Record("ZendiatorSend5", Lifetime); }
+    public IEnumerable<string> Lifetimes => ["Default","Scoped"];
+    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator",Lifetime); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>(); ChildEvidence.Record("ZendiatorSend5", Lifetime); }
     [GlobalCleanup] public void Cleanup()
     {
         scope.Dispose(); provider.Dispose();
@@ -959,18 +997,18 @@ public class ZendiatorSend5
     }
     public ValueTask<int> Invoke(Ping5 r,CancellationToken t=default) => entry.SendAsync(r,t);
     [Benchmark] public ValueTask<int> Typed() => Invoke(request);
-    [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); return Invoke(request); }
+    [Benchmark] public ValueTask<int> ResolveSend() { entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>(); return Invoke(request); }
     [Benchmark] public async ValueTask<int> ScopeK1()
     {
         using var local=provider.CreateScope();
-        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>();
+        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>();
         var r=request; var t=CancellationToken.None;
         return await entry.SendAsync(r,t);
     }
     public async ValueTask<int> ScopeMany(int count)
     {
         using var local=provider.CreateScope();
-        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>();
+        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>();
         var r=request; var t=CancellationToken.None; int sum=0;
         for(int i=0;i<count;i++) sum+=await entry.SendAsync(r,t);
         return sum;
@@ -978,7 +1016,7 @@ public class ZendiatorSend5
     [Benchmark] public ValueTask<int> ScopeK10() => ScopeMany(10);
     [Benchmark] public ValueTask<int> ScopeK100() => ScopeMany(100);
     [Benchmark] public int ScopeOnly() { using var local=provider.CreateScope(); return 1; }
-    [Benchmark] public int ScopeResolve() { using var local=provider.CreateScope(); GC.KeepAlive(local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>()); return 1; }
+    [Benchmark] public int ScopeResolve() { using var local=provider.CreateScope(); GC.KeepAlive(local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>()); return 1; }
     // Each FirstSend invocation takes its own scope, created before the measured iteration starts.
     [IterationSetup(Target=nameof(FirstSend))] public void CreateFresh()
     {
@@ -1010,7 +1048,7 @@ public class ZendiatorSend5
     [Benchmark, InvocationCount(FreshScopes.Count)] public ValueTask<int> FirstSend()
     {
         var local=fresh[used++];
-        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>();
+        var entry=local.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>();
         var r=request; var t=CancellationToken.None;
         return entry.SendAsync(r,t);
     }
@@ -1020,13 +1058,17 @@ public class ZendiatorStream5
 {
     private ServiceProvider provider = null!;
     private IServiceScope scope = null!;
-    private Competitive.Generated.IZendiator entry = null!;
+    private Competitive.Generated.BenchmarkStreams.IZendiator entry = null!;
     private Stream5 request = null!;
+    private readonly StreamBenchmarkSink typedSink = new();
     [Params(0,1,16,1024)] public int Count {get;set;}
     [Params(false,true)] public bool Asynchronous {get;set;}
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorStream5", "Default"); }
+    [GlobalSetup] public void Setup() { provider=StreamRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.BenchmarkStreams.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorStream5", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public IAsyncEnumerable<int> Invoke(Stream5 r,CancellationToken t=default) => entry.StreamAsync(r,t);
+    public ValueTask InvokeTyped<TSink>(Stream5 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamSource(r,t).ConsumeAsync(sink);
+    [Benchmark] public async ValueTask<int> FullTyped() { typedSink.Reset(false); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.Sum; }
+    [Benchmark] public async ValueTask<int> EarlyBreakTyped() { typedSink.Reset(true); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.First; }
     [Benchmark] public IAsyncEnumerable<int> Creation() => Invoke(request);
     [Benchmark] public async ValueTask<int> Full() { int sum=0; await foreach(var item in Invoke(request).ConfigureAwait(false)) sum+=item; return sum; }
     [Benchmark] public async ValueTask<bool> First() { await using var e=Invoke(request).GetAsyncEnumerator(); return await e.MoveNextAsync(); }
@@ -2753,63 +2795,63 @@ public class ImmediateStream5
 }
 [MemoryDiagnoser] public class ZendiatorClosed
 {
-    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.IZendiator entry=null!;
+    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.App.IZendiator entry=null!;
     private readonly Counter counter=new(); private ClosedGeneric<int> request=null!;
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(); ChildEvidence.Record("ZendiatorClosed", "Default"); }
+    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>(); request=new(); ChildEvidence.Record("ZendiatorClosed", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public async ValueTask<int> Invoke(ClosedGeneric<int> r,CancellationToken t=default) { return await entry.SendAsync(r,t); }
     [Benchmark] public ValueTask<int> Dispatch() => Invoke(request);
 }
 [MemoryDiagnoser] public class ZendiatorOpen
 {
-    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.IZendiator entry=null!;
+    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.App.IZendiator entry=null!;
     private readonly Counter counter=new(); private OpenGeneric<int> request=null!;
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(); ChildEvidence.Record("ZendiatorOpen", "Default"); }
+    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>(); request=new(); ChildEvidence.Record("ZendiatorOpen", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public async ValueTask<int> Invoke(OpenGeneric<int> r,CancellationToken t=default) { return await entry.SendAsync(r,t); }
     [Benchmark] public ValueTask<int> Dispatch() => Invoke(request);
 }
 [MemoryDiagnoser] public class ZendiatorVoid0
 {
-    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.IZendiator entry=null!;
+    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.App.IZendiator entry=null!;
     private readonly Counter counter=new(); private Void0 request=null!;
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorVoid0", "Default"); }
+    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorVoid0", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public async ValueTask Invoke(Void0 r,CancellationToken t=default) { await entry.SendAsync(r,t); }
     [Benchmark] public ValueTask Dispatch() => Invoke(request);
 }
 [MemoryDiagnoser] public class ZendiatorVoid1
 {
-    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.IZendiator entry=null!;
+    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.App.IZendiator entry=null!;
     private readonly Counter counter=new(); private Void1 request=null!;
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorVoid1", "Default"); }
+    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorVoid1", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public async ValueTask Invoke(Void1 r,CancellationToken t=default) { await entry.SendAsync(r,t); }
     [Benchmark] public ValueTask Dispatch() => Invoke(request);
 }
 [MemoryDiagnoser] public class ZendiatorVoid3
 {
-    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.IZendiator entry=null!;
+    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.App.IZendiator entry=null!;
     private readonly Counter counter=new(); private Void3 request=null!;
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorVoid3", "Default"); }
+    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorVoid3", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public async ValueTask Invoke(Void3 r,CancellationToken t=default) { await entry.SendAsync(r,t); }
     [Benchmark] public ValueTask Dispatch() => Invoke(request);
 }
 [MemoryDiagnoser] public class ZendiatorVoid5
 {
-    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.IZendiator entry=null!;
+    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.App.IZendiator entry=null!;
     private readonly Counter counter=new(); private Void5 request=null!;
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorVoid5", "Default"); }
+    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.App.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorVoid5", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public async ValueTask Invoke(Void5 r,CancellationToken t=default) { await entry.SendAsync(r,t); }
     [Benchmark] public ValueTask Dispatch() => Invoke(request);
 }
 [MemoryDiagnoser] public class ZendiatorNotification0
 {
-    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.IZendiator entry=null!;
+    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.Notifications.IZendiator entry=null!;
     private readonly Counter counter=new(); private Notice0 request=null!;
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorNotification0", "Default"); }
+    [GlobalSetup] public void Setup() { provider=NotificationRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.Notifications.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorNotification0", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public async ValueTask Invoke(Notice0 r,CancellationToken t=default) { await entry.PublishAsync(r,t); }
     [Benchmark] public ValueTask Dispatch() => Invoke(request);
@@ -2817,9 +2859,9 @@ public class ImmediateStream5
 [MemoryDiagnoser] public class ZendiatorNotification1
 {
     private readonly Notice1 asyncRequest = new(new Counter(), Asynchronous: true);
-    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.IZendiator entry=null!;
+    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.Notifications.IZendiator entry=null!;
     private readonly Counter counter=new(); private Notice1 request=null!;
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorNotification1", "Default"); }
+    [GlobalSetup] public void Setup() { provider=NotificationRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.Notifications.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorNotification1", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public async ValueTask Invoke(Notice1 r,CancellationToken t=default) { await entry.PublishAsync(r,t); }
     [Benchmark] public ValueTask Dispatch() => Invoke(request);
@@ -2828,9 +2870,9 @@ public class ImmediateStream5
 [MemoryDiagnoser] public class ZendiatorNotification4
 {
     private readonly Notice4 asyncRequest = new(new Counter(), Asynchronous: true);
-    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.IZendiator entry=null!;
+    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.Notifications.IZendiator entry=null!;
     private readonly Counter counter=new(); private Notice4 request=null!;
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorNotification4", "Default"); }
+    [GlobalSetup] public void Setup() { provider=NotificationRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.Notifications.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorNotification4", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public async ValueTask Invoke(Notice4 r,CancellationToken t=default) { await entry.PublishAsync(r,t); }
     [Benchmark] public ValueTask Dispatch() => Invoke(request);
@@ -2839,9 +2881,9 @@ public class ImmediateStream5
 [MemoryDiagnoser] public class ZendiatorNotification16
 {
     private readonly Notice16 asyncRequest = new(new Counter(), Asynchronous: true);
-    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.IZendiator entry=null!;
+    private ServiceProvider provider=null!; private IServiceScope scope=null!; private Competitive.Generated.Notifications.IZendiator entry=null!;
     private readonly Counter counter=new(); private Notice16 request=null!;
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorNotification16", "Default"); }
+    [GlobalSetup] public void Setup() { provider=NotificationRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.Notifications.IZendiator>(); request=new(counter); ChildEvidence.Record("ZendiatorNotification16", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public async ValueTask Invoke(Notice16 r,CancellationToken t=default) { await entry.PublishAsync(r,t); }
     [Benchmark] public ValueTask Dispatch() => Invoke(request);
@@ -3167,13 +3209,17 @@ public class ZendiatorRelay1
 {
     private ServiceProvider provider = null!;
     private IServiceScope scope = null!;
-    private Competitive.Generated.IZendiator entry = null!;
+    private Competitive.Generated.BenchmarkStreams.IZendiator entry = null!;
     private Relay1 request = null!;
+    private readonly StreamBenchmarkSink typedSink = new();
     [Params(0,1,16,1024)] public int Count {get;set;}
     [Params(false,true)] public bool Asynchronous {get;set;}
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorRelay1", "Default"); }
+    [GlobalSetup] public void Setup() { provider=StreamRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.BenchmarkStreams.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorRelay1", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public IAsyncEnumerable<int> Invoke(Relay1 r,CancellationToken t=default) => entry.StreamAsync(r,t);
+    public ValueTask InvokeTyped<TSink>(Relay1 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamSource(r,t).ConsumeAsync(sink);
+    [Benchmark] public async ValueTask<int> FullTyped() { typedSink.Reset(false); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.Sum; }
+    [Benchmark] public async ValueTask<int> EarlyBreakTyped() { typedSink.Reset(true); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.First; }
     [Benchmark] public IAsyncEnumerable<int> Creation() => Invoke(request);
     [Benchmark] public async ValueTask<int> Full() { int sum=0; await foreach(var item in Invoke(request).ConfigureAwait(false)) sum+=item; return sum; }
     [Benchmark] public async ValueTask<bool> First() { await using var e=Invoke(request).GetAsyncEnumerator(); return await e.MoveNextAsync(); }
@@ -3192,13 +3238,17 @@ public class ZendiatorRelay5
 {
     private ServiceProvider provider = null!;
     private IServiceScope scope = null!;
-    private Competitive.Generated.IZendiator entry = null!;
+    private Competitive.Generated.BenchmarkStreams.IZendiator entry = null!;
     private Relay5 request = null!;
+    private readonly StreamBenchmarkSink typedSink = new();
     [Params(0,1,16,1024)] public int Count {get;set;}
     [Params(false,true)] public bool Asynchronous {get;set;}
-    [GlobalSetup] public void Setup() { provider=Registration.Create("Zendiator"); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorRelay5", "Default"); }
+    [GlobalSetup] public void Setup() { provider=StreamRegistration.Create(); scope=provider.CreateScope(); entry=scope.ServiceProvider.GetRequiredService<Competitive.Generated.BenchmarkStreams.IZendiator>(); request=new(Count,Asynchronous); ChildEvidence.Record("ZendiatorRelay5", "Default"); }
     [GlobalCleanup] public void Cleanup() { scope.Dispose(); provider.Dispose(); }
     public IAsyncEnumerable<int> Invoke(Relay5 r,CancellationToken t=default) => entry.StreamAsync(r,t);
+    public ValueTask InvokeTyped<TSink>(Relay5 r,TSink sink,CancellationToken t=default) where TSink:Z.IStreamSink<int> => entry.StreamSource(r,t).ConsumeAsync(sink);
+    [Benchmark] public async ValueTask<int> FullTyped() { typedSink.Reset(false); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.Sum; }
+    [Benchmark] public async ValueTask<int> EarlyBreakTyped() { typedSink.Reset(true); await InvokeTyped(request,typedSink).ConfigureAwait(false); return typedSink.First; }
     [Benchmark] public IAsyncEnumerable<int> Creation() => Invoke(request);
     [Benchmark] public async ValueTask<int> Full() { int sum=0; await foreach(var item in Invoke(request).ConfigureAwait(false)) sum+=item; return sum; }
     [Benchmark] public async ValueTask<bool> First() { await using var e=Invoke(request).GetAsyncEnumerator(); return await e.MoveNextAsync(); }
@@ -3433,7 +3483,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new DirectStream0(); stream.Setup();
-    try { await Correctness.Stream("Direct",0,(n,a,p,t)=>stream.Invoke(new Stream0(n,a,p),t)); }
+    try { await Correctness.Stream("Direct",0,(n,a,p,t)=>stream.Invoke(new Stream0(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3456,7 +3508,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new ZendiatorStream0(); stream.Setup();
-    try { await Correctness.Stream("Zendiator",0,(n,a,p,t)=>stream.Invoke(new Stream0(n,a,p),t)); }
+    try { await Correctness.Stream("Zendiator",0,(n,a,p,t)=>stream.Invoke(new Stream0(n,a,p),t));
+        await Correctness.TypedStream("Zendiator",0, (n,a,p,s,t)=>stream.InvokeTyped(new Stream0(n,a,p),s,t));
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3479,7 +3533,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new ZendiatorStream1(); stream.Setup();
-    try { await Correctness.Stream("Zendiator",1,(n,a,p,t)=>stream.Invoke(new Stream1(n,a,p),t)); }
+    try { await Correctness.Stream("Zendiator",1,(n,a,p,t)=>stream.Invoke(new Stream1(n,a,p),t));
+        await Correctness.TypedStream("Zendiator",1, (n,a,p,s,t)=>stream.InvokeTyped(new Stream1(n,a,p),s,t));
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3502,7 +3558,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new ZendiatorStream3(); stream.Setup();
-    try { await Correctness.Stream("Zendiator",3,(n,a,p,t)=>stream.Invoke(new Stream3(n,a,p),t)); }
+    try { await Correctness.Stream("Zendiator",3,(n,a,p,t)=>stream.Invoke(new Stream3(n,a,p),t));
+        await Correctness.TypedStream("Zendiator",3, (n,a,p,s,t)=>stream.InvokeTyped(new Stream3(n,a,p),s,t));
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3525,7 +3583,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new ZendiatorStream5(); stream.Setup();
-    try { await Correctness.Stream("Zendiator",5,(n,a,p,t)=>stream.Invoke(new Stream5(n,a,p),t)); }
+    try { await Correctness.Stream("Zendiator",5,(n,a,p,t)=>stream.Invoke(new Stream5(n,a,p),t));
+        await Correctness.TypedStream("Zendiator",5, (n,a,p,s,t)=>stream.InvokeTyped(new Stream5(n,a,p),s,t));
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3548,7 +3608,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new MediatRHistoricalStream0(); stream.Setup();
-    try { await Correctness.Stream("MediatRHistorical",0,(n,a,p,t)=>stream.Invoke(new Stream0(n,a,p),t)); }
+    try { await Correctness.Stream("MediatRHistorical",0,(n,a,p,t)=>stream.Invoke(new Stream0(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3571,7 +3633,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new MediatRHistoricalStream1(); stream.Setup();
-    try { await Correctness.Stream("MediatRHistorical",1,(n,a,p,t)=>stream.Invoke(new Stream1(n,a,p),t)); }
+    try { await Correctness.Stream("MediatRHistorical",1,(n,a,p,t)=>stream.Invoke(new Stream1(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3594,7 +3658,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new MediatRHistoricalStream3(); stream.Setup();
-    try { await Correctness.Stream("MediatRHistorical",3,(n,a,p,t)=>stream.Invoke(new Stream3(n,a,p),t)); }
+    try { await Correctness.Stream("MediatRHistorical",3,(n,a,p,t)=>stream.Invoke(new Stream3(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3617,7 +3683,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new MediatRHistoricalStream5(); stream.Setup();
-    try { await Correctness.Stream("MediatRHistorical",5,(n,a,p,t)=>stream.Invoke(new Stream5(n,a,p),t)); }
+    try { await Correctness.Stream("MediatRHistorical",5,(n,a,p,t)=>stream.Invoke(new Stream5(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3640,7 +3708,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new MediatorStream0(); stream.Setup();
-    try { await Correctness.Stream("Mediator",0,(n,a,p,t)=>stream.Invoke(new Stream0(n,a,p),t)); }
+    try { await Correctness.Stream("Mediator",0,(n,a,p,t)=>stream.Invoke(new Stream0(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3663,7 +3733,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new MediatorStream1(); stream.Setup();
-    try { await Correctness.Stream("Mediator",1,(n,a,p,t)=>stream.Invoke(new Stream1(n,a,p),t)); }
+    try { await Correctness.Stream("Mediator",1,(n,a,p,t)=>stream.Invoke(new Stream1(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3686,7 +3758,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new MediatorStream3(); stream.Setup();
-    try { await Correctness.Stream("Mediator",3,(n,a,p,t)=>stream.Invoke(new Stream3(n,a,p),t)); }
+    try { await Correctness.Stream("Mediator",3,(n,a,p,t)=>stream.Invoke(new Stream3(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3709,7 +3783,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new MediatorStream5(); stream.Setup();
-    try { await Correctness.Stream("Mediator",5,(n,a,p,t)=>stream.Invoke(new Stream5(n,a,p),t)); }
+    try { await Correctness.Stream("Mediator",5,(n,a,p,t)=>stream.Invoke(new Stream5(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3732,7 +3808,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new DispatchRStream0(); stream.Setup();
-    try { await Correctness.Stream("DispatchR",0,(n,a,p,t)=>stream.Invoke(new Stream0(n,a,p),t)); }
+    try { await Correctness.Stream("DispatchR",0,(n,a,p,t)=>stream.Invoke(new Stream0(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3755,7 +3833,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new DispatchRStream1(); stream.Setup();
-    try { await Correctness.Stream("DispatchR",1,(n,a,p,t)=>stream.Invoke(new Stream1(n,a,p),t)); }
+    try { await Correctness.Stream("DispatchR",1,(n,a,p,t)=>stream.Invoke(new Stream1(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3778,7 +3858,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new DispatchRStream3(); stream.Setup();
-    try { await Correctness.Stream("DispatchR",3,(n,a,p,t)=>stream.Invoke(new Stream3(n,a,p),t)); }
+    try { await Correctness.Stream("DispatchR",3,(n,a,p,t)=>stream.Invoke(new Stream3(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3801,7 +3883,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new DispatchRStream5(); stream.Setup();
-    try { await Correctness.Stream("DispatchR",5,(n,a,p,t)=>stream.Invoke(new Stream5(n,a,p),t)); }
+    try { await Correctness.Stream("DispatchR",5,(n,a,p,t)=>stream.Invoke(new Stream5(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3824,7 +3908,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new ImmediateStream0(); stream.Setup();
-    try { await Correctness.Stream("Immediate",0,(n,a,p,t)=>stream.Invoke(new Stream0(n,a,p),t)); }
+    try { await Correctness.Stream("Immediate",0,(n,a,p,t)=>stream.Invoke(new Stream0(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3847,7 +3933,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new ImmediateStream1(); stream.Setup();
-    try { await Correctness.Stream("Immediate",1,(n,a,p,t)=>stream.Invoke(new Stream1(n,a,p),t)); }
+    try { await Correctness.Stream("Immediate",1,(n,a,p,t)=>stream.Invoke(new Stream1(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3870,7 +3958,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new ImmediateStream3(); stream.Setup();
-    try { await Correctness.Stream("Immediate",3,(n,a,p,t)=>stream.Invoke(new Stream3(n,a,p),t)); }
+    try { await Correctness.Stream("Immediate",3,(n,a,p,t)=>stream.Invoke(new Stream3(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 {
@@ -3893,7 +3983,9 @@ public static class GeneratedGate { public static async Task Run() {
     }
     finally { send.Cleanup(); }
     var stream=new ImmediateStream5(); stream.Setup();
-    try { await Correctness.Stream("Immediate",5,(n,a,p,t)=>stream.Invoke(new Stream5(n,a,p),t)); }
+    try { await Correctness.Stream("Immediate",5,(n,a,p,t)=>stream.Invoke(new Stream5(n,a,p),t));
+
+    }
     finally { stream.Cleanup(); }
 }
 { var x=new DirectVoid0(); x.Setup(); try { await Correctness.Void("Direct",0,(c,p,t)=>x.Invoke(new Void0(c,p),t)); } finally {x.Cleanup();} }
@@ -3917,13 +4009,8 @@ public static class GeneratedGate { public static async Task Run() {
 { var x=new ZendiatorSend1 {Lifetime="Scoped"}; x.Setup(); try { await Correctness.Send("Zendiator-MatchedScoped",1,async(p,t)=>await x.Invoke(new Ping1(41,p),t)); if(await x.ScopeK1()!=42 || await x.ResolveSend()!=42) throw new InvalidOperationException("Scope result"); } finally {x.Cleanup();} }
 { var x=new ZendiatorSend3 {Lifetime="Scoped"}; x.Setup(); try { await Correctness.Send("Zendiator-MatchedScoped",3,async(p,t)=>await x.Invoke(new Ping3(41,p),t)); if(await x.ScopeK1()!=42 || await x.ResolveSend()!=42) throw new InvalidOperationException("Scope result"); } finally {x.Cleanup();} }
 { var x=new ZendiatorSend5 {Lifetime="Scoped"}; x.Setup(); try { await Correctness.Send("Zendiator-MatchedScoped",5,async(p,t)=>await x.Invoke(new Ping5(41,p),t)); if(await x.ScopeK1()!=42 || await x.ResolveSend()!=42) throw new InvalidOperationException("Scope result"); } finally {x.Cleanup();} }
-{ var x=new ZendiatorSend0 {Lifetime="Singleton"}; x.Setup(); try { await Correctness.Send("Zendiator-MatchedSingleton",0,async(p,t)=>await x.Invoke(new Ping0(41,p),t)); if(await x.ScopeK1()!=42 || await x.ResolveSend()!=42) throw new InvalidOperationException("Scope result"); } finally {x.Cleanup();} }
-{ var x=new ZendiatorSend1 {Lifetime="Singleton"}; x.Setup(); try { await Correctness.Send("Zendiator-MatchedSingleton",1,async(p,t)=>await x.Invoke(new Ping1(41,p),t)); if(await x.ScopeK1()!=42 || await x.ResolveSend()!=42) throw new InvalidOperationException("Scope result"); } finally {x.Cleanup();} }
-{ var x=new ZendiatorSend3 {Lifetime="Singleton"}; x.Setup(); try { await Correctness.Send("Zendiator-MatchedSingleton",3,async(p,t)=>await x.Invoke(new Ping3(41,p),t)); if(await x.ScopeK1()!=42 || await x.ResolveSend()!=42) throw new InvalidOperationException("Scope result"); } finally {x.Cleanup();} }
-{ var x=new ZendiatorSend5 {Lifetime="Singleton"}; x.Setup(); try { await Correctness.Send("Zendiator-MatchedSingleton",5,async(p,t)=>await x.Invoke(new Ping5(41,p),t)); if(await x.ScopeK1()!=42 || await x.ResolveSend()!=42) throw new InvalidOperationException("Scope result"); } finally {x.Cleanup();} }
 Correctness.Lifetime("Zendiator","Default",typeof(ZPing0));
 Correctness.Lifetime("Zendiator","Scoped",typeof(ZPing0));
-Correctness.Lifetime("Zendiator","Singleton",typeof(ZPing0));
 { var x=new MediatRHistoricalVoid0(); x.Setup(); try { await Correctness.Void("MediatRHistorical",0,(c,p,t)=>x.Invoke(new Void0(c,p),t)); } finally {x.Cleanup();} }
 { var x=new MediatRHistoricalVoid1(); x.Setup(); try { await Correctness.Void("MediatRHistorical",1,(c,p,t)=>x.Invoke(new Void1(c,p),t)); } finally {x.Cleanup();} }
 { var x=new MediatRHistoricalVoid3(); x.Setup(); try { await Correctness.Void("MediatRHistorical",3,(c,p,t)=>x.Invoke(new Void3(c,p),t)); } finally {x.Cleanup();} }
@@ -4003,7 +4090,9 @@ Correctness.Lifetime("Immediate","Default",typeof(IPing0.Handler));
 Correctness.Lifetime("Immediate","Scoped",typeof(IPing0.Handler));
 Correctness.Lifetime("Immediate","Singleton",typeof(IPing0.Handler));
 { var x=new ZendiatorRelay1(); x.Setup(); try { await Correctness.Stream("Zendiator-Relay",1,(n,a,p,t)=>x.Invoke(new Relay1(n,a,p),t)); await Correctness.RelayTiming("Zendiator",1,p=>x.Invoke(new Relay1(2,false,p))); } finally {x.Cleanup();} }
+{ var x=new ZendiatorRelay1(); x.Setup(); try { await Correctness.TypedStream("Zendiator-Relay",1,(n,a,p,s,t)=>x.InvokeTyped(new Relay1(n,a,p),s,t)); } finally {x.Cleanup();} }
 { var x=new ZendiatorRelay5(); x.Setup(); try { await Correctness.Stream("Zendiator-Relay",5,(n,a,p,t)=>x.Invoke(new Relay5(n,a,p),t)); await Correctness.RelayTiming("Zendiator",5,p=>x.Invoke(new Relay5(2,false,p))); } finally {x.Cleanup();} }
+{ var x=new ZendiatorRelay5(); x.Setup(); try { await Correctness.TypedStream("Zendiator-Relay",5,(n,a,p,s,t)=>x.InvokeTyped(new Relay5(n,a,p),s,t)); } finally {x.Cleanup();} }
 { var x=new MediatRHistoricalRelay1(); x.Setup(); try { await Correctness.Stream("MediatRHistorical-Relay",1,(n,a,p,t)=>x.Invoke(new Relay1(n,a,p),t)); await Correctness.RelayTiming("MediatRHistorical",1,p=>x.Invoke(new Relay1(2,false,p))); } finally {x.Cleanup();} }
 { var x=new MediatRHistoricalRelay5(); x.Setup(); try { await Correctness.Stream("MediatRHistorical-Relay",5,(n,a,p,t)=>x.Invoke(new Relay5(n,a,p),t)); await Correctness.RelayTiming("MediatRHistorical",5,p=>x.Invoke(new Relay5(2,false,p))); } finally {x.Cleanup();} }
 { var x=new MediatorRelay1(); x.Setup(); try { await Correctness.Stream("Mediator-Relay",1,(n,a,p,t)=>x.Invoke(new Relay1(n,a,p),t)); await Correctness.RelayTiming("Mediator",1,p=>x.Invoke(new Relay1(2,false,p))); } finally {x.Cleanup();} }

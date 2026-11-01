@@ -29,7 +29,8 @@ internal sealed partial class GenerationAnalysis
                 Error(8, $"Conflicting request kinds for {Name(pair.Key)}: response and void multi contracts cannot be combined. Keep one.", pair.Key);
                 continue;
             }
-            if (multiResp || multiVoid) continue;
+            if (multiResp || multiVoid)
+                continue;
             handlers.TryGetValue(pair.Key, out var list);
             voidHandlers.TryGetValue(pair.Key, out var vlist);
             var legacyCount = list?.Count ?? 0;
@@ -50,7 +51,8 @@ internal sealed partial class GenerationAnalysis
                 Error(1, $"No handler found for {Name(pair.Key)}. Include its assembly.", pair.Key);
             else if (list.Count != 1)
                 Error(2, $"Multiple handlers found for {Name(pair.Key)}: {string.Join(", ", list.Select(Name))}.", pair.Key);
-            else routes.Add(new Route(pair.Key, pair.Value, list[0]));
+            else
+                routes.Add(new Route(pair.Key, pair.Value, list[0]));
         }
         foreach (var def in openRequests.Keys.OrderBy(Name, StringComparer.Ordinal))
         {
@@ -59,7 +61,8 @@ internal sealed partial class GenerationAnalysis
                 Error(8, $"Conflicting request kinds for {Name(def)}: response and void multi contracts cannot be combined. Keep one.", def);
                 continue;
             }
-            if (IsResponseMulti(def) || IsVoidMulti(def)) continue;
+            if (IsResponseMulti(def) || IsVoidMulti(def))
+                continue;
             var template = openRequests[def];
             var binds = openHandlers.Where(b => Same(b.RequestDefinition, def)).ToList();
             var vbinds = openVoidHandlers.Where(b => Same(b.RequestDefinition, def)).ToList();
@@ -89,13 +92,16 @@ internal sealed partial class GenerationAnalysis
         }
         foreach (var route in routes)
         {
-            if (route.IsOpen || !route.Request.IsGenericType) continue;
+            if (route.IsOpen || !route.Request.IsGenericType)
+                continue;
             var isRouteVoid = route.IsVoid;
             foreach (var binding in openHandlers.Concat(openVoidHandlers))
             {
-                if (binding.IsVoid != isRouteVoid) continue;
+                if (binding.IsVoid != isRouteVoid)
+                    continue;
                 if (Same(binding.RequestDefinition, route.Request.OriginalDefinition) &&
-                    (IsResponseMulti(binding.RequestDefinition) || IsVoidMulti(binding.RequestDefinition))) continue;
+                    (IsResponseMulti(binding.RequestDefinition) || IsVoidMulti(binding.RequestDefinition)))
+                    continue;
                 if (Covers(binding, route.Request))
                     Error(10, $"Ambiguous generic binding for {Name(route.Request)}: closed handler {Name(route.Handler)} overlaps open handler {Name(binding.Definition)}. Keep one.", route.Request);
             }

@@ -2,7 +2,6 @@ using Microsoft.CodeAnalysis;
 
 namespace Zendiator.SourceGenerator;
 
-/// <summary>Handler and behavior definitions for requests with and without a response.</summary>
 internal sealed class RequestContracts(
     INamedTypeSymbol handler,
     INamedTypeSymbol behavior,

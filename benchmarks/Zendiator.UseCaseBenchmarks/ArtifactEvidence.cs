@@ -93,7 +93,8 @@ internal static class ArtifactEvidence
                 "coreclr.dll" or "clrjit.dll" or "libcoreclr.so" or "libclrjit.so" or "libcoreclr.dylib" or "libclrjit.dylib")
             .Select(static module => new ConfigFileEvidence(System.IO.Path.GetFullPath(module.FileName), Hash(module.FileName)))
             .OrderBy(static item => item.Path, StringComparer.Ordinal).ToArray();
-        if (native.Length == 0) throw new InvalidOperationException("No loaded native runtime evidence");
+        if (native.Length == 0)
+            throw new InvalidOperationException("No loaded native runtime evidence");
         return new(framework, framework[5..], RuntimeInformation.ProcessArchitecture.ToString(),
             RuntimeInformation.OSArchitecture.ToString(),
             System.IO.Path.GetDirectoryName(typeof(object).Assembly.Location)

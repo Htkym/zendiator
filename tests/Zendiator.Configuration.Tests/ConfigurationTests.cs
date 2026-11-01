@@ -24,8 +24,6 @@ public sealed class ConfigurationTests
         Assert.Empty(snapshot.Behaviors);
         Assert.Empty(snapshot.Notifications);
         Assert.Empty(snapshot.HandlerOrders);
-        Assert.Empty(snapshot.StreamRequestValidators);
-        Assert.DoesNotContain("streamValidators=", snapshot.GetFingerprint());
     }
 
     [Fact]
@@ -44,8 +42,6 @@ public sealed class ConfigurationTests
             configuration.AddOpenBehavior(typeof(BehaviorA), order: 0);
             configuration.AddNotification<Note>();
             configuration.ConfigureHandlerOrder(typeof(HandlerA), order: 3);
-            configuration.AddStreamRequestValidator(typeof(BehaviorB), order: -1);
-            configuration.AddStreamRequestValidator(typeof(BehaviorA), order: 0);
             return configuration.Snapshot();
         }
 
@@ -58,19 +54,16 @@ public sealed class ConfigurationTests
             configuration.AddOpenBehavior(typeof(BehaviorB), order: 1);
             configuration.RegisterServicesFromAssemblyContaining<MarkerA>();
             configuration.RegisterServicesFromAssemblyContaining<MarkerB>();
-            configuration.AddStreamRequestValidator(typeof(BehaviorA), order: 0);
-            configuration.AddStreamRequestValidator(typeof(BehaviorB), order: -1);
             configuration.Namespace = "MyApp.Generated";
             configuration.ServiceLifetime = ServiceLifetime.Singleton;
             return configuration.Snapshot();
         }
 
         Assert.Equal(First().GetFingerprint(), Second().GetFingerprint());
-        Assert.Equal([-1, 0], First().StreamRequestValidators.Select(static entry => entry.Order));
         var changed = new ZendiatorConfiguration();
-        changed.AddStreamRequestValidator(typeof(BehaviorA), order: 1);
+        changed.AddOpenBehavior(typeof(BehaviorA), order: 1);
         var reordered = new ZendiatorConfiguration();
-        reordered.AddStreamRequestValidator(typeof(BehaviorA), order: 2);
+        reordered.AddOpenBehavior(typeof(BehaviorA), order: 2);
         Assert.NotEqual(changed.Snapshot().GetFingerprint(), reordered.Snapshot().GetFingerprint());
     }
 
@@ -83,7 +76,38 @@ public sealed class ConfigurationTests
         Assert.Throws<InvalidOperationException>(() => configuration.Namespace = "X");
         Assert.Throws<InvalidOperationException>(() => configuration.DependencyLifetime = ServiceLifetime.Scoped);
         Assert.Throws<InvalidOperationException>(() => configuration.RegisterServicesFromAssemblyContaining<MarkerA>());
-        Assert.Throws<InvalidOperationException>(() => configuration.AddStreamRequestValidator(typeof(BehaviorA), order: 0));
+    }
+
+    [Fact]
+    public void Snapshot_collections_reject_mutation_and_preserve_fingerprint()
+    {
+        var configuration = new ZendiatorConfiguration();
+        configuration.RegisterServicesFromAssemblyContaining<MarkerA>();
+        configuration.RegisterServicesFromAssembly(typeof(MarkerB).Assembly);
+        configuration.AddOpenBehavior(typeof(BehaviorA), order: 2);
+        configuration.AddNotification<Note>();
+        configuration.ConfigureHandlerOrder(typeof(HandlerA), order: 3);
+        configuration.AddHandler<HandlerA>();
+        var snapshot = configuration.Snapshot();
+        var fingerprint = snapshot.GetFingerprint();
+
+        static void RejectMutation<T>(IReadOnlyList<T> values)
+        {
+            var before = values.ToArray();
+            if (values is ICollection<T> mutable)
+                Assert.Throws<NotSupportedException>(mutable.Clear);
+            if (values is IList<T> indexed && values.Count != 0)
+                Assert.Throws<NotSupportedException>(() => indexed[0] = default!);
+            Assert.Equal(before, values.ToArray());
+        }
+
+        RejectMutation(snapshot.AssemblyMarkers);
+        RejectMutation(snapshot.Assemblies);
+        RejectMutation(snapshot.Behaviors);
+        RejectMutation(snapshot.Notifications);
+        RejectMutation(snapshot.HandlerOrders);
+        RejectMutation(snapshot.Handlers);
+        Assert.Equal(fingerprint, snapshot.GetFingerprint());
     }
 
     [Fact]
@@ -104,9 +128,6 @@ public sealed class ConfigurationTests
         configuration.AddOpenBehavior(first, order: firstOrder);
         configuration.AddOpenBehavior(second, order: secondOrder);
         Assert.Throws<InvalidOperationException>(() => configuration.Snapshot());
-        var validators = new ZendiatorConfiguration();
-        validators.AddStreamRequestValidator(first, order: firstOrder);
-        Assert.Throws<InvalidOperationException>(() => validators.AddStreamRequestValidator(second, order: secondOrder));
     }
 
     [Fact]
@@ -128,7 +149,6 @@ public sealed class ConfigurationTests
     {
         var configuration = new ZendiatorConfiguration();
         Assert.Throws<ArgumentNullException>(() => configuration.AddOpenBehavior(null!, order: 0));
-        Assert.Throws<ArgumentNullException>(() => configuration.AddStreamRequestValidator(null!, order: 0));
         Assert.Throws<ArgumentNullException>(() => configuration.ConfigureHandlerOrder(null!, order: 0));
         Assert.Throws<ArgumentNullException>(() => configuration.RegisterServicesFromAssembly(null!));
     }

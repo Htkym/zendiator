@@ -2,23 +2,50 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6.0.0
         with:
           dotnet-version: 10.0.x
 
+      - name: Record validation environment
+        shell: pwsh
+        run: |
+          "Commit: $env:GITHUB_SHA" >> $env:GITHUB_STEP_SUMMARY
+          "Run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID (attempt $env:GITHUB_RUN_ATTEMPT)" >> $env:GITHUB_STEP_SUMMARY
+          "Runner: $env:RUNNER_OS / $env:RUNNER_ARCH" >> $env:GITHUB_STEP_SUMMARY
+          dotnet --info
+          "SDK: $(dotnet --version)" >> $env:GITHUB_STEP_SUMMARY
+          dotnet --list-runtimes
+
       - name: Restore
         run: dotnet restore Zendiator.slnx
+
+      - name: Verify tracked package locks
+        shell: pwsh
+        run: |
+          git diff --exit-code -- benchmarks/Zendiator.UseCaseBenchmarks/packages.lock.json benchmarks/Zendiator.BeforeRelayBenchmarks/packages.lock.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build
         run: dotnet build Zendiator.slnx -c Release --no-restore
@@ -30,49 +57,67 @@ jobs:
         working-directory: benchmarks/Zendiator.UseCaseBenchmarks
         run: dotnet ./bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll --validate-only
 
-      - name: Format check
-        shell: pwsh
-        run: |
-          foreach ($p in @(
-            "src/Zendiator.Abstractions/Zendiator.Abstractions.csproj",
-            "src/Zendiator/Zendiator.csproj",
-            "src/Zendiator.SourceGenerator/Zendiator.SourceGenerator.csproj",
-            "tests/Zendiator.Tests/Zendiator.Tests.csproj",
-            "tests/Zendiator.AssemblyGen.Tests/Zendiator.AssemblyGen.Tests.csproj",
-            "tests/Zendiator.Configuration.Tests/Zendiator.Configuration.Tests.csproj",
-            "tests/Zendiator.DiConfiguration.Tests/Zendiator.DiConfiguration.Tests.csproj",
-            "tests/Zendiator.Generator.Tests/Zendiator.Generator.Tests.csproj",
-            "tests/Zendiator.Allocation.Tests/Zendiator.Allocation.Tests.csproj",
-            "tests/Zendiator.CachePolicy.Tests/Zendiator.CachePolicy.Tests.csproj",
-            "samples/Zendiator.Sample.Contracts/Zendiator.Sample.Contracts.csproj",
-            "samples/Zendiator.Sample.Application/Zendiator.Sample.Application.csproj",
-            "samples/Zendiator.Sample.Host/Zendiator.Sample.Host.csproj",
-            "benchmarks/Zendiator.UseCaseBenchmarks/Zendiator.UseCaseBenchmarks.csproj")) {
-            dotnet format $p --verify-no-changes --no-restore
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
+      - name: Run Stream Before example
+        working-directory: benchmarks/Zendiator.BeforeRelayBenchmarks
+        run: dotnet ./bin/Release/net10.0/Zendiator.BeforeRelayBenchmarks.dll --example
 
       - name: Pack
         run: |
           dotnet pack src/Zendiator.Abstractions/Zendiator.Abstractions.csproj -c Release --no-build -o artifacts/packages
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           dotnet pack src/Zendiator/Zendiator.csproj -c Release --no-build -o artifacts/packages
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet pack src/Zendiator.CodeFixes/Zendiator.CodeFixes.csproj -c Release --no-build -o artifacts/packages
+
+      - name: Restore remaining project dependencies for formatting
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$solution = Get-Content 'Zendiator.slnx' -Raw
+          $solutionProjects = @($solution.SelectNodes('//Project') | ForEach-Object { $_.Path })
+          $projects = @(git ls-files -- '*.csproj')
+          if ($LASTEXITCODE -ne 0) { throw 'Project enumeration failed' }
+          $feed = (Resolve-Path artifacts/packages).Path
+          $packages = Join-Path $env:RUNNER_TEMP 'format-consumer-packages'
+          $config = Join-Path $env:RUNNER_TEMP 'format.NuGet.Config'
+          $escapedFeed = [System.Security.SecurityElement]::Escape($feed)
+          @"
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local" value="$escapedFeed" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+          </configuration>
+          "@ | Set-Content $config -Encoding UTF8
+          foreach ($project in $projects | Where-Object { $_ -notin $solutionProjects }) {
+            [xml]$xml = Get-Content $project -Raw
+            $consumesPackage = @($xml.SelectNodes('//PackageReference') | Where-Object { $_.Include -eq 'Zendiator' }).Count -gt 0
+            if ($consumesPackage) {
+              dotnet restore $project --packages $packages --configfile $config
+            } else {
+              dotnet restore $project
+            }
+            if ($LASTEXITCODE -ne 0) { throw "Additional project restore failed: $project" }
+          }
+
+      - name: Format check
+        shell: pwsh
+        run: |
+          $projects = @(git ls-files -- '*.csproj')
+          if ($LASTEXITCODE -ne 0 -or $projects.Count -eq 0) { throw 'No tracked C# projects found' }
+          foreach ($project in $projects) {
+            dotnet format $project --verify-no-changes --no-restore
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
       - name: Verify package contents
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
-          $tmp = Join-Path $env:RUNNER_TEMP "pkg-inspect"
-          Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
-          Expand-Archive "artifacts/packages/Zendiator.$version.nupkg" "$tmp/main" -Force
-          $analyzer = "$tmp/main/analyzers/dotnet/cs/Zendiator.SourceGenerator.dll"
-          if (-not (Test-Path $analyzer)) { throw "generator analyzer missing from package" }
-          $nuspec = Get-Content "$tmp/main/Zendiator.nuspec" -Raw
-          foreach ($banned in @("MessagePipe", "CodeAnalysis")) {
-            if ($nuspec -match $banned) { throw "banned dependency in nuspec: $banned" }
-          }
-          if ($nuspec -notmatch 'dependency id="Zendiator.Abstractions"') { throw "Abstractions dependency missing" }
+          $sourceCommit = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/Verify-ReleasePackages.ps1 -SourceCommit $sourceCommit
 
       - name: Run sample
         run: dotnet run --project samples/Zendiator.Sample.Host -c Release --no-build
@@ -91,3 +136,12 @@ jobs:
         run: |
           $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
           ./scripts/aot-matrix-test.ps1 -PackageVersion $version -PackagesDir artifacts/packages
+
+      - name: Record validation outcome
+        if: always()
+        shell: pwsh
+        env:
+          VALIDATION_STATUS: ${{ job.status }}
+        run: |
+          "Validation: $env:VALIDATION_STATUS" >> $env:GITHUB_STEP_SUMMARY
+          "Individual results and failures: see this run's step logs. Strict performance measurement and package publication are not part of this workflow." >> $env:GITHUB_STEP_SUMMARY

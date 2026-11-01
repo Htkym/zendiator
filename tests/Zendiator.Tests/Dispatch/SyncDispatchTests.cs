@@ -141,7 +141,11 @@ public sealed class SyncDispatchTests
     {
         var services = Services();
         var calls = 0;
-        services.AddTransient<AddOneHandler>(_ => { calls++; return new(); });
+        services.AddTransient<AddOneHandler>(_ =>
+        {
+            calls++;
+            return new();
+        });
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();

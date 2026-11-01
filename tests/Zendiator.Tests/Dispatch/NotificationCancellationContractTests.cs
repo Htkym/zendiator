@@ -50,10 +50,14 @@ public sealed class ContextMutatingSource : System.Threading.Tasks.Sources.IValu
     {
         this.context = context;
         this.suspend = suspend;
-        if (!suspend) Complete();
+        if (!suspend)
+            Complete();
     }
 
-    public int Consumptions { get; private set; }
+    public int Consumptions
+    {
+        get; private set;
+    }
     public void Complete() => completion.SetResult(true);
 
     public void GetResult(short token)
@@ -69,7 +73,8 @@ public sealed class ContextMutatingSource : System.Threading.Tasks.Sources.IValu
     public void OnCompleted(Action<object?> continuation, object? state, short token,
         System.Threading.Tasks.Sources.ValueTaskSourceOnCompletedFlags flags)
     {
-        if (!suspend) throw new InvalidOperationException("Completed source must not register a continuation.");
+        if (!suspend)
+            throw new InvalidOperationException("Completed source must not register a continuation.");
         completion.OnCompleted(continuation, state, token, flags);
     }
 }
@@ -98,7 +103,8 @@ public sealed class NotificationContextContractTests
             Assert.Equal(0, source.Consumptions);
             source.Complete();
         }
-        else Assert.True(pending.IsCompletedSuccessfully);
+        else
+            Assert.True(pending.IsCompletedSuccessfully);
         await pending;
         Assert.Equal(1, source.Consumptions);
         Assert.Equal("caller", context.Value);
@@ -124,10 +130,12 @@ public sealed class NotificationFastPathAllocationTests
         await using var scope = provider.CreateAsyncScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
         var notification = new SynchronousSuccessNotification();
-        for (var i = 0; i < 1024; i++) await mediator.PublishAsync(notification);
+        for (var i = 0; i < 1024; i++)
+            await mediator.PublishAsync(notification);
 
         var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < 8192; i++) await mediator.PublishAsync(notification);
+        for (var i = 0; i < 8192; i++)
+            await mediator.PublishAsync(notification);
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.Equal(0, allocated);

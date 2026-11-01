@@ -5,6 +5,7 @@ namespace Competitive;
 
 public static class Correctness
 {
+    public const string StreamProtocol = "native-typed-pull-v1";
     public static void Lifetime(string library, string lifetime, Type handlerType)
     {
         string expected = library switch
@@ -23,7 +24,14 @@ public static class Correctness
         object b = first.ServiceProvider.GetRequiredService(handlerType);
         object c = second.ServiceProvider.GetRequiredService(handlerType);
         Require(ReferenceEquals(a, b) == (expected != "Transient") && ReferenceEquals(a, c) == (expected == "Singleton"), $"{library}: lifetime {lifetime}");
-        Results.Add(new { library, suite = "LifetimeIdentity", lifetime, expected, status = "Passed" });
+        Results.Add(new
+        {
+            library,
+            suite = "LifetimeIdentity",
+            lifetime,
+            expected,
+            status = "Passed"
+        });
     }
     public static List<object> Results { get; } = [];
     private static void Require(bool value, string message)
@@ -55,14 +63,23 @@ public static class Correctness
         }
         catch (OperationCanceledException) { }
         Require(probe.Handlers == 0, "Cancelled send executed handler");
-        probe = new() { Fail = true };
+        probe = new()
+        {
+            Fail = true
+        };
         try
         {
             await send(probe, default);
             throw new InvalidOperationException($"{library}: exception not propagated");
         }
         catch (ArithmeticException) { }
-        Results.Add(new { library, suite = "Send", behaviors, status = "Passed" });
+        Results.Add(new
+        {
+            library,
+            suite = "Send",
+            behaviors,
+            status = "Passed"
+        });
     }
 
     public static async Task Stream(string library, int behaviors,
@@ -81,7 +98,16 @@ public static class Correctness
                 Order(probe, behaviors);
                 Require(probe.Disposals == 1, $"{library}: full disposal");
 
-                Results.Add(new { library, suite = "Stream", behaviors, count, asynchronous, status = "Passed" });
+                Results.Add(new
+                {
+                    library,
+                    suite = "Stream",
+                    behaviors,
+                    count,
+                    asynchronous,
+                    streamProtocol = library.StartsWith("Zendiator", StringComparison.Ordinal) ? StreamProtocol : "historical-enumerable",
+                    status = "Passed"
+                });
             }
         foreach (bool asynchronous in new[] { false, true })
         {
@@ -108,7 +134,9 @@ public static class Correctness
         var failing = new Probe { Fail = true };
         try
         {
-            await foreach (int item in stream(16, true, failing, default)) { }
+            await foreach (int item in stream(16, true, failing, default))
+            {
+            }
             throw new InvalidOperationException($"{library}: stream exception not propagated");
         }
         catch (ArithmeticException) { }
@@ -120,11 +148,53 @@ public static class Correctness
             try
             {
                 var sequence = stream(16, true, probe, enumerationToken ? default : cancelled.Token);
-                await foreach (var item in sequence.WithCancellation(enumerationToken ? cancelled.Token : default)) { }
+                await foreach (var item in sequence.WithCancellation(enumerationToken ? cancelled.Token : default))
+                {
+                }
                 throw new InvalidOperationException($"{library}: precancelled stream token was ignored (enumeration={enumerationToken})");
             }
             catch (OperationCanceledException) { }
             Require(probe.Handlers == 0, $"{library}: precancelled stream executed handler");
+        }
+    }
+
+    public static async Task TypedStream(string library, int behaviors,
+        Func<int, bool, Probe, Zendiator.IStreamSink<int>, CancellationToken, ValueTask> consume)
+    {
+        foreach (var count in new[] { 0, 16 })
+            foreach (var asynchronous in new[] { false, true })
+            {
+                var probe = new Probe();
+                var sink = new CollectSink();
+                await consume(count, asynchronous, probe, sink, default);
+                Require(sink.Items.SequenceEqual(Enumerable.Range(0, count)), $"{library}: typed sequence");
+                Order(probe, behaviors);
+                Require(probe.Disposals == 1, $"{library}: typed disposal");
+            }
+        using var cts = new CancellationTokenSource();
+        var stopped = new Probe();
+        var stoppingSink = new CollectSink(cts);
+        await consume(16, true, stopped, stoppingSink, cts.Token);
+        Require(stoppingSink.Items.SequenceEqual(new[] { 0 }) && stopped.Items == 1 && stopped.Disposals == 1,
+            $"{library}: typed false must stop normally even when its callback also cancels");
+        var failing = new Probe { Fail = true };
+        try
+        {
+            await consume(16, true, failing, new CollectSink(), default);
+            throw new InvalidOperationException($"{library}: typed exception not propagated");
+        }
+        catch (ArithmeticException) { }
+        Require(failing.Disposals == 1, $"{library}: typed failed disposal");
+    }
+
+    private sealed class CollectSink(CancellationTokenSource? stop = null) : Zendiator.IStreamSink<int>
+    {
+        public List<int> Items { get; } = [];
+        public ValueTask<bool> OnNextAsync(int item, CancellationToken token)
+        {
+            Items.Add(item);
+            stop?.Cancel();
+            return new(stop is null);
         }
     }
 
@@ -157,14 +227,27 @@ public static class Correctness
                 await move;
                 stage = "none";
             }
-            finally { await e.DisposeAsync(); }
+            finally
+            {
+                await e.DisposeAsync();
+            }
         }
         catch (ArithmeticException) { }
         Require(stage != "none", $"{library}: relay failure not propagated");
         Require(failing.Handlers == 0, $"{library}: relay failure started the handler");
         if (library == "Zendiator")
-            Require(atCreation == 0 && atEnumerator == 0 && stage == "move-await", "Zendiator: relay pre-processing must start on the first move");
-        Results.Add(new { library, suite = "RelayTiming", behaviors, eventsAtCreation = atCreation, eventsAtEnumerator = atEnumerator, eventsAtFirstMove = atFirstMove, failureStage = stage, status = "Passed" });
+            Require(atCreation == 0 && atEnumerator == 0 && stage is ("move-call" or "move-await"), "Zendiator: relay pre-processing must start on the first move");
+        Results.Add(new
+        {
+            library,
+            suite = "RelayTiming",
+            behaviors,
+            eventsAtCreation = atCreation,
+            eventsAtEnumerator = atEnumerator,
+            eventsAtFirstMove = atFirstMove,
+            failureStage = stage,
+            status = "Passed"
+        });
     }
 
     public static void Save(string directory)
@@ -191,21 +274,41 @@ public static class Correctness
     {
         foreach (bool asynchronous in new[] { false, true })
         {
-            var counter = new Counter(); var probe = new Probe();
+            var counter = new Counter();
+            var probe = new Probe();
             await publish(counter, probe, asynchronous, default);
             Require(counter.Value == handlers && probe.Handlers == handlers && counter.Active == 0, $"{library}: notification count");
             Require(probe.Events.Where(x => x != 100).Order().SequenceEqual(Enumerable.Range(1, handlers)), $"{library}: notification exactly once");
             if (handlers > 0)
             {
-                using var cts = new CancellationTokenSource(); cts.Cancel();
-                try { await publish(new(), new(), asynchronous, cts.Token); throw new InvalidOperationException("Notification cancellation"); }
+                using var cts = new CancellationTokenSource();
+                cts.Cancel();
+                try
+                {
+                    await publish(new(), new(), asynchronous, cts.Token);
+                    throw new InvalidOperationException("Notification cancellation");
+                }
                 catch (OperationCanceledException) { }
                 catch (AggregateException e) when (library == "Mediator" && e.InnerExceptions.Count == handlers && e.InnerExceptions.All(x => x is OperationCanceledException)) { }
-                try { await publish(new(), new() { Fail = true }, asynchronous, default); throw new InvalidOperationException("Notification exception"); }
+                try
+                {
+                    await publish(new(), new()
+                    {
+                        Fail = true
+                    }, asynchronous, default);
+                    throw new InvalidOperationException("Notification exception");
+                }
                 catch (ArithmeticException) { }
                 catch (AggregateException e) when (library == "Mediator" && e.InnerExceptions.Count == handlers && e.InnerExceptions.All(x => x is ArithmeticException)) { }
             }
-            Results.Add(new { library, suite = "Notification", handlers, asynchronous, status = "Passed" });
+            Results.Add(new
+            {
+                library,
+                suite = "Notification",
+                handlers,
+                asynchronous,
+                status = "Passed"
+            });
         }
     }
 }

@@ -7,7 +7,8 @@ internal static class RegistrationAudit
 {
     public static void Record(IServiceCollection services, string library, string lifetime, string stage)
     {
-        if (Environment.GetEnvironmentVariable("COLD_AUDIT_REG") != "1") return;
+        if (Environment.GetEnvironmentVariable("COLD_AUDIT_REG") != "1")
+            return;
         var directory = Environment.GetEnvironmentVariable("COLD_EVIDENCE_DIR")
             ?? throw new InvalidOperationException("COLD_EVIDENCE_DIR is required for registration audit.");
         Directory.CreateDirectory(directory);

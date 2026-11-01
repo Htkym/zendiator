@@ -8,7 +8,6 @@ using static Zendiator.SourceGenerator.GeneratorDiagnostics;
 
 namespace Zendiator.SourceGenerator;
 
-/// <summary>Owns the semantic state of one generation run; each stage adds routes or diagnostics.</summary>
 internal sealed partial class GenerationAnalysis(ImmutableArray<INamedTypeSymbol> declarations, ImmutableArray<InvocationExpressionSyntax> diInvocations, Compilation compilation, CancellationToken ct)
 {
     private readonly List<Diagnostic> errors = new List<Diagnostic>();
@@ -26,16 +25,16 @@ internal sealed partial class GenerationAnalysis(ImmutableArray<INamedTypeSymbol
     internal GenerationResult Generate()
     {
         var configurationError = Configure();
-        if (configurationError != null) return configurationError;
+        if (configurationError != null)
+            return configurationError;
         var discoveryError = DiscoverTypes();
-        if (discoveryError != null) return discoveryError;
+        if (discoveryError != null)
+            return discoveryError;
         BuildRequests();
-        BuildStreams();
         BuildMultiRequests();
         BuildSyncRequests();
         BuildNotifications();
         ApplyPipelines();
-        ApplyStreamValidators();
         return EmitResult();
     }
 }

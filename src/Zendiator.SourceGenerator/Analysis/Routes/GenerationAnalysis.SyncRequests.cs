@@ -51,26 +51,31 @@ internal sealed partial class GenerationAnalysis
         var pool = isVoid ? openSyncVoidHandlers : openSyncHandlers;
         foreach (var binding in pool)
         {
-            if (!Same(binding.RequestDefinition, request.OriginalDefinition) && !Same(binding.RequestDefinition, request)) continue;
-            if (!Covers(binding, request)) continue;
+            if (!Same(binding.RequestDefinition, request.OriginalDefinition) && !Same(binding.RequestDefinition, request))
+                continue;
+            if (!Covers(binding, request))
+                continue;
             var hArgs = new string[binding.Definition.TypeParameters.Length];
             for (var j = 0; j < hArgs.Length; j++)
                 hArgs[j] = Name(request.TypeArguments[binding.HandlerPosition[j]]);
             var display = ClosedGenericName(binding.Definition, hArgs);
             var mapArgs = new ITypeSymbol[binding.Definition.TypeParameters.Length];
-            for (var j = 0; j < mapArgs.Length; j++) mapArgs[j] = request.TypeArguments[binding.HandlerPosition[j]];
+            for (var j = 0; j < mapArgs.Length; j++)
+                mapArgs[j] = request.TypeArguments[binding.HandlerPosition[j]];
             var respDisplay = isVoid ? "" : Name(Substitute(binding.ResponsePattern, binding.Definition, mapArgs, compilation));
             var reqDisplay = Name(request);
             var contractDisplay = isVoid
                 ? $"global::Zendiator.ISyncRequestHandler<{reqDisplay}>"
                 : $"global::Zendiator.ISyncRequestHandler<{reqDisplay}, {respDisplay}>";
-            if (route.Branches.Any(b => Same(b.Handler, binding.Definition))) continue;
+            if (route.Branches.Any(b => Same(b.Handler, binding.Definition)))
+                continue;
             AddMultiBranch(route, binding.Definition, handlerIsOpen: true, display, contractDisplay);
         }
         route.Branches.Sort(static (a, b) =>
         {
             var order = a.Order.CompareTo(b.Order);
-            if (order != 0) return order;
+            if (order != 0)
+                return order;
             var assembly = string.Compare(a.AssemblyId, b.AssemblyId, StringComparison.Ordinal);
             return assembly != 0 ? assembly : string.Compare(a.FullName, b.FullName, StringComparison.Ordinal);
         });
@@ -101,7 +106,8 @@ internal sealed partial class GenerationAnalysis
         }
         var reqDisplay = ClosedGenericName(def, reqArgs);
         var merged = def.TypeParameters.Select(FromTypeParam).ToArray();
-        for (var i = 0; i < merged.Length; i++) merged[i].AllowsRefLike = def.TypeParameters[i].AllowsRefLikeType;
+        for (var i = 0; i < merged.Length; i++)
+            merged[i].AllowsRefLike = def.TypeParameters[i].AllowsRefLikeType;
         var ordered = binds
             .Select(b => (Binding: b, Order: SubscriberOrder(b.Definition), Assembly: b.Definition.ContainingAssembly.Identity.ToString(), Full: Name(b.Definition)))
             .OrderBy(static x => x.Order)
@@ -111,7 +117,8 @@ internal sealed partial class GenerationAnalysis
         foreach (var binding in ordered)
         {
             var mapArgs = new ITypeSymbol[binding.Definition.TypeParameters.Length];
-            for (var j = 0; j < mapArgs.Length; j++) mapArgs[j] = def.TypeParameters[binding.HandlerToDef[j]];
+            for (var j = 0; j < mapArgs.Length; j++)
+                mapArgs[j] = def.TypeParameters[binding.HandlerToDef[j]];
             for (var j = 0; j < binding.Definition.TypeParameters.Length; j++)
             {
                 if (!MergeHandlerParam(merged[binding.HandlerToDef[j]], binding.Definition.TypeParameters[j], binding.Definition, mapArgs, compilation))
@@ -128,7 +135,8 @@ internal sealed partial class GenerationAnalysis
             }
             var display = ClosedGenericName(binding.Definition, hArgs);
             string respDisplay = "";
-            if (!isVoid) respDisplay = Name(Substitute(binding.ResponsePattern, binding.Definition, mapArgs, compilation));
+            if (!isVoid)
+                respDisplay = Name(Substitute(binding.ResponsePattern, binding.Definition, mapArgs, compilation));
             var contractDisplay = isVoid
                 ? $"global::Zendiator.ISyncRequestHandler<{reqDisplay}>"
                 : $"global::Zendiator.ISyncRequestHandler<{reqDisplay}, {respDisplay}>";
@@ -144,7 +152,8 @@ internal sealed partial class GenerationAnalysis
         {
             var first = binds[0];
             var firstMap = new ITypeSymbol[first.Definition.TypeParameters.Length];
-            for (var j = 0; j < firstMap.Length; j++) firstMap[j] = def.TypeParameters[first.HandlerToDef[j]];
+            for (var j = 0; j < firstMap.Length; j++)
+                firstMap[j] = def.TypeParameters[first.HandlerToDef[j]];
             route.ResponseDisplay = Name(Substitute(first.ResponsePattern, first.Definition, firstMap, compilation));
         }
         syncMultiRoutes.Add(route);
@@ -191,11 +200,13 @@ internal sealed partial class GenerationAnalysis
                 Error(1, $"No handler found for {Name(pair.Key)}. Include its assembly.", pair.Key);
             else if (rc > 1)
                 Error(2, $"Multiple handlers found for {Name(pair.Key)}: {string.Join(", ", list!.Select(Name))}.", pair.Key);
-            else syncRoutes.Add(new Route(pair.Key, pair.Value, list![0], isSync: true));
+            else
+                syncRoutes.Add(new Route(pair.Key, pair.Value, list![0], isSync: true));
         }
         foreach (var req in syncVoidRequests.OrderBy(Name, StringComparer.Ordinal))
         {
-            if (syncRequests.ContainsKey(req) || IsOpenDefinition(req)) continue;
+            if (syncRequests.ContainsKey(req) || IsOpenDefinition(req))
+                continue;
             var mr = IsSyncResponseMulti(req);
             var mv = IsSyncVoidMulti(req);
             if (mr && mv)
@@ -225,7 +236,8 @@ internal sealed partial class GenerationAnalysis
                 Error(1, $"No handler found for {Name(req)}. Include its assembly.", req);
             else if (vc > 1)
                 Error(2, $"Multiple handlers found for {Name(req)}: {string.Join(", ", vlist!.Select(Name))}.", req);
-            else syncRoutes.Add(new Route(req, compilation.GetSpecialType(SpecialType.System_Void), vlist![0], isVoid: true, isSync: true));
+            else
+                syncRoutes.Add(new Route(req, compilation.GetSpecialType(SpecialType.System_Void), vlist![0], isVoid: true, isSync: true));
         }
         foreach (var def in openSyncRequests.Keys.OrderBy(Name, StringComparer.Ordinal))
         {
@@ -234,7 +246,8 @@ internal sealed partial class GenerationAnalysis
                 Error(8, $"Conflicting request kinds for {Name(def)}: response and void sync multi contracts cannot be combined. Keep one.", def);
                 continue;
             }
-            if (IsSyncResponseMulti(def) || IsSyncVoidMulti(def)) continue;
+            if (IsSyncResponseMulti(def) || IsSyncVoidMulti(def))
+                continue;
             var template = openSyncRequests[def];
             var binds = openSyncHandlers.Where(b => Same(b.RequestDefinition, def)).ToList();
             var vbinds = openSyncVoidHandlers.Where(b => Same(b.RequestDefinition, def)).ToList();
@@ -264,22 +277,26 @@ internal sealed partial class GenerationAnalysis
         }
         foreach (var route in syncRoutes)
         {
-            if (route.IsOpen || !route.Request.IsGenericType) continue;
+            if (route.IsOpen || !route.Request.IsGenericType)
+                continue;
             var isRouteVoid = route.IsVoid;
             foreach (var binding in openSyncHandlers.Concat(openSyncVoidHandlers))
             {
-                if (binding.IsVoid != isRouteVoid) continue;
+                if (binding.IsVoid != isRouteVoid)
+                    continue;
                 if (Covers(binding, route.Request))
                     Error(10, $"Ambiguous generic binding for {Name(route.Request)}: closed handler {Name(route.Handler)} overlaps open handler {Name(binding.Definition)}. Keep one.", route.Request);
             }
         }
         foreach (var route in syncRoutes)
         {
-            if (route.IsOpen || !route.Request.IsGenericType) continue;
+            if (route.IsOpen || !route.Request.IsGenericType)
+                continue;
             var isRouteVoid = route.IsVoid;
             foreach (var binding in openSyncHandlers.Concat(openSyncVoidHandlers))
             {
-                if (binding.IsVoid != isRouteVoid) continue;
+                if (binding.IsVoid != isRouteVoid)
+                    continue;
                 if (Covers(binding, route.Request))
                     Error(10, $"Ambiguous generic binding for {Name(route.Request)}: closed handler {Name(route.Handler)} overlaps open handler {Name(binding.Definition)}. Keep one.", route.Request);
             }
@@ -288,7 +305,8 @@ internal sealed partial class GenerationAnalysis
         {
             var isResp = IsSyncResponseMulti(def);
             var isVoid = IsSyncVoidMulti(def);
-            if (!isResp && !isVoid) continue;
+            if (!isResp && !isVoid)
+                continue;
             var template = openSyncRequests[def];
             if (isResp)
             {
@@ -296,9 +314,11 @@ internal sealed partial class GenerationAnalysis
                 var hasClosed = syncHandlers.Keys.Any(k => k.IsGenericType && Same(k.OriginalDefinition, def));
                 if (binds.Count == 0)
                 {
-                    if (!hasClosed) Error(1, $"No handler found for {Name(def)}. Include its assembly.", def);
+                    if (!hasClosed)
+                        Error(1, $"No handler found for {Name(def)}. Include its assembly.", def);
                 }
-                else BuildOpenSyncMulti(def, template, binds, isVoid: false);
+                else
+                    BuildOpenSyncMulti(def, template, binds, isVoid: false);
             }
             else
             {
@@ -306,9 +326,11 @@ internal sealed partial class GenerationAnalysis
                 var hasClosed = syncVoidHandlers.Keys.Any(k => k.IsGenericType && Same(k.OriginalDefinition, def));
                 if (binds.Count == 0)
                 {
-                    if (!hasClosed) Error(1, $"No handler found for {Name(def)}. Include its assembly.", def);
+                    if (!hasClosed)
+                        Error(1, $"No handler found for {Name(def)}. Include its assembly.", def);
                 }
-                else BuildOpenSyncMulti(def, template, binds, isVoid: true);
+                else
+                    BuildOpenSyncMulti(def, template, binds, isVoid: true);
             }
         }
     }

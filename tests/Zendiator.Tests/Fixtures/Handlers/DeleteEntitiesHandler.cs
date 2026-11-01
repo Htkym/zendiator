@@ -8,7 +8,8 @@ public sealed class DeleteEntitiesHandler<T> : IRequestHandler<DeleteEntities<T>
     public static List<string> Deleted { get; } = [];
     public ValueTask HandleAsync(DeleteEntities<T> request, CancellationToken cancellationToken)
     {
-        foreach (var id in request.Ids) Deleted.Add($"{typeof(T).Name}:{id}");
+        foreach (var id in request.Ids)
+            Deleted.Add($"{typeof(T).Name}:{id}");
         return default;
     }
 }

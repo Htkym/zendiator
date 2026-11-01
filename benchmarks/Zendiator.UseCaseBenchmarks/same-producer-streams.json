@@ -1,0 +1,182 @@
+[
+  {
+    "Type": "ZendiatorSameProducerStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorSameProducerStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorSameProducerStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorSameProducerStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorSameProducerStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorSameProducerStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalSameProducerStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalSameProducerStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalSameProducerStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalSameProducerStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalSameProducerStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalSameProducerStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorSameProducerStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorSameProducerStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorSameProducerStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorSameProducerStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorSameProducerStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorSameProducerStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRSameProducerStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRSameProducerStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRSameProducerStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRSameProducerStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRSameProducerStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRSameProducerStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateSameProducerStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateSameProducerStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateSameProducerStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateSameProducerStream0",
+    "Method": "Full",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateSameProducerStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateSameProducerStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  }
+]

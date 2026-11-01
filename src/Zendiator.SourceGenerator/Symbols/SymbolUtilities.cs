@@ -27,7 +27,8 @@ internal static class SymbolUtilities
             case INamedTypeSymbol named when named.IsGenericType && !IsOpenDefinition(named):
                 {
                     var definition = QualifiedMetadataName(named.OriginalDefinition);
-                    if (definition == null) return null;
+                    if (definition == null)
+                        return null;
                     var args = new List<string>();
                     var containingTypes = new Stack<INamedTypeSymbol>();
                     for (var current = named; current != null; current = current.ContainingType)
@@ -35,7 +36,8 @@ internal static class SymbolUtilities
                     foreach (var argument in containingTypes.SelectMany(static current => current.TypeArguments))
                     {
                         var name = FullNameOf(argument);
-                        if (name == null) return null;
+                        if (name == null)
+                            return null;
                         args.Add(name);
                     }
                     return definition + "[" + string.Join(",", args) + "]";
@@ -49,9 +51,11 @@ internal static class SymbolUtilities
 
     internal static string? QualifiedMetadataName(INamedTypeSymbol definition)
     {
-        if (definition.ContainingNamespace == null) return null;
+        if (definition.ContainingNamespace == null)
+            return null;
         var chain = new Stack<string>();
-        for (var t = definition; t != null; t = t.ContainingType) chain.Push(t.MetadataName);
+        for (var t = definition; t != null; t = t.ContainingType)
+            chain.Push(t.MetadataName);
         var ns = definition.ContainingNamespace.IsGlobalNamespace ? "" : definition.ContainingNamespace.ToDisplayString() + ".";
         return ns + string.Join("+", chain);
     }
@@ -62,9 +66,11 @@ internal static class SymbolUtilities
         {
             ct.ThrowIfCancellationRequested();
             if (member is INamespaceSymbol child)
-                foreach (var type in Types(child, ct)) yield return type;
+                foreach (var type in Types(child, ct))
+                    yield return type;
             else if (member is INamedTypeSymbol named)
-                foreach (var type in Types(named, ct)) yield return type;
+                foreach (var type in Types(named, ct))
+                    yield return type;
         }
     }
 
@@ -73,7 +79,8 @@ internal static class SymbolUtilities
         ct.ThrowIfCancellationRequested();
         yield return named;
         foreach (var nested in named.GetTypeMembers())
-            foreach (var type in Types(nested, ct)) yield return type;
+            foreach (var type in Types(nested, ct))
+                yield return type;
     }
 
     internal static bool HasGenericContainer(INamedTypeSymbol type) => type.ContainingType != null && HasParameters(type.ContainingType);
@@ -108,18 +115,23 @@ internal static class SymbolUtilities
     internal static bool IsPublicDefinition(INamedTypeSymbol type)
     {
         for (var t = type; t != null; t = t.ContainingType)
-            if (t.DeclaredAccessibility != Accessibility.Public) return false;
+            if (t.DeclaredAccessibility != Accessibility.Public)
+                return false;
         return true;
     }
 
     internal static bool LeavesPublicOrParam(ITypeSymbol type, INamedTypeSymbol owner)
     {
-        if (type is IDynamicTypeSymbol) return true;
-        if (type is ITypeParameterSymbol p) return Same(p.ContainingSymbol, owner);
-        if (type is IArrayTypeSymbol a) return LeavesPublicOrParam(a.ElementType, owner);
+        if (type is IDynamicTypeSymbol)
+            return true;
+        if (type is ITypeParameterSymbol p)
+            return Same(p.ContainingSymbol, owner);
+        if (type is IArrayTypeSymbol a)
+            return LeavesPublicOrParam(a.ElementType, owner);
         if (type is INamedTypeSymbol n)
         {
-            if (!IsPublicDefinition(n.OriginalDefinition)) return false;
+            if (!IsPublicDefinition(n.OriginalDefinition))
+                return false;
             return n.TypeArguments.All(t => LeavesPublicOrParam(t, owner));
         }
         return false;
@@ -128,7 +140,8 @@ internal static class SymbolUtilities
     internal static string QualifiedName(INamedTypeSymbol def)
     {
         var chain = new List<string>();
-        for (var t = def; t != null; t = t.ContainingType) chain.Add(t.Name);
+        for (var t = def; t != null; t = t.ContainingType)
+            chain.Add(t.Name);
         chain.Reverse();
         var ns = def.ContainingNamespace.IsGlobalNamespace ? null : def.ContainingNamespace.ToDisplayString();
         return (ns == null ? "global::" : "global::" + ns + ".") + string.Join(".", chain);
@@ -158,11 +171,14 @@ internal static class SymbolUtilities
         var interfaces = closed.AllInterfaces.Where(i => Same(i.OriginalDefinition, ifaceDefinition)).ToArray();
         // With multiple contracts, use the route-specific interface cast. A
         // public overload need not implement the contract for this request.
-        if (interfaces.Length != 1) return false;
+        if (interfaces.Length != 1)
+            return false;
         var iface = interfaces[0];
         var target = iface?.GetMembers(methodName).OfType<IMethodSymbol>().FirstOrDefault();
-        if (target == null) return false;
-        if (closed.FindImplementationForInterfaceMember(target) is not IMethodSymbol impl) return false;
+        if (target == null)
+            return false;
+        if (closed.FindImplementationForInterfaceMember(target) is not IMethodSymbol impl)
+            return false;
         return impl.ExplicitInterfaceImplementations.IsEmpty &&
             impl.ContainingType != null && Same(impl.ContainingType.OriginalDefinition, closed.OriginalDefinition);
     }

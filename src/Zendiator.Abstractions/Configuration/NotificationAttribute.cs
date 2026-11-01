@@ -4,6 +4,5 @@ namespace Zendiator;
 [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = true, Inherited = false)]
 public sealed class NotificationAttribute(Type notificationType) : Attribute
 {
-    /// <summary>Gets the declared notification type.</summary>
     public Type NotificationType { get; } = notificationType;
 }

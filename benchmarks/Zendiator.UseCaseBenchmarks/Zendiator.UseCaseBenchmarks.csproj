@@ -11,6 +11,7 @@
     <NoWarn>$(NoWarn);MSG0005</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="AllocationBreakdown.cs" />
     <ProjectReference Include="../../src/Zendiator/Zendiator.csproj" />
     <ProjectReference Include="../../src/Zendiator.SourceGenerator/Zendiator.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <PackageReference Include="MediatR" Version="[14.2.0]" />

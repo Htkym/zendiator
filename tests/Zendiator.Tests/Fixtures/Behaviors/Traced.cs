@@ -9,7 +9,13 @@ public abstract class Traced<TRequest, TResponse>(Trace trace, string name) : IP
         where TNext : struct, IRequestContinuation<TRequest, TResponse>
     {
         trace.Add(name);
-        try { return await next.InvokeAsync(request, cancellationToken).ConfigureAwait(false); }
-        finally { trace.Add("/" + name); }
+        try
+        {
+            return await next.InvokeAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            trace.Add("/" + name);
+        }
     }
 }

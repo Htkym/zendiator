@@ -13,12 +13,22 @@ public sealed class StandardContainerTests
     {
         var services = new ServiceCollection();
         var factoryCalls = 0;
-        IZendiator Factory(IServiceProvider provider) { factoryCalls++; return new Zendiator(provider); }
-        if (!registerAfter) services.AddScoped<IZendiator>(Factory);
+        IZendiator Factory(IServiceProvider provider)
+        {
+            factoryCalls++;
+            return new Zendiator(provider);
+        }
+        if (!registerAfter)
+            services.AddScoped<IZendiator>(Factory);
         services.AddZendiator();
-        if (registerAfter) services.AddScoped<IZendiator>(Factory);
+        if (registerAfter)
+            services.AddScoped<IZendiator>(Factory);
         var calls = 0;
-        services.AddTransient<Guid0Handler>(_ => { calls++; return new(); });
+        services.AddTransient<Guid0Handler>(_ =>
+        {
+            calls++;
+            return new();
+        });
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();

@@ -1,15 +1,15 @@
 """Render the checked BDN matrix without interpreting one-launch differences."""
 
 import csv
-import json
 import sys
-from pathlib import Path
+
+from artifact_gate import filesystem_path, resolve_path, read
 
 
 if len(sys.argv) != 2:
     raise SystemExit("Usage: python make_report.py OUTPUT_ROOT")
-OUTPUT = Path(sys.argv[1]).resolve()
-ROWS = list(csv.DictReader((OUTPUT / "all-results.csv").open(encoding="utf-8")))
+OUTPUT = resolve_path(sys.argv[1])
+ROWS = list(csv.DictReader(filesystem_path(OUTPUT / "all-results.csv").open(encoding="utf-8")))
 LIBS = {
     "Zendiator": "Zendiator",
     "Immediate": "Immediate.Handlers 4.2.0",
@@ -48,7 +48,7 @@ def table(cases):
     return "\n".join(lines)
 
 
-metadata = json.loads((OUTPUT / "runs" / "send" / "run-info.json").read_text(encoding="utf-8"))
+metadata = read(OUTPUT / "runs" / "send" / "run-info.json")
 execution_order_note = (
     "ライブラリ横断の比較キー順に各ライブラリを単一ケースで起動し、先頭ライブラリを交代した。実行ログと計画の完全一致を確認した。"
     if metadata.get("executionOrder") == "cross-library-interleaved-verified" else
@@ -58,7 +58,7 @@ revision = metadata.get("revision", metadata.get("commit"))
 if not revision:
     raise ValueError("The send run has no source revision")
 source_digest = metadata.get("sourceDigest")
-manifest = json.loads((OUTPUT / "runs" / "send" / "manifest.json").read_text(encoding="utf-8"))
+manifest = read(OUTPUT / "runs" / "send" / "manifest.json")
 generated = next((item["sha256"] for item in manifest.get("generated", []) if item["path"].endswith("Zendiator.g.cs")), None)
 product = (metadata.get("productHashes") or [None])[0]
 environment = "、".join(part for part in (
@@ -146,9 +146,9 @@ RELAY_STAGE = {
 
 def relay_timing():
     path = OUTPUT / "runs" / "relay" / "correctness.json"
-    if not path.exists():
+    if not filesystem_path(path).exists():
         return []
-    rows = [row for row in json.loads(path.read_text(encoding="utf-8")) if row.get("suite") == "RelayTiming"]
+    rows = [row for row in read(path) if row.get("suite") == "RelayTiming"]
     lines = ["| ライブラリ | Behavior 段数 | 前処理の実行時点 | 前処理の例外 |", "|---|---:|---|---|"]
     for row in rows:
         when = ("Stream 生成時" if row["eventsAtCreation"] else
@@ -198,5 +198,5 @@ parts += [
     "- 測定前に Send/Void の例外とキャンセル、通知の購読順と例外、Stream の破棄などを確認する。時間測定には Stream 途中キャンセルを含めるが、Send の例外経路や非同期中断する Send handler の時間はこのマトリクスの対象外。",
 ]
 
-(OUTPUT / "RESULT.ja.md").write_text("\n".join(parts) + "\n", encoding="utf-8")
+filesystem_path(OUTPUT / "RESULT.ja.md").write_text("\n".join(parts) + "\n", encoding="utf-8")
 print(OUTPUT / "RESULT.ja.md")

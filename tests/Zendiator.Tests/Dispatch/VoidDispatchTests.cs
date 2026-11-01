@@ -33,7 +33,11 @@ public sealed class VoidDispatchTests
         GuardedDeleteHandler.Calls = 0;
         var services = Services();
         var factories = 0;
-        services.AddTransient<GuardedDeleteHandler>(_ => { factories++; return new(); });
+        services.AddTransient<GuardedDeleteHandler>(_ =>
+        {
+            factories++;
+            return new();
+        });
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();

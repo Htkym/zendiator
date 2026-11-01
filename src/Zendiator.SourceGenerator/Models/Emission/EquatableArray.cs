@@ -15,9 +15,11 @@ internal readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IRea
     public T this[int index] => _items[index];
     public bool Equals(EquatableArray<T> other)
     {
-        if (Count != other.Count) return false;
+        if (Count != other.Count)
+            return false;
         for (var i = 0; i < Count; i++)
-            if (!EqualityComparer<T>.Default.Equals(this[i], other[i])) return false;
+            if (!EqualityComparer<T>.Default.Equals(this[i], other[i]))
+                return false;
         return true;
     }
     public override bool Equals(object? obj) => obj is EquatableArray<T> other && Equals(other);

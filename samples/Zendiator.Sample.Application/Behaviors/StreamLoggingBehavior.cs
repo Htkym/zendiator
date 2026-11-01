@@ -3,23 +3,46 @@ using Zendiator.Sample.Contracts;
 
 namespace Zendiator.Sample.Application;
 
-/// <summary>Logging behavior for streams. Runs once per enumeration, not per item.</summary>
+/// <summary>Logging at an explicit opaque cursor boundary, once per enumeration.</summary>
 public sealed class StreamLoggingBehavior<TRequest, TItem>(ILogger<StreamLoggingBehavior<TRequest, TItem>> logger)
-    : IStreamPipelineBehavior<TRequest, TItem>
+    : IStreamMiddleware<TRequest, TItem>
     where TRequest : IStreamRequest<TItem>
 {
-    public async IAsyncEnumerable<TItem> HandleAsync<TNext>(TRequest request, TNext next, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
-        where TNext : struct, IStreamContinuation<TRequest, TItem>
+    public async ValueTask<IAsyncEnumerator<TItem>> OpenAsync(TRequest request,
+        IStreamUpstream<TRequest, TItem> next, CancellationToken cancellationToken)
     {
         logger.LogInformation("Streaming {Request}", typeof(TRequest).Name);
         try
         {
-            await foreach (var item in next.InvokeAsync(request, cancellationToken).WithCancellation(cancellationToken).ConfigureAwait(false))
-                yield return item;
+            var cursor = await next.OpenAsync(request, cancellationToken).ConfigureAwait(false);
+            return new LoggingCursor(cursor, logger);
         }
-        finally
+        catch
         {
             logger.LogInformation("Streamed {Request}", typeof(TRequest).Name);
+            throw;
+        }
+    }
+
+    private sealed class LoggingCursor(IAsyncEnumerator<TItem> cursor,
+        ILogger<StreamLoggingBehavior<TRequest, TItem>> logger) : IAsyncEnumerator<TItem>
+    {
+        private bool _disposed;
+        public TItem Current => cursor.Current;
+        public ValueTask<bool> MoveNextAsync() => cursor.MoveNextAsync();
+        public async ValueTask DisposeAsync()
+        {
+            if (_disposed)
+                return;
+            _disposed = true;
+            try
+            {
+                await cursor.DisposeAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                logger.LogInformation("Streamed {Request}", typeof(TRequest).Name);
+            }
         }
     }
 }

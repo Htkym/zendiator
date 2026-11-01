@@ -9,7 +9,8 @@ internal sealed partial class GenerationAnalysis
 {
     private bool EnsureOpenNotification(INamedTypeSymbol reqDef)
     {
-        if (openNotifications.Contains(reqDef)) return true;
+        if (openNotifications.Contains(reqDef))
+            return true;
         if (!IsOpenDefinition(reqDef) || !IsPublicDefinition(reqDef) ||
             !(GetContracts(reqDef, notificationDefinition).Length != 0))
         {
@@ -44,8 +45,10 @@ internal sealed partial class GenerationAnalysis
         var pfixed = new ITypeSymbol[pargs.Length];
         var h2d = new int[type.TypeParameters.Length];
         var hpos = new int[type.TypeParameters.Length];
-        for (var j = 0; j < h2d.Length; j++) h2d[j] = -1;
-        for (var j = 0; j < hpos.Length; j++) hpos[j] = -1;
+        for (var j = 0; j < h2d.Length; j++)
+            h2d[j] = -1;
+        for (var j = 0; j < hpos.Length; j++)
+            hpos[j] = -1;
         for (var i = 0; i < pargs.Length; i++)
         {
             if (pargs[i] is ITypeParameterSymbol hp && Same(hp.ContainingSymbol, type))
@@ -73,7 +76,8 @@ internal sealed partial class GenerationAnalysis
                 return;
             }
         }
-        if (!EnsureOpenNotification(reqDef)) return;
+        if (!EnsureOpenNotification(reqDef))
+            return;
         if (type.TypeParameters.Any(static p => p.AllowsRefLikeType))
         {
             Error(12, $"Subscriber {Name(type)} has ref-like type parameters. Ref struct notifications are not supported.", type);
@@ -81,7 +85,8 @@ internal sealed partial class GenerationAnalysis
         }
         var merged = reqDef.TypeParameters.Select(FromTypeParam).ToArray();
         var mapArgs = new ITypeSymbol[type.TypeParameters.Length];
-        for (var j = 0; j < mapArgs.Length; j++) mapArgs[j] = reqDef.TypeParameters[h2d[j]];
+        for (var j = 0; j < mapArgs.Length; j++)
+            mapArgs[j] = reqDef.TypeParameters[h2d[j]];
         for (var j = 0; j < type.TypeParameters.Length; j++)
         {
             if (!MergeHandlerParam(merged[h2d[j]], type.TypeParameters[j], type, mapArgs, compilation))

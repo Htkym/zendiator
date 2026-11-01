@@ -40,7 +40,12 @@ public sealed class CompositionSlotTests
             var storage = typeof(ZendiatorServiceResolver)
                 .GetField("_storage", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .GetValue(resolver);
-            return storage switch { object?[]?[] pages => pages.Length, object?[] => 1, _ => 0 };
+            return storage switch
+            {
+                object?[]?[] pages => pages.Length,
+                object?[] => 1,
+                _ => 0
+            };
         }
 
         Assert.True(PageLength(filler) >= 2);
@@ -70,8 +75,10 @@ public sealed class CompositionSlotTests
         var method = typeof(ZendiatorServiceResolver<PromotionComposition>).GetMethod("GetRequiredService")!;
         var calls = types.Select(type => method.MakeGenericMethod(type)).ToArray();
         var primer = new ZendiatorServiceResolver<PromotionComposition>(provider);
-        foreach (var call in calls) call.Invoke(primer, null);
-        if (reverse) Array.Reverse(calls);
+        foreach (var call in calls)
+            call.Invoke(primer, null);
+        if (reverse)
+            Array.Reverse(calls);
         var resolver = new ZendiatorServiceResolver<PromotionComposition>(provider, capacity);
         var captured = new object?[calls.Length];
         captured[0] = calls[0].Invoke(resolver, null);
@@ -153,7 +160,11 @@ public sealed class CompositionSlotTests
     public void Missing_service_raises_the_standard_DI_exception_without_another_factory_call()
     {
         var calls = 0;
-        using var provider = new ServiceCollection().AddTransient<SlotSecond>(_ => { calls++; return null!; }).BuildServiceProvider();
+        using var provider = new ServiceCollection().AddTransient<SlotSecond>(_ =>
+        {
+            calls++;
+            return null!;
+        }).BuildServiceProvider();
         var resolver = new ZendiatorServiceResolver<MissingComposition>(provider);
         Assert.Throws<InvalidOperationException>(resolver.GetRequiredService<SlotFirst>);
         Assert.Throws<InvalidOperationException>(resolver.GetRequiredService<SlotSecond>);
@@ -187,8 +198,28 @@ public sealed class CompositionSlotTests
     private sealed class BoundedReentrantComposition;
     private sealed class TargetComposition;
     private sealed class PromotionComposition;
-    private sealed class SlotFiller<T> { public SlotFiller() { } }
-    private sealed class SlotFirst { public SlotFirst() { } }
-    private sealed class SlotSecond { public SlotSecond() { } }
-    private sealed class SlotThird { public SlotThird() { } }
+    private sealed class SlotFiller<T>
+    {
+        public SlotFiller()
+        {
+        }
+    }
+    private sealed class SlotFirst
+    {
+        public SlotFirst()
+        {
+        }
+    }
+    private sealed class SlotSecond
+    {
+        public SlotSecond()
+        {
+        }
+    }
+    private sealed class SlotThird
+    {
+        public SlotThird()
+        {
+        }
+    }
 }

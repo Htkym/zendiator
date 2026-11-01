@@ -79,21 +79,7 @@ internal sealed partial class SourceEmitter
 
         foreach (var service in syncServices.Distinct().OrderBy(n => n, StringComparer.Ordinal))
             Register(b, service, "serviceLifetime");
-        var streamServices = new List<string>();
-        foreach (var route in _model.Routes.Streams)
-        {
-            foreach (var validator in route.Validators)
-                streamServices.Add($$"""typeof({{Name(validator)}}), typeof({{Name(validator)}})""");
-            foreach (var behavior in route.Behaviors)
-            {
-                streamServices.Add(route.IsOpen ? $$"""typeof({{OpenTypeofName(behavior)}}), typeof({{OpenTypeofName(behavior)}})""" : $$"""typeof({{Name(behavior)}}), typeof({{Name(behavior)}})""");
-            }
 
-            streamServices.Add(route.IsOpen ? $$"""typeof({{OpenTypeofName(route.Handler)}}), typeof({{OpenTypeofName(route.Handler)}})""" : $$"""typeof({{Name(route.Handler)}}), typeof({{Name(route.Handler)}})""");
-        }
-
-        foreach (var service in streamServices.Distinct().OrderBy(n => n, StringComparer.Ordinal))
-            Register(b, service, "serviceLifetime");
     }
 
     private void EmitRegistrar(StringBuilder b)

@@ -8,6 +8,9 @@ public sealed class QuoteTaxBehavior : IPipelineBehavior<GetQuotes, Quote>
         where TNext : struct, IRequestContinuation<GetQuotes, Quote>
     {
         var quote = await next.InvokeAsync(request, cancellationToken).ConfigureAwait(false);
-        return quote with { Price = quote.Price * 1.1m };
+        return quote with
+        {
+            Price = quote.Price * 1.1m
+        };
     }
 }
