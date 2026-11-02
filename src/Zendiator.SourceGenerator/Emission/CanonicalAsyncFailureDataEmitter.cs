@@ -6,7 +6,8 @@ internal static class CanonicalAsyncFailureDataEmitter
 {
     internal static void Emit(StringBuilder b, CanonicalCapabilityCompositionEmission c, CanonicalRouteDependenciesPlan dependencies)
     {
-        b.AppendLine($"{c.Registration.Handler.ResultName} response;");
+        // Managed success and failure share a completion block; initialize the local for definite assignment.
+        b.AppendLine($"{c.Registration.Handler.ResultName} response = default!;");
         EmitScope(b, c, dependencies, 0, "request");
         b.AppendLine("return response;");
     }
@@ -21,7 +22,7 @@ internal static class CanonicalAsyncFailureDataEmitter
         var error = "error" + index;
         var success = "success" + index;
         var failure = "failure" + index;
-        var propagate = "propagate" + index;
+        var finalize = "finalize" + index;
         var complete = "complete" + index;
         b.AppendLine($$"""
             {
@@ -57,16 +58,7 @@ internal static class CanonicalAsyncFailureDataEmitter
                     await Finally{{index}}({{receiver}}, {{saved}}, new global::Zendiator.SendExitInfo({{success}}, {{error}}), cancellationToken).ConfigureAwait(false);
                     throw;
                 }
-                try
-                {
-                    await Finally{{index}}({{receiver}}, {{saved}}, new global::Zendiator.SendExitInfo({{success}}, {{error}}), cancellationToken).ConfigureAwait(false);
-                }
-                catch (global::System.Exception finalFailure{{index}})
-                {
-                    {{error}} = finalFailure{{index}};
-                    goto {{propagate}};
-                }
-                goto {{complete}};
+                goto {{finalize}};
             {{failure}}:
                 try
                 {
@@ -78,12 +70,13 @@ internal static class CanonicalAsyncFailureDataEmitter
                     await Finally{{index}}({{receiver}}, {{saved}}, new global::Zendiator.SendExitInfo({{success}}, {{error}}), cancellationToken).ConfigureAwait(false);
                     throw;
                 }
+            {{finalize}}:
                 try
                 {
                     await Finally{{index}}({{receiver}}, {{saved}}, new global::Zendiator.SendExitInfo({{success}}, {{error}}), cancellationToken).ConfigureAwait(false);
                 }
                 catch (global::System.Exception finalReplacement{{index}}) { {{error}} = finalReplacement{{index}}; }
-            {{propagate}}:
+                if ({{error}} is null) goto {{complete}};
             """);
         if (index != 0)
             b.AppendLine($$"""
@@ -101,3 +94,4 @@ internal static class CanonicalAsyncFailureDataEmitter
             """);
     }
 }
+

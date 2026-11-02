@@ -4,21 +4,31 @@ namespace Zendiator.Generator.Tests;
 
 public sealed partial class GeneratorTests
 {
-    [Fact]
-    public async Task Native_stream_first_owner_claim_is_lazy_and_clones_keep_independent_original_tokens()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(5)]
+    public async Task Native_stream_first_owner_claim_is_lazy_and_clones_keep_independent_original_tokens(int wrappers)
     {
-        var source = NativeStreamFixture("""
-            c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));c.Pipeline<Items>(DispatchFamily.Stream);
-            """, """
+        var stages = string.Concat(Enumerable.Range(1, wrappers).Select(i => ",Stage.Wrapper<Relay" + i + ">()"));
+        var source = NativeStreamFixture("c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));c.Pipeline<Items>(DispatchFamily.Stream" + stages + ");", """
             public sealed record Items:IStreamRequest<int>;
             public sealed class Probe{
-                public int Resolved,Opened,HandlerDisposals;public readonly HashSet<int> Active=new();public readonly List<int> Disposed=new();
+                public int Resolved,Opened,HandlerDisposals,WrapperResolved,WrapperOpened;public readonly HashSet<int> Active=new();public readonly List<int> Disposed=new();
             }
             [ZendiatorHandler]public sealed class Handler:IStreamSourceHandler<Items,int,Cursor>,IDisposable{
                 private readonly Probe p;public Handler(Probe p){this.p=p;p.Resolved++;}
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){var id=++p.Opened;p.Active.Add(id);return new(new Cursor(p,id,t));}
                 public void Dispose()=>p.HandlerDisposals++;
             }
+            public class Relay:IStreamMiddleware<Items,int>{
+                private readonly Probe p;public Relay(Probe p){this.p=p;p.WrapperResolved++;}
+                public ValueTask<IAsyncEnumerator<int>> OpenAsync(Items r,IStreamUpstream<Items,int> next,CancellationToken t){p.WrapperOpened++;return next.OpenAsync(r,t);}
+            }
+            public sealed class Relay1(Probe p):Relay(p);
+            public sealed class Relay2(Probe p):Relay(p);
+            public sealed class Relay3(Probe p):Relay(p);
+            public sealed class Relay4(Probe p):Relay(p);
+            public sealed class Relay5(Probe p):Relay(p);
             public sealed class Cursor(Probe p,int id,CancellationToken token):IAsyncEnumerator<int>{
                 private int index=-1;private bool disposed;public int Current=>index;
                 public ValueTask<bool> MoveNextAsync(){Check.That(!disposed,"another owner must not dispose this native cursor");token.ThrowIfCancellationRequested();return new(++index<2);}
@@ -29,7 +39,7 @@ public sealed partial class GeneratorTests
             await using var provider=services.BuildServiceProvider();await using var scope=provider.CreateAsyncScope();
             var mediator=scope.ServiceProvider.GetRequiredService<global::NativeStream.Generated.Reads.IZendiator>();
             IAsyncEnumerable<int> unused=mediator.StreamAsync(new Items());var unissued=(IAsyncEnumerator<int>)unused;
-            Check.That(p.Resolved==0&&p.Opened==0,"creating an unused standard source does not acquire a handler or native cursor");
+            Check.That(p.Resolved==0&&p.Opened==0&&p.WrapperResolved==0&&p.WrapperOpened==0,"creating an unused standard source does not acquire a handler or native cursor");
             Check.Invalid(()=>{_=unissued.Current;});var rejected=false;
             try{await unissued.MoveNextAsync();}catch(InvalidOperationException){rejected=true;}
             Check.That(rejected&&p.Resolved==0&&p.Opened==0,"a source cast cannot move before its first GetAsyncEnumerator");
@@ -49,7 +59,7 @@ public sealed partial class GeneratorTests
                 var afterRace=racing.GetAsyncEnumerator();
                 Check.That(!ReferenceEquals(racing,afterRace),"the first owner is never claimed again after competing disposal");
                 await afterRace.DisposeAsync();await racingOwner.DisposeAsync();
-                Check.That(p.Resolved==0&&p.Opened==0,"cold disposal competitors settle without acquiring or stranding a shared completion");
+                Check.That(p.Resolved==0&&p.Opened==0&&p.WrapperResolved==0&&p.WrapperOpened==0,"cold disposal competitors settle without acquiring or stranding a shared completion");
             }
 
             IAsyncEnumerable<int> cold=mediator.StreamAsync(new Items());var coldOwner=(IAsyncEnumerator<int>)cold;
@@ -78,6 +88,7 @@ public sealed partial class GeneratorTests
             await ea.DisposeAsync();await eb.DisposeAsync();await later.DisposeAsync();
             Check.That(p.Opened==4&&p.Active.Count==0&&p.Disposed.Distinct().Count()==4&&p.Disposed.Count==4,"all started native cursors close once, including API-canceled clones");
             Check.That(p.Resolved==1&&p.HandlerDisposals==0,"independent owners borrow the same captured DI handler");
+            Check.That(p.WrapperOpened==p.WrapperResolved*4,"each started enumeration independently opens every middleware stage");
             await scope.DisposeAsync();Check.That(p.HandlerDisposals==1,"the DI scope retains handler disposal ownership");
 
             static async ValueTask ExpectCanceled(IAsyncEnumerator<int> cursor){
@@ -85,6 +96,6 @@ public sealed partial class GeneratorTests
                 Check.That(canceled,"the owner must observe its cancellation token");Check.Invalid(()=>{_=cursor.Current;});
             }
             """);
-        await RunNativeStreamFixture("first-owner-claim", source);
+        await RunNativeStreamFixture("first-owner-claim-" + wrappers, source);
     }
 }

@@ -54,7 +54,7 @@ internal static class CanonicalStreamFallbackEmitter
                     { _services = services; _request = request; _api = api; }
                     internal static global::System.Collections.Generic.IAsyncEnumerable<{{item}}> CreateEnumerable(
                         global::System.IServiceProvider services, {{h.RequestName}} request, global::System.Threading.CancellationToken api) =>
-                        {{(factoryEnumerable ? "api.CanBeCanceled ? new Cursor" + model.ConsumerSegment + "(services, request, api, default, reserveFirstEnumeration: true) : new " + enumerableName + "(new(services, request, api))" : standalone ? "new Cursor" + model.ConsumerSegment + "(services, request, api, default, reserveFirstEnumeration: true)" : "new Enumerable(new(services, request, api))")}};
+                        {{(factoryEnumerable ? "api.CanBeCanceled ? new Cursor" + model.ConsumerSegment + "(services, request, api, default, reserveFirstEnumeration: true) : new " + enumerableName + "(new(services, request, api))" : "new Cursor" + model.ConsumerSegment + "(services, request, api, default, " + (standalone ? "" : "null, ") + "reserveFirstEnumeration: true)")}};
                     private Cursor{{model.ConsumerSegment}} CreateCursor(global::System.Threading.CancellationToken token)
                     {
                         if (_services is null) throw new global::System.InvalidOperationException("The Stream source is uninitialized.");
@@ -128,16 +128,6 @@ internal static class CanonicalStreamFallbackEmitter
                         }
                     }
                 """);
-        else if (!standalone)
-            b.AppendLine($$"""
-                    private sealed class Enumerable : global::System.Collections.Generic.IAsyncEnumerable<{{item}}>
-                    {
-                        private readonly {{source}}{{generic}} _plan;
-                        internal Enumerable({{source}}{{generic}} plan) => _plan = plan;
-                        public global::System.Collections.Generic.IAsyncEnumerator<{{item}}> GetAsyncEnumerator(
-                            global::System.Threading.CancellationToken cancellationToken = default) => _plan.CreateCursor(cancellationToken);
-                    }
-                """);
         foreach (var segment in model.Segments)
             EmitCursor(b, model, segment);
         if (h.ReturnsEnumerable)
@@ -185,6 +175,7 @@ internal static class CanonicalStreamFallbackEmitter
         var receiver = segment.Wrapper == null ? Storage(h.HandlerName, h.HandlerIsValueType)
             : Storage(segment.Wrapper.WrapperName, segment.Wrapper.WrapperIsValueType);
         var standalone = IsStandalone(model);
+        var firstOwner = n == model.ConsumerSegment;
         var referenceAccess = segment.Upstream is null ? "private" : "internal";
         var parent = model.Segments.SingleOrDefault(s => s.Upstream == n);
         var awaitMove = segment.Hooks.Count == 0 ? CanonicalStreamPendingTaskEmitter.Emit(model, n) : """
@@ -210,7 +201,7 @@ internal static class CanonicalStreamFallbackEmitter
             ? "else if (_identitySource is { } child) return AdvanceGroup(child); else operation = ObserveMove(MoveCoreAsync());"
             : CanonicalStreamPrivateAdvanceEmitter.IsParent(model, n)
             ? "else if (_identitySource is { } child) operation = AdvanceIdentity(child); else operation = ObserveMove(MoveCoreAsync());"
-            : standalone && segment.Hooks.Count == 0 ? $$"""
+            : segment.Hooks.Count == 0 ? $$"""
                             else
                             {
                                 var pending = MoveCoreAsync();
@@ -227,7 +218,7 @@ internal static class CanonicalStreamFallbackEmitter
             repeatedMove = "else if (_identityLease is not null) return AdvanceIdentityLease();\n" + repeatedMove;
         b.AppendLine($$"""
                     private sealed class Cursor{{n}} : global::Zendiator.Streaming.StreamCursorState,
-                        global::System.Collections.Generic.IAsyncEnumerator<{{output}}>{{(standalone ? ", global::System.Collections.Generic.IAsyncEnumerable<" + output + ">" : "")}}
+                        global::System.Collections.Generic.IAsyncEnumerator<{{output}}>{{(firstOwner ? ", global::System.Collections.Generic.IAsyncEnumerable<" + output + ">" : "")}}
                     {
                         {{referenceAccess}} readonly global::System.IServiceProvider _services;
                         private readonly {{h.RequestName}} _request;
@@ -236,7 +227,7 @@ internal static class CanonicalStreamFallbackEmitter
                         {{(referenceSource ? "" : "private bool _acquired;")}}
                         {{(standalone ? "" : "private bool _normalEnd;\ninternal bool CanReopen => _normalEnd && !HasPendingOperation;")}}
                         internal Cursor{{n}}(global::System.IServiceProvider services, {{h.RequestName}} request,
-                            global::System.Threading.CancellationToken api, global::System.Threading.CancellationToken enumeration{{(standalone ? ", bool reserveFirstEnumeration = false" : ", global::Zendiator.Streaming.StreamCursorState? root")}}) : base(api, enumeration{{(standalone ? ", reserveFirstEnumeration" : "")}})
+                            global::System.Threading.CancellationToken api, global::System.Threading.CancellationToken enumeration{{(standalone ? "" : ", global::Zendiator.Streaming.StreamCursorState? root")}}{{(firstOwner ? ", bool reserveFirstEnumeration = false" : "")}}) : base(api, enumeration{{(firstOwner ? ", reserveFirstEnumeration" : "")}})
                         { _services = services; _request = request; {{(standalone ? "" : "_root = root ?? this;")}} }
             """);
         if (segment.Hooks.Count != 0)
@@ -294,15 +285,18 @@ internal static class CanonicalStreamFallbackEmitter
                             return false;
                         }
             """);
-        if (standalone)
-        {
+        if (firstOwner)
             b.AppendLine($$"""
                         public global::System.Collections.Generic.IAsyncEnumerator<{{output}}> GetAsyncEnumerator(
                             global::System.Threading.CancellationToken cancellationToken = default)
                         {
                             if (TryClaimFirstEnumeration(cancellationToken)) return this;
-                            return new Cursor{{n}}(_services, _request, OriginalApiToken, cancellationToken);
+                            return new Cursor{{n}}(_services, _request, OriginalApiToken, cancellationToken{{(standalone ? "" : ", null")}});
                         }
+                """);
+        if (standalone)
+        {
+            b.AppendLine($$"""
                         // This fresh owner is kept inside one Consume operation and is never passed to user code.
                         internal global::System.Threading.Tasks.ValueTask<bool> MoveNextForTerminalAsync()
                         {
@@ -352,7 +346,10 @@ internal static class CanonicalStreamFallbackEmitter
         b.AppendLine("private static " + input + " ReadSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.Current;");
         b.AppendLine("private static global::System.Threading.Tasks.ValueTask DisposeSource<" + cursorType + ">(ref " + cursorType + " source) where " + cursorType + " : global::System.Collections.Generic.IAsyncEnumerator<" + input + "> => source.DisposeAsync();");
         EmitMove(b, segment);
-        EmitCleanup(b, segment, factory, referenceSource, HasIdentitySource(model, n), standalone && segment.Hooks.Count == 0, identityLeaseParent);
+        var completionCell = segment.Hooks.Count == 0
+            && !CanonicalStreamGroupAdvanceEmitter.IsParent(model, n)
+            && !CanonicalStreamPrivateAdvanceEmitter.IsParent(model, n);
+        EmitCleanup(b, segment, factory, referenceSource, HasIdentitySource(model, n), completionCell, identityLeaseParent);
         b.AppendLine("}");
         if (segment.Upstream is { } upstream)
             EmitUpstream(b, h, segment, upstream, HasIdentitySource(model, n) || CanonicalStreamIdentityLeaseEmitter.HasEdge(model, n));
