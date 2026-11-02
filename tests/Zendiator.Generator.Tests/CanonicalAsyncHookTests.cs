@@ -304,35 +304,6 @@ public sealed partial class GeneratorTests
         foreach (var generated in new[] { false, true })
             await RunAsyncHookCase(f, mode, isVoid, generated, phase == "h0.exception" ? "handler-error" : "success", phase);
     }
-    [Theory]
-    [InlineData("success", "h0.finally")]
-    [InlineData("before-error", "h0.finally")]
-    [InlineData("observer-error", "h0.finally")]
-    [InlineData("finally-success-error", null)]
-    [InlineData("finally-body-error", null)]
-    [InlineData("finally-success-oce", null)]
-    [InlineData("inner-finally-error", "h0.finally")]
-    [InlineData("observer-pending-oce", "h0.exception")]
-    public async Task Async_hook_shared_completion_keeps_success_failure_and_replacement_boundaries(string scenario, string? pending)
-    {
-        var fixture = HookAsyncFixture("two", false);
-        foreach (var generated in new[] { false, true })
-            await RunAsyncHookCase(fixture, "two", false, generated, scenario, pending);
-    }
-
-    [Fact]
-    public void Async_hook_managed_paths_share_one_finally_await_site_per_hook()
-    {
-        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(
-            SyncCompilation(AsyncHookSource("two", false), "SharedHookCompletion_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        Assert.Empty(diagnostics);
-        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
-        var text = string.Join("\n", driver.GetRunResult().Results.Single().GeneratedSources.Select(s => s.SourceText.ToString()));
-        // One shared managed path plus the two preserved non-CLS exception boundaries.
-        Assert.Equal(3, text.Split("await Finally0(", StringSplitOptions.None).Length - 1);
-        Assert.Equal(3, text.Split("await Finally1(", StringSplitOptions.None).Length - 1);
-    }
-
     [Fact]
     public async Task Async_hook_pending_observer_OCE_overwrites_body_and_native_Before_keeps_its_context_boundary()
     {

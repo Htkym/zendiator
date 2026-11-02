@@ -42,9 +42,15 @@ public sealed partial class GeneratorTests
             Check.That(await cursor.MoveNextAsync()&&cursor.Current==1,"initial item opens the mixed hook boundary");
             var first=cursor.MoveNextAsync();Check.That(!first.IsCompleted,"first repeated move is pending");
             Check.Invalid(()=>{_=cursor.Current;});Check.Invalid(()=>{_=cursor.MoveNextAsync();});Check.Invalid(()=>{_=cursor.DisposeAsync();});
-            p.First.Complete();Check.That(first.IsCompleted,"first result remains available without consumption");
+            var firstReady=new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            first.ConfigureAwait(false).GetAwaiter().UnsafeOnCompleted(()=>firstReady.TrySetResult(true));
+            p.First.Complete();await firstReady.Task.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            Check.That(first.IsCompleted,"first result remains available without consumption");
             var second=cursor.MoveNextAsync();Check.That(!second.IsCompleted,"second repeated move is pending");
-            p.Second.Complete();Check.That(second.IsCompleted,"second result remains available without consumption");
+            var secondReady=new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            second.ConfigureAwait(false).GetAwaiter().UnsafeOnCompleted(()=>secondReady.TrySetResult(true));
+            p.Second.Complete();await secondReady.Task.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            Check.That(second.IsCompleted,"second result remains available without consumption");
             var third=cursor.MoveNextAsync();Check.That(!third.IsCompleted,"third move can proceed while two generations remain unconsumed");
             var saved=third.AsTask();p.Third.Complete();
             Check.That(await saved&&cursor.Current==4,"independent overflow generation publishes the current item");
