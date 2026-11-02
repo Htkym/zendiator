@@ -256,6 +256,7 @@ internal static class CanonicalStreamFallbackEmitter
                             catch (global::System.Exception error) { operation = MoveFailed(error); }
                             return PublishMove(operation);
                         }
+                        {{CanonicalAsyncCallEmitter.PoolingBuilderAttribute}}
                         private async global::System.Threading.Tasks.ValueTask<bool> StartMoveAsync()
                         {
                             try
