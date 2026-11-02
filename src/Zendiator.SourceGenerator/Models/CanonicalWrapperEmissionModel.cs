@@ -6,6 +6,10 @@ internal sealed record BoundWrapperEmission(string WrapperName, string ContractN
     {
         get; init;
     }
+    public BoundAsyncCallTargetEmission? CallTarget
+    {
+        get; init;
+    }
 }
 internal sealed record RegistrationStageEmission(string TypeName, string Kind, string? FactoryName = null);
 internal sealed record CanonicalWrapperRegionEmission(HookCapabilityEmission? Hook, BoundWrapperEmission? Wrapper, BoundAsyncFactoryEmission? Factory)
