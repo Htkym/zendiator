@@ -766,4 +766,3 @@ public sealed partial class GeneratorTests
     [InlineData("async-owned", false)]
     public void Async_hook_emitter_preserves_accepted_zero_Hook_generation_only(string mode, bool isVoid) => AsyncRuntimeFixture(mode, isVoid);
 }
-

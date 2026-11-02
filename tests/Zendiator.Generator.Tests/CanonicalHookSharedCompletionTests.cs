@@ -17,28 +17,51 @@ public sealed class SharedHookCompletionProbe
     public readonly AsyncOnceGate<int> Gate = new(0);
     public string Scenario = "success";
     public bool Pending;
-    public void Construct(int role, object receiver) { Created.Add(receiver); Trace.Add("construct:" + role); }
-    public void Release(object receiver) { Assert.DoesNotContain(Released, item => ReferenceEquals(item, receiver)); Released.Add(receiver); }
+    public void Construct(int role, object receiver)
+    {
+        Created.Add(receiver);
+        Trace.Add("construct:" + role);
+    }
+    public void Release(object receiver)
+    {
+        Assert.DoesNotContain(Released, item => ReferenceEquals(item, receiver));
+        Released.Add(receiver);
+    }
     public ValueTask<T> Transform<T>(int role, object receiver, T request, CancellationToken token)
     {
         Trace.Add("before:" + role);
-        if (role == 0 && Scenario != "success" && Scenario != "finally-success") throw Body;
+        if (role == 0 && Scenario != "success" && Scenario != "finally-success")
+            throw Body;
         return new(request);
     }
-    public ValueTask<int> Handle(int role, object receiver, int value) { Trace.Add("handle:" + role); return new(value); }
-    public ValueTask<int> After(int role, int value) { Trace.Add("after:" + role); return new(value); }
+    public ValueTask<int> Handle(int role, object receiver, int value)
+    {
+        Trace.Add("handle:" + role);
+        return new(value);
+    }
+    public ValueTask<int> After(int role, int value)
+    {
+        Trace.Add("after:" + role);
+        return new(value);
+    }
     public ValueTask Observe(int role, Exception error)
     {
-        Trace.Add("observe:" + role); Observed.Add(error);
-        if (Scenario == "observer") throw Observer;
+        Trace.Add("observe:" + role);
+        Observed.Add(error);
+        if (Scenario == "observer")
+            throw Observer;
         return default;
     }
     public ValueTask Finally(int role, SendExitInfo exit)
     {
-        Trace.Add("finally:" + role); Exits.Add((role, exit));
-        if (role != 0) return default;
-        if (Pending) return Gate.Void;
-        if (Scenario is "finally-success" or "finally-failure") throw Final;
+        Trace.Add("finally:" + role);
+        Exits.Add((role, exit));
+        if (role != 0)
+            return default;
+        if (Pending)
+            return Gate.Void;
+        if (Scenario is "finally-success" or "finally-failure")
+            throw Final;
         return default;
     }
 }
@@ -107,8 +130,10 @@ public sealed partial class GeneratorTests
             {
                 Assert.False(operation.IsCompleted);
                 Assert.Equal(0, probe.Gate.Consumptions);
-                if (scenario == "finally-failure") probe.Gate.Fail(probe.Final);
-                else probe.Gate.Complete();
+                if (scenario == "finally-failure")
+                    probe.Gate.Fail(probe.Final);
+                else
+                    probe.Gate.Complete();
             }
             var expected = scenario switch
             {
@@ -117,22 +142,28 @@ public sealed partial class GeneratorTests
                 "finally-success" or "finally-failure" => probe.Final,
                 _ => probe.Body
             };
-            if (expected == null) Assert.Equal(42, await operation.WaitAsync(TimeSpan.FromSeconds(10)));
-            else Assert.Same(expected, await Assert.ThrowsAnyAsync<Exception>(() => operation.WaitAsync(TimeSpan.FromSeconds(10))));
+            if (expected == null)
+                Assert.Equal(42, await operation.WaitAsync(TimeSpan.FromSeconds(10)));
+            else
+                Assert.Same(expected, await Assert.ThrowsAnyAsync<Exception>(() => operation.WaitAsync(TimeSpan.FromSeconds(10))));
             Assert.Equal(expected is OperationCanceledException, operation.IsCanceled);
-            if (pending) Assert.Equal(1, probe.Gate.Consumptions);
+            if (pending)
+                Assert.Equal(1, probe.Gate.Consumptions);
             Assert.Equal(4, probe.Created.Count);
             Assert.Empty(probe.Released);
             var succeeded = scenario is "success" or "finally-success";
             var trace = new List<string> { "construct:0", "construct:1", "construct:2", "construct:3", "before:0" };
-            if (succeeded) trace.AddRange(["before:1", "before:2", "handle:3", "after:2", "finally:2", "after:1", "finally:1", "after:0"]);
-            else trace.Add("observe:0");
+            if (succeeded)
+                trace.AddRange(["before:1", "before:2", "handle:3", "after:2", "finally:2", "after:1", "finally:1", "after:0"]);
+            else
+                trace.Add("observe:0");
             trace.Add("finally:0");
             Assert.Equal(trace, probe.Trace);
             var outer = Assert.Single(probe.Exits, item => item.Role == 0).Exit;
             Assert.Equal(succeeded, outer.Success);
             Assert.Same(succeeded ? null : scenario == "observer" ? probe.Observer : probe.Body, outer.Error);
-            if (!succeeded) Assert.Same(probe.Body, Assert.Single(probe.Observed));
+            if (!succeeded)
+                Assert.Same(probe.Body, Assert.Single(probe.Observed));
         }
         Assert.Equal(probe.Created.Count, probe.Released.Count);
     }
