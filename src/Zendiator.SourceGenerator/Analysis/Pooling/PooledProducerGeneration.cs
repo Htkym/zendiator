@@ -265,6 +265,9 @@ internal static class PooledProducerGeneration
         bool VisitMethod(IMethodSymbol callee)
         {
             callee = callee.OriginalDefinition;
+            // Calls bind to the partial definition; inspect and track its executable counterpart.
+            // Accessors expose the same link for partial properties and indexers.
+            callee = callee.PartialImplementationPart ?? callee;
             if (callee.MethodKind == MethodKind.Constructor && callee.ContainingType.DeclaringSyntaxReferences.Length != 0)
             {
                 failure = "source-defined constructors and their initializer call graphs are unsupported.";
