@@ -137,6 +137,12 @@ jobs:
           $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
           ./scripts/aot-matrix-test.ps1 -PackageVersion $version -PackagesDir artifacts/packages
 
+      - name: Pooled producer package and Native AOT smoke (C# 14)
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
+          ./scripts/pooled-producer-package-smoke-test.ps1 -PackageVersion $version -PackagesDir artifacts/packages -Aot
+
       - name: Record validation outcome
         if: always()
         shell: pwsh
