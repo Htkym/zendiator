@@ -85,16 +85,14 @@ internal static class CanonicalWrapperSourceEmitter
     private static string Result(BoundSyncHandlerEmission h, bool async) => async ?
         (h.ResultName == null ? "global::System.Threading.Tasks.ValueTask" : "global::System.Threading.Tasks.ValueTask<" + h.ResultName + ">") : h.ResultName ?? "void";
     private static string Call(string expression, bool async) => async ? "await " + expression + ".ConfigureAwait(false)" : expression;
-    private static string WrapperCall(BoundWrapperEmission w, string input, string next, bool hasValue)
+    private static string WrapperCall(BoundWrapperEmission w, string input, string next)
     {
         var arguments = "(" + input + "," + next + ",cancellationToken)";
         var fallback = "((" + w.ContractName + ")wrapper)." + w.MethodName + arguments;
-        if (w.CallTarget is not { } target || target.RequiresExactReceiver && !hasValue)
+        // Non-sealed receivers retain the original interface dispatch, including derived reimplementations.
+        if (w.CallTarget is not { } target || target.RequiresExactReceiver)
             return fallback;
-        var direct = "((" + target.ImplementationTypeName + ")wrapper)." + target.MethodName + arguments;
-        return target.RequiresExactReceiver
-            ? "(((global::System.Object)wrapper).GetType() == typeof(" + target.ReceiverName + ") ? " + direct + " : " + fallback + ")"
-            : direct;
+        return "((" + target.ImplementationTypeName + ")wrapper)." + target.MethodName + arguments;
     }
     private static void GeneralRegion(StringBuilder b, CanonicalWrapperCompositionEmission c, int index)
     {
@@ -125,7 +123,7 @@ internal static class CanonicalWrapperSourceEmitter
         CanonicalCapabilitySourceEmitter.Acquire(b, factory, type, receiver, input, region.Wrapper?.WrapperIsValueType ?? h.HandlerIsValueType);
         if (factory?.CleanupContractName != null)
             b.AppendLine("try{");
-        var call = region.Wrapper is { } w ? WrapperCall(w, input, "new WrapperNext" + index + "(this)", async || h.ResultName != null) : "((" + h.ContractName + ")handler)." + h.MethodName + "(" + input + ",cancellationToken)";
+        var call = region.Wrapper is { } w ? WrapperCall(w, input, "new WrapperNext" + index + "(this)") : "((" + h.ContractName + ")handler)." + h.MethodName + "(" + input + ",cancellationToken)";
         b.AppendLine((h.ResultName == null ? "" : "response=") + Call(call, async) + ";");
         CanonicalCapabilitySourceEmitter.Cleanup(b, factory, receiver, async);
         if (hook?.Success != null)
@@ -193,7 +191,7 @@ internal static class CanonicalWrapperSourceEmitter
             CanonicalCapabilitySourceEmitter.Acquire(b, f, region.Wrapper?.WrapperName ?? h.HandlerName, receiver, input, region.Wrapper?.WrapperIsValueType ?? h.HandlerIsValueType);
             if (f?.CleanupContractName != null)
                 b.AppendLine("try{");
-            var call = region.Wrapper is { } w ? WrapperCall(w, input, "new WrapperNext" + regionIndex + "(this)", async || h.ResultName != null) : "((" + h.ContractName + ")handler)." + h.MethodName + "(" + input + ",cancellationToken)";
+            var call = region.Wrapper is { } w ? WrapperCall(w, input, "new WrapperNext" + regionIndex + "(this)") : "((" + h.ContractName + ")handler)." + h.MethodName + "(" + input + ",cancellationToken)";
             b.AppendLine((h.ResultName == null ? "" : "response=") + Call(call, async) + ";");
             CanonicalCapabilitySourceEmitter.Cleanup(b, f, receiver, async);
             return;
@@ -267,7 +265,7 @@ internal static class CanonicalWrapperSourceEmitter
         if (outer)
         {
             b.AppendLine($$"""var wrapper={{CanonicalServiceResolution.Emit(c.Wrapper.WrapperName, c.Wrapper.WrapperIsValueType)}};""");
-            b.AppendLine((h.ResultName == null ? "" : "response=") + Call(WrapperCall(c.Wrapper, request, "new WrapperNext" + typeParameters + "(this)", async || h.ResultName != null), async) + ";");
+            b.AppendLine((h.ResultName == null ? "" : "response=") + Call(WrapperCall(c.Wrapper, request, "new WrapperNext" + typeParameters + "(this)"), async) + ";");
         }
         else
         {
@@ -322,7 +320,7 @@ internal static class CanonicalWrapperSourceEmitter
         if (outer)
         {
             b.AppendLine($"var wrapper={CanonicalServiceResolution.Emit(c.Wrapper.WrapperName, c.Wrapper.WrapperIsValueType)};");
-            b.AppendLine((h.ResultName == null ? "" : "response=") + Call(WrapperCall(c.Wrapper, "saved", "new WrapperNext(this)", async || h.ResultName != null), async) + ";");
+            b.AppendLine((h.ResultName == null ? "" : "response=") + Call(WrapperCall(c.Wrapper, "saved", "new WrapperNext(this)"), async) + ";");
         }
         else
         {

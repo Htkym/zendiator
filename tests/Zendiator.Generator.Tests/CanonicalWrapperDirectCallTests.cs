@@ -107,15 +107,14 @@ public sealed partial class GeneratorTests
             .Where(s => s.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal)).Select(s => s.SourceText.ToString()).ToArray();
         string Route(string request) => Assert.Single(routes, r => r.Contains("global::App." + request + " request", StringComparison.Ordinal));
 
-        // Sealed receivers call the implementation directly; other classes keep interface dispatch for derived runtime types.
+        // Only sealed receivers call directly; every non-sealed receiver retains interface dispatch.
         Assert.Contains("((global::App.SealedWrapper)wrapper).InvokeAsync(", Route("SealedPing"));
         Assert.Contains("((global::App.InheritedBase)wrapper).InvokeAsync(", Route("InheritedPing"));
         Assert.Contains("((global::App.SealedNoteWrapper)wrapper).Invoke(", Route("SealedNote"));
         foreach (var request in new[] { "SealedPing", "InheritedPing", "SealedNote" })
             Assert.DoesNotContain("GetType()", Route(request));
-        foreach (var (request, receiver) in new[] { ("VirtualPing", "VirtualWrapper"), ("ReimplementedPing", "ReimplementedBase"), ("SyncPing", "SyncWrapper") })
-            Assert.Contains("(((global::System.Object)wrapper).GetType() == typeof(global::App." + receiver + ") ? ((global::App." + receiver + ")wrapper).", Route(request));
-        foreach (var (request, receiver) in new[] { ("ExplicitPing", "ExplicitWrapper"), ("OverloadPing", "OverloadWrapper"), ("SyncNote", "NoteWrapper") })
+        foreach (var (request, receiver) in new[] { ("VirtualPing", "VirtualWrapper"), ("ReimplementedPing", "ReimplementedBase"), ("SyncPing", "SyncWrapper"),
+                     ("ExplicitPing", "ExplicitWrapper"), ("OverloadPing", "OverloadWrapper"), ("SyncNote", "NoteWrapper") })
         {
             Assert.DoesNotContain("((global::App." + receiver + ")wrapper)", Route(request));
             Assert.DoesNotContain("GetType()", Route(request));
