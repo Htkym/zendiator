@@ -11,6 +11,7 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        PooledProducerGeneration.Register(context);
         var marked = context.SyntaxProvider.ForAttributeWithMetadataName(
             MarkedHandlerDiscovery.MarkerName,
             static (node, _) => node is TypeDeclarationSyntax,
