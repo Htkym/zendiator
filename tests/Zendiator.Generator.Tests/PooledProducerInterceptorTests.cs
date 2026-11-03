@@ -102,7 +102,10 @@ public sealed partial class GeneratorTests
         {
             Assert.True(await value);
         }
-        catch (Exception ex) { failure = ex; }
+        catch (Exception ex)
+        {
+            failure = ex;
+        }
         if (scenario == "success")
         {
             Assert.Null(failure);
@@ -229,7 +232,11 @@ public sealed partial class GeneratorTests
                 if (failure is OperationCanceledException canceled)
                     Assert.Equal(cancellation.Token, canceled.CancellationToken);
             }
-            finally { await cursor.DisposeAsync(); await cursor.DisposeAsync(); }
+            finally
+            {
+                await cursor.DisposeAsync();
+                await cursor.DisposeAsync();
+            }
             Assert.Equal(1, probeType.GetField("Disposals")!.GetValue(probe));
             var result = System.Text.Json.JsonSerializer.Serialize(new
             {
