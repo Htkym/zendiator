@@ -145,7 +145,10 @@ internal static class StageContractBinding
                 scopedCallbacks[role.Phase] = new(Name(contract), members[0].Name);
             }
             if (role.Wrapper)
-                wrapperEmission = new(Name(type), Name(contract), members[0].Name, role.Completion);
+                wrapperEmission = new(Name(type), Name(contract), members[0].Name, role.Completion)
+                {
+                    CallTarget = role.Stream ? null : CanonicalAsyncCallBinding.BindWrapper(type, members[0], implementation, compilation, Name)
+                };
             if (role.Stream && !role.Wrapper && (role.Completion is BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask))
                 streamEmission = new(Name(type), Name(contract), members[0].Name, role.Phase, type.IsValueType, role.Completion)
                 {

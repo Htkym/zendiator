@@ -36,6 +36,33 @@ internal static class CanonicalAsyncCallBinding
             new(implementation.Parameters.Select(p => name(p.Type))), !receiver.IsSealed);
     }
 
+    // A Send wrapper contract is a generic interface method; a direct call avoids runtime generic virtual dispatch.
+    internal static BoundAsyncCallTargetEmission? BindWrapper(INamedTypeSymbol receiver, IMethodSymbol contract,
+        IMethodSymbol implementation, Compilation compilation, Func<ITypeSymbol, string> name)
+    {
+        if (receiver.TypeKind != TypeKind.Class || implementation.ContainingType.TypeKind != TypeKind.Class ||
+            implementation.MethodKind != MethodKind.Ordinary || implementation.DeclaredAccessibility != Accessibility.Public ||
+            implementation.IsStatic || implementation.Arity != 1 || contract.Arity != 1 ||
+            implementation.ReturnsByRef || implementation.ReturnsByRefReadonly ||
+            implementation.HasUnsupportedMetadata || Restricted(implementation) || RestrictedType(implementation.ContainingType) ||
+            !implementation.ExplicitInterfaceImplementations.IsEmpty ||
+            !compilation.IsSymbolAccessibleWithin(implementation.ContainingType, compilation.Assembly) ||
+            !compilation.IsSymbolAccessibleWithin(implementation, compilation.Assembly) ||
+            !SymbolEqualityComparer.Default.Equals(implementation.ReturnType, contract.ReturnType) ||
+            implementation.Parameters.Length != 3 || contract.Parameters.Length != 3 ||
+            implementation.Parameters.Any(p => p.RefKind != RefKind.None) ||
+            !SymbolEqualityComparer.Default.Equals(implementation.Parameters[0].Type, contract.Parameters[0].Type) ||
+            !SymbolEqualityComparer.Default.Equals(implementation.Parameters[1].Type, implementation.TypeParameters[0]) ||
+            !SymbolEqualityComparer.Default.Equals(implementation.Parameters[2].Type, contract.Parameters[2].Type))
+            return null;
+        // Any other member with this name could change which method a source-level call binds to.
+        var members = implementation.ContainingType.GetMembers(implementation.Name);
+        if (members.Length != 1 || !SymbolEqualityComparer.Default.Equals(members[0], implementation))
+            return null;
+        return new(name(receiver), name(implementation.ContainingType), implementation.Name,
+            new(Array.Empty<string>()), !receiver.IsSealed);
+    }
+
     private static bool RestrictedType(INamedTypeSymbol? type) => type != null &&
         (Restricted(type) || RestrictedType(type.ContainingType));
 
