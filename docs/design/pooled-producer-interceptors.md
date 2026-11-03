@@ -60,4 +60,11 @@ The synchronous Stream0 control was slower in all three pairs (+9.91%, +2.10%, +
 
 A static optimization recheck identified the interceptor's explicit null check and forwarding call as possible JIT-sensitive overhead. They are not on the synchronous executed path, may already be eliminated/inlined, and removing them or forcing inlining has no demonstrated benefit. The measured implementation is retained rather than adding unmeasured runtime changes.
 
-Read-only IL inspection of the measured assemblies found both `MoveNextAsync` methods have 176 IL bytes and the same control-flow shape, with the asynchronous branch calling the interceptor instead of the original helper. The 16-byte interceptor includes both an explicit null check and a `callvirt` to the pooled helper. This identifies a correctness-preserving simplification candidate, not demonstrated native-code overhead: JIT output was not captured, and no additional measurement was performed.
+Read-only IL inspection of the measured assemblies found both `MoveNextAsync` methods have 176 IL bytes and the same control-flow shape, with the asynchronous branch calling the interceptor instead of the original helper. The 16-byte interceptor includes both an explicit null check and a `callvirt` to the pooled helper. This identifies a correctness-preserving simplification candidate, not demonstrated native-code overhead: JIT output was not captured, and source inspection alone did not establish a performance benefit.
+
+
+### Follow-up null-check experiment (not adopted)
+
+A separate candidate removed only the explicit interceptor null check, preserving the helper call's synchronous null failure. Its 37 focused tests (including a new null-failure regression test), both 389-case semantic gates and independent source review passed. Across four representative cases and three paired rounds (24 case-rounds), allocations were unchanged and every case had mixed time directions. Async Stream0's median was +1.92% and Relay5's was -2.09%; their individual pairs were +5.30/+8.72/-15.65% and -4.05/-9.61/+4.04%, respectively. Synchronous Stream0's median was -5.27% but its pairs were -11.04/+1.71/+0.47%; synchronous Relay5's median was -3.42% with +15.78/+1.51/-4.87% pairs.
+
+This did not establish a repeatable speed improvement. The explicit guard is retained in the adopted implementation, and the earlier synchronous regression observation is not erased or explained by this experiment. No repeated tuning variants were pursued.
