@@ -7,18 +7,20 @@ Roslyn Incremental Source Generator がリクエストごとの `SendAsync` オ�
 構造体の継続ノード、DI 登録を生成します。型付きの要求配送に、実行時のアセンブリ走査、
 リフレクション呼び出し、`dynamic` は使いません。
 
-## 0.5.0の使い方
+## 0.5.1の使い方
 
-このガイドは、0.5.0で同期処理・非同期処理・Streamを使う例です。
+このガイドは、0.5.1で同期処理・非同期処理・Streamを使う例です。
+修正と実験的な opt-in producer 機能は、[0.5.1リリースノート](docs/release/0.5.1-release-notes.ja.md)を参照してください。
 .NET 10 SDKとC# 14を使います。0.4.0からの更新には破壊的変更があるため、
 [0.5.0リリースノート](docs/release/0.5.0-release-notes.ja.md)を確認してください。
 
 ```shell
-dotnet add package Zendiator --version 0.5.0
+dotnet add package Zendiator --version 0.5.1
 ```
 
-NuGet.orgで0.5.0が公開されるまでは、同じ版のローカルビルド済みpackageを使ってください。
+NuGet.orgで0.5.1が公開されるまでは、同じ版のローカルビルド済みpackageを使ってください。
 [packageを使う実行例](docs/getting-started-0.5.0.ja.md)に、設定とサンプルがあります。
+そのガイドの 0.5.0 の package 例を使う場合、今回の版ではすべて 0.5.1 に揃えてください。
 
 ## 登録と実行順序
 

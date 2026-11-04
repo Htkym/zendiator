@@ -1,6 +1,6 @@
 # Zendiator.CodeFixes
 
-Optional C# code fixes for the Zendiator 0.5.0 API. The runtime and
+Optional C# code fixes for the Zendiator 0.5.x API. The runtime and
 source generator remain in the `Zendiator` package; this package is installed
 separately and is not a runtime dependency.
 
@@ -12,7 +12,7 @@ Use the same version as Zendiator:
                   PrivateAssets="all" />
 ```
 
-Set `ZendiatorPackageVersion` to `0.5.0`. Before publication to NuGet.org,
+Set `ZendiatorPackageVersion` to `0.5.1`. Before publication to NuGet.org,
 use matching locally built packages from your local feed.
 
 The fix adds `[ZendiatorHandler]` when a ZEN0035 diagnostic identifies a missing

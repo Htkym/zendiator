@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.5.0 (unreleased)
+## 0.5.1 (unreleased)
+
+- Generate direct calls for eligible sealed Send wrappers while retaining interface fallbacks for other bindings.
+- Add the experimental, explicitly enabled `GeneratePooledProducer` attribute for supported private `async ValueTask<bool>` helpers. Unsupported source receives diagnostics; existing producers are unchanged unless opted in.
+- Validate partial producer helper implementations before generating pooled helpers.
+- Add regression coverage for synchronous Before cancellation, exception priority, reentrancy and typed closed-generic composition.
+
+The [0.5.1 release notes](docs/release/0.5.1-release-notes.md) explain the opt-in boundaries and measured trade-offs. The 0.5.0 mediator contracts remain in place; performance improvements are workload-dependent.
+
+## 0.5.0
 
 - Add explicit handler markers, named compositions and ordered handler/pipeline declarations. Dedicated hooks can be generated together; arbitrary wrappers retain their own execution boundaries.
 - Replace the previous Stream handler contract with `IStreamHandler<TRequest, TItem>` returning `IAsyncEnumerable<TItem>`, or `IStreamSourceHandler<TRequest, TItem, TCursor>` opening a named cursor through `OpenAsync`. Guarded paths acquire input on the first move; eligible flat iterator routes with noncancelable tokens acquire input at `GetAsyncEnumerator` and require consumer disposal after EOF or failure. `StreamAsync` returns standard `IAsyncEnumerable<T>` for normal enumeration and HTTP serialization. `StreamSource(...).ConsumeAsync(...)` provides a separate typed terminal without a performance guarantee.
