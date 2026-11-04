@@ -7,8 +7,9 @@ ordered pipelines. Call through the generated `IZendiator`; the source generator
 binds selected handlers, hooks and middleware without runtime assembly scanning or
 reflective invocation on typed routes.
 
-This guide covers **0.5.0** and its breaking API changes. Read the
-[0.5.0 release notes](docs/release/0.5.0-release-notes.md) before upgrading.
+This guide covers **0.5.1**. Read the [0.5.1 release notes](docs/release/0.5.1-release-notes.md)
+for the fixes and experimental opt-in producer feature. Upgrading from 0.4.0 also
+requires the breaking changes in the [0.5.0 release notes](docs/release/0.5.0-release-notes.md).
 For the 0.4.0 API, use the
 [0.4.0 release notes](docs/release/0.4.0-release-notes.md) and its matching package.
 
@@ -24,14 +25,15 @@ generator and an Abstractions dependency; a contracts-only project can reference
 `Zendiator.Abstractions` alone.
 
 ```shell
-dotnet add package Zendiator --version 0.5.0
+dotnet add package Zendiator --version 0.5.1
 ```
 
-Before 0.5.0 is published to NuGet.org, use matching locally built packages from
+Before 0.5.1 is published to NuGet.org, use matching locally built packages from
 your package feed. Keep package versions aligned across your application.
 
 The [getting-started guide](docs/getting-started-0.5.0.md) explains package
-references and runnable samples. A minimal asynchronous request follows the same
+references and runnable samples. When following its 0.5.0 package examples,
+use 0.5.1 consistently for the current release. A minimal asynchronous request follows the same
 pattern as the [GettingStarted sample](samples/Zendiator.Sample.GettingStarted/Program.cs):
 
 ```csharp

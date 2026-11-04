@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <IsPackable>false</IsPackable>
-    <Version>0.5.0</Version>
+    <Version>0.5.1</Version>
     <Authors>tkym</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/Htkym/zendiator</RepositoryUrl>
@@ -13,7 +13,7 @@
     <PackageProjectUrl>https://github.com/Htkym/zendiator</PackageProjectUrl>
     <PackageTags>mediator;source-generator;CQRS;AOT</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Zendiator 0.5.0: explicit handler and pipeline registration, enumerable and cursor-based Streams, and dependency capture options. Breaking API changes require migration from 0.4.0. See https://github.com/Htkym/zendiator/blob/v0.5.0/docs/release/0.5.0-release-notes.md</PackageReleaseNotes>
+    <PackageReleaseNotes>Zendiator 0.5.1: direct calls for eligible sealed Send wrappers, experimental opt-in pooled producer helpers, and partial-helper validation fixes. See https://github.com/Htkym/zendiator/blob/v0.5.1/docs/release/0.5.1-release-notes.md</PackageReleaseNotes>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>
