@@ -1,0 +1,360 @@
+{
+  "kind": "allocation diagnostic, not formal timing",
+  "sdk": "10.0.403",
+  "runtime": ".NET 10.0.14",
+  "sourceRevision": "7c69f2a7408a68f36cf25abc3c6ac74ef00c5054",
+  "checks": {
+    "smokeAnd4096Agree": true,
+    "contiguousAllocationBoundariesReconcile": true,
+    "prefetchPreservesWholeBytes": true,
+    "slotShapeAndOccupancyMatch": true,
+    "sameDiagnosticInputs": true,
+    "onlyAppAttributeSettingDiffers": true,
+    "bothLockedRestoreAndBuildPassed": true,
+    "formalBdnRun": false,
+    "disposalSentinelTest": false
+  },
+  "stages": {
+    "inline": {
+      "allocation": [
+        {
+          "Name": "Send0",
+          "prefetch": false,
+          "scopeCreationBytes": 128,
+          "firstMediatorResolveBytes": 432,
+          "explicitDependencyGetBytes": 0,
+          "sendBytes": 24,
+          "disposalBytes": 0,
+          "wholeScopeBytes": 584,
+          "cachedSendBytes": 0,
+          "directMediatorConstructorBytes": 248
+        },
+        {
+          "Name": "Send0",
+          "prefetch": true,
+          "scopeCreationBytes": 128,
+          "firstMediatorResolveBytes": 432,
+          "explicitDependencyGetBytes": 24,
+          "sendBytes": 0,
+          "disposalBytes": 0,
+          "wholeScopeBytes": 584,
+          "cachedSendBytes": 0,
+          "directMediatorConstructorBytes": 248
+        },
+        {
+          "Name": "Send5",
+          "prefetch": false,
+          "scopeCreationBytes": 128,
+          "firstMediatorResolveBytes": 432,
+          "explicitDependencyGetBytes": 0,
+          "sendBytes": 144,
+          "disposalBytes": 0,
+          "wholeScopeBytes": 704,
+          "cachedSendBytes": 0,
+          "directMediatorConstructorBytes": 248
+        },
+        {
+          "Name": "Send5",
+          "prefetch": true,
+          "scopeCreationBytes": 128,
+          "firstMediatorResolveBytes": 432,
+          "explicitDependencyGetBytes": 144,
+          "sendBytes": 0,
+          "disposalBytes": 0,
+          "wholeScopeBytes": 704,
+          "cachedSendBytes": 0,
+          "directMediatorConstructorBytes": 248
+        }
+      ],
+      "sampling": [
+        {
+          "case": "Send0",
+          "processWideBytesPerOperation": 584.0181884765625,
+          "totalSamples": 724,
+          "topTypes": [
+            {
+              "type": "Competitive.Generated.App.Zendiator",
+              "samples": 307
+            },
+            {
+              "type": "Entry[Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceCacheKey,System.Object][]",
+              "samples": 175
+            },
+            {
+              "type": "System.Collections.Generic.Dictionary`2[Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceCacheKey,System.Object]",
+              "samples": 97
+            },
+            {
+              "type": "Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceProviderEngineScope",
+              "samples": 57
+            },
+            {
+              "type": "System.Int32[]",
+              "samples": 48
+            },
+            {
+              "type": "Competitive.ZPing0",
+              "samples": 33
+            },
+            {
+              "type": "System.String",
+              "samples": 2
+            },
+            {
+              "type": "System.UInt32",
+              "samples": 2
+            },
+            {
+              "type": "MoreEventInfo",
+              "samples": 1
+            },
+            {
+              "type": "System.Diagnostics.Tracing.EventWrittenEventArgs",
+              "samples": 1
+            },
+            {
+              "type": "System.Object[]",
+              "samples": 1
+            }
+          ]
+        },
+        {
+          "case": "Send5",
+          "processWideBytesPerOperation": 704.0012817382812,
+          "totalSamples": 872,
+          "topTypes": [
+            {
+              "type": "Competitive.Generated.App.Zendiator",
+              "samples": 302
+            },
+            {
+              "type": "Entry[Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceCacheKey,System.Object][]",
+              "samples": 173
+            },
+            {
+              "type": "System.Collections.Generic.Dictionary`2[Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceCacheKey,System.Object]",
+              "samples": 99
+            },
+            {
+              "type": "Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceProviderEngineScope",
+              "samples": 62
+            },
+            {
+              "type": "System.Int32[]",
+              "samples": 50
+            },
+            {
+              "type": "Competitive.CanonicalBefore2`1[Competitive.Ping5]",
+              "samples": 33
+            },
+            {
+              "type": "Competitive.CanonicalBefore4`1[Competitive.Ping5]",
+              "samples": 31
+            },
+            {
+              "type": "Competitive.CanonicalBefore1`1[Competitive.Ping5]",
+              "samples": 31
+            },
+            {
+              "type": "Competitive.CanonicalBefore5`1[Competitive.Ping5]",
+              "samples": 29
+            },
+            {
+              "type": "Competitive.ZPing5",
+              "samples": 28
+            },
+            {
+              "type": "Competitive.CanonicalBefore3`1[Competitive.Ping5]",
+              "samples": 27
+            },
+            {
+              "type": "MoreEventInfo",
+              "samples": 3
+            }
+          ]
+        }
+      ]
+    },
+    "lazyblocks": {
+      "allocation": [
+        {
+          "Name": "Send0",
+          "prefetch": false,
+          "scopeCreationBytes": 128,
+          "firstMediatorResolveBytes": 232,
+          "explicitDependencyGetBytes": 0,
+          "sendBytes": 168,
+          "disposalBytes": 0,
+          "wholeScopeBytes": 528,
+          "cachedSendBytes": 0,
+          "directMediatorConstructorBytes": 48
+        },
+        {
+          "Name": "Send0",
+          "prefetch": true,
+          "scopeCreationBytes": 128,
+          "firstMediatorResolveBytes": 232,
+          "explicitDependencyGetBytes": 168,
+          "sendBytes": 0,
+          "disposalBytes": 0,
+          "wholeScopeBytes": 528,
+          "cachedSendBytes": 0,
+          "directMediatorConstructorBytes": 48
+        },
+        {
+          "Name": "Send5",
+          "prefetch": false,
+          "scopeCreationBytes": 128,
+          "firstMediatorResolveBytes": 232,
+          "explicitDependencyGetBytes": 0,
+          "sendBytes": 288,
+          "disposalBytes": 0,
+          "wholeScopeBytes": 648,
+          "cachedSendBytes": 0,
+          "directMediatorConstructorBytes": 48
+        },
+        {
+          "Name": "Send5",
+          "prefetch": true,
+          "scopeCreationBytes": 128,
+          "firstMediatorResolveBytes": 232,
+          "explicitDependencyGetBytes": 288,
+          "sendBytes": 0,
+          "disposalBytes": 0,
+          "wholeScopeBytes": 648,
+          "cachedSendBytes": 0,
+          "directMediatorConstructorBytes": 48
+        }
+      ],
+      "sampling": [
+        {
+          "case": "Send0",
+          "processWideBytesPerOperation": 528.0130615234375,
+          "totalSamples": 655,
+          "topTypes": [
+            {
+              "type": "ServiceBlock_0",
+              "samples": 178
+            },
+            {
+              "type": "Entry[Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceCacheKey,System.Object][]",
+              "samples": 171
+            },
+            {
+              "type": "System.Collections.Generic.Dictionary`2[Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceCacheKey,System.Object]",
+              "samples": 100
+            },
+            {
+              "type": "Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceProviderEngineScope",
+              "samples": 59
+            },
+            {
+              "type": "Competitive.Generated.App.Zendiator",
+              "samples": 58
+            },
+            {
+              "type": "System.Int32[]",
+              "samples": 52
+            },
+            {
+              "type": "Competitive.ZPing0",
+              "samples": 29
+            },
+            {
+              "type": "MoreEventInfo",
+              "samples": 2
+            },
+            {
+              "type": "System.Object[]",
+              "samples": 2
+            },
+            {
+              "type": "System.UInt32",
+              "samples": 2
+            },
+            {
+              "type": "System.UInt64",
+              "samples": 1
+            },
+            {
+              "type": "System.IntPtr",
+              "samples": 1
+            }
+          ]
+        },
+        {
+          "case": "Send5",
+          "processWideBytesPerOperation": 648.0012817382812,
+          "totalSamples": 802,
+          "topTypes": [
+            {
+              "type": "ServiceBlock_0",
+              "samples": 207
+            },
+            {
+              "type": "Entry[Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceCacheKey,System.Object][]",
+              "samples": 147
+            },
+            {
+              "type": "System.Collections.Generic.Dictionary`2[Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceCacheKey,System.Object]",
+              "samples": 109
+            },
+            {
+              "type": "Competitive.Generated.App.Zendiator",
+              "samples": 76
+            },
+            {
+              "type": "Microsoft.Extensions.DependencyInjection.ServiceLookup.ServiceProviderEngineScope",
+              "samples": 55
+            },
+            {
+              "type": "System.Int32[]",
+              "samples": 53
+            },
+            {
+              "type": "Competitive.CanonicalBefore1`1[Competitive.Ping5]",
+              "samples": 30
+            },
+            {
+              "type": "Competitive.CanonicalBefore2`1[Competitive.Ping5]",
+              "samples": 26
+            },
+            {
+              "type": "Competitive.CanonicalBefore4`1[Competitive.Ping5]",
+              "samples": 25
+            },
+            {
+              "type": "Competitive.ZPing5",
+              "samples": 25
+            },
+            {
+              "type": "Competitive.CanonicalBefore5`1[Competitive.Ping5]",
+              "samples": 23
+            },
+            {
+              "type": "Competitive.CanonicalBefore3`1[Competitive.Ping5]",
+              "samples": 22
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "comparison": [
+    {
+      "case": "Send0",
+      "inlineBytesPerOperation": 584,
+      "lazyBlocksBytesPerOperation": 528,
+      "savedBytesPerOperation": 56,
+      "savedPercent": 9.58904109589041
+    },
+    {
+      "case": "Send5",
+      "inlineBytesPerOperation": 704,
+      "lazyBlocksBytesPerOperation": 648,
+      "savedBytesPerOperation": 56,
+      "savedPercent": 7.954545454545454
+    }
+  ],
+  "interpretation": "Existing LazyBlocks saves 56 B/op for these synchronous ScopeK1 allocation paths. Prefetch moves allocation without reducing the total. No timing improvement, full ownership/disposal proof, or public eager API justification is established."
+}

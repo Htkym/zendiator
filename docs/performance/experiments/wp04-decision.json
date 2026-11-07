@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "experiment": "WP04 optional generic struct upstream",
+  "baselineRevision": "7c69f2a7408a68f36cf25abc3c6ac74ef00c5054",
+  "implementationCheckpoint": "2822a638c8aacfacdc3816f31af22a838e983a2b",
+  "candidateRevision": "998abae44668e374b3d8119f385be9abe133b390",
+  "decision": "hold-not-integrated",
+  "decisionLabel": "保留・非統合（強制棄却条件には未該当だが時間保護未証明）",
+  "integrated": false,
+  "candidatePublished": false,
+  "criteria": {
+    "policySha256": "076D40BD4074710A6D60F0F437CBDC31A158B3306444F2F04020D5B1C60468BB",
+    "comparisonPairs": 3,
+    "materialTimeDifferencePercent": 3,
+    "allocationToleranceBytes": 0,
+    "rejectWhen": "median of three right/left mean ratios > 1.03, or all three ratios > 1.03",
+    "timeImprovementWhen": "all three ratios < 1 and median < 0.97",
+    "allocationOnlyAllThreeSlower": "Do not adopt when all three ratios > 1, even within 3 percent",
+    "noBestRoundSelection": true,
+    "noOffsettingCases": true,
+    "thresholdExpandedAfterTiming": false
+  },
+  "series": [
+    {
+      "mode": "Feature",
+      "measuredCases": 60,
+      "caseDefinitions": 10,
+      "pairs": 30,
+      "timeImprovementCases": 0,
+      "materialRegressionCases": 0,
+      "allThreeSlowerCases": 0,
+      "allMediansAtMost1_03": true
+    },
+    {
+      "mode": "DefaultProtection",
+      "measuredCases": 60,
+      "caseDefinitions": 10,
+      "pairs": 30,
+      "timeImprovementCases": 1,
+      "materialRegressionCases": 0,
+      "allThreeSlowerCases": 0,
+      "allMediansAtMost1_03": true
+    }
+  ],
+  "decisionReasons": [
+    "Five-stage feature allocation savings reproduce at about 200 B/op; zero-stage allocations are unchanged.",
+    "No frozen forced-rejection case or all-three-slower allocation-only case occurs, but all-round time protection is unproven.",
+    "Feature Stream5.EarlyBreak sync round 3 ratio is 1.432259 and right round-mean range is 59.96 percent.",
+    "Default Stream5.Full sync round 2 ratio is 1.456326 and right round-mean range is 45.42 percent.",
+    "Default Stream0.Full sync meets the speed rule, but is not counted as a struct-port effect or causal proof.",
+    "Large independent initial-baseline drift remains disclosed; thresholds are not widened and cases are not offset or rerun."
+  ],
+  "verification": {
+    "formalRawReports": 120,
+    "pairedRows": 60,
+    "rawActualPerReport": 12,
+    "rawWarmupPerReport": 20,
+    "retainedNRange": [
+      10,
+      12
+    ],
+    "distinctActualChildProofs": 120,
+    "cacheReusedProofs": 0,
+    "defaultBenchmarkGateCases": 389,
+    "candidateAdditionalParityCases": 96,
+    "candidateDriverTypes": 3,
+    "authorFullSourceGeneratedBinaryAndSavedBundleByteAudit": true,
+    "independentAllRawGcCsvPairsPolicyAudit": true,
+    "independentBulkSourceAndBundleRehash": false,
+    "finalV2IndependentAcceptance": "passed; evidence and metadata correction accepted; overall adoption held",
+    "initialProductStageReleaseFullTests": 3622,
+    "laterFocusedContractTests": 30,
+    "finalCheckpointFreshFull3622Run": false
+  },
+  "metadataCorrection": {
+    "independentFindingIncorrectExclusionIdReports": 58,
+    "independentFindingSource": "wp04-independent-review.json: verification.originalDefinitelyIncorrectIdLists",
+    "observedOldNonemptyLists": 66,
+    "observedOldEmptyLists": 54,
+    "newExclusionIds": "null in all reports; actual exclusion IDs not reconstructed",
+    "actualAndResultRawMeasurementsStoredSeparately": true,
+    "allStatisticsPairsAndDecisionsIdenticalToV1": true,
+    "pairedCsvAndPairMappingByteIdenticalToV1": true,
+    "originalV1Preserved": true
+  },
+  "sourceRecords": [
+    {
+      "path": "D:\\gitroot\\zendiator-perf-artifacts-20261107\\wp04-aggregation-v2\\paired-summary.json",
+      "sha256": "E2B88BEE81C0CA0AA74FEF85687AC859A9093DC04C97F30BE7E56896E7F2C9BD",
+      "originalDecision": "pending-independent-review"
+    },
+    {
+      "path": "D:\\gitroot\\zendiator-perf-artifacts-20261107\\wp04-aggregation-v2\\aggregation-output-manifest.json",
+      "sha256": "D3CD5403BFE09FF55475680B0B657C3E0B8E9DB807696E2439AA860B055B3A32"
+    },
+    {
+      "path": "D:\\gitroot\\zendiator-perf-artifacts-20261107\\wp04-aggregation-v1\\aggregation-output-manifest.json",
+      "sha256": "752DDD7D84D6876890D56056AE8A78A78768460E9C89E983FF0DD51A9E0715B4",
+      "preserved": true
+    },
+    {
+      "path": "C:\\Users\\h_tky\\wp04-aggregation-v1-v2-comparison.json",
+      "sha256": "D028F50341A3F6558F713C40177FAC18330ACB2AA04A23D872CA911DD109445C"
+    },
+    {
+      "path": "D:\\gitroot\\zendiator-perf-artifacts-20261107\\wp04-same-assembly-pairs\\controller.json",
+      "sha256": "67053D5DFEEC8625C84DC4786EB514582CE0F9318E7F4394B8A9FC6B6BE0B397"
+    },
+    {
+      "path": "D:\\gitroot\\zendiator-perf-artifacts-20261107\\wp04-default-protection-pairs\\controller.json",
+      "sha256": "30F224F00199306C39842A8B663C6155F914F11BF36A878F78E9D6325715FA9A"
+    },
+    {
+      "path": "D:\\gitroot\\zendiator-perf-20261107\\docs\\performance\\experiments\\decision-policy-2026-11-07.json",
+      "sha256": "076D40BD4074710A6D60F0F437CBDC31A158B3306444F2F04020D5B1C60468BB"
+    },
+    {
+      "path": "C:\\Users\\h_tky\\zendiator_wp04_aggregate_v4.py",
+      "sha256": "60A2A98AC8DA0E1508C3C4AA7E08A26EA2EBABCC247109AF36938514D7413614"
+    },
+    {
+      "path": "D:\\gitroot\\zendiator-perf-artifacts-20261107\\wp04-aggregation-v2\\INDEPENDENT-REVIEW.json",
+      "sha256": "79A164D431D6EE99D538019EB36FDEA6C24A84276743D1ACD200C9D72EAB445D",
+      "documentCopy": "wp04-independent-review.json"
+    },
+    {
+      "path": "D:\\gitroot\\zendiator-perf-artifacts-20261107\\wp04-aggregation-v1\\INDEPENDENT-REVIEW.json",
+      "sha256": "6D597CA10DAD4769C7C223DFE5B6C177D1DFE6C590035BB3C56991013316FCC8",
+      "preserved": true
+    },
+    {
+      "path": "D:\\gitroot\\zendiator-wp04-20261107\\.local\\wp04-contract-evidence\\generated-source-comparison.checkpoint.json",
+      "sha256": "BF290D683586466687D57DC7151727BC781E068C04E6F871FF4640A770EE8EBC"
+    },
+    {
+      "path": "D:\\gitroot\\zendiator-wp04-20261107\\.local\\wp04-contract-evidence\\struct-stream-il\\caller-il.json",
+      "sha256": "EC9A78ED465DB7639ADFBAA0963FB3993D4C981071F5318F727E62054B0EB53A"
+    }
+  ],
+  "limitations": [
+    "All medians <= 1.03 does not establish all-round protection or product-code causation.",
+    "The independent raw review relies on the author audit for source/generated/bundle bulk rehash.",
+    "UseCase uses OwnedCommand, setup/final and preserved-consumer bundle proof, not Foundatio v9 pre-Executor admission; no built-in overall deadline.",
+    "No competitor ranking, other runtime, AOT timing or universal composition performance claim is made.",
+    "No product integration, push, release or formal rerun is authorized by this documentation."
+  ]
+}

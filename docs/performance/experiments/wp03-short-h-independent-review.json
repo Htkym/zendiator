@@ -1,0 +1,169 @@
+{
+  "status": "passed",
+  "mainRawReports": 18,
+  "diagnosticRawReports": 3,
+  "pairs": 9,
+  "allRawActual": 12,
+  "allRawWarmup": 20,
+  "HInvocationCount": 16384,
+  "HUnrollFactor": 1,
+  "retainedNRange": [
+    9,
+    12
+  ],
+  "summarySHA256": "EBF37553DAC076B46DA19B8FD0056F43A162301A5BB20C232CF5D1D349C2BEBD",
+  "pairsSHA256": "A6233DCEE7EADE08028AB06EE0626EAD006F4909CA9F7DE2F466D74A18E9AA31",
+  "cellsSHA256": "406A46DC8F4319A3216EAA3A413B57DC3660677540C6B1C266010C72FDA4B57F",
+  "roundsSHA256": "23AACABCA68172714F0B40E8A2E1579C7B5DC1959BD44538DFF6A822C6608DD9",
+  "finalSHA256": "4AB010B0A9355B672D7ED9098158FBB5ABC94A90BB3DFC79C230D3C5736B5006",
+  "policySHA256": "AC2FED5466A8EFCAEE17E51647F73C87544CA187D112D400B80FB816C06340CC",
+  "findings": [
+    {
+      "caseId": "release-v8-499",
+      "ratios": [
+        1.1018526560444186,
+        0.9993247345730535,
+        1.0907117663608574
+      ],
+      "medianRatio": 1.0907117663608574,
+      "materialRegression": true,
+      "baselineRangePercent": 0.2317269475485828,
+      "bdnCVPercent": {
+        "baseline": [
+          0.5037375152577063,
+          0.7874282193419296,
+          0.4717263406741417
+        ],
+        "candidate": [
+          0.7064403924858497,
+          0.5345554903886602,
+          3.3929655989211827
+        ]
+      },
+      "rawActualCVPercent": {
+        "baseline": [
+          0.5845726190668793,
+          0.7666214631832758,
+          0.8112199589643174
+        ],
+        "candidate": [
+          0.8278979911161906,
+          0.7065353419319865,
+          3.833377023826494
+        ]
+      },
+      "Bop": {
+        "baseline": [
+          0,
+          0,
+          0
+        ],
+        "candidate": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "caseId": "release-v8-485",
+      "ratios": [
+        1.1614180472467748,
+        0.9564990237572002,
+        1.0329387333469848
+      ],
+      "medianRatio": 1.0329387333469848,
+      "materialRegression": true,
+      "baselineRangePercent": 1.4816569636122434,
+      "bdnCVPercent": {
+        "baseline": [
+          9.564322757721671,
+          4.024205821554933,
+          2.3090653355086093
+        ],
+        "candidate": [
+          34.29831060982966,
+          10.604857281251652,
+          3.953795643973386
+        ]
+      },
+      "rawActualCVPercent": {
+        "baseline": [
+          24.014137016328725,
+          28.006254432387994,
+          33.79701888458994
+        ],
+        "candidate": [
+          34.2659647560279,
+          24.32984637891284,
+          31.425020766395022
+        ]
+      },
+      "Bop": {
+        "baseline": [
+          480,
+          480,
+          480
+        ],
+        "candidate": [
+          480,
+          480,
+          480
+        ]
+      }
+    },
+    {
+      "caseId": "release-v8-495",
+      "ratios": [
+        1.0161749118825938,
+        1.0093140623887515,
+        0.8846167011077148
+      ],
+      "medianRatio": 1.0093140623887515,
+      "materialRegression": false,
+      "baselineRangePercent": 18.76989559573441,
+      "bdnCVPercent": {
+        "baseline": [
+          1.1978854042774745,
+          2.3651431899227036,
+          0.5050331452071418
+        ],
+        "candidate": [
+          1.5768903922323954,
+          1.518532536937022,
+          1.4088481462294835
+        ]
+      },
+      "rawActualCVPercent": {
+        "baseline": [
+          1.1976759893935678,
+          2.364724455907396,
+          0.5049578605527129
+        ],
+        "candidate": [
+          1.5766208126775876,
+          1.5182678351289436,
+          4.688817863112871
+        ]
+      },
+      "Bop": {
+        "baseline": [
+          1776,
+          1776,
+          2520
+        ],
+        "candidate": [
+          1776,
+          1776,
+          1776
+        ]
+      }
+    }
+  ],
+  "overallRecommendation": "reject-current-WP03-candidate-under-frozen-policy; do-not-integrate",
+  "limitations": [
+    "No source or saved bundle bulk rehash; author postflight covers these.",
+    "Timing regression criteria are met; code-level cause is not established.",
+    "UseCase controls are separate and are not offset by Short/H results."
+  ]
+}

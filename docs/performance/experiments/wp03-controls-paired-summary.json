@@ -1,0 +1,539 @@
+{
+  "schemaVersion": 1,
+  "experiment": "WP03",
+  "baselineRevision": "7c69f2a7408a68f36cf25abc3c6ac74ef00c5054",
+  "candidateRevision": "3bafd184ed662b357430a2409a7c017cfb1d513b",
+  "controllerSha256": "A101055A5A141CC8A847F0369942E28F48659D8F98E64CE3851F0532357174E6",
+  "policySha256": "076D40BD4074710A6D60F0F437CBDC31A158B3306444F2F04020D5B1C60468BB",
+  "matrixSha256": "CABA8D31BBCE553AA7456146BBAAD1DECADB16A26CED0CB9CEA97648E4C493E8",
+  "pairCount": 3,
+  "caseCount": 6,
+  "inputs": {
+    "01-baseline": {
+      "csvSha256": "B9F7E5C68479FF730EF3B69BF501746DBDCEE8A7E260DBD5BBFFB5082DAD7867",
+      "sessionSha256": "E7B51EF8B0CC1539FEE125BF0455DC10A33DDCB245802644FD0282F79493DE30",
+      "outcomeSha256": "A16300CD6209F9F873FB7B760D689566A03ED0CB40F74876022B80ADF46934D1",
+      "session": {
+        "revision": "7c69f2a7408a68f36cf25abc3c6ac74ef00c5054",
+        "sdk": "10.0.403",
+        "sourceDigest": "F6966CCBCEDF4757889A56772D519EF9DCEE8551C9245F517E67D89DEFD670B7",
+        "groups": [
+          "custom"
+        ],
+        "matrixSha256": {
+          "custom": "CABA8D31BBCE553AA7456146BBAAD1DECADB16A26CED0CB9CEA97648E4C493E8"
+        },
+        "profile": "Release; affinity 1; 20 warmup; 12 measurement; 500 ms requested iteration; 1 launch",
+        "artifactGateProtocol": "zendiator-child-artifact-gate-v1",
+        "sessionId": "de2211f258434af885594784119cdc22",
+        "runtimeSha256": "98983A99017A972586293DCE4FC5A720D593F8C984FCE3EAAF82327A74B16A78",
+        "benchmarkSha256": "587D221C4532E5E363AECE133F2CEF295E604E9965DBBB6D8B4527F50E46237F",
+        "generatorSha256": "E9B84F590321CBCF4C0E3DEB00348175CDB5EAD100FB3F718D709A4541AA0B1A",
+        "runtime": ".NET 10.0.14",
+        "diSha256": "2D0E268BF76B4CE36A55EBB2767354DB956C6660DE65D6CCCFC35C957FB12CFC",
+        "gateSha256": {
+          "custom": "6E58C085A2D6B34D4DBECF41F84A4FE652D180F1BD8E45C87B60ABB68B4F9788"
+        }
+      }
+    },
+    "01-candidate": {
+      "csvSha256": "260CB2E004788CEA3B06564DC8A814CEBD8BCD36B2058EC911948180049E1879",
+      "sessionSha256": "D23172498908506F1A79200E50E00317F7EDC99AB9B6C38FBF9FC69FE04D8CBC",
+      "outcomeSha256": "A16300CD6209F9F873FB7B760D689566A03ED0CB40F74876022B80ADF46934D1",
+      "session": {
+        "revision": "3bafd184ed662b357430a2409a7c017cfb1d513b",
+        "sdk": "10.0.403",
+        "sourceDigest": "C36043432A6644CF6E82CA7BF5AFF0152816D898E4C65F2CE0C31D910A3AF725",
+        "groups": [
+          "custom"
+        ],
+        "matrixSha256": {
+          "custom": "CABA8D31BBCE553AA7456146BBAAD1DECADB16A26CED0CB9CEA97648E4C493E8"
+        },
+        "profile": "Release; affinity 1; 20 warmup; 12 measurement; 500 ms requested iteration; 1 launch",
+        "artifactGateProtocol": "zendiator-child-artifact-gate-v1",
+        "sessionId": "16983460fcc94028919280681adaa1ff",
+        "runtimeSha256": "930A1EA56256B6E7C88C5059B29F063E870864D6C7EBFEC2B9CE9CF58F9F47A3",
+        "benchmarkSha256": "8A092DFC2A2B5B517AF890CBF958B894FA44D259E398D9AB0318F472DCBA5EEF",
+        "generatorSha256": "ADBD07892AFA225212854F478925706456CC145E477A80C0662CFD4757A840F6",
+        "runtime": ".NET 10.0.14",
+        "diSha256": "2D0E268BF76B4CE36A55EBB2767354DB956C6660DE65D6CCCFC35C957FB12CFC",
+        "gateSha256": {
+          "custom": "6E58C085A2D6B34D4DBECF41F84A4FE652D180F1BD8E45C87B60ABB68B4F9788"
+        }
+      }
+    },
+    "02-candidate": {
+      "csvSha256": "E5FE74C4662A6AA13245009C5C44198D6A92385D87F8F17E1F5228820066BF7E",
+      "sessionSha256": "0951E0ED4608B6B13BB65CF57C956631E9071E6FB76D256F54C4953F9F4F7EE0",
+      "outcomeSha256": "A16300CD6209F9F873FB7B760D689566A03ED0CB40F74876022B80ADF46934D1",
+      "session": {
+        "revision": "3bafd184ed662b357430a2409a7c017cfb1d513b",
+        "sdk": "10.0.403",
+        "sourceDigest": "C36043432A6644CF6E82CA7BF5AFF0152816D898E4C65F2CE0C31D910A3AF725",
+        "groups": [
+          "custom"
+        ],
+        "matrixSha256": {
+          "custom": "CABA8D31BBCE553AA7456146BBAAD1DECADB16A26CED0CB9CEA97648E4C493E8"
+        },
+        "profile": "Release; affinity 1; 20 warmup; 12 measurement; 500 ms requested iteration; 1 launch",
+        "artifactGateProtocol": "zendiator-child-artifact-gate-v1",
+        "sessionId": "65289326b6fe4f40abcc696a09aa50ac",
+        "runtimeSha256": "930A1EA56256B6E7C88C5059B29F063E870864D6C7EBFEC2B9CE9CF58F9F47A3",
+        "benchmarkSha256": "8A092DFC2A2B5B517AF890CBF958B894FA44D259E398D9AB0318F472DCBA5EEF",
+        "generatorSha256": "ADBD07892AFA225212854F478925706456CC145E477A80C0662CFD4757A840F6",
+        "runtime": ".NET 10.0.14",
+        "diSha256": "2D0E268BF76B4CE36A55EBB2767354DB956C6660DE65D6CCCFC35C957FB12CFC",
+        "gateSha256": {
+          "custom": "6E58C085A2D6B34D4DBECF41F84A4FE652D180F1BD8E45C87B60ABB68B4F9788"
+        }
+      }
+    },
+    "02-baseline": {
+      "csvSha256": "CE5354C110865DC869FF45F89BB0F3D61E6123C94F14462C4C20E9AB17DFA408",
+      "sessionSha256": "C288AE261FE7338E2822B49520E10C00A4E49930E4BDC1796A4C64892CF1FD3B",
+      "outcomeSha256": "A16300CD6209F9F873FB7B760D689566A03ED0CB40F74876022B80ADF46934D1",
+      "session": {
+        "revision": "7c69f2a7408a68f36cf25abc3c6ac74ef00c5054",
+        "sdk": "10.0.403",
+        "sourceDigest": "F6966CCBCEDF4757889A56772D519EF9DCEE8551C9245F517E67D89DEFD670B7",
+        "groups": [
+          "custom"
+        ],
+        "matrixSha256": {
+          "custom": "CABA8D31BBCE553AA7456146BBAAD1DECADB16A26CED0CB9CEA97648E4C493E8"
+        },
+        "profile": "Release; affinity 1; 20 warmup; 12 measurement; 500 ms requested iteration; 1 launch",
+        "artifactGateProtocol": "zendiator-child-artifact-gate-v1",
+        "sessionId": "2ee36da6c90a4e5d9e68632e648747f6",
+        "runtimeSha256": "98983A99017A972586293DCE4FC5A720D593F8C984FCE3EAAF82327A74B16A78",
+        "benchmarkSha256": "587D221C4532E5E363AECE133F2CEF295E604E9965DBBB6D8B4527F50E46237F",
+        "generatorSha256": "E9B84F590321CBCF4C0E3DEB00348175CDB5EAD100FB3F718D709A4541AA0B1A",
+        "runtime": ".NET 10.0.14",
+        "diSha256": "2D0E268BF76B4CE36A55EBB2767354DB956C6660DE65D6CCCFC35C957FB12CFC",
+        "gateSha256": {
+          "custom": "6E58C085A2D6B34D4DBECF41F84A4FE652D180F1BD8E45C87B60ABB68B4F9788"
+        }
+      }
+    },
+    "03-baseline": {
+      "csvSha256": "CDF72E783B535989442262FA24BC20325671D5B07BA6A0B57E81199827377AD1",
+      "sessionSha256": "6CFFF7F7AD64AC08052D02F42441164ACDED60E7BB215ADF4D3339D1D340AE65",
+      "outcomeSha256": "A16300CD6209F9F873FB7B760D689566A03ED0CB40F74876022B80ADF46934D1",
+      "session": {
+        "revision": "7c69f2a7408a68f36cf25abc3c6ac74ef00c5054",
+        "sdk": "10.0.403",
+        "sourceDigest": "F6966CCBCEDF4757889A56772D519EF9DCEE8551C9245F517E67D89DEFD670B7",
+        "groups": [
+          "custom"
+        ],
+        "matrixSha256": {
+          "custom": "CABA8D31BBCE553AA7456146BBAAD1DECADB16A26CED0CB9CEA97648E4C493E8"
+        },
+        "profile": "Release; affinity 1; 20 warmup; 12 measurement; 500 ms requested iteration; 1 launch",
+        "artifactGateProtocol": "zendiator-child-artifact-gate-v1",
+        "sessionId": "5354d93751f6403a8bc112b683a512cc",
+        "runtimeSha256": "98983A99017A972586293DCE4FC5A720D593F8C984FCE3EAAF82327A74B16A78",
+        "benchmarkSha256": "587D221C4532E5E363AECE133F2CEF295E604E9965DBBB6D8B4527F50E46237F",
+        "generatorSha256": "E9B84F590321CBCF4C0E3DEB00348175CDB5EAD100FB3F718D709A4541AA0B1A",
+        "runtime": ".NET 10.0.14",
+        "diSha256": "2D0E268BF76B4CE36A55EBB2767354DB956C6660DE65D6CCCFC35C957FB12CFC",
+        "gateSha256": {
+          "custom": "6E58C085A2D6B34D4DBECF41F84A4FE652D180F1BD8E45C87B60ABB68B4F9788"
+        }
+      }
+    },
+    "03-candidate": {
+      "csvSha256": "D8885AAAA0A06C7E3E696805638C625939EFB958F54D095E0C28710EA3D9195C",
+      "sessionSha256": "B03EAE412A1621414C66B8B9DBD2E00E0B264617444039EFC788C416C8201523",
+      "outcomeSha256": "A16300CD6209F9F873FB7B760D689566A03ED0CB40F74876022B80ADF46934D1",
+      "session": {
+        "revision": "3bafd184ed662b357430a2409a7c017cfb1d513b",
+        "sdk": "10.0.403",
+        "sourceDigest": "C36043432A6644CF6E82CA7BF5AFF0152816D898E4C65F2CE0C31D910A3AF725",
+        "groups": [
+          "custom"
+        ],
+        "matrixSha256": {
+          "custom": "CABA8D31BBCE553AA7456146BBAAD1DECADB16A26CED0CB9CEA97648E4C493E8"
+        },
+        "profile": "Release; affinity 1; 20 warmup; 12 measurement; 500 ms requested iteration; 1 launch",
+        "artifactGateProtocol": "zendiator-child-artifact-gate-v1",
+        "sessionId": "d480f707b6d24fad96b900b5123f3c87",
+        "runtimeSha256": "930A1EA56256B6E7C88C5059B29F063E870864D6C7EBFEC2B9CE9CF58F9F47A3",
+        "benchmarkSha256": "8A092DFC2A2B5B517AF890CBF958B894FA44D259E398D9AB0318F472DCBA5EEF",
+        "generatorSha256": "ADBD07892AFA225212854F478925706456CC145E477A80C0662CFD4757A840F6",
+        "runtime": ".NET 10.0.14",
+        "diSha256": "2D0E268BF76B4CE36A55EBB2767354DB956C6660DE65D6CCCFC35C957FB12CFC",
+        "gateSha256": {
+          "custom": "6E58C085A2D6B34D4DBECF41F84A4FE652D180F1BD8E45C87B60ABB68B4F9788"
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "Type": "ZendiatorSend0",
+      "Method": "FirstSend",
+      "Lifetime": "Scoped",
+      "Count": "",
+      "Asynchronous": "",
+      "pairs": [
+        {
+          "round": 1,
+          "baselineMeanNs": 428.7506103515625,
+          "candidateMeanNs": 366.3646351207386,
+          "timeRatio": 0.8544935593685353,
+          "baselineCVPercent": 26.982337987005806,
+          "candidateCVPercent": 16.500128721360497,
+          "baselineAllocatedBytes": 456.0,
+          "candidateAllocatedBytes": 456.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 12,
+          "candidateN": 11
+        },
+        {
+          "round": 2,
+          "baselineMeanNs": 432.7657063802083,
+          "candidateMeanNs": 441.18374911221593,
+          "timeRatio": 1.0194517324452967,
+          "baselineCVPercent": 32.19760539031078,
+          "candidateCVPercent": 18.48260845031325,
+          "baselineAllocatedBytes": 456.0,
+          "candidateAllocatedBytes": 456.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 12,
+          "candidateN": 11
+        },
+        {
+          "round": 3,
+          "baselineMeanNs": 481.9507945667614,
+          "candidateMeanNs": 392.51875443892044,
+          "timeRatio": 0.8144374049466319,
+          "baselineCVPercent": 11.332325320631902,
+          "candidateCVPercent": 20.01135055470857,
+          "baselineAllocatedBytes": 456.0,
+          "candidateAllocatedBytes": 456.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 11,
+          "candidateN": 11
+        }
+      ],
+      "medianTimeRatio": 0.8544935593685353,
+      "timeDecision": "no-material-regression-observed-in-three-pairs",
+      "baselineMeanRangePercent": 12.40818856714312,
+      "baselineMedianVsInitialRatio": 1.0359983781552613,
+      "initialBaselineCVPercent": 19.101271177383115,
+      "initialBaselineHighVariability": true,
+      "baselineAnyRoundCVOver5Percent": true,
+      "allocationDeltaRangeBytes": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "Type": "ZendiatorSend0",
+      "Method": "ScopeK1",
+      "Lifetime": "Scoped",
+      "Count": "",
+      "Asynchronous": "",
+      "pairs": [
+        {
+          "round": 1,
+          "baselineMeanNs": 96.39355925883852,
+          "candidateMeanNs": 80.24813578653429,
+          "timeRatio": 0.8325051632448791,
+          "baselineCVPercent": 0.7432454316372209,
+          "candidateCVPercent": 0.987714309758465,
+          "baselineAllocatedBytes": 584.0,
+          "candidateAllocatedBytes": 584.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 11,
+          "candidateN": 12
+        },
+        {
+          "round": 2,
+          "baselineMeanNs": 80.91639126113243,
+          "candidateMeanNs": 85.60051033260304,
+          "timeRatio": 1.0578883832863242,
+          "baselineCVPercent": 1.9714457302396193,
+          "candidateCVPercent": 1.1743335303856395,
+          "baselineAllocatedBytes": 584.0,
+          "candidateAllocatedBytes": 584.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 12,
+          "candidateN": 12
+        },
+        {
+          "round": 3,
+          "baselineMeanNs": 82.42922347283871,
+          "candidateMeanNs": 130.9047281794027,
+          "timeRatio": 1.5880863929591325,
+          "baselineCVPercent": 1.218502541020677,
+          "candidateCVPercent": 13.831809398206504,
+          "baselineAllocatedBytes": 584.0,
+          "candidateAllocatedBytes": 584.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 12,
+          "candidateN": 12
+        }
+      ],
+      "medianTimeRatio": 1.0578883832863242,
+      "timeDecision": "material-regression",
+      "baselineMeanRangePercent": 19.12735819836349,
+      "baselineMedianVsInitialRatio": 1.002431152149256,
+      "initialBaselineCVPercent": 1.1472151181571175,
+      "initialBaselineHighVariability": false,
+      "baselineAnyRoundCVOver5Percent": false,
+      "allocationDeltaRangeBytes": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "Type": "ZendiatorSend0",
+      "Method": "Typed",
+      "Lifetime": "Scoped",
+      "Count": "",
+      "Asynchronous": "",
+      "pairs": [
+        {
+          "round": 1,
+          "baselineMeanNs": 1.173810541757977,
+          "candidateMeanNs": 1.0841058823514302,
+          "timeRatio": 0.9235782469015834,
+          "baselineCVPercent": 1.1978632522486012,
+          "candidateCVPercent": 1.0908867663433561,
+          "baselineAllocatedBytes": 0.0,
+          "candidateAllocatedBytes": 0.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 11,
+          "candidateN": 10
+        },
+        {
+          "round": 2,
+          "baselineMeanNs": 1.182599322772991,
+          "candidateMeanNs": 1.1467326410516976,
+          "timeRatio": 0.9696713155245242,
+          "baselineCVPercent": 2.9991336746922768,
+          "candidateCVPercent": 4.037535346379225,
+          "baselineAllocatedBytes": 0.0,
+          "candidateAllocatedBytes": 0.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 12,
+          "candidateN": 12
+        },
+        {
+          "round": 3,
+          "baselineMeanNs": 0.9710558959646018,
+          "candidateMeanNs": 1.3587408997206314,
+          "timeRatio": 1.399240667161514,
+          "baselineCVPercent": 2.6461406164144377,
+          "candidateCVPercent": 4.198959250421697,
+          "baselineAllocatedBytes": 0.0,
+          "candidateAllocatedBytes": 0.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 12,
+          "candidateN": 12
+        }
+      ],
+      "medianTimeRatio": 0.9696713155245242,
+      "timeDecision": "no-material-regression-observed-in-three-pairs",
+      "baselineMeanRangePercent": 21.784886708118044,
+      "baselineMedianVsInitialRatio": 0.8677269392412649,
+      "initialBaselineCVPercent": 2.090660461850969,
+      "initialBaselineHighVariability": false,
+      "baselineAnyRoundCVOver5Percent": false,
+      "allocationDeltaRangeBytes": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "Type": "ZendiatorSend5",
+      "Method": "FirstSend",
+      "Lifetime": "Scoped",
+      "Count": "",
+      "Asynchronous": "",
+      "pairs": [
+        {
+          "round": 1,
+          "baselineMeanNs": 629.8597547743055,
+          "candidateMeanNs": 695.2936345880681,
+          "timeRatio": 1.1038864276019813,
+          "baselineCVPercent": 1.9984181515991657,
+          "candidateCVPercent": 22.564426735135267,
+          "baselineAllocatedBytes": 576.0,
+          "candidateAllocatedBytes": 576.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 9,
+          "candidateN": 11
+        },
+        {
+          "round": 2,
+          "baselineMeanNs": 741.0227457682291,
+          "candidateMeanNs": 690.6116832386364,
+          "timeRatio": 0.9319709647005088,
+          "baselineCVPercent": 20.731665088498055,
+          "candidateCVPercent": 20.659123130974336,
+          "baselineAllocatedBytes": 576.0,
+          "candidateAllocatedBytes": 576.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 12,
+          "candidateN": 11
+        },
+        {
+          "round": 3,
+          "baselineMeanNs": 711.9978471235795,
+          "candidateMeanNs": 660.4833984375,
+          "timeRatio": 0.9276480274565517,
+          "baselineCVPercent": 21.25738456330757,
+          "candidateCVPercent": 7.6769299478122415,
+          "baselineAllocatedBytes": 576.0,
+          "candidateAllocatedBytes": 576.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 11,
+          "candidateN": 10
+        }
+      ],
+      "medianTimeRatio": 0.9319709647005088,
+      "timeDecision": "no-material-regression-observed-in-three-pairs",
+      "baselineMeanRangePercent": 17.64884804137963,
+      "baselineMedianVsInitialRatio": 1.0047473706629249,
+      "initialBaselineCVPercent": 21.553532803669853,
+      "initialBaselineHighVariability": true,
+      "baselineAnyRoundCVOver5Percent": true,
+      "allocationDeltaRangeBytes": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "Type": "ZendiatorSend5",
+      "Method": "ScopeK1",
+      "Lifetime": "Scoped",
+      "Count": "",
+      "Asynchronous": "",
+      "pairs": [
+        {
+          "round": 1,
+          "baselineMeanNs": 164.85330208923338,
+          "candidateMeanNs": 152.57680269210152,
+          "timeRatio": 0.9255307643732443,
+          "baselineCVPercent": 1.0525262654043357,
+          "candidateCVPercent": 3.2171604277578627,
+          "baselineAllocatedBytes": 704.0,
+          "candidateAllocatedBytes": 704.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 12,
+          "candidateN": 12
+        },
+        {
+          "round": 2,
+          "baselineMeanNs": 151.70496120458228,
+          "candidateMeanNs": 150.4469622526025,
+          "timeRatio": 0.9917075951769087,
+          "baselineCVPercent": 1.4069606793212008,
+          "candidateCVPercent": 1.351680122238379,
+          "baselineAllocatedBytes": 704.0,
+          "candidateAllocatedBytes": 704.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 12,
+          "candidateN": 12
+        },
+        {
+          "round": 3,
+          "baselineMeanNs": 142.71227937393192,
+          "candidateMeanNs": 150.15812658215802,
+          "timeRatio": 1.0521738370439493,
+          "baselineCVPercent": 0.4893071132248526,
+          "candidateCVPercent": 1.5942147466790444,
+          "baselineAllocatedBytes": 704.0,
+          "candidateAllocatedBytes": 704.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 10,
+          "candidateN": 12
+        }
+      ],
+      "medianTimeRatio": 0.9917075951769087,
+      "timeDecision": "no-material-regression-observed-in-three-pairs",
+      "baselineMeanRangePercent": 15.514448239795819,
+      "baselineMedianVsInitialRatio": 0.8980789605268157,
+      "initialBaselineCVPercent": 0.5602387025146237,
+      "initialBaselineHighVariability": false,
+      "baselineAnyRoundCVOver5Percent": false,
+      "allocationDeltaRangeBytes": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "Type": "ZendiatorSend5",
+      "Method": "Typed",
+      "Lifetime": "Scoped",
+      "Count": "",
+      "Asynchronous": "",
+      "pairs": [
+        {
+          "round": 1,
+          "baselineMeanNs": 9.599048634351126,
+          "candidateMeanNs": 5.586357897648951,
+          "timeRatio": 0.5819699545700423,
+          "baselineCVPercent": 1.5330882161669377,
+          "candidateCVPercent": 1.3195950130131104,
+          "baselineAllocatedBytes": 0.0,
+          "candidateAllocatedBytes": 0.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 11,
+          "candidateN": 12
+        },
+        {
+          "round": 2,
+          "baselineMeanNs": 9.480170587203029,
+          "candidateMeanNs": 5.00869567586324,
+          "timeRatio": 0.5283339186558852,
+          "baselineCVPercent": 2.988759555845859,
+          "candidateCVPercent": 0.7592323926549034,
+          "baselineAllocatedBytes": 0.0,
+          "candidateAllocatedBytes": 0.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 12,
+          "candidateN": 11
+        },
+        {
+          "round": 3,
+          "baselineMeanNs": 9.509351579017492,
+          "candidateMeanNs": 4.846004809181237,
+          "timeRatio": 0.5096041269390028,
+          "baselineCVPercent": 1.1284445473224378,
+          "candidateCVPercent": 1.6572048300886895,
+          "baselineAllocatedBytes": 0.0,
+          "candidateAllocatedBytes": 0.0,
+          "allocationDeltaBytes": 0.0,
+          "baselineN": 12,
+          "candidateN": 12
+        }
+      ],
+      "medianTimeRatio": 0.5283339186558852,
+      "timeDecision": "time-improvement",
+      "baselineMeanRangePercent": 1.2539652747237229,
+      "baselineMedianVsInitialRatio": 0.9323682000104613,
+      "initialBaselineCVPercent": 0.6622482407885284,
+      "initialBaselineHighVariability": false,
+      "baselineAnyRoundCVOver5Percent": false,
+      "allocationDeltaRangeBytes": [
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "decision": "pending-independent-review",
+  "decisionReasons": [],
+  "limitations": [
+    "Per-case time classifications use the unchanged frozen policy and are not an overall adoption decision.",
+    "Initial baseline and subsequent baseline drift are reported separately; no tolerance was changed after candidate timing.",
+    "Raw BenchmarkDotNet JSON has not been independently cross-checked by this aggregation script.",
+    "No claim about competitor ranking or cross-worktree historical timing is made."
+  ]
+}

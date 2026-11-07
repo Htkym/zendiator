@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "kind": "foundatio-seven-current-baseline-results",
+  "sourceHead": "7c69f2a7408a68f36cf25abc3c6ac74ef00c5054",
+  "startedUtc": "2026-11-07T16:26:34.065786+00:00",
+  "completedUtc": "2026-11-07T16:30:30.788491+00:00",
+  "status": "completed",
+  "successful": 7,
+  "failed": 0,
+  "notStarted": 0,
+  "ownedProcessesZero": true,
+  "finalSha256": "7F3D0FB96EBBBF9DE8748FD7528D68EEF73144B5FBD895AB0E082D5B6EBDB76D",
+  "controllerReturnSha256": "602158E107C8E506DC96676732B861B80BA6553E8330BE2F1EF27BFD4C343CE1",
+  "cases": [
+    {
+      "caseId": "release-v8-129",
+      "executionIndex": 1,
+      "meanNs": 413.5884448283761,
+      "standardDeviationNs": 11.779999125021103,
+      "cvPercent": 2.848241838552662,
+      "N": 12,
+      "allocatedBytes": 856,
+      "rawActualN": 12,
+      "rawWarmupN": 20,
+      "reportSha256": "542A59BE730002FCC4C8559CBEC4BF0D77FF79D9FD6DE07BDF3E1E43A346D700",
+      "wrapperAssemblySha256": "DDF1E2CB9E46913BEBF3A094E5DE63030853A9A40FEFFE07F7799D8F0205EC40"
+    },
+    {
+      "caseId": "release-v8-263",
+      "executionIndex": 2,
+      "meanNs": 49010.06828607172,
+      "standardDeviationNs": 685.330477381066,
+      "cvPercent": 1.3983463017859772,
+      "N": 11,
+      "allocatedBytes": 393,
+      "rawActualN": 12,
+      "rawWarmupN": 20,
+      "reportSha256": "3B4F5C169459AA5067AC9AA84BE1B5A5F16ADA5ECC3934FD57FDEE1882976A5D",
+      "wrapperAssemblySha256": "BCFD1A6930E9CF485BCE46455560DB4DC267C0D2708665590AF168E0DF7714B4"
+    },
+    {
+      "caseId": "release-v8-417",
+      "executionIndex": 3,
+      "meanNs": 52061.053321678315,
+      "standardDeviationNs": 2248.9325742656633,
+      "cvPercent": 4.319798449658344,
+      "N": 11,
+      "allocatedBytes": 393,
+      "rawActualN": 12,
+      "rawWarmupN": 20,
+      "reportSha256": "863E588CC1DC7A185212812BCB4E3480D8C21190B43E190DE78DF29AB62805AB",
+      "wrapperAssemblySha256": "923AEA10E8F851BC701F688FAE98EA1B8EEB13026DB54BF3F6C0C7B28ED5D695"
+    },
+    {
+      "caseId": "release-v8-330",
+      "executionIndex": 4,
+      "meanNs": 104441.79398148147,
+      "standardDeviationNs": 1088.4338009984053,
+      "cvPercent": 1.04214391529065,
+      "N": 12,
+      "allocatedBytes": 1808,
+      "rawActualN": 12,
+      "rawWarmupN": 20,
+      "reportSha256": "D899AF8D9D006A931130FA4C3C698BCD3C8E3335E6FB621D39992DB158CF3092",
+      "wrapperAssemblySha256": "CB8094B9320631FC55ED43768E09D028C153E3B2D4F7E0BEF53BBA272421A6A4"
+    },
+    {
+      "caseId": "release-v8-345",
+      "executionIndex": 5,
+      "meanNs": 260190.8743042672,
+      "standardDeviationNs": 3592.3644461401,
+      "cvPercent": 1.3806650428251335,
+      "N": 11,
+      "allocatedBytes": 2539,
+      "rawActualN": 12,
+      "rawWarmupN": 20,
+      "reportSha256": "6488442ADEB22AE9471141EA004B230F8B409EB2E5BFF89C685596FBE786B18E",
+      "wrapperAssemblySha256": "FEC17A32302046F42A52EBCDD8E1E79CB6591EC1D764DC85EB1E650137AA2C4F"
+    },
+    {
+      "caseId": "release-v8-258",
+      "executionIndex": 6,
+      "meanNs": 64.28776678384887,
+      "standardDeviationNs": 0.40416296540809654,
+      "cvPercent": 0.6286778739211627,
+      "N": 10,
+      "allocatedBytes": 144,
+      "rawActualN": 12,
+      "rawWarmupN": 20,
+      "reportSha256": "5916F9AF3406C6C073CC1BC9A0D384BFFF74AD04380B05316403B30C2DA5A5B3",
+      "wrapperAssemblySha256": "77BF5DFC562421C94D9C299CD328E91EFE37A1A96839207F8448F15A4EA962B3"
+    },
+    {
+      "caseId": "release-v8-340",
+      "executionIndex": 7,
+      "meanNs": 574.4049762590695,
+      "standardDeviationNs": 4.365572294874947,
+      "cvPercent": 0.7600164475082779,
+      "N": 11,
+      "allocatedBytes": 1808,
+      "rawActualN": 12,
+      "rawWarmupN": 20,
+      "reportSha256": "CD9BE021D34614A9022D630D69DFFD8A8D5688D27B86D6FE0079310D500AB957",
+      "wrapperAssemblySha256": "20E00126BB745376A745391D54FDCB09F25773AC43363186BA88890F8819845D"
+    }
+  ],
+  "limitations": [
+    "One baseline campaign, not an independent three-pair candidate comparison.",
+    "Foundatio and wp00-initial were collected in separate time blocks; no cross-block ranking or speedup is claimed.",
+    "All twelve raw Actual points remain preserved although BenchmarkDotNet Statistics.N can be smaller after its unchanged outlier policy."
+  ]
+}

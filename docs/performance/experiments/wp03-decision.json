@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "experiment": "WP03 attribute-free closed cache warm/cold split",
+  "baselineRevision": "7c69f2a7408a68f36cf25abc3c6ac74ef00c5054",
+  "candidateRevision": "3bafd184ed662b357430a2409a7c017cfb1d513b",
+  "decision": "rejected-under-frozen-policy",
+  "integrated": false,
+  "criteria": {
+    "rejectWhen": "median of three candidate/baseline mean ratios > 1.03, or all three ratios > 1.03",
+    "materialTimeDifferencePercent": 3,
+    "allocationToleranceBytes": 0,
+    "highCVBehavior": "Flag noisy cases; do not enlarge band, remove case, select favorable round, pool samples, or offset regressions with gains elsewhere"
+  },
+  "protectedFailures": [
+    {
+      "case": "ZendiatorShortCircuit.WarmDispatch",
+      "medianRatio": 1.0907117663608574,
+      "ratios": [
+        1.1018526560444186,
+        0.9993247345730535,
+        1.0907117663608574
+      ]
+    },
+    {
+      "case": "HZendiatorBenchmarks.FirstSend",
+      "medianRatio": 1.0329387333469848,
+      "ratios": [
+        1.1614180472467748,
+        0.9564990237572002,
+        1.0329387333469848
+      ]
+    },
+    {
+      "case": "ZendiatorSend0.ScopeK1",
+      "medianRatio": 1.0578883832863242,
+      "ratios": [
+        0.8325051632448791,
+        1.0578883832863242,
+        1.5880863929591325
+      ]
+    }
+  ],
+  "otherFindings": [
+    "ZendiatorSend5.Typed improves by 47.17% at median; it does not offset protected failures.",
+    "ColdOuterFailure median ratio 1.0093140623887515; baseline third round is 2520 B/op while other five cells are 1776 B/op. No consistent -744 B/op reduction is claimed.",
+    "Observed policy failure is separate from attributing regression causally to product code."
+  ],
+  "sourceRecords": [
+    {
+      "sha256": "8B4C324AE71F2840B96BCA2FDEBB4ABD917C1C801B6DFEF4EC6525116401644D",
+      "path": "D:\\gitroot\\zendiator-perf-artifacts-20261107\\short-h-pairs-runtime14-v3\\aggregation-v1\\OUTPUT-MANIFEST.json"
+    },
+    {
+      "sha256": "EBF37553DAC076B46DA19B8FD0056F43A162301A5BB20C232CF5D1D349C2BEBD",
+      "originalDecision": "pending-independent-review",
+      "path": "D:\\gitroot\\zendiator-perf-artifacts-20261107\\short-h-pairs-runtime14-v3\\aggregation-v1\\SUMMARY.json"
+    },
+    {
+      "status": "passed",
+      "sha256": "2C618A2A2652C9CD8229AA6D55C2C17A97DD2DA108891FA35C91FF131455ADC0",
+      "path": "D:\\gitroot\\zendiator-perf-artifacts-20261107\\short-h-pairs-runtime14-v3\\INDEPENDENT-REVIEW.json"
+    },
+    {
+      "sha256": "AC2FED5466A8EFCAEE17E51647F73C87544CA187D112D400B80FB816C06340CC",
+      "path": "D:\\gitroot\\zendiator-perf-artifacts-20261107\\short-h-pairs-runtime14-v3\\BASELINE-POLICY.FROZEN.json"
+    },
+    {
+      "sha256": "076D40BD4074710A6D60F0F437CBDC31A158B3306444F2F04020D5B1C60468BB",
+      "path": "D:\\gitroot\\zendiator-perf-20261107\\docs\\performance\\experiments\\decision-policy-2026-11-07.json"
+    },
+    {
+      "sha256": "B249CE33763361262389E778696A0C00EF2E3967AEAD943C2B4D06555EDC1F1A",
+      "originalDecision": "pending-independent-review",
+      "path": "D:\\gitroot\\zendiator-perf-20261107\\docs\\performance\\experiments\\wp03-controls-paired-summary.json"
+    },
+    {
+      "path": "D:\\gitroot\\zendiator-perf-artifacts-20261107\\wp03-controls-pairs\\independent-verification.json",
+      "sha256": "895832DBDB5CF5118052693221D29A481ABB6F190174FCB58C0BAB804C22BBF7"
+    }
+  ],
+  "verification": {
+    "rawWarmupPerCell": 20,
+    "pairs": 9,
+    "HUnrollFactor": 1,
+    "independentReviewBulkSourceRehash": false,
+    "mainRawReports": 18,
+    "authorSavedPreparedAndActualBundlesRehashed": true,
+    "originalSourceRecordsModified": false,
+    "authorSourcePinsRehashedPerVariant": 849,
+    "HInvocationCount": 16384,
+    "retainedNRange": [
+      9,
+      12
+    ],
+    "rawActualPerCell": 12,
+    "precedingBaselineRawReports": 3
+  },
+  "limitations": [
+    "Independent review checks raw statistics/CSV/hashes and receipts but relies on author postflight for source and bundle bulk rehash.",
+    "Earlier native-code diagnosis uses preserved formal bundle bytes in a new non-timed process, not native capture from the original timed child.",
+    "H WarmSend release-v8-490 is not admitted and is not part of the nine pairs.",
+    "This is not a universal claim about other runtimes, AOT or every composition."
+  ]
+}

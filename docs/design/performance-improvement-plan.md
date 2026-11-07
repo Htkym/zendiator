@@ -1,6 +1,6 @@
 # Zendiator 高速化改修の実施記録
 
-2026-11-07 受領の改修計画に沿って実施する。計画の調査基準と現在の origin/main は、ともに `7c69f2a7408a68f36cf25abc3c6ac74ef00c5054`。README の過去値はこの main の新規実測として扱わない。
+2026-11-07 受領の改修計画に沿って実施する。計画の調査基準と現在の origin/main は、ともに `7c69f2a7408a68f36cf25abc3c6ac74ef00c5054` である。README の過去値はこの main の新規実測として扱わない。
 
 ## 実施順序
 
@@ -8,17 +8,17 @@
 
 | 作業 | 対象 | 状態 |
 | --- | --- | --- |
-| WP00 | baseline・fixture・証跡の固定 | 準備中。元 ShortCircuit / Hook failure / Foundatio fixture を回収。既存 correctness gate 389 件合格 |
+| WP00 | baseline・fixture・証跡の固定 | 初回 31 + Foundatio 7 + Short/H 3 = 41 ケースの baseline を完了し、各実測 child の証跡を保存。別枠の WP03 候補比較 Short/H 18 ケース・controls 36 ケースも完了。追加 HWarm490 は定義不一致で保留 |
 | WP01 | 適格な Stream OpenAsync の直接呼び出し | 代表条件では棄却。warm Tier1 で対象 dispatch は除去済み |
-| WP02 | cursor の稀な状態の分離 | 単独試作待ち |
-| WP03 | closed 依存 getter の warm/cold 分離 | 単独試作待ち |
-| WP04 | generic struct upstream の任意契約 | 初期評価後に判断 |
-| WP05 | 明示的な eager constructor injection | 費用分解後に判断。既定の lazy 取得は維持 |
-| WP06 | producer 状態の列挙期間中保持 | 初期評価後に判断。既存 pooled producer と分離 |
-| WP07 | producer と owner の completion 融合 | WP06 後の profile で必要性を判断 |
-| WP08 | SendAsync wrapper の軽量 completion 境界 | 元 fixture は SendAsync と確認。WP03 後に判断 |
-| WP09 | Hook failure の最終完了処理 | 元 fixture を回収。profile 後に判断 |
-| WP10 | .NET 11 runtime async | .NET 10 の改修効果と分離する別系列。未着手 |
+| WP02 | cursor の稀な状態の分離 | 交互 3 ペア・60 ケースを完了。同期 B/op 削減は確認したものの、時間保護は未証明のため保留・非統合 |
+| WP03 | closed 依存 getter の warm/cold 分離 | 完了・棄却。98 件の限定テスト、Send 保護 18 ペアと Short/H 9 ペアを完了。凍結 3% 基準で保護失敗 3 件となり非統合。詳細は [実験記録](../performance/experiments/wp03.md) |
+| WP04 | generic struct upstream の任意契約 | feature/default 各 3 ペア・計 120 ケースと証跡監査を完了。約 200 B/op 削減は再現したが、時間保護未証明のため保留・非統合。強制棄却条件には未該当。詳細は [実験記録](../performance/experiments/wp04.md) |
+| WP05 | 明示的な eager constructor injection | allocation 費用分解を完了。既存 LazyBlocks の 56 B/op 削減を確認。時間と新 eager mode は未判定 |
+| WP06 | producer 状態の列挙期間中保持 | 手書き実証の semantic と allocation 診断を完了。生成 pooled 比の allocation 改善は確認できず、時間は未測定 |
+| WP07 | producer と owner の completion 融合 | WP06 後も二重 completion が主要費用であると示す profile 証拠が未成立のため、条件未成立・非着手 |
+| WP08 | SendAsync wrapper の軽量 completion 境界 | 元 SendAsync fixture は確認済み。生成コード・native code で軽量 completion 対象の残存費用が未特定のため、条件未成立・非着手 |
+| WP09 | Hook failure の最終完了処理 | 元 fixture は回収済み。最終 throw と builder による例外完了が主要費用だと示す profile が未成立のため、条件付き研究は非着手 |
+| WP10 | .NET 11 runtime async | P3 の条件付き研究として別系列で評価。現在は未実施で、.NET 10 の改修効果へ算入しない |
 
 ## 保持する契約
 
@@ -35,3 +35,5 @@ Task.Yield、token check、probe、cleanup を減らす変更は採用しない�
 時間と B/op は別々に評価する。ばらつきを超える改善が再現しない案は改善未証明とする。競合首位を主張するときは、同一ホスト・runtime・workload で主要競合を再測定する。既定 API、typed terminal、pooled producer、その他の任意機能は別系列とする。
 
 [baseline 記録](../performance/baseline-2026-11-07.md)に fixture 対応、環境、再現コマンド、未確認事項を残す。実験の結果は `docs/performance/experiments/` に記録する。
+
+受領計画の全体完了範囲は、全 WP の実装・採用ではなく、L1〜L7・A1・A2 の改善結果または改善未証明の理由、既存契約の維持、opt-in と default の区別、commit／PR と再現可能な証跡をそろえることとする。採用案の baseline 比の効果と同条件の競合比較は区別し、未測定の仮説を実現済みの成果として扱わない。
