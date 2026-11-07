@@ -1,0 +1,203 @@
+{
+  "schemaVersion": 1,
+  "frozenAtUtc": "2026-11-07T14:37:55.089351+00:00",
+  "baselineRevision": "7c69f2a7408a68f36cf25abc3c6ac74ef00c5054",
+  "baselineSessionSha256": "83E0ADEF7E7E5FFB4D23C202A31C816D0D3A9EEE494225DA29AAC98793F7CDDE",
+  "candidateTimingStarted": false,
+  "comparisonPairs": 3,
+  "pairOrder": [
+    "baseline,candidate",
+    "candidate,baseline",
+    "baseline,candidate"
+  ],
+  "materialTimeDifferencePercent": 3,
+  "allocationToleranceBytes": 0,
+  "policy": [
+    "Use paired case means and report every round, the three ratios, and their median.",
+    "Claim time improvement only if all three ratios are below one and the median is below 0.97.",
+    "Reject a material time regression if the median ratio exceeds 1.03, or all three ratios exceed 1.03.",
+    "Do not adopt an allocation-only change when all three time ratios are above one, even within the 3 percent band; mark time protection unproven.",
+    "If baseline CV exceeds 5 percent, flag the case as noisy. Do not enlarge its 3 percent band or hide that case.",
+    "An inconclusive protected case prevents an unqualified no-regression claim. Additional runs require a specific diagnosed uncertainty, not a desired result.",
+    "Report all async allocation additions and judge their workload cost separately from synchronous savings.",
+    "Check independent baseline drift separately. Do not widen thresholds after candidate timing."
+  ],
+  "baselineCases": [
+    {
+      "type": "ZendiatorRelay5",
+      "method": "Full",
+      "lifetime": "",
+      "count": "1024",
+      "asynchronous": "False",
+      "meanNs": 17861.944444444445,
+      "cvPercent": 0.9904784315916076,
+      "allocatedBytes": 1216.0,
+      "highVariability": false
+    },
+    {
+      "type": "ZendiatorRelay5",
+      "method": "Full",
+      "lifetime": "",
+      "count": "1024",
+      "asynchronous": "True",
+      "meanNs": 154295.99358974356,
+      "cvPercent": 4.439236523214295,
+      "allocatedBytes": 116562.0,
+      "highVariability": false
+    },
+    {
+      "type": "ZendiatorSend0",
+      "method": "FirstSend",
+      "lifetime": "Scoped",
+      "count": "",
+      "asynchronous": "",
+      "meanNs": 417.72816975911456,
+      "cvPercent": 19.101271177383115,
+      "allocatedBytes": 456.0,
+      "highVariability": true
+    },
+    {
+      "type": "ZendiatorSend0",
+      "method": "ScopeK1",
+      "lifetime": "Scoped",
+      "count": "",
+      "asynchronous": "",
+      "meanNs": 82.22931150544042,
+      "cvPercent": 1.1472151181571175,
+      "allocatedBytes": 584.0,
+      "highVariability": false
+    },
+    {
+      "type": "ZendiatorSend0",
+      "method": "Typed",
+      "lifetime": "Scoped",
+      "count": "",
+      "asynchronous": "",
+      "meanNs": 1.352741846166894,
+      "cvPercent": 2.090660461850969,
+      "allocatedBytes": 0.0,
+      "highVariability": false
+    },
+    {
+      "type": "ZendiatorSend5",
+      "method": "FirstSend",
+      "lifetime": "Scoped",
+      "count": "",
+      "asynchronous": "",
+      "meanNs": 708.6337002840909,
+      "cvPercent": 21.553532803669853,
+      "allocatedBytes": 576.0,
+      "highVariability": true
+    },
+    {
+      "type": "ZendiatorSend5",
+      "method": "ScopeK1",
+      "lifetime": "Scoped",
+      "count": "",
+      "asynchronous": "",
+      "meanNs": 168.9216292469336,
+      "cvPercent": 0.5602387025146237,
+      "allocatedBytes": 704.0,
+      "highVariability": false
+    },
+    {
+      "type": "ZendiatorSend5",
+      "method": "Typed",
+      "lifetime": "Scoped",
+      "count": "",
+      "asynchronous": "",
+      "meanNs": 10.199137614207345,
+      "cvPercent": 0.6622482407885284,
+      "allocatedBytes": 0.0,
+      "highVariability": false
+    },
+    {
+      "type": "ZendiatorStream0",
+      "method": "EarlyBreak",
+      "lifetime": "",
+      "count": "16",
+      "asynchronous": "False",
+      "meanNs": 64.11857024589658,
+      "cvPercent": 1.4835288794257218,
+      "allocatedBytes": 160.0,
+      "highVariability": false
+    },
+    {
+      "type": "ZendiatorStream0",
+      "method": "EarlyBreak",
+      "lifetime": "",
+      "count": "16",
+      "asynchronous": "True",
+      "meanNs": 1693.7108491060856,
+      "cvPercent": 8.537162688243889,
+      "allocatedBytes": 600.0,
+      "highVariability": true
+    },
+    {
+      "type": "ZendiatorStream0",
+      "method": "Full",
+      "lifetime": "",
+      "count": "1024",
+      "asynchronous": "False",
+      "meanNs": 10165.03905081094,
+      "cvPercent": 1.8237299929630777,
+      "allocatedBytes": 160.0,
+      "highVariability": false
+    },
+    {
+      "type": "ZendiatorStream0",
+      "method": "Full",
+      "lifetime": "",
+      "count": "1024",
+      "asynchronous": "True",
+      "meanNs": 144875.58514246947,
+      "cvPercent": 1.3007118472101202,
+      "allocatedBytes": 115458.0,
+      "highVariability": false
+    },
+    {
+      "type": "ZendiatorStream5",
+      "method": "EarlyBreak",
+      "lifetime": "",
+      "count": "16",
+      "asynchronous": "False",
+      "meanNs": 391.70682353168166,
+      "cvPercent": 3.2987985995987184,
+      "allocatedBytes": 1216.0,
+      "highVariability": false
+    },
+    {
+      "type": "ZendiatorStream5",
+      "method": "EarlyBreak",
+      "lifetime": "",
+      "count": "16",
+      "asynchronous": "True",
+      "meanNs": 1987.7864288028509,
+      "cvPercent": 5.192241509016373,
+      "allocatedBytes": 1656.0,
+      "highVariability": true
+    },
+    {
+      "type": "ZendiatorStream5",
+      "method": "Full",
+      "lifetime": "",
+      "count": "1024",
+      "asynchronous": "False",
+      "meanNs": 11348.847238149845,
+      "cvPercent": 1.1980951222939078,
+      "allocatedBytes": 1216.0,
+      "highVariability": false
+    },
+    {
+      "type": "ZendiatorStream5",
+      "method": "Full",
+      "lifetime": "",
+      "count": "1024",
+      "asynchronous": "True",
+      "meanNs": 163012.8271349862,
+      "cvPercent": 1.6664907747736746,
+      "allocatedBytes": 116562.0,
+      "highVariability": false
+    }
+  ]
+}
