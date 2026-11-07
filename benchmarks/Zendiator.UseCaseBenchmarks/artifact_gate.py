@@ -5,6 +5,7 @@ The complete managed map includes the generated BDN host in the conservative key
 """
 
 import hashlib
+import itertools
 import json
 import os
 import re
@@ -180,6 +181,7 @@ def semantic_identity(final, session, project, runtime, bundle_files):
         "session": session["sessionId"], "revision": session["revision"], "sourceDigest": session["sourceDigest"],
         "sdk": session["sdk"], "protocol": PROTOCOL, "gateImplementationSha256": implementation_identity(project),
         "gateDriverSha256": sha(Path(__file__)),
+        "structUpstreamGateImplementationSha256": sha(project / "StructUpstreamGate.cs"),
         "bundleFiles": dict(bundle_files),
         "assemblies": sorted([item["name"], item["fullName"], item["mvid"], item["sha256"]]
                              for item in final["assemblies"]),
@@ -257,6 +259,56 @@ def verify_runtime(actual, expected):
             raise ValueError("Gate used a different actual dependency context/native runtime")
 
 
+def verify_struct_upstream_gate(request, proof, proof_path):
+    implementation = request.get("structUpstreamGateImplementationSha256")
+    if (not isinstance(implementation, str) or not HASH.fullmatch(implementation) or
+            proof.get("structUpstreamGateImplementationSha256") != implementation):
+        raise ValueError("Missing/substituted struct upstream gate implementation identity")
+    extra = proof.get("structUpstreamGate")
+    if (not isinstance(extra, dict) or extra.get("schemaVersion") != 1 or extra.get("cases") != 96 or
+            extra.get("driverTypes") != 3 or extra.get("implementationSha256") != implementation or
+            extra.get("correctnessPath") != "struct-upstream/struct-upstream-correctness.json" or
+            extra.get("driverIdentificationPath") != "struct-upstream/struct-upstream-driver-identification.json" or
+            not same_path(proof_path.parent, request["output"])):
+        raise ValueError("Missing/incomplete struct upstream additional proof")
+    directory = proof_path.parent / "struct-upstream"
+    correctness = directory / "struct-upstream-correctness.json"
+    driver = directory / "struct-upstream-driver-identification.json"
+    if filesystem_path(directory).is_symlink() or (os.name == "nt" and filesystem_path(directory).is_junction()):
+        raise ValueError("Struct upstream additional proof cannot use a reparse root")
+    try:
+        files = tree_hashes(directory)
+        if (files != {"struct-upstream-correctness.json": extra.get("correctnessSha256"),
+                     "struct-upstream-driver-identification.json": extra.get("driverIdentificationSha256")}):
+            raise ValueError("Struct upstream additional proof is missing or its hashes changed")
+        rows, types = read(correctness), read(driver)
+    except OSError as error:
+        raise ValueError("Struct upstream additional proof files are missing") from error
+    expected = set(itertools.product(("Stream0", "Stream5", "Relay5"), (0, 1, 16, 1024), (False, True), (False, True), (False, True)))
+    if not isinstance(rows, list) or len(rows) != 96:
+        raise ValueError("Struct upstream proof requires all 96 parity cases")
+    for row in rows:
+        if (not isinstance(row, dict) or type(row.get("count")) is not int or
+                any(type(row.get(name)) is not bool for name in ("asynchronous", "early", "typed"))):
+            raise ValueError("Invalid struct upstream parity case shape")
+        key = (row.get("name"), row["count"], row["asynchronous"], row["early"], row["typed"])
+        if (key not in expected or row.get("status") != "Passed" or row.get("Handlers") != 1 or row.get("Disposals") != 1 or
+                any(type(row.get(name)) is not int for name in ("Handlers", "Items", "Disposals")) or
+                row.get("Items") != (min(1, row["count"]) if row["early"] else row["count"])):
+            raise ValueError("Struct upstream parity proof is duplicate, missing or failed")
+        expected.remove(key)
+    expected_types = {"ZendiatorStructUpstreamStream0", "ZendiatorStructUpstreamStream5", "ZendiatorStructUpstreamRelay5"}
+    if expected or not isinstance(types, list) or len(types) != 3:
+        raise ValueError("Struct upstream proof requires three driver type classifications")
+    for row in types:
+        if (not isinstance(row, dict) or row.get("Type") not in expected_types or row.get("Library") != "Zendiator" or
+                type(row.get("Cases")) is not int or row["Cases"] != 56):
+            raise ValueError("Struct upstream driver type classification changed/failed")
+        expected_types.remove(row["Type"])
+    if tree_hashes(directory) != files:
+        raise ValueError("Struct upstream additional proof changed during verification")
+
+
 def verify_gate(request_path, proof_path):
     request, proof = read(request_path), read(proof_path)
     for key in ("protocol", "session", "case", "childPid", "childProofSha256",
@@ -286,6 +338,7 @@ def verify_gate(request_path, proof_path):
             raise ValueError("Measured dependency context/native runtime changed after the gate")
     if sha(runtime["hostPath"]) != runtime["hostSha256"]:
         raise ValueError("Measured executable changed after the gate")
+    verify_struct_upstream_gate(request, proof, proof_path)
     return proof
 
 
@@ -305,7 +358,8 @@ def ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env):
                "expectedRuntime": runtime, "expectedAssemblies": expected, "bundleFiles": files,
                "originalBuildRoot": str(build_root), "buildEvidenceSha256": sha(attempt / "build-artifacts.json"),
                "gateImplementationSha256": semantic["gateImplementationSha256"],
-               "gateDriverSha256": semantic["gateDriverSha256"]}
+               "gateDriverSha256": semantic["gateDriverSha256"],
+               "structUpstreamGateImplementationSha256": semantic["structUpstreamGateImplementationSha256"]}
     request_path = attempt / "artifact-gate-request.json"
     write(request_path, request)
     reused = filesystem_path(cache).exists()
@@ -409,7 +463,9 @@ def check_artifact_binding(row, attempt, session, project):
         proven_request.get("bundleFiles") != request["bundleFiles"] or
         proven_request["session"] != session["sessionId"] or
         proven_request["gateImplementationSha256"] != semantic["gateImplementationSha256"] or
-        proven_request["gateDriverSha256"] != semantic["gateDriverSha256"]):
+        proven_request["gateDriverSha256"] != semantic["gateDriverSha256"] or
+        request.get("structUpstreamGateImplementationSha256") != semantic["structUpstreamGateImplementationSha256"] or
+        proven_request.get("structUpstreamGateImplementationSha256") != semantic["structUpstreamGateImplementationSha256"]):
         raise ValueError("Cached proof covers a different semantic artifact/gate implementation")
     verify_gate(gate_request, proof_path)
     return binding_result(path, binding)
@@ -418,4 +474,4 @@ def check_artifact_binding(row, attempt, session, project):
 def binding_result(path, binding):
     return {"bindingSha256": sha(path), "childFinalSha256": binding["childProofSha256"], "key": binding["key"],
             "proofSha256": binding["proofSha256"], "proofReused": binding["proofReused"],
-            "scope": "389 benchmark gate; notification-contract/full-suite evidence remains separate"}
+            "scope": "389 existing benchmark gate plus separate 96 struct-upstream parity cases and three driver type classifications; focused/full-suite evidence remains separate"}

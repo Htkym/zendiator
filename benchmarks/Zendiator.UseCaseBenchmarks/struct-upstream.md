@@ -38,3 +38,15 @@ The initial local prototype passed the complete Release suite, focused old/opt-i
 fixtures, the original 389-case correctness gate, separate 96-case parity gate and package-only
 managed/Native AOT smoke. This establishes correctness evidence, not performance acceptance.
 A local checkpoint and a clean worktree are required by the unchanged formal driver.
+The candidate preserved-consumer gate keeps the original 389 results and `correctness.json`
+unchanged, then runs the separate 96-case struct gate under the same resolver/runtime/bundle
+checks. Its additional correctness and three-type driver files live in `struct-upstream/`.
+Their hashes and the explicit struct-gate implementation hash are mandatory in artifact proof
+schema v1 and the semantic cache identity. A 389-only proof is insufficient for this candidate.
+The new checker rejects missing, mutated, failed, wrong-count and wrong-hash additional evidence.
+This harness passed its Release build, checker negatives and a real non-timed representative
+preserved-consumer run with strict bundle resolution and fresh/cache-reused proofs. Its 389-case
+default results and separate 96-case/three-type evidence passed. The representative scaffold and
+setup-only child checks are not actual timed-child artifact proof; the unchanged formal driver
+must generate that proof from its own candidate bundle. The existing UseCase protocol is not
+Foundatio v9 pre-Executor admission.
