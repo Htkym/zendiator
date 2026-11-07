@@ -1,0 +1,147 @@
+{
+  "ordinaryMatrix": "wp02.json",
+  "ordinaryMatrixSha256": "03B1E4CAD9084BA3556FC65FEC7E49F939A56F859270D0ECF3B8AD839E7406A2",
+  "scope": "Type mapping only. Method, Count, Asynchronous and any other parameters are unchanged.",
+  "pairs": [
+    {
+      "ordinary": {
+        "Type": "ZendiatorStream0",
+        "Method": "EarlyBreak",
+        "Count": 16,
+        "Asynchronous": false
+      },
+      "optIn": {
+        "Type": "ZendiatorStructUpstreamStream0",
+        "Method": "EarlyBreak",
+        "Count": 16,
+        "Asynchronous": false
+      }
+    },
+    {
+      "ordinary": {
+        "Type": "ZendiatorStream0",
+        "Method": "Full",
+        "Count": 1024,
+        "Asynchronous": false
+      },
+      "optIn": {
+        "Type": "ZendiatorStructUpstreamStream0",
+        "Method": "Full",
+        "Count": 1024,
+        "Asynchronous": false
+      }
+    },
+    {
+      "ordinary": {
+        "Type": "ZendiatorStream0",
+        "Method": "EarlyBreak",
+        "Count": 16,
+        "Asynchronous": true
+      },
+      "optIn": {
+        "Type": "ZendiatorStructUpstreamStream0",
+        "Method": "EarlyBreak",
+        "Count": 16,
+        "Asynchronous": true
+      }
+    },
+    {
+      "ordinary": {
+        "Type": "ZendiatorStream0",
+        "Method": "Full",
+        "Count": 1024,
+        "Asynchronous": true
+      },
+      "optIn": {
+        "Type": "ZendiatorStructUpstreamStream0",
+        "Method": "Full",
+        "Count": 1024,
+        "Asynchronous": true
+      }
+    },
+    {
+      "ordinary": {
+        "Type": "ZendiatorStream5",
+        "Method": "EarlyBreak",
+        "Count": 16,
+        "Asynchronous": false
+      },
+      "optIn": {
+        "Type": "ZendiatorStructUpstreamStream5",
+        "Method": "EarlyBreak",
+        "Count": 16,
+        "Asynchronous": false
+      }
+    },
+    {
+      "ordinary": {
+        "Type": "ZendiatorStream5",
+        "Method": "Full",
+        "Count": 1024,
+        "Asynchronous": false
+      },
+      "optIn": {
+        "Type": "ZendiatorStructUpstreamStream5",
+        "Method": "Full",
+        "Count": 1024,
+        "Asynchronous": false
+      }
+    },
+    {
+      "ordinary": {
+        "Type": "ZendiatorStream5",
+        "Method": "EarlyBreak",
+        "Count": 16,
+        "Asynchronous": true
+      },
+      "optIn": {
+        "Type": "ZendiatorStructUpstreamStream5",
+        "Method": "EarlyBreak",
+        "Count": 16,
+        "Asynchronous": true
+      }
+    },
+    {
+      "ordinary": {
+        "Type": "ZendiatorStream5",
+        "Method": "Full",
+        "Count": 1024,
+        "Asynchronous": true
+      },
+      "optIn": {
+        "Type": "ZendiatorStructUpstreamStream5",
+        "Method": "Full",
+        "Count": 1024,
+        "Asynchronous": true
+      }
+    },
+    {
+      "ordinary": {
+        "Type": "ZendiatorRelay5",
+        "Method": "Full",
+        "Count": 1024,
+        "Asynchronous": false
+      },
+      "optIn": {
+        "Type": "ZendiatorStructUpstreamRelay5",
+        "Method": "Full",
+        "Count": 1024,
+        "Asynchronous": false
+      }
+    },
+    {
+      "ordinary": {
+        "Type": "ZendiatorRelay5",
+        "Method": "Full",
+        "Count": 1024,
+        "Asynchronous": true
+      },
+      "optIn": {
+        "Type": "ZendiatorStructUpstreamRelay5",
+        "Method": "Full",
+        "Count": 1024,
+        "Asynchronous": true
+      }
+    }
+  ]
+}

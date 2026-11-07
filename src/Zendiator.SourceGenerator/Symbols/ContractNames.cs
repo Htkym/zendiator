@@ -43,6 +43,8 @@ internal static class ContractNames
 
     internal const string StreamMiddleware = "Zendiator.IStreamMiddleware`2";
 
+    internal const string StructStreamMiddleware = "Zendiator.IStructStreamMiddleware`2";
+
     internal const string StreamSink = "Zendiator.IStreamSink`1";
 
     internal const string StreamHandler = "Zendiator.IStreamSourceHandler`3";

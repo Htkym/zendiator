@@ -1,0 +1,62 @@
+[
+  {
+    "Type": "ZendiatorStructUpstreamStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStructUpstreamStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStructUpstreamStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStructUpstreamStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStructUpstreamStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStructUpstreamStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStructUpstreamStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStructUpstreamStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStructUpstreamRelay5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStructUpstreamRelay5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  }
+]

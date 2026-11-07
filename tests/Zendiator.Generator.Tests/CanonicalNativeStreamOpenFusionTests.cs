@@ -4,8 +4,10 @@ namespace Zendiator.Generator.Tests;
 
 public sealed partial class GeneratorTests
 {
-    [Fact]
-    public async Task Native_stream_nested_pending_opens_keep_gates_and_request_contexts_independent()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Native_stream_nested_pending_opens_keep_gates_and_request_contexts_independent(bool structUpstream)
     {
         var source = NativeStreamFixture("""
             c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));
@@ -121,6 +123,8 @@ public sealed partial class GeneratorTests
                 await completion.ConfigureAwait(false);
             }
             """);
+        if (structUpstream)
+            source = WithStructStreamMiddleware(source);
         await RunNativeStreamFixture("nested-open-fusion", source);
     }
 }

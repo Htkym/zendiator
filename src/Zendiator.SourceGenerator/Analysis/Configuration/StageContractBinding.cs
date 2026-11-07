@@ -138,6 +138,16 @@ internal static class StageContractBinding
                 Reject("StageContractMismatch", $"Middleware {Name(type)} requires OpenAsync(request, IStreamUpstream<TRequest,TItem>, token) returning ValueTask<IAsyncEnumerator<TItem>>.");
                 continue;
             }
+            BoundStructStreamCallEmission? structStreamCall = null;
+            if (role.Stream && role.Wrapper)
+            {
+                structStreamCall = CanonicalStructStreamContractBinding.Bind(type, contract, compilation, out var structError);
+                if (structError != null)
+                {
+                    Reject("StageContractMismatch", $"Middleware {Name(type)}: {structError}");
+                    continue;
+                }
+            }
             if (role.ScopedObserver)
             {
                 if (!implementation.ReturnsVoid || implementation.Parameters.Length == 0 || implementation.Parameters[0].ScopedKind != ScopedKind.ScopedValue)
@@ -147,6 +157,7 @@ internal static class StageContractBinding
             if (role.Wrapper)
                 wrapperEmission = new(Name(type), Name(contract), members[0].Name, role.Completion)
                 {
+                    StructStreamCall = structStreamCall,
                     CallTarget = role.Stream ? null : CanonicalAsyncCallBinding.BindWrapper(type, members[0], implementation, compilation, Name)
                 };
             if (role.Stream && !role.Wrapper && (role.Completion is BoundCompletionKind.Synchronous or BoundCompletionKind.ValueTask))

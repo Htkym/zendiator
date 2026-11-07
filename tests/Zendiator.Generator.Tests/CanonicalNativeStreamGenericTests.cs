@@ -5,8 +5,10 @@ namespace Zendiator.Generator.Tests;
 
 public sealed partial class GeneratorTests
 {
-    [Fact]
-    public async Task Native_stream_open_value_request_type_changing_stages_hide_internal_cursor_and_keep_Send_routes()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Native_stream_open_value_request_type_changing_stages_hide_internal_cursor_and_keep_Send_routes(bool structUpstream)
     {
         var source = NativeStreamFixture("""
             c.Handlers(typeof(Items<>),DispatchFamily.Stream,typeof(Handler<>));
@@ -51,6 +53,8 @@ public sealed partial class GeneratorTests
             Check.That(terminal.SequenceEqual(values)&&p.Opened==2&&p.Disposed==2&&p.Boundaries==2,"typed terminal and type-changed opaque port share one independently cleaned cursor per operation");
             Check.That(m.Send(new Query(9))==10&&p.Sends==2,"closed Send after native generic Stream");
             """);
+        if (structUpstream)
+            source = WithStructStreamMiddleware(source);
         await RunNativeStreamFixture("open-value-type-change", source);
     }
 
