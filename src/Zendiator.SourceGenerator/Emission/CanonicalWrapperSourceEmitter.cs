@@ -105,7 +105,7 @@ internal static class CanonicalWrapperSourceEmitter
         var async = c.Family == BoundDispatchFamily.SendAsync;
         var region = c.Regions[index];
         var hook = region.Hook;
-        if (async && hook == null && region.Wrapper != null && region.Factory == null &&
+        if (async && hook == null && region.Wrapper is { WrapperIsValueType: false } && region.Factory == null &&
             h.ResultName != null && c.Registration.Generic == null)
         {
             LightweightRegion(b, c, index);

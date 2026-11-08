@@ -56,16 +56,23 @@ public sealed class WrapperBoundarySource : IValueTaskSource<int>
 public sealed partial class GeneratorTests
 {
     [Theory]
-    [InlineData(0)]
-    [InlineData(1)]
-    [InlineData(2)]
-    [InlineData(3)]
-    [InlineData(4)]
-    [InlineData(5)]
-    [InlineData(6)]
-    public async Task Wrapper_only_boundary_restores_context_and_preserves_completion_and_single_consumption(int mode)
+    [InlineData(0, false)]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    [InlineData(1, true)]
+    [InlineData(2, false)]
+    [InlineData(2, true)]
+    [InlineData(3, false)]
+    [InlineData(3, true)]
+    [InlineData(4, false)]
+    [InlineData(4, true)]
+    [InlineData(5, false)]
+    [InlineData(5, true)]
+    [InlineData(6, false)]
+    [InlineData(6, true)]
+    public async Task Wrapper_only_boundary_restores_context_and_preserves_completion_and_single_consumption(int mode, bool valueWrapper)
     {
-        const string source = """
+        var source = """
             using System.Threading;using System.Threading.Tasks;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;
             using Probe=global::Zendiator.Generator.Tests.WrapperBoundaryProbe;
             namespace Boundary{
@@ -78,6 +85,8 @@ public sealed partial class GeneratorTests
             public static ValueTask<int> Send(object m,int mode)=>((global::Boundary.Generated.App.IZendiator)m).SendAsync(new Ping(mode));
             }}
             """;
+        if (valueWrapper)
+            source = source.Replace("sealed class Wrapper", "struct Wrapper");
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "Boundary_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
         Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
