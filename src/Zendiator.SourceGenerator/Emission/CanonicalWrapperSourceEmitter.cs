@@ -105,6 +105,12 @@ internal static class CanonicalWrapperSourceEmitter
         var async = c.Family == BoundDispatchFamily.SendAsync;
         var region = c.Regions[index];
         var hook = region.Hook;
+        if (async && hook == null && region.Wrapper != null && region.Factory == null &&
+            h.ResultName != null && c.Registration.Generic == null)
+        {
+            LightweightRegion(b, c, index);
+            return;
+        }
         var input = hook == null ? "request" : "saved";
         b.AppendLine($"private {(async ? "async " : "")}{Result(h, async)} ExecuteRegion{index}({h.RequestName} request,global::System.Threading.CancellationToken cancellationToken){{cancellationToken.ThrowIfCancellationRequested();");
         if (hook != null)
@@ -157,6 +163,52 @@ internal static class CanonicalWrapperSourceEmitter
             private readonly struct WrapperNext{{index}}:global::Zendiator.{{(async ? "IAsyncSendContinuation" : "ISendContinuation")}}<{{h.RequestName}}{{(h.ResultName == null ? "" : ", " + h.ResultName)}}>{
                 private readonly Zendiator _owner;public WrapperNext{{index}}(Zendiator owner){_owner=owner;}
                 public {{Result(h, async)}} {{(async ? "InvokeAsync" : "Invoke")}}({{h.RequestName}} request,global::System.Threading.CancellationToken token){{{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}{{(async || h.ResultName != null ? "return " : "")}}_owner.ExecuteRegion{{index + 1}}(request,token);}
+            }
+            """);
+    }
+    private static void LightweightRegion(StringBuilder b, CanonicalWrapperCompositionEmission c, int index)
+    {
+        var h = c.Registration.Handler;
+        var wrapper = c.Regions[index].Wrapper!;
+        var result = Result(h, true);
+        b.AppendLine($$"""
+            private {{result}} ExecuteRegion{{index}}({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken) {
+                var state = new WrapperBoundary{{index}} { Owner = this, Request = request, Token = cancellationToken,
+                    Builder = global::System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder<{{h.ResultName}}>.Create() };
+                state.Builder.Start(ref state);
+                return state.Operation;
+            }
+            private struct WrapperBoundary{{index}} : global::System.Runtime.CompilerServices.IAsyncStateMachine {
+                internal Zendiator Owner;
+                internal {{h.RequestName}} Request;
+                internal global::System.Threading.CancellationToken Token;
+                internal global::System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder<{{h.ResultName}}> Builder;
+                internal {{result}} Operation;
+                public void MoveNext() {
+                    try {
+                        Token.ThrowIfCancellationRequested();
+                        var request = Request;
+                        var cancellationToken = Token;
+                        var wrapper = {{"Owner.Required_" + CanonicalSplitSourceEmitter.Id(wrapper.WrapperName) + "()"}};
+                        var pending = {{WrapperCall(wrapper, "request", "new WrapperNext" + index + "(Owner)")}};
+                        // Start restores the caller's context; pending and faulted values retain an await boundary.
+                        Operation = pending.IsCompletedSuccessfully
+                            ? new {{result}}(pending.GetAwaiter().GetResult()) : AwaitWrapper{{index}}(pending);
+                    } catch (global::System.Exception failure) {
+                        Builder.SetException(failure);
+                        Operation = Builder.Task;
+                    }
+                }
+                public void SetStateMachine(global::System.Runtime.CompilerServices.IAsyncStateMachine machine) => Builder.SetStateMachine(machine);
+            }
+            private static async {{result}} AwaitWrapper{{index}}({{result}} pending) => await pending.ConfigureAwait(false);
+            private readonly struct WrapperNext{{index}} : global::Zendiator.IAsyncSendContinuation<{{h.RequestName}}, {{h.ResultName}}> {
+                private readonly Zendiator _owner;
+                public WrapperNext{{index}}(Zendiator owner) { _owner = owner; }
+                public {{result}} InvokeAsync({{h.RequestName}} request, global::System.Threading.CancellationToken token) {
+                    {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
+                    return _owner.ExecuteRegion{{index + 1}}(request, token);
+                }
             }
             """);
     }
