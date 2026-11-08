@@ -54,6 +54,12 @@ public sealed partial class GeneratorTests
         var execution = eligible && CapabilityTyped
             ? invoker!.GetMethod("InvokeAsync", BindingFlags.NonPublic | BindingFlags.Instance)!
             : root.GetMethod(Assert.Single(CanonicalEntryMethods(routeEntry, "Execute")).MetadataName, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)!;
+        var outcomeExecution = invoker?.GetMethod("InvokeOutcomeAsync", BindingFlags.NonPublic | BindingFlags.Instance);
+        if (outcomeExecution != null)
+        {
+            Assert.Null(execution.GetCustomAttribute<AsyncStateMachineAttribute>());
+            execution = outcomeExecution;
+        }
         Assert.Equal(eligible ? typeof(PoolingAsyncValueTaskMethodBuilder<>) : null, execution.GetCustomAttribute<AsyncMethodBuilderAttribute>()?.BuilderType);
         var frame = execution.GetCustomAttribute<AsyncStateMachineAttribute>()!.StateMachineType;
         Assert.NotNull(frame.GetMethod("MoveNext", BindingFlags.NonPublic | BindingFlags.Instance));
@@ -61,7 +67,8 @@ public sealed partial class GeneratorTests
         {
             Assert.True(invoker!.IsValueType);
             Assert.NotNull(invoker.GetCustomAttribute<IsReadOnlyAttribute>());
-            var bridges = invoker.GetMethods(BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly);
+            var bridges = invoker.GetMethods(BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                .Where(method => method.Name != "AwaitOutcome").ToArray();
             Assert.Equal(13, bridges.Length);
             Assert.All(bridges, m => Assert.Null(m.GetCustomAttribute<AsyncStateMachineAttribute>()));
             var request = output.GetTypeByMetadataName(mediatorName.StartsWith("S07Pilot", StringComparison.Ordinal) ? "S07Pilot.Async.Query" : "App.Ping")!;

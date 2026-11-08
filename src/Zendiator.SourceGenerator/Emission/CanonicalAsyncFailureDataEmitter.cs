@@ -4,15 +4,15 @@ namespace Zendiator.SourceGenerator;
 
 internal static class CanonicalAsyncFailureDataEmitter
 {
-    internal static void Emit(StringBuilder b, CanonicalCapabilityCompositionEmission c, CanonicalRouteDependenciesPlan dependencies)
+    internal static void Emit(StringBuilder b, CanonicalCapabilityCompositionEmission c, CanonicalRouteDependenciesPlan dependencies, bool outcomeBoundary = false)
     {
         b.AppendLine($"{c.Registration.Handler.ResultName} response;");
-        EmitScope(b, c, dependencies, 0, "request");
-        b.AppendLine("return response;");
+        EmitScope(b, c, dependencies, 0, "request", outcomeBoundary);
+        b.AppendLine(outcomeBoundary ? "return new SendOutcome(response, null);" : "return response;");
     }
 
     private static void EmitScope(StringBuilder b, CanonicalCapabilityCompositionEmission c, CanonicalRouteDependenciesPlan dependencies,
-        int index, string input)
+        int index, string input, bool outcomeBoundary)
     {
         var h = c.Registration.Handler;
         var hook = c.Hooks[index];
@@ -36,7 +36,7 @@ internal static class CanonicalAsyncFailureDataEmitter
                     cancellationToken.ThrowIfCancellationRequested();
             """);
         if (index + 1 < c.Hooks.Count)
-            EmitScope(b, c, dependencies, index + 1, saved);
+            EmitScope(b, c, dependencies, index + 1, saved, outcomeBoundary);
         else
             b.AppendLine($$"""
                     var handler = {{CanonicalRouteDependenciesEmitter.Receiver(dependencies, h.HandlerName, h.HandlerIsValueType)}};
@@ -90,6 +90,8 @@ internal static class CanonicalAsyncFailureDataEmitter
                 error{{index - 1}} = {{error}};
                 goto failure{{index - 1}};
                 """);
+        else if (outcomeBoundary)
+            b.AppendLine("return new SendOutcome(default!, error0!);");
         else
             b.AppendLine($$"""
                 global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture({{error}}!).Throw();
