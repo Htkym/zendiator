@@ -237,6 +237,30 @@ public sealed partial class GeneratorTests
         Assert.Contains(diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error && diagnostic.Id == "ZEN0035" && diagnostic.GetMessage().StartsWith("Eager", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Eager_dependency_selection_rejects_native_carrier_routes_but_keeps_direct_value_handler_routes(bool valueHandler)
+    {
+        var source = """
+            using System.Threading;using System.Threading.Tasks;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;
+            namespace EagerCarrier{
+            public sealed record R:IRequest<int>;
+            [ZendiatorHandler]public HANDLER H:IRequestHandler<R,int>{public ValueTask<int> HandleAsync(R r,CancellationToken t)=>new(42);}
+            public sealed class Hook:ISendRequestTransform<R>,ISendResponseTransform<R,int>{public R Before(R r,CancellationToken t)=>r;public int After(R r,int value,CancellationToken t)=>value;}
+            [ZendiatorComposition("carrier",EagerDependencies=new[]{typeof(Hook)})]public sealed class App;
+            public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<App>(c=>{c.Handlers<R>(DispatchFamily.SendAsync,typeof(H));c.Pipeline<R>(DispatchFamily.SendAsync,Stage.Hook<Hook>());});}}
+            """.Replace("HANDLER", valueHandler ? "struct" : "sealed class");
+        SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "EagerCarrier_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+        if (valueHandler)
+        {
+            Assert.Empty(diagnostics);
+            Assert.Empty(output.GetDiagnostics().Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error));
+        }
+        else
+            Assert.Contains(diagnostics, diagnostic => diagnostic.Id == "ZEN0035" && diagnostic.GetMessage().Contains("carrier", StringComparison.Ordinal));
+    }
+
     private static FieldInfo[] AdaptiveCacheBlocks(AdaptiveCacheFixture fixture) => fixture.Mediator
         .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
         .Where(field => field.FieldType.DeclaringType == fixture.Mediator && field.FieldType.IsClass).ToArray();

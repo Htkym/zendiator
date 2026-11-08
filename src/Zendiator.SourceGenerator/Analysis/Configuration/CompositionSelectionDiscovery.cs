@@ -199,12 +199,12 @@ internal static class CompositionSelectionDiscovery
                 }
             var pipelines = lists.Bind(selected.Keys);
             var eagerEligible = new HashSet<string>(pipelines.Where(p => (p.Family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) &&
-                !p.RequestIsGeneric && p.Handlers.All(h => h.Sessions.Count == 0) &&
+                !p.RequestIsGeneric && !CanonicalCapabilityEmissionNormalizer.UsesDependencyCarrier(p) && p.Handlers.All(h => h.Sessions.Count == 0) &&
                 p.Stages.All(s => s.Sessions.Count == 0 && s.Callbacks.All(callback => callback.Completion == BoundCompletionKind.Synchronous)))
                 .SelectMany(p => p.Handlers.Select(h => h.Name).Concat(p.Stages.Select(s => s.Name))), StringComparer.Ordinal);
             foreach (var dependency in eagerDependencies)
                 if (!eagerEligible.Contains(dependency))
-                    errors.Add("Eager dependency " + dependency + " must be a direct closed Send-route service with synchronous stages, not a session receiver or an unrelated service.");
+                    errors.Add("Eager dependency " + dependency + " must be a direct closed Send-route service with synchronous stages, not a carrier, session receiver, or unrelated service.");
             if (lists.Facts.Any(f => f.Anchor.StartsWith("catalog:", StringComparison.Ordinal)))
                 lists.Facts.RemoveAll(f => f.Key == "IncompleteExecutionContract");
             if (generatedNamespace != null && GeneratedTypeConflict(compilation, generatedNamespace))
