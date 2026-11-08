@@ -56,6 +56,7 @@ internal static class CompositionSelectionDiscovery
             var hasExplicitSelection = false;
             var compilerOwned = false;
             var lazyClosedServiceCache = false;
+            var eagerDependencies = new List<string>();
             if (method.Arity == 1 && method.TypeArguments[0] is INamedTypeSymbol composition)
             {
                 identity = MarkedHandlerDiscovery.Identity(composition);
@@ -80,6 +81,26 @@ internal static class CompositionSelectionDiscovery
                         errors.Add("The composition key must be nonempty, trimmed, free of control characters and different from default.");
                     else
                         key = value;
+                    foreach (var argument in attributes[0].NamedArguments.Where(a => a.Key == "EagerDependencies"))
+                    {
+                        if (argument.Value.Kind == TypedConstantKind.Error)
+                            compilerOwned = true;
+                        else if (argument.Value.Kind != TypedConstantKind.Array || argument.Value.IsNull)
+                            errors.Add("EagerDependencies must be a nonnull array of closed public reference types.");
+                        else
+                            foreach (var item in argument.Value.Values)
+                                if (item.Value is INamedTypeSymbol dependency && dependency.IsReferenceType &&
+                                    !dependency.IsUnboundGenericType && Public(dependency))
+                                {
+                                    var name = Name(dependency.WithNullableAnnotation(NullableAnnotation.NotAnnotated));
+                                    if (eagerDependencies.Contains(name))
+                                        errors.Add("EagerDependencies must not contain duplicates.");
+                                    else
+                                        eagerDependencies.Add(name);
+                                }
+                                else
+                                    errors.Add("EagerDependencies must contain only closed public reference types.");
+                    }
                     foreach (var argument in attributes[0].NamedArguments.Where(a => a.Key == "ClosedServiceCache"))
                     {
                         if (argument.Value.Kind == TypedConstantKind.Error)
@@ -177,6 +198,13 @@ internal static class CompositionSelectionDiscovery
                         errors.Add($"Composition selection operation {operation.Name} is not connected yet.");
                 }
             var pipelines = lists.Bind(selected.Keys);
+            var eagerEligible = new HashSet<string>(pipelines.Where(p => (p.Family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) &&
+                !p.RequestIsGeneric && p.Handlers.All(h => h.Sessions.Count == 0) &&
+                p.Stages.All(s => s.Sessions.Count == 0 && s.Callbacks.All(callback => callback.Completion == BoundCompletionKind.Synchronous)))
+                .SelectMany(p => p.Handlers.Select(h => h.Name).Concat(p.Stages.Select(s => s.Name))), StringComparer.Ordinal);
+            foreach (var dependency in eagerDependencies)
+                if (!eagerEligible.Contains(dependency))
+                    errors.Add("Eager dependency " + dependency + " must be a direct closed Send-route service with synchronous stages, not a session receiver or an unrelated service.");
             if (lists.Facts.Any(f => f.Anchor.StartsWith("catalog:", StringComparison.Ordinal)))
                 lists.Facts.RemoveAll(f => f.Key == "IncompleteExecutionContract");
             if (generatedNamespace != null && GeneratedTypeConflict(compilation, generatedNamespace))
@@ -194,6 +222,7 @@ internal static class CompositionSelectionDiscovery
                 ExplicitHandlerTypes = new(explicitHandlerNames),
                 CatalogMarkerTypes = new(catalogMarkerNames),
                 LazyClosedServiceCache = lazyClosedServiceCache,
+                EagerDependencies = new(eagerDependencies),
                 ExternAliases = CanonicalSymbolName.Aliases(compilation)
             };
             var location = semantic.GetInterceptableLocation(invocation, ct);

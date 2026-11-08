@@ -34,7 +34,7 @@ internal sealed record CanonicalSourceFile(string HintName, string Source)
     }
 }
 internal sealed record CanonicalCompositionFragment(string Namespace, string Registrar, EquatableArray<string> Externs,
-    EquatableArray<CanonicalServiceDependency> Dependencies, bool LazyClosedServiceCache);
+    EquatableArray<CanonicalServiceDependency> Dependencies, bool LazyClosedServiceCache, EquatableArray<string> EagerDependencies = default);
 internal sealed record CanonicalRouteFile(CanonicalRouteText Route, CanonicalSourceFile File);
 internal sealed record CanonicalOutputSelection(string Namespace, string RequestName, BoundDispatchFamily? Family);
 
@@ -56,10 +56,10 @@ internal static class CanonicalSplitSourceEmitter
     }
 
     internal static void Mediator(StringBuilder b, IEnumerable<CanonicalServiceDependency> dependencies,
-        bool lazyClosedServiceCache, IEnumerable<MemberDeclarationSyntax>? methods = null)
+        bool lazyClosedServiceCache, IEnumerable<MemberDeclarationSyntax>? methods = null, EquatableArray<string> eagerDependencies = default)
     {
         b.AppendLine("public sealed partial class Zendiator : IZendiator, global::System.IServiceProvider {");
-        b.AppendLine(CanonicalRouteServiceEmitter.Services(dependencies, lazyClosedServiceCache));
+        b.AppendLine(CanonicalRouteServiceEmitter.Services(dependencies, lazyClosedServiceCache, eagerDependencies));
         if (methods != null)
             foreach (var method in methods)
                 b.AppendLine(method.NormalizeWhitespace().ToFullString());
@@ -88,7 +88,7 @@ internal static class CanonicalSplitSourceEmitter
         var mediator = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "Zendiator");
         var registrar = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "ZendiatorGeneratedRegistrar");
         var id = Id(route.StableKey);
-        var fragment = CanonicalRouteServiceEmitter.Fragment(root, ns, mediator, registrar, route.BoxedDependencies, route.LazyClosedServiceCache);
+        var fragment = CanonicalRouteServiceEmitter.Fragment(root, ns, mediator, registrar, route.BoxedDependencies, route.LazyClosedServiceCache, route.EagerDependencies);
         var b = Header(fragment.Externs);
         b.Append("namespace ").Append(fragment.Namespace).AppendLine(" {\npublic partial interface IZendiator {");
         foreach (var member in api.Members)
@@ -136,7 +136,7 @@ internal static class CanonicalSplitSourceEmitter
             var dependencies = routes.SelectMany(route => route.Dependencies).GroupBy(type => type.TypeName, StringComparer.Ordinal)
                 .Select(group => group.First() with { Boxed = group.Any(type => type.Boxed) });
             yield return Composition(new(composition.Namespace, registrar.ToString(), new(CanonicalSymbolName.Declarations(composition.Routes[0].Registration.ExternAliases)
-                .Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries)), new(dependencies), routes[0].LazyClosedServiceCache));
+                .Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries)), new(dependencies), routes[0].LazyClosedServiceCache, new(routes.SelectMany(route => route.EagerDependencies).Distinct(StringComparer.Ordinal))));
         }
     }
 
@@ -144,7 +144,7 @@ internal static class CanonicalSplitSourceEmitter
     {
         var b = Header(fragment.Externs);
         b.Append("namespace ").Append(fragment.Namespace).AppendLine(" {");
-        Mediator(b, fragment.Dependencies, fragment.LazyClosedServiceCache);
+        Mediator(b, fragment.Dependencies, fragment.LazyClosedServiceCache, eagerDependencies: fragment.EagerDependencies);
         b.AppendLine(fragment.Registrar).AppendLine("}");
         return new("Zendiator.Composition." + Id(fragment.Namespace) + ".g.cs", b.ToString());
     }

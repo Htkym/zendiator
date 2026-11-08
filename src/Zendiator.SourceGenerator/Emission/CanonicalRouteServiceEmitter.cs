@@ -147,7 +147,7 @@ internal static class CanonicalRouteServiceEmitter
     }
 
     internal static CanonicalCompositionFragment Fragment(CompilationUnitSyntax root, NamespaceDeclarationSyntax ns,
-        ClassDeclarationSyntax mediator, ClassDeclarationSyntax registrar, EquatableArray<string> boxedDependencies, bool lazyClosedServiceCache)
+        ClassDeclarationSyntax mediator, ClassDeclarationSyntax registrar, EquatableArray<string> boxedDependencies, bool lazyClosedServiceCache, EquatableArray<string> eagerDependencies = default)
     {
         var dependencies = Dependencies(ns).ToArray();
         var boxed = new HashSet<string>(boxedDependencies.Select(type => TypeKey(SyntaxFactory.ParseTypeName(type))), StringComparer.Ordinal);
@@ -155,10 +155,10 @@ internal static class CanonicalRouteServiceEmitter
             if (call.Expression is MemberAccessExpressionSyntax { Name: IdentifierNameSyntax } && ServiceType(call, "_provider") is { } type)
                 boxed.Add(TypeKey(type));
         return new(ns.Name.ToString(), registrar.ToFullString(), new(root.Externs.Select(e => e.WithLeadingTrivia().WithTrailingTrivia().ToString())),
-            new(dependencies.Select(type => new CanonicalServiceDependency(TypeKey(type), !Closed(type), boxed.Contains(TypeKey(type))))), lazyClosedServiceCache);
+            new(dependencies.Select(type => new CanonicalServiceDependency(TypeKey(type), !Closed(type), boxed.Contains(TypeKey(type))))), lazyClosedServiceCache, eagerDependencies);
     }
 
-    internal static string Services(IEnumerable<CanonicalServiceDependency> dependencies, bool lazyClosedServiceCache)
+    internal static string Services(IEnumerable<CanonicalServiceDependency> dependencies, bool lazyClosedServiceCache, EquatableArray<string> eagerDependencies = default)
     {
         var values = dependencies.ToArray();
         var closed = values.Where(type => !type.Open).ToArray();
@@ -178,6 +178,20 @@ internal static class CanonicalRouteServiceEmitter
             b.AppendLine(CanonicalGenericServiceCacheEmitter.Members());
         }
         CanonicalClosedServiceCacheEmitter.AppendMembers(b, closed, lazyClosedServiceCache);
+        if (eagerDependencies.Count != 0)
+        {
+            var eager = closed.Where(type => eagerDependencies.Contains(type.TypeName)).ToArray();
+            b.AppendLine("public Zendiator(global::System.IServiceProvider provider, " + string.Join(", ", eager.Select((type, i) => type.TypeName + " eager" + i)) + ") : this(provider) {");
+            for (var i = 0; i < eager.Length; i++)
+            {
+                var type = eager[i];
+                b.AppendLine("global::System.ArgumentNullException.ThrowIfNull(eager" + i + ");");
+                var block = System.Array.IndexOf(closed, type) / 16;
+                var slot = lazyClosedServiceCache ? "(_serviceBlock_" + block + " ??= new ServiceBlock_" + block + "())." : "";
+                b.AppendLine(slot + "_service_" + CanonicalSplitSourceEmitter.Id(type.TypeName) + " = eager" + i + ";");
+            }
+            b.AppendLine("}");
+        }
         b.AppendLine("object? global::System.IServiceProvider.GetService(global::System.Type serviceType) {");
         foreach (var type in closed)
             b.AppendLine("if (serviceType == typeof(" + type.TypeName + ")) return Service_" + CanonicalSplitSourceEmitter.Id(type.TypeName) + "();");

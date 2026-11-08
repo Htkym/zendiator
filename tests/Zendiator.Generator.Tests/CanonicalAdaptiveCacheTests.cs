@@ -56,13 +56,13 @@ public sealed partial class GeneratorTests
     private sealed record AdaptiveCacheFixture(Type Mediator, Type Hook, Type[] Handlers,
         Func<IServiceCollection, IServiceCollection> Register, Func<IServiceProvider, object> Create,
         Func<AdaptiveCacheProbe, int, object> NewService, Func<object, int, int, int> Send, Action<object, int> Dense);
-    private static readonly ConcurrentDictionary<(int Dependencies, ClosedServiceCacheMode? Mode), Lazy<AdaptiveCacheFixture>> AdaptiveCacheFixtures = new();
+    private static readonly ConcurrentDictionary<(int Dependencies, ClosedServiceCacheMode? Mode, bool Eager), Lazy<AdaptiveCacheFixture>> AdaptiveCacheFixtures = new();
 
     // Each composition has N unique dependencies: N-1 handlers and one hook shared by every route.
     // The last handler is a mutable struct. Requests stay typed structs in the bridge, including allocation runs.
-    private static AdaptiveCacheFixture AdaptiveCacheRuntimeFixture(int dependencies, ClosedServiceCacheMode? mode = ClosedServiceCacheMode.LazyBlocks) => AdaptiveCacheFixtures.GetOrAdd((dependencies, mode), selection => new(() =>
+    private static AdaptiveCacheFixture AdaptiveCacheRuntimeFixture(int dependencies, ClosedServiceCacheMode? mode = ClosedServiceCacheMode.LazyBlocks, bool eager = false) => AdaptiveCacheFixtures.GetOrAdd((dependencies, mode, eager), selection => new(() =>
     {
-        var (count, cacheMode) = selection;
+        var (count, cacheMode, eagerMode) = selection;
         var routes = count - 1;
         var source = new StringBuilder("using System;using System.Threading;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;using Probe=global::Zendiator.Generator.Tests.AdaptiveCacheProbe;namespace Adaptive{");
         for (var i = 0; i < routes; i++)
@@ -81,6 +81,8 @@ public sealed partial class GeneratorTests
         source.Append("public void Dispose()=>_p.Release(this);}[ZendiatorComposition(\"adaptive\"");
         if (cacheMode is { } selectedMode)
             source.Append(",ClosedServiceCache=ClosedServiceCacheMode.").Append(selectedMode);
+        if (eagerMode)
+            source.Append(",EagerDependencies=new[]{typeof(H0),typeof(Shared)}");
         source.Append(")]public sealed class Reads;public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<Reads>(c=>{");
         for (var i = 0; i < routes; i++)
             source.Append("c.Handlers<R").Append(i).Append(">(DispatchFamily.SendSync,typeof(H").Append(i).Append("));c.Pipeline<R").Append(i).Append(">(DispatchFamily.SendSync,Stage.Hook<Shared>());");
@@ -138,6 +140,102 @@ public sealed partial class GeneratorTests
             bridge.GetMethod("Send")!.CreateDelegate<Func<object, int, int, int>>(),
             bridge.GetMethod("Dense")!.CreateDelegate<Action<object, int>>());
     })).Value;
+
+    [Theory]
+    [InlineData(ClosedServiceCacheMode.Inline)]
+    [InlineData(ClosedServiceCacheMode.LazyBlocks)]
+    public void Eager_dependencies_use_native_di_once_and_leave_unselected_routes_and_direct_construction_lazy(ClosedServiceCacheMode mode)
+    {
+        var fixture = AdaptiveCacheRuntimeFixture(4, mode, eager: true);
+        var probe = new AdaptiveCacheProbe();
+        IServiceCollection services = new ServiceCollection();
+        services.AddSingleton(probe);
+        fixture.Register(services);
+        var overrides = 0;
+        services.AddTransient(fixture.Handlers[0], _ =>
+        {
+            overrides++;
+            return fixture.NewService(probe, 0);
+        });
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+        using (var scope = provider.CreateScope())
+        {
+            Assert.Empty(probe.Created);
+            var mediator = scope.ServiceProvider.GetRequiredService(CanonicalEntryService(fixture.Mediator));
+            Assert.Equal(new[] { -1, 0 }, probe.Created.Select(c => c.Index).OrderBy(i => i));
+            Assert.Equal(1, overrides);
+            Assert.Equal(42, fixture.Send(mediator, 0, 42));
+            Assert.Equal(43, fixture.Send(mediator, 0, 43));
+            Assert.Equal(2, probe.Created.Count);
+            Assert.Same(probe.Calls[0].Receiver, probe.Calls[1].Receiver);
+            Assert.Equal(44, fixture.Send(mediator, 1, 44));
+            Assert.Equal(new[] { -1, 0, 1 }, probe.Created.Select(c => c.Index).OrderBy(i => i));
+            Assert.Empty(probe.Released);
+        }
+        Assert.Equal(3, probe.Released.Count);
+        var directProbe = new AdaptiveCacheProbe();
+        var directServices = new ServiceCollection();
+        directServices.AddSingleton(directProbe);
+        fixture.Register(directServices);
+        using var directProvider = directServices.BuildServiceProvider();
+        using (var scope = directProvider.CreateScope())
+        {
+            var mediator = fixture.Create(scope.ServiceProvider);
+            Assert.Empty(directProbe.Created);
+            Assert.Equal(42, fixture.Send(mediator, 1, 42));
+            Assert.Equal(new[] { -1, 1 }, directProbe.Created.Select(c => c.Index).OrderBy(i => i));
+        }
+        Assert.Equal(2, directProbe.Released.Count);
+    }
+
+    [Fact]
+    public void Eager_dependency_constructor_failure_remains_a_native_di_failure_and_can_be_retried()
+    {
+        var fixture = AdaptiveCacheRuntimeFixture(4, ClosedServiceCacheMode.Inline, eager: true);
+        var failure = new ArithmeticException("eager-constructor-sentinel");
+        var probe = new AdaptiveCacheProbe
+        {
+            DuringConstruct = id =>
+            {
+                if (id == 0)
+                    throw failure;
+            }
+        };
+        var services = new ServiceCollection();
+        services.AddSingleton(probe);
+        fixture.Register(services);
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        Assert.Same(failure, Assert.Throws<ArithmeticException>(() => scope.ServiceProvider.GetRequiredService(CanonicalEntryService(fixture.Mediator))));
+        probe.DuringConstruct = null;
+        var mediator = scope.ServiceProvider.GetRequiredService(CanonicalEntryService(fixture.Mediator));
+        Assert.Equal(42, fixture.Send(mediator, 0, 42));
+        // Native DI owns the transient constructed before failure as well as the retry's dependencies.
+        Assert.Equal(new[] { -1, -1, 0 }, probe.Created.Select(c => c.Index).OrderBy(i => i));
+        scope.Dispose();
+        Assert.Equal(probe.Created.Count, probe.Released.Count);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("new[]{typeof(H),typeof(H)}")]
+    [InlineData("new[]{typeof(Unselected)}")]
+    [InlineData("new[]{typeof(int)}")]
+    [InlineData("new[]{typeof(System.Collections.Generic.List<>)}")]
+    public void Eager_dependency_selection_rejects_null_duplicates_unselected_and_nonclosed_reference_types(string selection)
+    {
+        var source = """
+            using System.Threading;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;
+            namespace EagerInvalid{
+            public sealed record R:ISyncRequest<int>;
+            [ZendiatorHandler]public sealed class H:ISyncRequestHandler<R,int>{public int Handle(R r,CancellationToken t)=>42;}
+            public sealed class Unselected;
+            [ZendiatorComposition("invalid",EagerDependencies=SELECTION)]public sealed class App;
+            public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<App>(c=>c.Handlers<R>(DispatchFamily.SendSync,typeof(H)));}}
+            """.Replace("SELECTION", selection);
+        SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "EagerInvalid_" + Guid.NewGuid().ToString("N")), out _, out var diagnostics);
+        Assert.Contains(diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error && diagnostic.Id == "ZEN0035" && diagnostic.GetMessage().StartsWith("Eager", StringComparison.Ordinal));
+    }
 
     private static FieldInfo[] AdaptiveCacheBlocks(AdaptiveCacheFixture fixture) => fixture.Mediator
         .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
