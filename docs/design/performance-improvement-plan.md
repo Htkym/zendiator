@@ -37,3 +37,12 @@ Task.Yield、token check、probe、cleanup を減らす変更は採用しない�
 [baseline 記録](../performance/baseline-2026-11-07.md)に fixture 対応、環境、再現コマンド、未確認事項を残す。実験の結果は `docs/performance/experiments/` に記録する。
 
 受領計画の全体完了範囲は、全 WP の実装・採用ではなく、L1〜L7・A1・A2 の改善結果または改善未証明の理由、既存契約の維持、opt-in と default の区別、commit／PR と再現可能な証跡をそろえることとする。採用案の baseline 比の効果と同条件の競合比較は区別し、未測定の仮説を実現済みの成果として扱わない。
+
+## 現在の進捗（2026-11-09）
+
+上記は2026-11-07時点の実施記録として保持する。以降の進捗は次のとおりであり、改修計画全体の完了を示すものではない。
+
+- WP01・WP02・WP03・WP06・WP07の現候補は不採用で終了した。WP05のexplicit eager opt-in、WP08のrefasync、WP09のtyped asyncoutcomeは実装を採用した。WP04のopt-inは暫定状態で、正式なfinal210のphase1後に判断する。
+- WP10は.NET 11 RCの126/126セルの実験、既存公式分析、独立数値照合、日本語校正を完了した。[実験結果](../performance/wp10-runtime-async-results.md)に利得・悪化・制約を併記した。.NET 10 shippingへの効果とは分けて扱い、新しいPE/PDB・generated-sourceの意味検証などの補強監査は未検証のままとする。
+- 残る工程は、fresh A/B/S/EとStrict consumerの実API・protocol・stageの確認完了、master freezeとpreflight、final210、9代表ケースの結果・採否・再現証跡の最終更新である。final210はphase1の117セルでWP04を判断し、別途GOを得た後にphase2の93セルを進める。
+- 現行shipping sourceのCI成功は、最終性能比較の完了を代替しない。原計画§15.2・§16.3に沿って、同条件でのbaseline比と競合比較を区別し、既存契約、opt-inとdefaultの区別、再現可能な証跡をそろえて全体の完了を判断する。
