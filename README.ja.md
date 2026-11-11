@@ -86,7 +86,7 @@ Wrapper の retry、cache、継続呼び出しは、アプリケーションで�
 
 呼び出し側では具体的なリクエスト型を使います。実行時の object によるリクエスト配送、
 Publish の並列実行、fire-and-forget、永続化や outbox は提供していません。
-通知の登録は、Send と Stream の経路とは別です。
+通知の登録は Send と Stream の経路とは別です。
 
 ## 依存のライフタイムと例外
 
@@ -98,7 +98,7 @@ Transient の同一性やコンストラクタの実行時期に依存する場�
 
 生成と破棄は DI が担当します。配送・列挙・後始末が終わるまで scope を保持し、
 破棄後に入口を使わないでください。再利用する Handler と Hook は並行呼び出しに対応する必要があります。
-`ValidateOnBuild` だけでは、配送時に初めて取得する依存を検証できません。
+`ValidateOnBuild` だけでは配送時に初めて取得する依存を検証できません。
 
 返された `ValueTask` は一度だけ await します。直接呼び出す経路では、`ValueTask` を返す前に
 例外が発生することがあります。`SendAsync` の呼び出しと await の両方を `try` の中に置いてください。
@@ -133,7 +133,7 @@ public sealed class Relay<TRequest, TItem> : IStreamMiddleware<TRequest, TItem>
 }
 ```
 
-生成器は、アクセス可能な sealed class に、正確な制約を持つ public・非 virtual の generic 実装が
+ジェネレーターはアクセス可能な sealed class に、正確な制約を持つ public・非 virtual の generic 実装が
 直接宣言されている場合に、この具体型の経路を選びます。ほかの対応する型では interface 経由の呼び出しを維持します。
 [型付き middleware の移行ガイド](docs/migrating-stream-upstream.md)に詳しい条件をまとめています。
 
