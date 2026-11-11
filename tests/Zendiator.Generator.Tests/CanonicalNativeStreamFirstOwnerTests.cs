@@ -14,7 +14,7 @@ public sealed partial class GeneratorTests
             public sealed class Probe{
                 public int Resolved,Opened,HandlerDisposals;public readonly HashSet<int> Active=new();public readonly List<int> Disposed=new();
             }
-            [ZendiatorHandler]public sealed class Handler:IStreamSourceHandler<Items,int,Cursor>,IDisposable{
+            [Handler]public sealed class Handler:IStreamSourceHandler<Items,int,Cursor>,IDisposable{
                 private readonly Probe p;public Handler(Probe p){this.p=p;p.Resolved++;}
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){var id=++p.Opened;p.Active.Add(id);return new(new Cursor(p,id,t));}
                 public void Dispose()=>p.HandlerDisposals++;

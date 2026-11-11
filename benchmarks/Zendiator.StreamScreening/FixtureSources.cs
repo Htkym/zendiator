@@ -151,7 +151,7 @@ internal static class FixtureSources
                 });
             }
             public sealed record Request:IStreamRequest<int>;
-            [ZendiatorHandler] public sealed class H:IStreamSourceHandler<Request,int,Source<int>> {
+            [Handler] public sealed class H:IStreamSourceHandler<Request,int,Source<int>> {
                 private readonly Context p;
                 public H(Context context) {p=context; /*C:20*/}
                 public ValueTask<Source<int>> OpenAsync(Request r,CancellationToken c) { /*C:0*/ return new(new Source<int>(p,1,c)); }
@@ -209,7 +209,7 @@ internal static class FixtureSources
             public sealed class Payload {public long Value {get;}=7;}
             public sealed record Request<T>(T Value):IStreamRequest<T>;
             public sealed record Final<T>(T Value);
-            [ZendiatorHandler] public sealed class H<T>(Context p):IStreamSourceHandler<Request<T>,T,Source<T>>,IAsyncDisposable where T:class,new() {
+            [Handler] public sealed class H<T>(Context p):IStreamSourceHandler<Request<T>,T,Source<T>>,IAsyncDisposable where T:class,new() {
                 public ValueTask<Source<T>> OpenAsync(Request<T> r,CancellationToken c) { /*C:0*/ return new(new Source<T>(p,r.Value,c)); }
                 public ValueTask DisposeAsync() { /*C:12*/ return default; }
             }
@@ -272,7 +272,7 @@ internal static class FixtureSources
             public sealed record Request:IStreamRequest<int>;
             [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential,Size=128)]
             public readonly struct LargeItem(long value) {public long Value {get;}=value;}
-            [ZendiatorHandler] public sealed class H(Context p):IStreamSourceHandler<Request,int,Source<int>>,IAsyncDisposable {
+            [Handler] public sealed class H(Context p):IStreamSourceHandler<Request,int,Source<int>>,IAsyncDisposable {
                 public ValueTask<Source<int>> OpenAsync(Request r,CancellationToken c) { /*C:0*/ return new(new Source<int>(p,7,c)); }
                 public ValueTask DisposeAsync() { /*C:12*/ return default; }
             }
@@ -347,7 +347,7 @@ internal static class FixtureSources
                 });
             }
             public sealed record Request:IStreamRequest<int>;
-            [ZendiatorHandler] public sealed class H:IStreamSourceHandler<Request,int,Source<int>> {
+            [Handler] public sealed class H:IStreamSourceHandler<Request,int,Source<int>> {
                 private readonly Context p;
                 public H(Context context) {p=context; /*C:20*/}
                 public ValueTask<Source<int>> OpenAsync(Request r,CancellationToken c) { /*C:0*/ return new(new Source<int>(p,1,c)); }

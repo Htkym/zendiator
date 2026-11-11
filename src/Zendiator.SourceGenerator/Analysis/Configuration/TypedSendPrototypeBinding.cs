@@ -70,9 +70,9 @@ internal static class TypedSendPrototypeBinding
         if (!Class(outer) || !Class(inner) || ports.Any(t => t.IsRefLikeType || MarkedHandlerDiscovery.HasOpenShape(t) || !Public(t)) ||
             new[] { handler, requestMap, responseMap }.Any(t => !Class(t)) || response.SpecialType != SpecialType.System_Int32 || published.SpecialType != SpecialType.System_String)
             return Reject(GeneratorDiagnostics.UnsupportedGenerationShape, "This prototype requires nonnull closed class requests and borrowed closed class receivers, one int handler response and a string public response; other shapes need separate proofs.");
-        var marker = assembly?.GetTypeByMetadataName("Zendiator.ZendiatorHandlerAttribute");
+        var marker = assembly?.GetTypeByMetadataName("Zendiator.HandlerAttribute");
         if (!handler.GetAttributes().Any(a => Same(a.AttributeClass, marker)))
-            return Reject(GeneratorDiagnostics.UnsupportedGenerationShape, "The explicitly supplied prototype handler requires ZendiatorHandler.");
+            return Reject(GeneratorDiagnostics.UnsupportedGenerationShape, "The explicitly supplied prototype handler requires Handler.");
         INamedTypeSymbol? Observer(INamedTypeSymbol receiver, string name, ITypeSymbol saved) =>
             Contracts(receiver, name, true).SingleOrDefault(i => Equal(i.TypeArguments[0], saved));
         var outerException = Observer(requestMap, "Zendiator.ISendExceptionObserver`1", outer);

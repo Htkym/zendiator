@@ -111,7 +111,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Catalog_v1_producer_rejects_duplicate_source_exports_before_metadata_dedup()
     {
-        var source = "using System.Threading;using Zendiator;[assembly:ZendiatorHandlerExport(typeof(App.Handler),\"" + new string('0', 64) + "\")][assembly:ZendiatorHandlerExport(typeof(App.Handler),\"" + new string('1', 64) + "\")]namespace App{public sealed record Ping:ISyncRequest<int>;[ZendiatorHandler]public sealed class Handler:ISyncRequestHandler<Ping,int>{public int Handle(Ping r,CancellationToken t)=>1;}}";
+        var source = "using System.Threading;using Zendiator;[assembly:ZendiatorHandlerExport(typeof(App.Handler),\"" + new string('0', 64) + "\")][assembly:ZendiatorHandlerExport(typeof(App.Handler),\"" + new string('1', 64) + "\")]namespace App{public sealed record Ping:ISyncRequest<int>;[Handler]public sealed class Handler:ISyncRequestHandler<Ping,int>{public int Handle(Ping r,CancellationToken t)=>1;}}";
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "CatalogProducerDuplicate"), out var output, out var diagnostics);
         var d = Assert.Single(diagnostics);
         Assert.Contains("DuplicateCatalogExport", d.GetMessage());
@@ -129,7 +129,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Catalog_v1_body_edit_keeps_catalog_source_cached_contract_edit_changes_fingerprint()
     {
-        var source = "using System.Threading;using Zendiator;namespace App{public sealed record Ping:ISyncRequest<int>;[ZendiatorHandler]public sealed class Handler:ISyncRequestHandler<Ping,int>{public int Handle(Ping r,CancellationToken t)=>1;}}";
+        var source = "using System.Threading;using Zendiator;namespace App{public sealed record Ping:ISyncRequest<int>;[Handler]public sealed class Handler:ISyncRequestHandler<Ping,int>{public int Handle(Ping r,CancellationToken t)=>1;}}";
         var driver = SyncDriver().RunGenerators(SyncCompilation(source, "CatalogCache"));
         var first = driver.GetRunResult().Results.Single().GeneratedSources.Single(s => s.HintName == GeneratedHandlerCatalog.HintName).SourceText.ToString();
         driver = driver.RunGenerators(SyncCompilation(source.Replace("=>1", "=>2"), "CatalogCache"));

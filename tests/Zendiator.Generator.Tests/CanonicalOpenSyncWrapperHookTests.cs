@@ -33,7 +33,7 @@ public sealed partial class GeneratorTests
                 Trace.Add(phase);AmbientSeen.Add(Ambient.Value);Ambient.Value=phase;
             }
         }
-        [ZendiatorHandler]public sealed class Handler<T>:ISyncRequestHandler<Query<T>{{response}}>,IDisposable where T:class,new() {
+        [Handler]public sealed class Handler<T>:ISyncRequestHandler<Query<T>{{response}}>,IDisposable where T:class,new() {
             private readonly Probe p;public Handler(Probe p){this.p=p;p.Resolve(this,"H");}
             public {{result}} Handle(Query<T> r,CancellationToken token){p.Hit("H",r,token);p.HandlerCalls++;{{(isVoid ? "" : "return r.Value;")}}}
             public void Dispose(){p.Disposed.Add(this);}

@@ -13,7 +13,7 @@ public sealed partial class GeneratorTests
 {
     private static byte[] IdentityProducer(string name, int value)
     {
-        var source = "using System.Threading;using Zendiator;namespace Twins{public sealed class Marker;public sealed record Ping(int Value):ISyncRequest<int>;[ZendiatorHandler]public sealed class Handler:ISyncRequestHandler<Ping,int>{public int Handle(Ping p,CancellationToken t)=>p.Value+" + value + ";}}";
+        var source = "using System.Threading;using Zendiator;namespace Twins{public sealed class Marker;public sealed record Ping(int Value):ISyncRequest<int>;[Handler]public sealed class Handler:ISyncRequestHandler<Ping,int>{public int Handle(Ping p,CancellationToken t)=>p.Value+" + value + ";}}";
         return CatalogProducerBytes(source, "identity-" + name, name, true);
     }
     private static byte[] IdentityForwarder(string name, MetadataReference target)
@@ -273,7 +273,7 @@ public sealed partial class GeneratorTests
     public void Identity_incomplete_source_never_crashes_or_reuses_stale_backend_and_recovers(string shape)
     {
         static bool Backend(GeneratedSourceResult source) => source.HintName.Contains("Canonical", StringComparison.Ordinal) || IsCanonicalRoute(source) || IsCanonicalComposition(source);
-        var source = "using System.Threading;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;namespace Broken{public sealed record Ping:ISyncRequest<int>;[ZendiatorHandler]public sealed class Handler:ISyncRequestHandler<Ping,int>{public int Handle(Ping r,CancellationToken t)=>1;}[ZendiatorComposition(\"broken\")]public sealed class Reads;public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<Reads>(c=>c.Handlers<Ping>(DispatchFamily.SendSync,typeof(Handler)));}}";
+        var source = "using System.Threading;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;namespace Broken{public sealed record Ping:ISyncRequest<int>;[Handler]public sealed class Handler:ISyncRequestHandler<Ping,int>{public int Handle(Ping r,CancellationToken t)=>1;}[ZendiatorComposition(\"broken\")]public sealed class Reads;public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<Reads>(c=>c.Handlers<Ping>(DispatchFamily.SendSync,typeof(Handler)));}}";
         var invalid = shape switch
         {
             "function-pointer" => source.Replace("public sealed class Handler", "public unsafe sealed class Handler").Replace("ISyncRequestHandler<Ping,int>", "ISyncRequestHandler<Ping,delegate*<void>>").Replace("public int Handle", "public delegate*<void> Handle").Replace("=>1", "=>null"),

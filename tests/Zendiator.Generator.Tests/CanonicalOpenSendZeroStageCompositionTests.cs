@@ -41,19 +41,19 @@ public sealed partial class GeneratorTests
             }
             public void Dispose(object receiver){Disposed.Add(receiver);Trace.Add("dispose:"+receiver.GetType());}
         }
-        [ZendiatorHandler]public sealed class Handler<X,Y>:IRequestHandler<Query<Y,X>,int>,IDisposable where X:class,IRight,new() where Y:class,ILeft,new(){
+        [Handler]public sealed class Handler<X,Y>:IRequestHandler<Query<Y,X>,int>,IDisposable where X:class,IRight,new() where Y:class,ILeft,new(){
             private readonly Probe p;public Handler(Probe p){this.p=p;p.Resolve(this);}
             public ValueTask<int> HandleAsync(Query<Y,X> r,CancellationToken token)=>p.Handle(this,"open",r,r.Value,r.Shared,token);
             public void Dispose()=>p.Dispose(this);
         }
-        [ZendiatorHandler]public sealed class StatusHandler:IRequestHandler<StatusQuery,int>,IDisposable {
+        [Handler]public sealed class StatusHandler:IRequestHandler<StatusQuery,int>,IDisposable {
             private readonly Probe p;public StatusHandler(Probe p){this.p=p;p.Resolve(this);}
             public ValueTask<int> HandleAsync(StatusQuery r,CancellationToken token)=>p.Handle(this,"closed",r,r.Value,r.Shared,token);
             public void Dispose()=>p.Dispose(this);
         }
         public sealed record ExtraQuery<T>:IRequest<int>;
-        [ZendiatorHandler]public sealed class ExtraHandler<T>:IRequestHandler<ExtraQuery<T>,int>{public ValueTask<int> HandleAsync(ExtraQuery<T> r,CancellationToken token)=>new(0);}
-        [ZendiatorHandler]public sealed class Missing<X,Y,Unused>:IRequestHandler<Query<Y,X>,int>{public ValueTask<int> HandleAsync(Query<Y,X> r,CancellationToken token)=>new(0);}
+        [Handler]public sealed class ExtraHandler<T>:IRequestHandler<ExtraQuery<T>,int>{public ValueTask<int> HandleAsync(ExtraQuery<T> r,CancellationToken token)=>new(0);}
+        [Handler]public sealed class Missing<X,Y,Unused>:IRequestHandler<Query<Y,X>,int>{public ValueTask<int> HandleAsync(Query<Y,X> r,CancellationToken token)=>new(0);}
         }
         """;
 

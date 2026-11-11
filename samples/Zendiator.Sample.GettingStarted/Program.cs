@@ -45,7 +45,7 @@ public sealed class App;
 
 public sealed record AddNumbers(int Left, int Right) : ISyncRequest<int>;
 
-[ZendiatorHandler]
+[Handler]
 public sealed class AddNumbersHandler : ISyncRequestHandler<AddNumbers, int>
 {
     public int Handle(AddNumbers request, CancellationToken token)
@@ -57,7 +57,7 @@ public sealed class AddNumbersHandler : ISyncRequestHandler<AddNumbers, int>
 
 public sealed record Greet(string Name) : IRequest<string>;
 
-[ZendiatorHandler]
+[Handler]
 public sealed class GreetHandler : IRequestHandler<Greet, string>
 {
     public ValueTask<string> HandleAsync(Greet request, CancellationToken token)
@@ -79,7 +79,7 @@ public sealed class AddExclamation : ISendResponseTransform<Greet, string>
 
 public sealed record ReadNumbers(int Count) : IStreamRequest<int>;
 
-[ZendiatorHandler]
+[Handler]
 public sealed class ReadNumbersHandler : IStreamSourceHandler<ReadNumbers, int, NumberCursor>
 {
     public ValueTask<NumberCursor> OpenAsync(ReadNumbers request, CancellationToken token) =>

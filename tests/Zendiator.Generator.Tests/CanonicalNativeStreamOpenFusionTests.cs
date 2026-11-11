@@ -28,7 +28,7 @@ public sealed partial class GeneratorTests
                 public int HandlerCreated,HandlerDisposed;
                 public Flow For(Items r)=>Flows[r.Id];
             }
-            [ZendiatorHandler]public sealed class Handler:IStreamSourceHandler<Items,int,Cursor>,IDisposable{
+            [Handler]public sealed class Handler:IStreamSourceHandler<Items,int,Cursor>,IDisposable{
                 private readonly Probe p;
                 public Handler(Probe p){this.p=p;p.HandlerCreated++;}
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){

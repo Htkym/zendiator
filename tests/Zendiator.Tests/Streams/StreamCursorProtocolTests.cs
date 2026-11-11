@@ -690,7 +690,7 @@ public sealed class OnceSource<T> : IValueTaskSource<T>
         _source.OnCompleted(continuation, state, token, flags);
 }
 
-[ZendiatorHandler]
+[Handler]
 public sealed class StreamHandler : IStreamSourceHandler<StreamRequest, int, NativeCursor>,
     IStreamSourceHandler<WrappedStreamRequest, int, NativeCursor>, IDisposable
 {

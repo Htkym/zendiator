@@ -26,7 +26,7 @@ public sealed partial class GeneratorTests
                 public string Create(string role){var name=role+(++Id);Created.Add(name);Live.Add(name);return name;}
                 public void Release(string name){Check.That(Live.Count!=0&&Live[^1]==name,"owned resources release in reverse acquisition order");Live.RemoveAt(Live.Count-1);Released.Add(name);}
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p,string name):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
+            [Handler]public sealed class Handler(Probe p,string name):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){
                     p.Opened++;if(p.Mode=="null-open")return new((Cursor)null!);
                     if(p.Mode=="pending-open-failure"){p.OpenGate=new(null!);return p.OpenGate.Task;}
@@ -160,7 +160,7 @@ public sealed partial class GeneratorTests
                 public readonly List<string> Cleanup=new();
                 public int Opened,Pulls,CursorDisposals,SessionsCreated,SessionDisposals,FactoryDisposals,FilterDisposals;
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){
                     Check.That(t==p.Cancellation.Token,"source receives operation token");p.Opened++;return new(new Cursor(p,t));
                 }

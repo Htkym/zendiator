@@ -126,7 +126,7 @@ public sealed partial class GeneratorTests
             using Probe = global::Zendiator.Generator.Tests.CanonicalSyncRuntimeProbe;
             namespace App {
                 public sealed record Ping : ISyncRequest{{(isVoid ? "" : "<int>")}};
-                [ZendiatorHandler] public sealed partial class Handler<T> : ISyncRequestHandler<Ping{{result}}>, IDisposable where T:class {
+                [Handler] public sealed partial class Handler<T> : ISyncRequestHandler<Ping{{result}}>, IDisposable where T:class {
                     private readonly Probe _probe;
                     public Handler(Probe probe) { _probe=probe; probe.ConstructHandler(this); }
                     {{(isVoid ? "void" : "int")}} ISyncRequestHandler<Ping{{result}}>.Handle(Ping request,CancellationToken token) {
@@ -594,7 +594,7 @@ public sealed partial class GeneratorTests
                 "public struct Factory<T> : IBorrowedSessionFactory<Ping,Handler<T>> where T:class { private readonly Probe _probe; public Factory(Probe probe) { _probe=probe; } Handler<T> IBorrowedSessionFactory<Ping,Handler<T>>.Create(Ping r,CancellationToken c)=>new(_probe); }"),
             "multiple-routes" => source.Replace("c => c.Handlers<Ping>(DispatchFamily.SendSync,typeof(Handler<string>))",
                 "c => { c.Handlers<Ping>(DispatchFamily.SendSync,typeof(Handler<string>)); c.Handlers<Other>(DispatchFamily.SendSync,typeof(OtherHandler)); }") +
-                "namespace App { public sealed record Other : ISyncRequest<int>; [ZendiatorHandler] public sealed class OtherHandler : ISyncRequestHandler<Other,int> { public int Handle(Other r,CancellationToken c)=>1; } }",
+                "namespace App { public sealed record Other : ISyncRequest<int>; [Handler] public sealed class OtherHandler : ISyncRequestHandler<Other,int> { public int Handle(Other r,CancellationToken c)=>1; } }",
             _ => source
         };
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "CanonicalSyncUnsupported_" + shape), out var output, out var diagnostics);

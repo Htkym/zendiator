@@ -32,12 +32,12 @@ public sealed partial class GeneratorTests
             namespace OpenAll {
             public sealed record Request<TLeft,TRight>(int Value,int[] Values):ISyncMultiRequest<int>;
             // Declared Z then A, deliberately opposite name order and with different request parameter order.
-            [ZendiatorHandler]public sealed class ZHandler<TLeft,TRight>:ISyncRequestHandler<Request<TRight,TLeft>,int>,IDisposable where TLeft:class,new() where TRight:class {
+            [Handler]public sealed class ZHandler<TLeft,TRight>:ISyncRequestHandler<Request<TRight,TLeft>,int>,IDisposable where TLeft:class,new() where TRight:class {
                 private readonly OpenAllFixture.Probe p;public ZHandler(OpenAllFixture.Probe p){this.p=p;p.Created.Add(GetType());}
                 public int Handle(Request<TRight,TLeft> r,CancellationToken t)=>p.Body("Z",r,r.Value,r.Values,t);
                 public void Dispose(){p.Disposed.Add(GetType());}
             }
-            [ZendiatorHandler]public sealed class AHandler<TLeft,TRight>:ISyncRequestHandler<Request<TLeft,TRight>,int>,IDisposable where TLeft:class,OpenAllFixture.ISecond,new() where TRight:class {
+            [Handler]public sealed class AHandler<TLeft,TRight>:ISyncRequestHandler<Request<TLeft,TRight>,int>,IDisposable where TLeft:class,OpenAllFixture.ISecond,new() where TRight:class {
                 private readonly OpenAllFixture.Probe p;public AHandler(OpenAllFixture.Probe p){this.p=p;p.Created.Add(GetType());}
                 public int Handle(Request<TLeft,TRight> r,CancellationToken t)=>p.Body("A",r,r.Value,r.Values,t);
                 public void Dispose(){p.Disposed.Add(GetType());}
@@ -121,14 +121,14 @@ public sealed partial class GeneratorTests
         declarations.Add("[ZendiatorComposition(\"Void\")]public sealed class Void;");
         registrations.Add("public static IServiceCollection Void(IServiceCollection s)=>s.AddZendiator<Void>(c=>{c.Handlers(typeof(VoidRequest<>),DispatchFamily.SendAllSync,typeof(VoidFirst<>),typeof(VoidSecond<>));c.Pipeline(typeof(VoidRequest<>),DispatchFamily.SendAllSync,Stage.Hook(typeof(VoidHook<>)));});");
         return OpenSendAllSyncSource() + "namespace OpenAllRejected {" + string.Join("\n", declarations) + "public static class Registration {" + string.Join("\n", registrations) + "}" + """
-            [ZendiatorHandler]public sealed class Unused<X,Y,Z>:ISyncRequestHandler<OpenAll.Request<X,Y>,int>{public int Handle(OpenAll.Request<X,Y> r,CancellationToken t)=>0;}
-            [ZendiatorHandler]public sealed class StructHandler<X,Y>:ISyncRequestHandler<OpenAll.Request<X,Y>,int> where X:struct{public int Handle(OpenAll.Request<X,Y> r,CancellationToken t)=>0;}
+            [Handler]public sealed class Unused<X,Y,Z>:ISyncRequestHandler<OpenAll.Request<X,Y>,int>{public int Handle(OpenAll.Request<X,Y> r,CancellationToken t)=>0;}
+            [Handler]public sealed class StructHandler<X,Y>:ISyncRequestHandler<OpenAll.Request<X,Y>,int> where X:struct{public int Handle(OpenAll.Request<X,Y> r,CancellationToken t)=>0;}
             public sealed record OtherRequest<X,Y>:ISyncMultiRequest<int>;
-            [ZendiatorHandler]public sealed class OtherHandler<X,Y>:ISyncRequestHandler<OtherRequest<X,Y>,int>{public int Handle(OtherRequest<X,Y> r,CancellationToken t)=>0;}
-            [ZendiatorHandler]public sealed class Third<X,Y>:ISyncRequestHandler<OpenAll.Request<X,Y>,int>{public int Handle(OpenAll.Request<X,Y> r,CancellationToken t)=>0;}
+            [Handler]public sealed class OtherHandler<X,Y>:ISyncRequestHandler<OtherRequest<X,Y>,int>{public int Handle(OtherRequest<X,Y> r,CancellationToken t)=>0;}
+            [Handler]public sealed class Third<X,Y>:ISyncRequestHandler<OpenAll.Request<X,Y>,int>{public int Handle(OpenAll.Request<X,Y> r,CancellationToken t)=>0;}
             public sealed record VoidRequest<X>:ISyncMultiRequest;
-            [ZendiatorHandler]public sealed class VoidFirst<X>:ISyncRequestHandler<VoidRequest<X>>{public void Handle(VoidRequest<X> r,CancellationToken t){}}
-            [ZendiatorHandler]public sealed class VoidSecond<X>:ISyncRequestHandler<VoidRequest<X>>{public void Handle(VoidRequest<X> r,CancellationToken t){}}
+            [Handler]public sealed class VoidFirst<X>:ISyncRequestHandler<VoidRequest<X>>{public void Handle(VoidRequest<X> r,CancellationToken t){}}
+            [Handler]public sealed class VoidSecond<X>:ISyncRequestHandler<VoidRequest<X>>{public void Handle(VoidRequest<X> r,CancellationToken t){}}
             public sealed class VoidHook<X>:ISendRequestTransform<VoidRequest<X>>,ISendSuccessObserver<VoidRequest<X>>,ISendExceptionObserver<VoidRequest<X>>,ISendFinallyObserver<VoidRequest<X>>{
                 public VoidRequest<X> Before(VoidRequest<X> r,CancellationToken t)=>r;public void After(VoidRequest<X> r,CancellationToken t){}public void OnException(VoidRequest<X> r,Exception e,CancellationToken t){}public void Finally(VoidRequest<X> r,SendExitInfo e,CancellationToken t){}
             }

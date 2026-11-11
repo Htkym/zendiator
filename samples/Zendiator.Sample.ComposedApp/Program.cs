@@ -83,7 +83,7 @@ public sealed class ProductStore(Product product) : IEntityStore<Product>
         return product.Id == id ? new(product) : ValueTask.FromException<Product>(new KeyNotFoundException(id));
     }
 }
-[ZendiatorHandler]
+[Handler]
 public sealed class LookupHandler<T>(IEntityStore<T> store) : IRequestHandler<Lookup<T>, T> where T : class, IEntity
 {
     public ValueTask<T> HandleAsync(Lookup<T> request, CancellationToken token) => store.FindAsync(request.Id, token);
@@ -126,14 +126,14 @@ public sealed class InMemoryInventory : IInventory
     }
 }
 public sealed record RefreshInventory(int Count) : IRequest;
-[ZendiatorHandler]
+[Handler]
 public sealed class RefreshInventoryHandler(IInventory inventory) : IRequestHandler<RefreshInventory>
 {
     public ValueTask HandleAsync(RefreshInventory request, CancellationToken token) => inventory.RefreshAsync(request.Count, token);
 }
 
 public sealed record Sum<TMarker>(int Left, int Right) : ISyncRequest<int> where TMarker : class;
-[ZendiatorHandler]
+[Handler]
 public sealed class SumHandler<TMarker> : ISyncRequestHandler<Sum<TMarker>, int> where TMarker : class
 {
     public int Handle(Sum<TMarker> request, CancellationToken token)
@@ -156,7 +156,7 @@ public sealed class SumHook<TMarker> : ISendRequestTransform<Sum<TMarker>>, ISen
 
 public sealed record CachedCount<TMarker>(string Key) : IRequest<int> where TMarker : class;
 public sealed class TransientCountException : Exception;
-[ZendiatorHandler]
+[Handler]
 public sealed class CachedCountHandler<TMarker>(IInventory inventory) : IRequestHandler<CachedCount<TMarker>, int> where TMarker : class
 {
     public ValueTask<int> HandleAsync(CachedCount<TMarker> request, CancellationToken token) => inventory.ReadPrimaryAsync(token);
@@ -184,7 +184,7 @@ public sealed class CountCache<TMarker> : IAsyncSendWrapper<CachedCount<TMarker>
 }
 
 public sealed record CollectCounts<TMarker>(int Offset) : ISyncMultiRequest<int> where TMarker : class;
-[ZendiatorHandler]
+[Handler]
 public sealed class CachedCollector<TMarker>(IInventory inventory) : ISyncRequestHandler<CollectCounts<TMarker>, int> where TMarker : class
 {
     public int Handle(CollectCounts<TMarker> request, CancellationToken token)
@@ -193,7 +193,7 @@ public sealed class CachedCollector<TMarker>(IInventory inventory) : ISyncReques
         return inventory.CachedCount + request.Offset;
     }
 }
-[ZendiatorHandler]
+[Handler]
 public sealed class WarehouseCollector<TMarker>(IInventory inventory) : ISyncRequestHandler<CollectCounts<TMarker>, int> where TMarker : class
 {
     public int Handle(CollectCounts<TMarker> request, CancellationToken token)
@@ -215,12 +215,12 @@ public sealed class CollectHook<TMarker> : ISendRequestTransform<CollectCounts<T
 }
 
 public sealed record ReadCounts<TMarker>(int Offset) : IRequest<int> where TMarker : class;
-[ZendiatorHandler]
+[Handler]
 public sealed class PrimaryReader<TMarker>(IInventory inventory) : IRequestHandler<ReadCounts<TMarker>, int> where TMarker : class
 {
     public async ValueTask<int> HandleAsync(ReadCounts<TMarker> request, CancellationToken token) => await inventory.ReadPrimaryAsync(token).ConfigureAwait(false) + request.Offset;
 }
-[ZendiatorHandler]
+[Handler]
 public sealed class ReplicaReader<TMarker>(IInventory inventory) : IRequestHandler<ReadCounts<TMarker>, int> where TMarker : class
 {
     public async ValueTask<int> HandleAsync(ReadCounts<TMarker> request, CancellationToken token) => await inventory.ReadReplicaAsync(token).ConfigureAwait(false) + request.Offset;
@@ -234,7 +234,7 @@ public sealed class ReadHook<TMarker> : IAsyncSendRequestTransform<ReadCounts<TM
 }
 
 public sealed record ReadNumbers(int Count) : IStreamRequest<int>;
-[ZendiatorHandler]
+[Handler]
 public sealed class ReadNumbersHandler(IInventory inventory) : IStreamSourceHandler<ReadNumbers, int, NumberCursor>
 {
     public ValueTask<NumberCursor> OpenAsync(ReadNumbers request, CancellationToken token) =>

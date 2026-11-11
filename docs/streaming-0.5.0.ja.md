@@ -9,7 +9,7 @@ HandlerはIStreamSourceHandler<TRequest, TItem, TCursor>を実装し、OpenAsync
 ~~~csharp
 public sealed record ReadNames(int Count) : IStreamRequest<string>;
 
-[ZendiatorHandler]
+[Handler]
 public sealed class ReadNamesHandler : IStreamSourceHandler<ReadNames, string, NameCursor>
 {
     public ValueTask<NameCursor> OpenAsync(ReadNames request, CancellationToken token) =>

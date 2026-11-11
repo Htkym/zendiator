@@ -67,7 +67,7 @@ public sealed partial class GeneratorTests
         var source = new StringBuilder("using System;using System.Threading;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;using Probe=global::Zendiator.Generator.Tests.AdaptiveCacheProbe;namespace Adaptive{");
         for (var i = 0; i < routes; i++)
         {
-            source.Append("public readonly record struct R").Append(i).Append("(int Value):ISyncRequest<int>;[ZendiatorHandler]public ");
+            source.Append("public readonly record struct R").Append(i).Append("(int Value):ISyncRequest<int>;[Handler]public ");
             if (i == routes - 1)
                 source.Append("struct H").Append(i).Append(":ISyncRequestHandler<R").Append(i).Append(",int>,IDisposable{public int State,Disposed;public H").Append(i).Append("(Probe p){State=Disposed=0;}public int Handle(R").Append(i).Append(" r,CancellationToken t)=>r.Value+ ++State;public void Dispose(){Disposed++;}}");
             else
@@ -228,7 +228,7 @@ public sealed partial class GeneratorTests
             using System.Threading;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;
             namespace EagerInvalid{
             public sealed record R:ISyncRequest<int>;
-            [ZendiatorHandler]public sealed class H:ISyncRequestHandler<R,int>{public int Handle(R r,CancellationToken t)=>42;}
+            [Handler]public sealed class H:ISyncRequestHandler<R,int>{public int Handle(R r,CancellationToken t)=>42;}
             public sealed class Unselected;
             [ZendiatorComposition("invalid",EagerDependencies=SELECTION)]public sealed class App;
             public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<App>(c=>c.Handlers<R>(DispatchFamily.SendSync,typeof(H)));}}
@@ -246,7 +246,7 @@ public sealed partial class GeneratorTests
             using System.Threading;using System.Threading.Tasks;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;
             namespace EagerCarrier{
             public sealed record R:IRequest<int>;
-            [ZendiatorHandler]public HANDLER H:IRequestHandler<R,int>{public ValueTask<int> HandleAsync(R r,CancellationToken t)=>new(42);}
+            [Handler]public HANDLER H:IRequestHandler<R,int>{public ValueTask<int> HandleAsync(R r,CancellationToken t)=>new(42);}
             public sealed class Hook:ISendRequestTransform<R>,ISendResponseTransform<R,int>{public R Before(R r,CancellationToken t)=>r;public int After(R r,int value,CancellationToken t)=>value;}
             [ZendiatorComposition("carrier",EagerDependencies=new[]{typeof(Hook)})]public sealed class App;
             public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<App>(c=>{c.Handlers<R>(DispatchFamily.SendAsync,typeof(H));c.Pipeline<R>(DispatchFamily.SendAsync,Stage.Hook<Hook>());});}}
@@ -309,9 +309,9 @@ public sealed partial class GeneratorTests
             namespace CacheLayout{
             public sealed record Items:IStreamRequest<int>;
             public sealed class Cursor:IAsyncEnumerator<int>{public int Current=>42;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}
-            [ZendiatorHandler]public sealed class StreamHandler:IStreamSourceHandler<Items,int,Cursor>{public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t)=>new(new Cursor());}
+            [Handler]public sealed class StreamHandler:IStreamSourceHandler<Items,int,Cursor>{public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t)=>new(new Cursor());}
             public sealed record Ping:ISyncRequest<int>;
-            [ZendiatorHandler]public sealed class SendHandler:ISyncRequestHandler<Ping,int>{public int Handle(Ping r,CancellationToken t)=>42;}
+            [Handler]public sealed class SendHandler:ISyncRequestHandler<Ping,int>{public int Handle(Ping r,CancellationToken t)=>42;}
             [ZendiatorComposition("standalone",ClosedServiceCache=ClosedServiceCacheMode.LazyBlocks)]public sealed class Standalone;
             [ZendiatorComposition("mixed",ClosedServiceCache=ClosedServiceCacheMode.LazyBlocks)]public sealed class Mixed;
             [ZendiatorComposition("inline")]public sealed class Inline;

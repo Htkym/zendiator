@@ -63,7 +63,7 @@ public sealed partial class GeneratorTests
             public void OnCompleted(Action<object?> continuation,object? state,short token,
                 global::System.Threading.Tasks.Sources.ValueTaskSourceOnCompletedFlags flags)=>core.OnCompleted(continuation,state,token,flags);
         }
-        [ZendiatorHandler]public sealed class Handler: IStreamSourceHandler<Items,int,Cursor>,IDisposable{
+        [Handler]public sealed class Handler: IStreamSourceHandler<Items,int,Cursor>,IDisposable{
             private readonly Probe p;public Handler(Probe p){this.p=p;p.HandlerCreated++;}
             public ValueTask<Cursor> OpenAsync(Items request,CancellationToken token){
                 p.Opened++;p.Events.Add("open");p.OpenContexts.Add(Probe.Ambient.Value??"null");return new(new Cursor(p,request.Count,token));
@@ -326,7 +326,7 @@ public sealed partial class GeneratorTests
                 ValueTask IAsyncStreamBefore<Items<T>>.BeforeAsync(Items<T> request,CancellationToken token){p.Calls.Add(++calls);return default;}
                 public void Dispose()=>p.DisposedCalls.Add(calls);
             }
-            [ZendiatorHandler]public sealed class Handler<T>(Probe p):IStreamSourceHandler<Items<T>,int,Cursor> where T:class,new(){
+            [Handler]public sealed class Handler<T>(Probe p):IStreamSourceHandler<Items<T>,int,Cursor> where T:class,new(){
                 public ValueTask<Cursor> OpenAsync(Items<T> request,CancellationToken token)=>new(new Cursor(p,request.Value));
             }
             public sealed class Cursor(Probe p,int value):IAsyncEnumerator<int>{
@@ -365,10 +365,10 @@ public sealed partial class GeneratorTests
         const string declarations = """
             public sealed record Items:IStreamRequest<int>,IRequest<int>;
             public sealed record Other:IStreamRequest<int>;
-            [ZendiatorHandler]public sealed class Handler:IStreamSourceHandler<Items,int,Cursor>{
+            [Handler]public sealed class Handler:IStreamSourceHandler<Items,int,Cursor>{
                 public ValueTask<Cursor> OpenAsync(Items request,CancellationToken token)=>new(new Cursor());
             }
-            [ZendiatorHandler]public sealed class SendHandler:IRequestHandler<Items,int>{
+            [Handler]public sealed class SendHandler:IRequestHandler<Items,int>{
                 public ValueTask<int> HandleAsync(Items request,CancellationToken token)=>new(0);
             }
             public sealed class Cursor:IAsyncEnumerator<int>{public int Current=>0;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}
@@ -396,7 +396,7 @@ public sealed partial class GeneratorTests
         const string declarations = """
             public sealed class Tag;
             public readonly record struct Items<T>(int Value):IStreamRequest<int>;
-            [ZendiatorHandler]public sealed class Handler<T>:IStreamSourceHandler<Items<T>,int,Cursor>{
+            [Handler]public sealed class Handler<T>:IStreamSourceHandler<Items<T>,int,Cursor>{
                 public ValueTask<Cursor> OpenAsync(Items<T> request,CancellationToken token)=>new(new Cursor());
             }
             public sealed class Cursor:IAsyncEnumerator<int>{public int Current=>0;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}

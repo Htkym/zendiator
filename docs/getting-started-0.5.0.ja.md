@@ -1,10 +1,10 @@
-# 0.5.0の使い方
+# 0.6.0の使い方
 
-このガイドは、0.5.0のpackageで同期処理・非同期処理・Streamを使う例です。NuGetで公開済みの0.4.0を使う場合は、[README](https://github.com/Htkym/zendiator/blob/v0.4.0/README.ja.md)を参照してください。
+0.6.0のpackageで同期処理・非同期処理・Streamを使う例です。移行時は[リリースノート](release/0.6.0-release-notes.ja.md)を確認してください。
 
 ## 準備と実行
 
-.NET 10 SDKとC# 14を使います。この例のバージョンは`0.5.0`です。NuGet.orgで公開されるまでは、同じ版のローカルビルド済み`Zendiator`と`Zendiator.Abstractions`を同じフォルダーに用意します。
+.NET 10 SDKとC# 14を使います。NuGet.orgから0.6.0のpackageを取得します。
 
 新しいフォルダーに、次のプロジェクトファイルと`Program.cs`を保存します。[サンプルのファイル](../samples/Zendiator.Sample.GettingStarted/)をコピーしても実行できます。Zendiatorのソースプロジェクトへの`ProjectReference`は使いません。
 
@@ -19,7 +19,7 @@
     <LangVersion>14.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ZendiatorPackageVersion Condition="'$(ZendiatorPackageVersion)' == ''">0.5.0</ZendiatorPackageVersion>
+    <ZendiatorPackageVersion Condition="'$(ZendiatorPackageVersion)' == ''">0.6.0</ZendiatorPackageVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Zendiator" Version="$(ZendiatorPackageVersion)" />
@@ -80,7 +80,7 @@ public sealed class App;
 
 public sealed record AddNumbers(int Left, int Right) : ISyncRequest<int>;
 
-[ZendiatorHandler]
+[Handler]
 public sealed class AddNumbersHandler : ISyncRequestHandler<AddNumbers, int>
 {
     public int Handle(AddNumbers request, CancellationToken token)
@@ -92,7 +92,7 @@ public sealed class AddNumbersHandler : ISyncRequestHandler<AddNumbers, int>
 
 public sealed record Greet(string Name) : IRequest<string>;
 
-[ZendiatorHandler]
+[Handler]
 public sealed class GreetHandler : IRequestHandler<Greet, string>
 {
     public ValueTask<string> HandleAsync(Greet request, CancellationToken token)
@@ -114,7 +114,7 @@ public sealed class AddExclamation : ISendResponseTransform<Greet, string>
 
 public sealed record ReadNumbers(int Count) : IStreamRequest<int>;
 
-[ZendiatorHandler]
+[Handler]
 public sealed class ReadNumbersHandler : IStreamSourceHandler<ReadNumbers, int, NumberCursor>
 {
     public ValueTask<NumberCursor> OpenAsync(ReadNumbers request, CancellationToken token) =>
@@ -173,12 +173,11 @@ public sealed class KeepAtMostForty : IStreamItemFilter<ReadNumbers, int>
 ```
 <!-- END program-source -->
 
-PowerShellでは、packageを置いたフォルダーを指定して実行します。`$feed`を手元のパスに変えてください。別の候補バージョンを使う場合は、プロジェクトの`ZendiatorPackageVersion`も合わせます。
+PowerShellから実行します。
 
 ```powershell
-$feed = 'D:\packages\zendiator-u01'
-dotnet restore .\Zendiator.Sample.GettingStarted.csproj --source $feed --source https://api.nuget.org/v3/index.json
-dotnet run --project .\Zendiator.Sample.GettingStarted.csproj -c Release --no-restore
+$version = '0.6.0'
+dotnet run --project .\Zendiator.Sample.GettingStarted.csproj -c Release -p:ZendiatorPackageVersion=$version
 ```
 
 実行すると、次の3行を出力します。
@@ -191,7 +190,7 @@ StreamAsync: 20, 40
 
 ## 登録と実行順序
 
-`[ZendiatorHandler]`はHandlerを明示する属性です。`Handlers<TRequest>`で使うHandlerを選び、`Pipeline<TRequest>`でHookの順序を指定します。この例ではHookがない同期処理にも、空の`Pipeline`を明示しています。対応するHandlerのみの`SendSync`と`SendAsync`では、`Pipeline`を省略できます。stageがないStreamには、空の`Pipeline`を`DispatchFamily.Stream`で宣言します。
+`[Handler]`はHandlerを明示する属性です。`Handlers<TRequest>`で使うHandlerを選び、`Pipeline<TRequest>`でHookの順序を指定します。この例ではHookがない同期処理にも、空の`Pipeline`を明示しています。対応するHandlerのみの`SendSync`と`SendAsync`では、`Pipeline`を省略できます。stageがないStreamには、空の`Pipeline`を`DispatchFamily.Stream`で宣言します。
 
 | 登録するfamily | 呼び出すメソッド | この例の処理 |
 |---|---|---|
@@ -249,7 +248,7 @@ Streamの返り値をscopeの外へ持ち出し、scopeを破棄してから列�
 
 ### Handler属性を補って再buildする
 
-CodeFixを使う場合は、`Zendiator`と同じ候補版の`Zendiator.CodeFixes`を`PrivateAssets="all"`で追加し、同じpackage feedからrestoreしてください。現在のVisual Studioでプロジェクトを開き、ZEN0035の修正候補から`Add ZendiatorHandler attribute`を選びます。
+CodeFixを使う場合は、`Zendiator`と同じバージョンの`Zendiator.CodeFixes`を`PrivateAssets="all"`で追加し、NuGet.orgからrestoreしてください。現在のVisual Studioでプロジェクトを開き、ZEN0035の修正候補から`Add Handler attribute`を選びます。
 
 ```xml
 <PackageReference Include="Zendiator.CodeFixes"
@@ -258,7 +257,7 @@ CodeFixを使う場合は、`Zendiator`と同じ候補版の`Zendiator.CodeFixes
 
 ```powershell
 $project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
-dotnet restore $project -p:ZendiatorPackageVersion=$version --source $feed --source https://api.nuget.org/v3/index.json
+dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
 ```
 
 たとえばComposedAppの`RefreshInventoryHandler`に属性が欠けている場合、候補を一意に特定でき、属性を追加した後のApp全体を生成できるときに修正できます。同じAppのType登録も保持します。変更する利用者コードはHandler属性だけです。曖昧な候補、不正な契約、未採用の構成を推測して直すことはありません。候補が出ない場合は、generatorの読み込みと契約を確認してください。
@@ -292,7 +291,7 @@ public sealed record Query<TMarker>(int Value) : IRequest<int>;
 public sealed record ClosedQuery(int Value) : IRequest<int>;
 ```
 
-`[ZendiatorHandler]`を付けた`Handler<TMarker>`と`ClosedHandler`を用意します。それぞれ`IRequestHandler<Query<TMarker>, int>`と`IRequestHandler<ClosedQuery, int>`を実装し、処理本体と必要なDI依存関係は既存のものを使います。次のWrapperは継続を1回呼び、`finally`で終了を記録します。
+`[Handler]`を付けた`Handler<TMarker>`と`ClosedHandler`を用意します。それぞれ`IRequestHandler<Query<TMarker>, int>`と`IRequestHandler<ClosedQuery, int>`を実装し、処理本体と必要なDI依存関係は既存のものを使います。次のWrapperは継続を1回呼び、`finally`で終了を記録します。
 
 ```csharp
 public sealed class Logging<TRequest, TResponse> : IAsyncSendWrapper<TRequest, TResponse>
@@ -351,7 +350,7 @@ var closedResult = await mediator.SendAsync(new ClosedQuery(7), CancellationToke
 両方の非同期処理が完了するまでscopeを保持します。PipelineはDIが所有するHandlerとWrapperを借りるため、Wrapper内で個別に破棄しないでください。返された`ValueTask`はそれぞれ1回だけ`await`します。この例の範囲はclassの要求に対する1個のopen response Wrapperと、別のclosed response routeです。他のdispatch family、session factory、HookとWrapperの追加の組合せにはそれぞれの契約があり、この例では登録方法を示していません。
 ### Handler属性の付け忘れ
 
-プロジェクト内で定義したHandlerを属性なしで明示登録すると、ZEN0035で登録箇所が示されます。ZEN0035はほかの生成条件の不備にも使います。診断文が属性不足を示している場合は、上の`AddNumbersHandler`のようにクラス宣言へ`[ZendiatorHandler]`を付けてください。
+プロジェクト内で定義したHandlerを属性なしで明示登録すると、ZEN0035で登録箇所が示されます。ZEN0035はほかの生成条件の不備にも使います。診断文が属性不足を示している場合は、上の`AddNumbersHandler`のようにクラス宣言へ`[Handler]`を付けてください。
 
 `Zendiator.CodeFixes`は任意で追加するパッケージです。利用する場合は、`Zendiator`と同じ候補バージョンを用意し、プロジェクトの`ZendiatorPackageVersion`をそのバージョンに合わせてください。[導入例](../src/Zendiator.CodeFixes/README.md)のように`PrivateAssets="all"`を指定します。NuGet.orgで公開されるまでは、同じ版のローカルビルド済みpackageを使ってください。
 

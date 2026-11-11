@@ -123,7 +123,7 @@ public sealed partial class GeneratorTests
                     core.OnCompleted(continuation,state,token,flags);registered.TrySetResult(true);
                 }
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken token){Check.That((token==p.Cancellation.Token)==!p.Partial,"only the token-boundary fallback endpoint has a different effective token");p.SourceToken=token;return new(new Cursor(p,token));}
                 public ValueTask DisposeAsync(){EofDiagnostic.Record("handler.cleanup");p.HandlerDisposals++;p.Released.Add("handler");if(p.Mode=="cleanup-fault")throw p.HandlerError;return default;}
             }
@@ -321,7 +321,7 @@ public sealed partial class GeneratorTests
                 public readonly List<string> Released=new();public bool ClaimedGuardObserved,RootClosedBeforeClaimedCleanup;
                 public int Opened,RawMoves,Reads,CursorDisposals,HandlerDisposals,HiddenDisposals,OuterDisposals,FactoryDisposals;
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
                 public ValueTask<Cursor> OpenAsync(Items request,CancellationToken token){p.Opened++;return new(new Cursor(p));}
                 public ValueTask DisposeAsync(){p.HandlerDisposals++;p.Released.Add("handler");return default;}
             }

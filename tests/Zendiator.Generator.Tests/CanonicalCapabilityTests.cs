@@ -111,7 +111,7 @@ public sealed partial class GeneratorTests
             namespace App{
                 public sealed record Ping(int Value):{{(async ? "IRequest" : "ISyncRequest")}}{{(isVoid ? "" : "<int>")}};
                 {{Hook(0)}}{{Hook(1)}}
-                [ZendiatorHandler]public sealed class Handler:{{(async ? "IRequestHandler" : "ISyncRequestHandler")}}<Ping{{(isVoid ? "" : ",int")}}>,IDisposable{
+                [Handler]public sealed class Handler:{{(async ? "IRequestHandler" : "ISyncRequestHandler")}}<Ping{{(isVoid ? "" : ",int")}}>,IDisposable{
                     private readonly Probe _p;public Handler(Probe p){_p=p;}
                     public {{(async ? (isVoid ? "ValueTask" : "ValueTask<int>") : (isVoid ? "void" : "int"))}} {{(async ? "HandleAsync" : "Handle")}}(Ping r,CancellationToken t)=>_p.{{(isVoid ? (async ? "HandleVoidAsync" : "HandleVoid") : (async ? "HandleAsync" : "Handle"))}}(r,{{(isVoid ? "" : "r.Value,")}}t);
                     public void Dispose()=>_p.Dispose();

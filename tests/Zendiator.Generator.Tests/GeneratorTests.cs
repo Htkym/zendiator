@@ -1036,7 +1036,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Marked_handler_metadata_stays_cached_while_current_fact_location_moves()
     {
-        var source = Head + Request + Handler.Replace("public sealed class Handler", "[ZendiatorHandler] public sealed class Handler") + SelectedComposition;
+        var source = Head + Request + Handler.Replace("public sealed class Handler", "[Handler] public sealed class Handler") + SelectedComposition;
         var driver = Driver().RunGenerators(Compilation(source));
         var initial = Catalog(driver);
         var initialComposition = Composition(driver);
@@ -1086,13 +1086,13 @@ public sealed partial class GeneratorTests
             public abstract class Base<T> : IRequestHandler<GenericPing<T>,int> where T : class {
                 public ValueTask<int> HandleAsync(GenericPing<T> request, CancellationToken ct) => new(1);
             }
-            [ZendiatorHandler] public sealed partial class Marked<T> : Base<T> where T : class;
+            [Handler] public sealed partial class Marked<T> : Base<T> where T : class;
             public sealed partial class Marked<T>;
-            [Foreign.ZendiatorHandler] public sealed class Unmarked : IRequestHandler<GenericPing<string>,int> {
+            [Foreign.Handler] public sealed class Unmarked : IRequestHandler<GenericPing<string>,int> {
                 public ValueTask<int> HandleAsync(GenericPing<string> request, CancellationToken ct) => new(2);
             }
             """ + SelectedComposition.Replace("c.AddHandler<Handler>()", "c.AddHandler(typeof(Marked<>))");
-        const string foreign = "namespace Foreign { public sealed class ZendiatorHandlerAttribute : System.Attribute {} }";
+        const string foreign = "namespace Foreign { public sealed class HandlerAttribute : System.Attribute {} }";
         var input = Compilation(source).AddSyntaxTrees(CSharpSyntaxTree.ParseText(foreign, SyncParseOptions));
         var driver = Driver().RunGenerators(input);
         var model = Catalog(driver);
@@ -1129,8 +1129,8 @@ public sealed partial class GeneratorTests
     public void Foreign_only_marker_keeps_legacy_generation(bool identicalMetadataName)
     {
         var attributeNamespace = identicalMetadataName ? "Zendiator" : "Foreign";
-        var source = Head + Request + Handler.Replace("public sealed class Handler", $"[global::{attributeNamespace}.ZendiatorHandler] public sealed class Handler");
-        var attribute = CSharpSyntaxTree.ParseText($"namespace {attributeNamespace} {{ public sealed class ZendiatorHandlerAttribute : System.Attribute {{}} }}",
+        var source = Head + Request + Handler.Replace("public sealed class Handler", $"[global::{attributeNamespace}.Handler] public sealed class Handler");
+        var attribute = CSharpSyntaxTree.ParseText($"namespace {attributeNamespace} {{ public sealed class HandlerAttribute : System.Attribute {{}} }}",
             SyncParseOptions);
         var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source).AddSyntaxTrees(attribute), out var output, out var diagnostics);
         Assert.Empty(diagnostics);
@@ -1151,7 +1151,7 @@ public sealed partial class GeneratorTests
         string? original = null;
         foreach (var marked in new[] { false, true, false })
         {
-            var input = Compilation(Head + Request + Handler + (marked ? extra.Replace("public sealed class ExtraHandler", "[ZendiatorHandler] public sealed class ExtraHandler") : extra));
+            var input = Compilation(Head + Request + Handler + (marked ? extra.Replace("public sealed class ExtraHandler", "[Handler] public sealed class ExtraHandler") : extra));
             driver = driver.RunGeneratorsAndUpdateCompilation(input, out var output, out var diagnostics);
             Assert.Empty(diagnostics);
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
@@ -1164,7 +1164,7 @@ public sealed partial class GeneratorTests
                 Assert.Equal(original, generated);
         }
         // An unrelated orphan request must still report the existing legacy error.
-        var missing = Run(Compilation(Head + Request + Handler + extra.Replace("public sealed class ExtraHandler", "[ZendiatorHandler] public sealed class ExtraHandler") +
+        var missing = Run(Compilation(Head + Request + Handler + extra.Replace("public sealed class ExtraHandler", "[Handler] public sealed class ExtraHandler") +
             "public sealed record Orphan : IRequest<int>;"), false);
         Assert.Equal("ZEN0001", Assert.Single(missing.Diagnostics).Id);
     }
@@ -1173,15 +1173,15 @@ public sealed partial class GeneratorTests
     public void Separate_selected_compositions_keep_membership_and_legacy_emission_isolated()
     {
         var source = Head + Request + Handler + """
-            [ZendiatorHandler] public sealed class A : IRequestHandler<Ping,int> {
+            [Handler] public sealed class A : IRequestHandler<Ping,int> {
                 public ValueTask<int> HandleAsync(Ping request, CancellationToken ct) => new(3);
             }
             public sealed record WriteRequest : IRequest<int>;
-            [ZendiatorHandler] public sealed class B : IRequestHandler<WriteRequest,int> {
+            [Handler] public sealed class B : IRequestHandler<WriteRequest,int> {
                 public ValueTask<int> HandleAsync(WriteRequest request, CancellationToken ct) => new(4);
             }
             public sealed record UnselectedRequest : IRequest<int>;
-            [ZendiatorHandler] public sealed class C : IRequestHandler<UnselectedRequest,int> {
+            [Handler] public sealed class C : IRequestHandler<UnselectedRequest,int> {
                 public ValueTask<int> HandleAsync(UnselectedRequest request, CancellationToken ct) => new(5);
             }
             """ + SelectedComposition.Replace("c.AddHandler<Handler>()", "c.AddHandler<A>()") + """
@@ -1230,13 +1230,13 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Producer_only_marker_has_no_consumer_backend_error_and_duplicate_marker_belongs_to_compiler()
     {
-        var handler = Handler.Replace("public sealed class Handler", "[ZendiatorHandler] public sealed class Handler");
+        var handler = Handler.Replace("public sealed class Handler", "[Handler] public sealed class Handler");
         var producer = Run(Compilation(Head.Replace("[GenerateZendiator] public sealed partial class Zendiator;", "") + Request + handler), true);
         Assert.Empty(producer.Diagnostics);
         var catalog = Assert.Single(producer.Results.Single().GeneratedSources);
         Assert.Equal("Zendiator.GeneratedCatalog.g.cs", catalog.HintName);
         Assert.Contains("typeof(global::App.Handler)", catalog.SourceText.ToString());
-        var source = Head + Request + Handler + handler.Replace("class Handler", "class Marked").Replace("[ZendiatorHandler]", "[ZendiatorHandler, ZendiatorHandler]") +
+        var source = Head + Request + Handler + handler.Replace("class Handler", "class Marked").Replace("[Handler]", "[Handler, Handler]") +
             SelectedComposition.Replace("c.AddHandler<Handler>()", "c.AddHandler<Marked>()");
         var driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source), out var output, out var diagnostics);
         Assert.Empty(diagnostics);
@@ -1247,9 +1247,9 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Explicit_default_membership_is_retained_and_control_flow_is_diagnosed_at_selection()
     {
-        var source = Head + Request + Handler.Replace("public sealed class Handler", "[ZendiatorHandler] public sealed class Handler") + """
+        var source = Head + Request + Handler.Replace("public sealed class Handler", "[Handler] public sealed class Handler") + """
             public sealed record OtherRequest : IRequest<int>;
-            [ZendiatorHandler] public sealed class Other : IRequestHandler<OtherRequest,int> {
+            [Handler] public sealed class Other : IRequestHandler<OtherRequest,int> {
                 public ValueTask<int> HandleAsync(OtherRequest request, CancellationToken ct) => new(2);
             }
             """ +

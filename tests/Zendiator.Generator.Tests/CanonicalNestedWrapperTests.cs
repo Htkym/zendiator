@@ -100,7 +100,7 @@ public sealed partial class GeneratorTests
                 """;
         }
         var text = "using System;using System.Threading;using System.Threading.Tasks;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;using Probe=global::Zendiator.Generator.Tests.NestedWrapperProbe;namespace App{";
-        text += $"public sealed record Ping(int Value):{(async ? "IRequest" : "ISyncRequest")}{(isVoid ? "" : "<int>")};[ZendiatorHandler]public sealed class Handler:{(async ? "IRequestHandler" : "ISyncRequestHandler")}<Ping{res}>,{disposable}{{private readonly Probe _p;public Handler(Probe p){{_p=p;p.Construct(\"h\",this);}}public {result} {(async ? "HandleAsync" : "Handle")}(Ping r,CancellationToken t){{_p.Hit(\"h.body\",r,t);{(async ? (isVoid ? "return default;" : "return new(r.Value);") : (isVoid ? "" : "return r.Value;"))}}}{Dispose("h")}}}";
+        text += $"public sealed record Ping(int Value):{(async ? "IRequest" : "ISyncRequest")}{(isVoid ? "" : "<int>")};[Handler]public sealed class Handler:{(async ? "IRequestHandler" : "ISyncRequestHandler")}<Ping{res}>,{disposable}{{private readonly Probe _p;public Handler(Probe p){{_p=p;p.Construct(\"h\",this);}}public {result} {(async ? "HandleAsync" : "Handle")}(Ping r,CancellationToken t){{_p.Hit(\"h.body\",r,t);{(async ? (isVoid ? "return default;" : "return new(r.Value);") : (isVoid ? "" : "return r.Value;"))}}}{Dispose("h")}}}";
         for (var i = 0; i <= (two ? 2 : 1); i++)
             if (hooks)
             {

@@ -24,7 +24,7 @@ public sealed partial class GeneratorTests
             using Dependency=global::Zendiator.Generator.Tests.GeneratorTests.HookFactoryDependency;
             namespace App {
                 public sealed record Ping : ISyncRequest{{(isVoid ? "" : "<int>")}};
-                [ZendiatorHandler] public sealed partial class Handler<T> : ISyncRequestHandler<Ping{{(isVoid ? "" : ",int")}}>,IDisposable where T:class {
+                [Handler] public sealed partial class Handler<T> : ISyncRequestHandler<Ping{{(isVoid ? "" : ",int")}}>,IDisposable where T:class {
                     private readonly Probe _probe; public Handler(Probe probe) { _probe=probe; probe.Core.ConstructHandler(); }
                     {{(isVoid ? "void" : "int")}} ISyncRequestHandler<Ping{{(isVoid ? "" : ",int")}}>.Handle(Ping request,CancellationToken token) { {{(isVoid ? "" : "return ")}}_probe.Core.Handle(request,token); }
                     void IDisposable.Dispose()=>_probe.Core.HandlerDisposals++;

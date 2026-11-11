@@ -25,7 +25,7 @@ public sealed partial class GeneratorTests
         return OpenSendWrapperModule.Replace("__CONFIGURATION__", configuration) + """
             namespace OpenSendWrapper {
             public sealed record ClosedQuery(int Value):IRequest<int>;
-            [ZendiatorHandler]public sealed class ClosedHandler:IRequestHandler<ClosedQuery,int>,IDisposable {
+            [Handler]public sealed class ClosedHandler:IRequestHandler<ClosedQuery,int>,IDisposable {
                 private readonly Probe p;
                 public ClosedHandler(Probe p){this.p=p;p.Created.Add(this);p.Events.Add("resolve:C");}
                 public ValueTask<int> HandleAsync(ClosedQuery r,CancellationToken token){Probe.Check(token==p.Outer.Token,"closed token");p.Events.Add("closed");return new(r.Value+1);}
@@ -35,7 +35,7 @@ public sealed partial class GeneratorTests
             """ + (orphan ? """
             namespace OpenSendWrapper {
             public sealed record OrphanQuery<T>:IRequest<int>;
-            [ZendiatorHandler]public sealed class OrphanHandler<T>:IRequestHandler<OrphanQuery<T>,int> {
+            [Handler]public sealed class OrphanHandler<T>:IRequestHandler<OrphanQuery<T>,int> {
                 public ValueTask<int> HandleAsync(OrphanQuery<T> r,CancellationToken token)=>new(99);
             }
             }

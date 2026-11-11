@@ -17,11 +17,11 @@ using I = Immediate.Handlers.Shared;
 namespace Competitive;
 public sealed record Ping0(int Value = 41, Probe? Probe = null) : IWork, Z.IRequest<int>, M.IRequest<int>, G.IRequest<int>, D.IRequest<Ping0, ValueTask<int>>;
 public sealed record Stream0(int Count, bool Asynchronous, Probe? Probe = null) : IWork, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Stream0, int>;
-[Z.ZendiatorHandler] public sealed class ZPing0 : Z.IRequestHandler<Ping0,int> { public ValueTask<int> HandleAsync(Ping0 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.Handler] public sealed class ZPing0 : Z.IRequestHandler<Ping0,int> { public ValueTask<int> HandleAsync(Ping0 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MPing0 : M.IRequestHandler<Ping0,int> { public Task<int> Handle(Ping0 r,CancellationToken t) => Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class GPing0 : G.IRequestHandler<Ping0,int> { public ValueTask<int> Handle(Ping0 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DPing0 : D.IRequestHandler<Ping0,ValueTask<int>> { public ValueTask<int> Handle(Ping0 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
-[Z.ZendiatorHandler] public sealed class ZStream0 : Z.IStreamSourceHandler<Stream0,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Stream0 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
+[Z.Handler] public sealed class ZStream0 : Z.IStreamSourceHandler<Stream0,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Stream0 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MStream0 : M.IStreamRequestHandler<Stream0,int> { public IAsyncEnumerable<int> Handle(Stream0 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GStream0 : G.IStreamRequestHandler<Stream0,int> { public IAsyncEnumerable<int> Handle(Stream0 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DStream0 : DS.IStreamRequestHandler<Stream0,int> { public IAsyncEnumerable<int> Handle(Stream0 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
@@ -31,11 +31,11 @@ public static partial class IPing0 { private static ValueTask<int> HandleAsync(P
 public static partial class IStream0 { private static IAsyncEnumerable<int> HandleAsync(Stream0 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed record Ping1(int Value = 41, Probe? Probe = null) : ILevel1, Z.IRequest<int>, M.IRequest<int>, G.IRequest<int>, D.IRequest<Ping1, ValueTask<int>>;
 public sealed record Stream1(int Count, bool Asynchronous, Probe? Probe = null) : ILevel1, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Stream1, int>;
-[Z.ZendiatorHandler] public sealed class ZPing1 : Z.IRequestHandler<Ping1,int> { public ValueTask<int> HandleAsync(Ping1 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.Handler] public sealed class ZPing1 : Z.IRequestHandler<Ping1,int> { public ValueTask<int> HandleAsync(Ping1 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MPing1 : M.IRequestHandler<Ping1,int> { public Task<int> Handle(Ping1 r,CancellationToken t) => Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class GPing1 : G.IRequestHandler<Ping1,int> { public ValueTask<int> Handle(Ping1 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DPing1 : D.IRequestHandler<Ping1,ValueTask<int>> { public ValueTask<int> Handle(Ping1 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
-[Z.ZendiatorHandler] public sealed class ZStream1 : Z.IStreamSourceHandler<Stream1,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Stream1 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
+[Z.Handler] public sealed class ZStream1 : Z.IStreamSourceHandler<Stream1,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Stream1 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MStream1 : M.IStreamRequestHandler<Stream1,int> { public IAsyncEnumerable<int> Handle(Stream1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GStream1 : G.IStreamRequestHandler<Stream1,int> { public IAsyncEnumerable<int> Handle(Stream1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DStream1 : DS.IStreamRequestHandler<Stream1,int> { public IAsyncEnumerable<int> Handle(Stream1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
@@ -49,11 +49,11 @@ public static partial class IPing1 { private static ValueTask<int> HandleAsync(P
 public static partial class IStream1 { private static IAsyncEnumerable<int> HandleAsync(Stream1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed record Ping3(int Value = 41, Probe? Probe = null) : ILevel3, Z.IRequest<int>, M.IRequest<int>, G.IRequest<int>, D.IRequest<Ping3, ValueTask<int>>;
 public sealed record Stream3(int Count, bool Asynchronous, Probe? Probe = null) : ILevel3, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Stream3, int>;
-[Z.ZendiatorHandler] public sealed class ZPing3 : Z.IRequestHandler<Ping3,int> { public ValueTask<int> HandleAsync(Ping3 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.Handler] public sealed class ZPing3 : Z.IRequestHandler<Ping3,int> { public ValueTask<int> HandleAsync(Ping3 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MPing3 : M.IRequestHandler<Ping3,int> { public Task<int> Handle(Ping3 r,CancellationToken t) => Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class GPing3 : G.IRequestHandler<Ping3,int> { public ValueTask<int> Handle(Ping3 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DPing3 : D.IRequestHandler<Ping3,ValueTask<int>> { public ValueTask<int> Handle(Ping3 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
-[Z.ZendiatorHandler] public sealed class ZStream3 : Z.IStreamSourceHandler<Stream3,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Stream3 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
+[Z.Handler] public sealed class ZStream3 : Z.IStreamSourceHandler<Stream3,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Stream3 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MStream3 : M.IStreamRequestHandler<Stream3,int> { public IAsyncEnumerable<int> Handle(Stream3 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GStream3 : G.IStreamRequestHandler<Stream3,int> { public IAsyncEnumerable<int> Handle(Stream3 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DStream3 : DS.IStreamRequestHandler<Stream3,int> { public IAsyncEnumerable<int> Handle(Stream3 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
@@ -75,11 +75,11 @@ public static partial class IPing3 { private static ValueTask<int> HandleAsync(P
 public static partial class IStream3 { private static IAsyncEnumerable<int> HandleAsync(Stream3 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed record Ping5(int Value = 41, Probe? Probe = null) : ILevel5, Z.IRequest<int>, M.IRequest<int>, G.IRequest<int>, D.IRequest<Ping5, ValueTask<int>>;
 public sealed record Stream5(int Count, bool Asynchronous, Probe? Probe = null) : ILevel5, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Stream5, int>;
-[Z.ZendiatorHandler] public sealed class ZPing5 : Z.IRequestHandler<Ping5,int> { public ValueTask<int> HandleAsync(Ping5 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.Handler] public sealed class ZPing5 : Z.IRequestHandler<Ping5,int> { public ValueTask<int> HandleAsync(Ping5 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MPing5 : M.IRequestHandler<Ping5,int> { public Task<int> Handle(Ping5 r,CancellationToken t) => Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class GPing5 : G.IRequestHandler<Ping5,int> { public ValueTask<int> Handle(Ping5 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DPing5 : D.IRequestHandler<Ping5,ValueTask<int>> { public ValueTask<int> Handle(Ping5 r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
-[Z.ZendiatorHandler] public sealed class ZStream5 : Z.IStreamSourceHandler<Stream5,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Stream5 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
+[Z.Handler] public sealed class ZStream5 : Z.IStreamSourceHandler<Stream5,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Stream5 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MStream5 : M.IStreamRequestHandler<Stream5,int> { public IAsyncEnumerable<int> Handle(Stream5 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GStream5 : G.IStreamRequestHandler<Stream5,int> { public IAsyncEnumerable<int> Handle(Stream5 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DStream5 : DS.IStreamRequestHandler<Stream5,int> { public IAsyncEnumerable<int> Handle(Stream5 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
@@ -189,7 +189,7 @@ public sealed class ISBehavior5<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override async IAsyncEnumerable<R> HandleAsync(T r,[EnumeratorCancellation] CancellationToken t) { Work.Enter(r,5); await foreach(var item in Next(r,t).WithCancellation(t).ConfigureAwait(false)) yield return item; } }
 public static class FreshScopes { public const int Count = 16384; }
 public sealed record Relay1(int Count, bool Asynchronous, Probe? Probe = null) : IRelayLevel1, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Relay1, int>;
-[Z.ZendiatorHandler] public sealed class ZRelay1 : Z.IStreamSourceHandler<Relay1,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Relay1 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
+[Z.Handler] public sealed class ZRelay1 : Z.IStreamSourceHandler<Relay1,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Relay1 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MRelay1 : M.IStreamRequestHandler<Relay1,int> { public IAsyncEnumerable<int> Handle(Relay1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GRelay1 : G.IStreamRequestHandler<Relay1,int> { public IAsyncEnumerable<int> Handle(Relay1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DRelay1 : DS.IStreamRequestHandler<Relay1,int> { public IAsyncEnumerable<int> Handle(Relay1 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
@@ -198,7 +198,7 @@ public static partial class IRelay1 { private static IAsyncEnumerable<int> Handl
 public sealed class DRBehavior1_1 : DS.IStreamPipelineBehavior<Relay1,int>
 { public required DS.IStreamRequestHandler<Relay1,int> NextPipeline {get;set;} public IAsyncEnumerable<int> Handle(Relay1 r,CancellationToken t) { Work.Relay(r,1); return NextPipeline.Handle(r,t); } }
 public sealed record Relay5(int Count, bool Asynchronous, Probe? Probe = null) : IRelayLevel5, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Relay5, int>;
-[Z.ZendiatorHandler] public sealed class ZRelay5 : Z.IStreamSourceHandler<Relay5,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Relay5 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
+[Z.Handler] public sealed class ZRelay5 : Z.IStreamSourceHandler<Relay5,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Relay5 r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MRelay5 : M.IStreamRequestHandler<Relay5,int> { public IAsyncEnumerable<int> Handle(Relay5 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GRelay5 : G.IStreamRequestHandler<Relay5,int> { public IAsyncEnumerable<int> Handle(Relay5 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DRelay5 : DS.IStreamRequestHandler<Relay5,int> { public IAsyncEnumerable<int> Handle(Relay5 r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
@@ -255,13 +255,13 @@ public sealed class GRBehavior5<T,R> : G.IStreamPipelineBehavior<T,R> where T : 
 public sealed class IRBehavior5<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override IAsyncEnumerable<R> HandleAsync(T r,CancellationToken t) { Work.Relay(r,5); return Next(r,t); } }
 public sealed record Void0(Counter Counter, Probe? Probe = null) : IWork, Z.IRequest, M.IRequest, G.IRequest, D.IRequest<Void0,ValueTask<ValueTuple>>;
-[Z.ZendiatorHandler] public sealed class ZVoid0 : Z.IRequestHandler<Void0> { public ValueTask HandleAsync(Void0 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
+[Z.Handler] public sealed class ZVoid0 : Z.IRequestHandler<Void0> { public ValueTask HandleAsync(Void0 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class MVoid0 : M.IRequestHandler<Void0> { public Task Handle(Void0 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return Task.CompletedTask; } }
 public sealed class GVoid0 : G.IRequestHandler<Void0> { public ValueTask<G.Unit> Handle(Void0 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class DVoid0 : D.IRequestHandler<Void0,ValueTask<ValueTuple>> { public ValueTask<ValueTuple> Handle(Void0 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 [I.Handler] [I.Behaviors()] public static partial class IVoid0 { private static ValueTask HandleAsync(Void0 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed record Void1(Counter Counter, Probe? Probe = null) : ILevel1, Z.IRequest, M.IRequest, G.IRequest, D.IRequest<Void1,ValueTask<ValueTuple>>;
-[Z.ZendiatorHandler] public sealed class ZVoid1 : Z.IRequestHandler<Void1> { public ValueTask HandleAsync(Void1 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
+[Z.Handler] public sealed class ZVoid1 : Z.IRequestHandler<Void1> { public ValueTask HandleAsync(Void1 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class MVoid1 : M.IRequestHandler<Void1> { public Task Handle(Void1 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return Task.CompletedTask; } }
 public sealed class GVoid1 : G.IRequestHandler<Void1> { public ValueTask<G.Unit> Handle(Void1 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class DVoid1 : D.IRequestHandler<Void1,ValueTask<ValueTuple>> { public ValueTask<ValueTuple> Handle(Void1 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
@@ -269,7 +269,7 @@ public sealed class DVoid1 : D.IRequestHandler<Void1,ValueTask<ValueTuple>> { pu
 public sealed class DVBehavior1_1 : D.IPipelineBehavior<Void1,ValueTask<ValueTuple>>
 { public required D.IRequestHandler<Void1,ValueTask<ValueTuple>> NextPipeline {get;set;} public ValueTask<ValueTuple> Handle(Void1 r,CancellationToken t) { Work.Enter(r,1); return NextPipeline.Handle(r,t); } }
 public sealed record Void3(Counter Counter, Probe? Probe = null) : ILevel3, Z.IRequest, M.IRequest, G.IRequest, D.IRequest<Void3,ValueTask<ValueTuple>>;
-[Z.ZendiatorHandler] public sealed class ZVoid3 : Z.IRequestHandler<Void3> { public ValueTask HandleAsync(Void3 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
+[Z.Handler] public sealed class ZVoid3 : Z.IRequestHandler<Void3> { public ValueTask HandleAsync(Void3 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class MVoid3 : M.IRequestHandler<Void3> { public Task Handle(Void3 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return Task.CompletedTask; } }
 public sealed class GVoid3 : G.IRequestHandler<Void3> { public ValueTask<G.Unit> Handle(Void3 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class DVoid3 : D.IRequestHandler<Void3,ValueTask<ValueTuple>> { public ValueTask<ValueTuple> Handle(Void3 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
@@ -281,7 +281,7 @@ public sealed class DVBehavior3_2 : D.IPipelineBehavior<Void3,ValueTask<ValueTup
 public sealed class DVBehavior3_3 : D.IPipelineBehavior<Void3,ValueTask<ValueTuple>>
 { public required D.IRequestHandler<Void3,ValueTask<ValueTuple>> NextPipeline {get;set;} public ValueTask<ValueTuple> Handle(Void3 r,CancellationToken t) { Work.Enter(r,3); return NextPipeline.Handle(r,t); } }
 public sealed record Void5(Counter Counter, Probe? Probe = null) : ILevel5, Z.IRequest, M.IRequest, G.IRequest, D.IRequest<Void5,ValueTask<ValueTuple>>;
-[Z.ZendiatorHandler] public sealed class ZVoid5 : Z.IRequestHandler<Void5> { public ValueTask HandleAsync(Void5 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
+[Z.Handler] public sealed class ZVoid5 : Z.IRequestHandler<Void5> { public ValueTask HandleAsync(Void5 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class MVoid5 : M.IRequestHandler<Void5> { public Task Handle(Void5 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return Task.CompletedTask; } }
 public sealed class GVoid5 : G.IRequestHandler<Void5> { public ValueTask<G.Unit> Handle(Void5 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class DVoid5 : D.IRequestHandler<Void5,ValueTask<ValueTuple>> { public ValueTask<ValueTuple> Handle(Void5 r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
@@ -308,11 +308,11 @@ public sealed class ZVBehavior5<T> : Z.IPipelineBehavior<T> where T:Z.IRequest,I
 { public ValueTask HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IRequestContinuation<T> { Work.Enter(r,5); return next.InvokeAsync(r,t); } }
 public sealed record ClosedGeneric<T>(int Value=41, Probe? Probe=null) : IWork,Z.IRequest<int>,M.IRequest<int>,D.IRequest<ClosedGeneric<T>,ValueTask<int>>;
 public sealed record OpenGeneric<T>(int Value=41, Probe? Probe=null) : IWork,Z.IRequest<int>,M.IRequest<int>,D.IRequest<OpenGeneric<T>,ValueTask<int>>;
-[Z.ZendiatorHandler] public sealed class ZClosed : Z.IRequestHandler<ClosedGeneric<int>,int> { public ValueTask<int> HandleAsync(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.Handler] public sealed class ZClosed : Z.IRequestHandler<ClosedGeneric<int>,int> { public ValueTask<int> HandleAsync(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MClosed : M.IRequestHandler<ClosedGeneric<int>,int> { public Task<int> Handle(ClosedGeneric<int> r,CancellationToken t)=>Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DClosed : D.IRequestHandler<ClosedGeneric<int>,ValueTask<int>> { public ValueTask<int> Handle(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 [I.Handler][I.Behaviors()] public static partial class IClosed { private static ValueTask<int> HandleAsync(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
-[Z.ZendiatorHandler] public sealed class ZOpen<T> : Z.IRequestHandler<OpenGeneric<T>,int> { public ValueTask<int> HandleAsync(OpenGeneric<T> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.Handler] public sealed class ZOpen<T> : Z.IRequestHandler<OpenGeneric<T>,int> { public ValueTask<int> HandleAsync(OpenGeneric<T> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MOpen<T> : M.IRequestHandler<OpenGeneric<T>,int> { public Task<int> Handle(OpenGeneric<T> r,CancellationToken t)=>Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DOpen<T> : D.IRequestHandler<OpenGeneric<T>,ValueTask<int>> { public ValueTask<int> Handle(OpenGeneric<T> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 #if PROBE_IMMEDIATE_OPEN

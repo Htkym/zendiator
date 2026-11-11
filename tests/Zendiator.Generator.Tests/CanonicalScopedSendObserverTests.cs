@@ -20,7 +20,7 @@ public sealed partial class GeneratorTests
             public readonly ref struct Request:ISyncRequest{{(isVoid ? "" : "<int>")}} {
                 public readonly Span<int> Values;public Request(Span<int> values){Values=values;}
             }
-            [ZendiatorHandler]public sealed class Handler:ISyncRequestHandler<Request{{(isVoid ? "" : ",int")}}>,IDisposable {
+            [Handler]public sealed class Handler:ISyncRequestHandler<Request{{(isVoid ? "" : ",int")}}>,IDisposable {
                 private readonly ScopedFixture.Probe p;public Handler(ScopedFixture.Probe p){this.p=p;p.HandlerResolutions++;p.Trace.Add("resolve:H");}
                 public {{ret}} Handle(scoped Request r,CancellationToken t){p.Calls++;p.Record("handler",r.Values,t);r.Values[1]+=5;if(p.Mode=="handler")throw p.Failure;{{(isVoid ? "" : "return r.Values[0]+r.Values[1];")}}}
                 public void Dispose(){p.Disposals++;p.Trace.Add("dispose:H");}
@@ -74,7 +74,7 @@ public sealed partial class GeneratorTests
     private static string ScopedOldSentinel(bool value) => $$"""
         namespace {{(value ? "OldValue" : "OldClass")}} {
         public {{(value ? "readonly record struct" : "sealed record")}} Request(int Value):ISyncRequest<int>;
-        [ZendiatorHandler]public sealed class Handler:ISyncRequestHandler<Request,int>{public int Handle(Request r,CancellationToken t)=>r.Value;}
+        [Handler]public sealed class Handler:ISyncRequestHandler<Request,int>{public int Handle(Request r,CancellationToken t)=>r.Value;}
         public sealed class Hook:ISendRequestTransform<Request>,ISendResponseTransform<Request,int>,ISendExceptionObserver<Request>,ISendFinallyObserver<Request>{
             public Request Before(Request r,CancellationToken t)=>r;public int After(Request r,int result,CancellationToken t)=>result+1;
             public void OnException(Request r,Exception e,CancellationToken t){}public void Finally(Request r,SendExitInfo exit,CancellationToken t){}

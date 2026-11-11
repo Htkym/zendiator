@@ -17,7 +17,7 @@ public sealed partial class GeneratorTests
                 public readonly global::Zendiator.Generator.Tests.AsyncOnceGate<bool> FirstSinkGate=new(true);
                 public Func<IStreamSink<int>,ValueTask>? Consume;
             }
-            [ZendiatorHandler]public sealed class Handler:IStreamSourceHandler<Items,int,Cursor>,IDisposable{
+            [Handler]public sealed class Handler:IStreamSourceHandler<Items,int,Cursor>,IDisposable{
                 private readonly Probe p;public Handler(Probe p){this.p=p;p.HandlerConstructions++;}
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){
                     var id=++p.Opened;Check.That(p.Active.Add(id),"each operation starts a fresh source cursor");return new(new Cursor(p,id));
@@ -92,7 +92,7 @@ public sealed partial class GeneratorTests
                 public static readonly AsyncLocal<string?> Ambient=new();public readonly List<string> Trace=new();
                 public void Observe(string route,string phase)=>Trace.Add(route+"/"+phase+"="+Ambient.Value);
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Plain,int,Cursor>,IStreamSourceHandler<Mapped,int,Cursor>{
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Plain,int,Cursor>,IStreamSourceHandler<Mapped,int,Cursor>{
                 public ValueTask<Cursor> OpenAsync(Plain r,CancellationToken t)=>Open("plain");
                 public ValueTask<Cursor> OpenAsync(Mapped r,CancellationToken t)=>Open("mapped");
                 private ValueTask<Cursor> Open(string route){p.Observe(route,"open");Probe.Ambient.Value=route+":open-change";return new(new Cursor(p,route));}
@@ -173,7 +173,7 @@ public sealed partial class GeneratorTests
                 public DisposeResult? Cleanup;
                 public int Opened,RawMoves,RawDisposals,Consumptions,OpaqueDisposals,Registrations;
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,RawCursor>{
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,RawCursor>{
                 public ValueTask<RawCursor> OpenAsync(Items r,CancellationToken token){p.Opened++;return new(new RawCursor(p));}
             }
             public sealed class RawCursor(Probe p):IAsyncEnumerator<int>{

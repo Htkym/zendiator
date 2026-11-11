@@ -23,7 +23,7 @@ public sealed partial class GeneratorTests
             using HandlerDependency=global::Zendiator.Generator.Tests.GeneratorTests.HookHandlerFactoryDependency;
             namespace App {
                 public sealed record Ping : ISyncRequest{{(isVoid ? "" : "<int>")}};
-                [ZendiatorHandler] public sealed partial class Handler<T> : ISyncRequestHandler<Ping{{result}}>,IDisposable where T:class {
+                [Handler] public sealed partial class Handler<T> : ISyncRequestHandler<Ping{{result}}>,IDisposable where T:class {
                     private readonly Probe _probe;private readonly Ping _request;private readonly CancellationToken _token;
                     public Handler(Probe probe,Ping request,CancellationToken token){_probe=probe;_request=request;_token=token;probe.Core.ConstructHandler();}
                     {{(isVoid ? "void" : "int")}} ISyncRequestHandler<Ping{{result}}>.Handle(Ping request,CancellationToken token){ {{(isVoid ? "" : "return ")}}_probe.Core.Handle(request,token); }

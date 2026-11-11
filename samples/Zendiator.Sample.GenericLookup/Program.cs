@@ -79,7 +79,7 @@ public sealed class InMemoryEntityStore<T>(IEnumerable<T> entities) : IEntitySto
     }
 }
 
-[ZendiatorHandler]
+[Handler]
 public sealed class LookupHandler<T>(IEntityStore<T> store) : IRequestHandler<Lookup<T>, T> where T : class, IEntity
 {
     public ValueTask<T> HandleAsync(Lookup<T> request, CancellationToken cancellationToken) => store.FindAsync(request.Id, cancellationToken);
@@ -115,13 +115,13 @@ public sealed class InMemoryInventory(InventoryStatus snapshot) : IStatusSource,
     }
 }
 
-[ZendiatorHandler]
+[Handler]
 public sealed class StatusHandler(IStatusSource status) : IRequestHandler<StatusQuery, InventoryStatus>
 {
     public ValueTask<InventoryStatus> HandleAsync(StatusQuery request, CancellationToken cancellationToken) => status.ReadAsync(cancellationToken);
 }
 
-[ZendiatorHandler]
+[Handler]
 public sealed class RefreshInventoryHandler(IInventoryUpdater inventory) : IRequestHandler<RefreshInventory>
 {
     public ValueTask HandleAsync(RefreshInventory request, CancellationToken cancellationToken) => inventory.RefreshAsync(request.ActiveCount, cancellationToken);

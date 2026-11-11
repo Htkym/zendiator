@@ -46,7 +46,7 @@ function Add-ExtraDefinitions {
         $iattrs='[I.Behaviors(' + ((1..$b | ForEach-Object {"typeof(IRBehavior$_<,>)"}) -join ',') + ')]'
         $lines.Add(@"
 public sealed record Relay$b(int Count, bool Asynchronous, Probe? Probe = null) : IRelayLevel$b, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Relay$b, int>;
-[Z.ZendiatorHandler] public sealed class ZRelay$b : Z.IStreamSourceHandler<Relay$b,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Relay$b r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
+[Z.Handler] public sealed class ZRelay$b : Z.IStreamSourceHandler<Relay$b,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Relay$b r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MRelay$b : M.IStreamRequestHandler<Relay$b,int> { public IAsyncEnumerable<int> Handle(Relay$b r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GRelay$b : G.IStreamRequestHandler<Relay$b,int> { public IAsyncEnumerable<int> Handle(Relay$b r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DRelay$b : DS.IStreamRequestHandler<Relay$b,int> { public IAsyncEnumerable<int> Handle(Relay$b r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
@@ -76,7 +76,7 @@ public sealed class IRBehavior$i<T,R> : I.StreamingBehavior<T,R> where T:IWork
         $marker=if($b){"ILevel$b"}else{'IWork'}
         $lines.Add(@"
 public sealed record Void$b(Counter Counter, Probe? Probe = null) : $marker, Z.IRequest, M.IRequest, G.IRequest, D.IRequest<Void$b,ValueTask<ValueTuple>>;
-[Z.ZendiatorHandler] public sealed class ZVoid$b : Z.IRequestHandler<Void$b> { public ValueTask HandleAsync(Void$b r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
+[Z.Handler] public sealed class ZVoid$b : Z.IRequestHandler<Void$b> { public ValueTask HandleAsync(Void$b r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class MVoid$b : M.IRequestHandler<Void$b> { public Task Handle(Void$b r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return Task.CompletedTask; } }
 public sealed class GVoid$b : G.IRequestHandler<Void$b> { public ValueTask<G.Unit> Handle(Void$b r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
 public sealed class DVoid$b : D.IRequestHandler<Void$b,ValueTask<ValueTuple>> { public ValueTask<ValueTuple> Handle(Void$b r,CancellationToken t) { Work.Void(r.Counter,r.Probe,t); return default; } }
@@ -99,11 +99,11 @@ public sealed class ZVBehavior$i<T> : Z.IPipelineBehavior<T> where T:Z.IRequest,
     $lines.Add(@'
 public sealed record ClosedGeneric<T>(int Value=41, Probe? Probe=null) : IWork,Z.IRequest<int>,M.IRequest<int>,D.IRequest<ClosedGeneric<T>,ValueTask<int>>;
 public sealed record OpenGeneric<T>(int Value=41, Probe? Probe=null) : IWork,Z.IRequest<int>,M.IRequest<int>,D.IRequest<OpenGeneric<T>,ValueTask<int>>;
-[Z.ZendiatorHandler] public sealed class ZClosed : Z.IRequestHandler<ClosedGeneric<int>,int> { public ValueTask<int> HandleAsync(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.Handler] public sealed class ZClosed : Z.IRequestHandler<ClosedGeneric<int>,int> { public ValueTask<int> HandleAsync(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MClosed : M.IRequestHandler<ClosedGeneric<int>,int> { public Task<int> Handle(ClosedGeneric<int> r,CancellationToken t)=>Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DClosed : D.IRequestHandler<ClosedGeneric<int>,ValueTask<int>> { public ValueTask<int> Handle(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 [I.Handler][I.Behaviors()] public static partial class IClosed { private static ValueTask<int> HandleAsync(ClosedGeneric<int> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
-[Z.ZendiatorHandler] public sealed class ZOpen<T> : Z.IRequestHandler<OpenGeneric<T>,int> { public ValueTask<int> HandleAsync(OpenGeneric<T> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.Handler] public sealed class ZOpen<T> : Z.IRequestHandler<OpenGeneric<T>,int> { public ValueTask<int> HandleAsync(OpenGeneric<T> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MOpen<T> : M.IRequestHandler<OpenGeneric<T>,int> { public Task<int> Handle(OpenGeneric<T> r,CancellationToken t)=>Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DOpen<T> : D.IRequestHandler<OpenGeneric<T>,ValueTask<int>> { public ValueTask<int> Handle(OpenGeneric<T> r,CancellationToken t)=>new(Work.Handle(r.Value,r.Probe,t)); }
 #if PROBE_IMMEDIATE_OPEN

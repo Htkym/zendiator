@@ -24,7 +24,7 @@ public sealed partial class GeneratorTests
                 public CancellationToken ExpectedToken;public int Handled,RawMoves,Produced,Reads,SourceDisposals,BorrowedDisposals;
                 public void Token(CancellationToken token)=>Check.That(token==ExpectedToken,"every opening and raw Move uses the effective enumeration token");
             }
-            [ZendiatorHandler]public sealed class IteratorHandler(Probe p):IStreamSourceHandler<IteratorItems,int,IteratorCursor>,IDisposable{
+            [Handler]public sealed class IteratorHandler(Probe p):IStreamSourceHandler<IteratorItems,int,IteratorCursor>,IDisposable{
                 public ValueTask<IteratorCursor> OpenAsync(IteratorItems r,CancellationToken token){p.Token(token);p.Handled++;return new(new IteratorCursor(p,Feed(p,r,token).GetAsyncEnumerator(token)));}
                 private static async IAsyncEnumerable<int> Feed(Probe p,IteratorItems r,[System.Runtime.CompilerServices.EnumeratorCancellation]CancellationToken token){
                     try{
@@ -42,7 +42,7 @@ public sealed partial class GeneratorTests
                 public ValueTask<bool> MoveNextAsync(){p.RawMoves++;return source.MoveNextAsync();}
                 public ValueTask DisposeAsync()=>source.DisposeAsync();
             }
-            [ZendiatorHandler]public sealed class NativeHandler(Probe p):IStreamSourceHandler<NativeItems,int,NativeCursor>,IDisposable{
+            [Handler]public sealed class NativeHandler(Probe p):IStreamSourceHandler<NativeItems,int,NativeCursor>,IDisposable{
                 public ValueTask<NativeCursor> OpenAsync(NativeItems r,CancellationToken token){p.Token(token);p.Handled++;return new(new NativeCursor(p,r.Count,token));}
                 public void Dispose()=>p.BorrowedDisposals++;
             }

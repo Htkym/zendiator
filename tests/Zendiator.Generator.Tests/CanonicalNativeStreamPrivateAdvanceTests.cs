@@ -35,7 +35,7 @@ public sealed partial class GeneratorTests
                 public System.Threading.Tasks.Sources.ValueTaskSourceStatus GetStatus(short token)=>inner.GetStatus(token);
                 public void OnCompleted(Action<object?> continuation,object? state,short token,System.Threading.Tasks.Sources.ValueTaskSourceOnCompletedFlags flags)=>inner.OnCompleted(continuation,state,token,flags);
             }
-            [ZendiatorHandler]public sealed class Handler(Flow f):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
+            [Handler]public sealed class Handler(Flow f):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken token){f.Opened++;return new(new Cursor(f,token));}
                 public ValueTask DisposeAsync(){f.HandlerDisposals++;f.Released.Add("handler");f.CleanupContexts.Add(Probe.Ambient.Value);return default;}
             }
@@ -154,7 +154,7 @@ public sealed partial class GeneratorTests
                 public int HandlerDisposals,RelayDisposals,WrapperDisposals,FactoryDisposals,Reads;
                 public bool CleanupFailure=>Mode is "eof-cleanup" or "cancel-cleanup";
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p,string id):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
+            [Handler]public sealed class Handler(Probe p,string id):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken token){p.Pulls.Add(id,0);p.Disposals.Add(id,0);return new(new Cursor(p,id,token));}
                 public ValueTask DisposeAsync(){p.HandlerDisposals++;p.Released.Add("handler:"+id);if(p.CleanupFailure)throw p.ChildCleanupError;return default;}
             }
@@ -323,7 +323,7 @@ public sealed partial class GeneratorTests
                     completed=true;continuation(state);
                 }
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>{
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>{
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken token){p.Opened++;return new(new Cursor(p,token));}
             }
             public struct Cursor(Probe p,CancellationToken token):IAsyncEnumerator<int>{

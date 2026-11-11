@@ -41,7 +41,7 @@ public sealed partial class GeneratorTests
         var dependencySource = "using Zendiator;namespace Payloads{public sealed record Request<T>(T Value):ISyncRequest<int> where T:class;}";
         var dependency = DependencyEmit(SyncCompilation(dependencySource, "Payloads_" + suffix), false, label + "-payloads");
         var dependencyRef = MetadataReference.CreateFromImage(dependency);
-        var producerSource = "using System;using System.Threading;using Zendiator;using Microsoft.Extensions.DependencyInjection;namespace Library{public sealed class Marker;" + (catalog ? "[ZendiatorHandler]" : "") + "public sealed class Handler<T>:ISyncRequestHandler<Payloads.Request<T>,int> where T:class{public int Handle(Payloads.Request<T> r,CancellationToken t)=>r.Value.ToString()!.Length;}public static class RuntimeRegistration{public static int Calls;public static IServiceCollection Register(IServiceCollection s){Calls++;throw new InvalidOperationException(\"Runtime registration must not be used for discovery.\");}}}";
+        var producerSource = "using System;using System.Threading;using Zendiator;using Microsoft.Extensions.DependencyInjection;namespace Library{public sealed class Marker;" + (catalog ? "[Handler]" : "") + "public sealed class Handler<T>:ISyncRequestHandler<Payloads.Request<T>,int> where T:class{public int Handle(Payloads.Request<T> r,CancellationToken t)=>r.Value.ToString()!.Length;}public static class RuntimeRegistration{public static int Calls;public static IServiceCollection Register(IServiceCollection s){Calls++;throw new InvalidOperationException(\"Runtime registration must not be used for discovery.\");}}}";
         var producer = DependencyEmit(SyncCompilation(producerSource, "Handlers_" + suffix).AddReferences(dependencyRef), catalog, label + "-handlers");
         var producerRef = MetadataReference.CreateFromImage(producer);
         return new(dependency, producer, dependencyRef, producerRef, producerSource);
@@ -107,7 +107,7 @@ public sealed partial class GeneratorTests
     public void Catalog_dependency_restored_reference_invalidates_error_and_recovers_membership()
     {
         var f = DependencyFixture("restore");
-        var source = DependencyConsumer().Replace("namespace Consumer{", "namespace Consumer{public sealed record LocalPing:ISyncRequest<int>;[ZendiatorHandler]public sealed class LocalHandler:ISyncRequestHandler<LocalPing,int>{public int Handle(LocalPing r,System.Threading.CancellationToken t)=>7;}").Replace("c.UseCatalogFrom<Library.Marker>();", "c.UseCatalogFrom<Library.Marker>();c.Handlers<LocalPing>(DispatchFamily.SendSync,typeof(LocalHandler));");
+        var source = DependencyConsumer().Replace("namespace Consumer{", "namespace Consumer{public sealed record LocalPing:ISyncRequest<int>;[Handler]public sealed class LocalHandler:ISyncRequestHandler<LocalPing,int>{public int Handle(LocalPing r,System.Threading.CancellationToken t)=>7;}").Replace("c.UseCatalogFrom<Library.Marker>();", "c.UseCatalogFrom<Library.Marker>();c.Handlers<LocalPing>(DispatchFamily.SendSync,typeof(LocalHandler));");
         var bad = SyncCompilation(source, "RestoredDependencyConsumer").AddReferences(f.Producer);
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(bad, out _, out var missing);
         Assert.Contains("CatalogDependencyUnavailable", Assert.Single(missing).GetMessage());

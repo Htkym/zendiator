@@ -19,7 +19,7 @@ public sealed partial class GeneratorTests
             public struct Items<T>:IStreamRequest<int> where T:class,new(){public int Value;public T Shared;public Items(int value,T shared){Value=value;Shared=shared;}}
             public sealed record Query(int Value):ISyncRequest<int>;
             public sealed class Probe{public int Opened,Disposed,Sends,Boundaries;public readonly List<int> Seen=new();}
-            [ZendiatorHandler]internal sealed class Handler<T>(Probe p):IStreamSourceHandler<Items<T>,int,ValueCursor<T>> where T:class,new(){
+            [Handler]internal sealed class Handler<T>(Probe p):IStreamSourceHandler<Items<T>,int,ValueCursor<T>> where T:class,new(){
                 public ValueTask<ValueCursor<T>> OpenAsync(Items<T> request,CancellationToken t){p.Opened++;p.Seen.Add(request.Value);var start=request.Value;request.Value=900;return new(new ValueCursor<T>(p,start,t));}
             }
             internal struct ValueCursor<T>:IAsyncEnumerator<int> where T:class,new(){
@@ -38,7 +38,7 @@ public sealed partial class GeneratorTests
             public sealed class TextBoundary<T>(Probe p):IStreamMiddleware<Items<T>,string?> where T:class,new(){
                 public ValueTask<IAsyncEnumerator<string?>> OpenAsync(Items<T> request,IStreamUpstream<Items<T>,string?> next,CancellationToken t){p.Boundaries++;p.Seen.Add(request.Value);return next.OpenAsync(request,t);}
             }
-            [ZendiatorHandler]public sealed class QueryHandler(Probe p):ISyncRequestHandler<Query,int>{public int Handle(Query r,CancellationToken t){p.Sends++;return r.Value+1;}}
+            [Handler]public sealed class QueryHandler(Probe p):ISyncRequestHandler<Query,int>{public int Handle(Query r,CancellationToken t){p.Sends++;return r.Value+1;}}
             public readonly struct Sink(List<long> values):IStreamSink<long>{public ValueTask<bool> OnNextAsync(long item,CancellationToken t){values.Add(item);return new(true);}}
             """, """
             var p=new Probe();var services=new ServiceCollection();services.AddSingleton(p);Register(services);
@@ -68,7 +68,7 @@ public sealed partial class GeneratorTests
             public sealed record Items:IStreamRequest<int>;
             [ZendiatorComposition("private-stream")]public sealed class Reads;
             public static class Container{
-                [ZendiatorHandler]private sealed class Handler:IStreamSourceHandler<Items,int,Handler.Cursor>{
+                [Handler]private sealed class Handler:IStreamSourceHandler<Items,int,Handler.Cursor>{
                     public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t)=>new(new Cursor());
                     public sealed class Cursor:IAsyncEnumerator<int>{public int Current=>0;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}
                 }

@@ -246,7 +246,7 @@ internal static class CompositionSelectionDiscovery
                     MarkedHandlerDiscovery.BindExplicitMetadata(compilation, type, ct);
                 if (candidate == null)
                 {
-                    errors.Add($"Handler {Name(type)} requires a source ZendiatorHandler marker or a supported explicitly supplied metadata type.");
+                    errors.Add($"Handler {Name(type)} requires a source Handler marker or a supported explicitly supplied metadata type.");
                     return;
                 }
                 var definition = candidate.Model;

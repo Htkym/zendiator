@@ -66,7 +66,7 @@ public sealed partial class GeneratorTests
             public void OnCompleted(Action<object?> continuation,object? state,short token,System.Threading.Tasks.Sources.ValueTaskSourceOnCompletedFlags flags){Registrations++;completed=true;continuation(state);}
             public void Enter(){flow.RaceEntry=Probe.Ambient.Value;Probe.Ambient.Value="raw-sync-"+flow.Id;}
         }
-        [ZendiatorHandler]public sealed class Handler(Flow flow):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
+        [Handler]public sealed class Handler(Flow flow):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
             public ValueTask<Cursor> OpenAsync(Items r,CancellationToken token){flow.Opened++;return new(new Cursor(flow,token));}
             public ValueTask DisposeAsync()=>flow.CloseSession(0);
         }

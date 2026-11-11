@@ -7,7 +7,7 @@ namespace Competitive;
 public sealed record SameProducerStream0(int Count, bool Asynchronous, Probe? Probe = null)
     : Zendiator.IStreamRequest<int>, IWork;
 
-[Zendiator.ZendiatorHandler]
+[Zendiator.Handler]
 public sealed class ZSameProducerStream0 : Zendiator.IStreamHandler<SameProducerStream0, int>
 {
     public IAsyncEnumerable<int> Handle(SameProducerStream0 request, CancellationToken token) =>

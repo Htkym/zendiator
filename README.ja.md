@@ -2,67 +2,169 @@
 
 [English](README.md)
 
-コンパイル時に型付きディスパッチを生成する、.NET 10 向けの小さな Mediator です。
-Roslyn Incremental Source Generator がリクエストごとの `SendAsync` オーバーロード、
-構造体の継続ノード、DI 登録を生成します。型付きの要求配送に、実行時のアセンブリ走査、
-リフレクション呼び出し、`dynamic` は使いません。
+.NET 10 向けの、ソース生成を使う Mediator です。Handler と処理順を定義し、生成された
+`IZendiator` からリクエストごとのメソッドを呼び出します。型付きの配送には生成コードを使い、
+実行時のアセンブリ走査やリフレクション呼び出しは使いません。
 
-## 0.5.1の使い方
+## インストール
 
-このガイドは、0.5.1で同期処理・非同期処理・Streamを使う例です。
-修正と実験的な opt-in producer 機能は、[0.5.1リリースノート](docs/release/0.5.1-release-notes.ja.md)を参照してください。
-.NET 10 SDKとC# 14を使います。0.4.0からの更新には破壊的変更があるため、
-[0.5.0リリースノート](docs/release/0.5.0-release-notes.ja.md)を確認してください。
+.NET 10 と C# 14 が必要です。[NuGet の Zendiator](https://www.nuget.org/packages/Zendiator) を追加します。
 
 ```shell
-dotnet add package Zendiator --version 0.5.1
+dotnet add package Zendiator --version 0.6.0
+dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
 ```
 
-NuGet.orgで0.5.1が公開されるまでは、同じ版のローカルビルド済みpackageを使ってください。
-[packageを使う実行例](docs/getting-started-0.5.0.ja.md)に、設定とサンプルがあります。
-そのガイドの 0.5.0 の package 例を使う場合、今回の版ではすべて 0.5.1 に揃えてください。
+`Zendiator` には Source Generator が含まれ、`Zendiator.Abstractions` に依存します。
+契約だけを定義するプロジェクトでは `Zendiator.Abstractions` 単体を参照できます。
+Zendiator の各パッケージは同じバージョンに揃えてください。ライセンスは MIT です。
 
-## 登録と実行順序
+## 最初のリクエスト
 
-`[ZendiatorHandler]`はHandlerを明示する属性です。`Handlers<TRequest>`で使うHandlerを選び、`Pipeline<TRequest>`でHookの順序を指定します。
+```csharp
+using GettingStarted.Generated.App;
+using Microsoft.Extensions.DependencyInjection;
+using Zendiator;
+using Zendiator.DependencyInjection;
 
-0.5.0では、Handlerの属性と明示的な登録を使います。0.4.0のinterface実装やアセンブリ指定だけに依存した登録は、そのまま移せません。
+namespace GettingStarted;
 
-Behaviorの並びは`Pipeline`の順序付きリストで指定します。既存Behaviorのretryやcacheなどの意味を、自動でHookへ置き換えるものではありません。継続の呼び出しを制御するBehaviorを移す際は、`Stage.Wrapper<T>()`の契約と対象経路を確認してください。
+public static class Program
+{
+    public static async Task Main()
+    {
+        var services = new ServiceCollection();
+        services.AddZendiator<App>(configuration =>
+        {
+            configuration.Handlers<Greet>(DispatchFamily.SendAsync, typeof(GreetHandler));
+            configuration.Pipeline<Greet>(DispatchFamily.SendAsync);
+        });
 
-## Streamの開始と再列挙
+        await using var provider = services.BuildServiceProvider(
+            new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+        await using var scope = provider.CreateAsyncScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        var greeting = await mediator.SendAsync(new Greet("Ada"));
+        Console.WriteLine(greeting);
+    }
+}
 
-0.5.0では標準IAsyncEnumerableを返すHandler、または名前付きcursorを開くHandlerを使います。MediatorのStreamAsync(request, apiToken)は標準IAsyncEnumerableとしてsource objectを返します。typed terminalにはStreamSource(request, apiToken).ConsumeAsync(sink, enumerationToken)を使います。StreamSourceの返り値はreadonlyの計画値で、IAsyncEnumerableではありません。既定のChannelや別producer taskは置きません。
+[ZendiatorComposition("gettingStarted")]
+public sealed class App;
 
-guard付きの経路では、pending Moveの完了前に別MoveやDisposeを始めると拒否します。Hook・Before・middleware・owned sessionを持たず、API側と列挙側の両tokenが取消不可のiterator経路では、GetAsyncEnumeratorで入力を取得し、producerの操作契約に従います。この経路でもEOFや失敗後を含めてDisposeAsyncをawaitしてください。実際の取消tokenを省略して経路を選ばないでください。Moveを一度awaitしてからDisposeし、scopeは後始末まで保持してください。false Filterは同じMove内で次itemへ進み、terminalのfalseは正常な全体停止です。sink/serializer例外はsource middlewareへ注入しません。
+public sealed record Greet(string Name) : IRequest<string>;
 
-[Streamの移行・実行契約](docs/streaming-0.5.0.ja.md)
+[Handler]
+public sealed class GreetHandler : IRequestHandler<Greet, string>
+{
+    public ValueTask<string> HandleAsync(Greet request, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        return new($"Hello, {request.Name}");
+    }
+}
+```
 
-## DI scopeの所有
+`[Handler]` で Handler を示し、`Handlers<TRequest>` で実装を選びます。
+Hook と middleware は `Pipeline<TRequest>` の順序付きリストに登録します。
+Handler だけを使う Send の経路では空の Pipeline を省略できます。Stream の経路では明示してください。
+Wrapper の retry、cache、継続呼び出しは、アプリケーションで定義した動作を維持します。
+設定全体は[構成ガイド](docs/getting-started-0.5.0.ja.md)と
+[ComposedApp サンプル](samples/Zendiator.Sample.ComposedApp/)を参照してください。
 
-生成登録の既定は、`IZendiator`がScoped、Handler・Hook・session factoryがTransientです。通常は各Mediatorが依存の型ごとに最初に公開された成功結果を捕捉し、その後の呼出しでも使います。
+## 配送メソッド
 
-非同期Hookの実行経路を使う閉じた`SendAsync` routeでは、借用するHandlerと全Hookが参照型で、Zendiatorのsession/factory契約やWrapperを使わず、異なるreceiver型が2個以上ある場合、route単位の依存セットを捕捉します。このセットは初回dispatchの取消確認後、既存の非同期実行内で最初のHookより前に取得します。外側Hookの失敗で未使用になるHandlerも含め、DIが全receiverを取得します。Transientのreceiverは、ほかのrouteやMediatorの明示的な`IServiceProvider`経由で取得するものと異なる場合があります。
+| 操作 | 生成される入口 |
+|---|---|
+| 同期リクエスト | `Send(request, token)` |
+| 非同期リクエスト | `SendAsync(request, token)` |
+| 同期の複数結果 | `SendAll(request, token)` |
+| 非同期の複数結果 | `SendAllAsync(request, token)` |
+| 通知の逐次配送 | `PublishAsync(notification, token)` |
+| 標準の非同期列挙 | `StreamAsync(request, token)` |
+| sink による逐次消費 | `StreamSource(request, token).ConsumeAsync(sink)` |
 
-同じ依存または依存セットを並行して解決した呼出しは、公開された同じ捕捉instanceを使います。ある解決の例外はほかの成功結果で隠しません。生成・破棄は標準DIの責任です。[詳細な条件と制約](docs/getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)を参照してください。
+呼び出し側では具体的なリクエスト型を使います。実行時の object によるリクエスト配送、
+Publish の並列実行、fire-and-forget、永続化や outbox は提供していません。
+通知の登録は、Send と Stream の経路とは別です。
 
-Streamの返り値をscopeの外へ持ち出し、scopeを破棄してから列挙を始めないでください。途中で`break`した場合も、`await foreach`による列挙子の後始末が終わるまでscopeを保持します。
+## 依存のライフタイムと例外
 
-`SendAsync`が返す`ValueTask`は、例のように1回だけ`await`します。同じ`ValueTask`を保存して複数回消費しないでください。
+生成登録の既定は `IZendiator` が Scoped、Handler・Hook・session factory が Transient です。
+上書きする登録は `AddZendiator` より先に追加してください。各 Mediator は取得した依存を再利用します。
+条件を満たす非同期 Hook の経路では、外側の失敗で未使用になる receiver も含め、経路ごとの依存セットを取得します。
+Transient の同一性やコンストラクタの実行時期に依存する場合は、
+[依存の取得とライフタイム](docs/getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)を確認してください。
 
-## CodeFix
+生成と破棄は DI が担当します。配送・列挙・後始末が終わるまで scope を保持し、
+破棄後に入口を使わないでください。再利用する Handler と Hook は並行呼び出しに対応する必要があります。
+`ValidateOnBuild` だけでは、配送時に初めて取得する依存を検証できません。
 
-Zendiator.CodeFixesは任意の別packageです。CodeFixを使う場合は、`Zendiator`と同じ版の`Zendiator.CodeFixes`を`PrivateAssets="all"`で追加し、同じpackage feedからrestoreしてください。現在のVisual Studioでプロジェクトを開き、ZEN0035の修正候補から`Add ZendiatorHandler attribute`を選びます。
+返された `ValueTask` は一度だけ await します。直接呼び出す経路では、`ValueTask` を返す前に
+例外が発生することがあります。`SendAsync` の呼び出しと await の両方を `try` の中に置いてください。
 
-登録順、wrapperのretryやcache、scopeの境界は手動で移行してください。既存のwrapper本文は意図を確認せずhookへ変換しません。
+依存の保持領域は既定でインラインに置きます。`ClosedServiceCacheMode.LazyBlocks` は、
+一部の依存だけを使う構成で保持領域の費用を変える設定です。
+`EagerDependencies` は依存を生成する時期を明示的に変えるため、未使用のサービスを生成する場合があります。
+使用状況の推測による自動選択は行いません。[保持領域の設定](docs/getting-started-0.5.0.md#closed-dependency-storage)も参照してください。
 
-[CodeFix package](src/Zendiator.CodeFixes/README.md)
+## Stream
+
+経路ごとに、次のどちらかの Handler を選びます。
+
+- `IStreamHandler<TRequest, TItem>` は `Handle` から `IAsyncEnumerable<TItem>` を返します。
+- `IStreamSourceHandler<TRequest, TItem, TCursor>` は `OpenAsync` で、名前付きの class または struct の cursor を開きます。
+
+`StreamAsync` は `await foreach` で列挙でき、ASP.NET Core の action から返して通常の非同期シリアライズにも使えます。
+シリアライズと破棄が終わるまで、リクエストの scope を保持してください。
+`StreamSource(...).ConsumeAsync(...)` は任意の sink 用メソッドで、`IAsyncEnumerable<T>` ではありません。
+時間や割当量が必ず減るものでもありません。値型の sink は値渡しになるため、
+集計結果は class の sink または共有する参照先に保存してください。
+
+標準の middleware で、上流を呼び出す port を値型のまま保持できます。
+
+```csharp
+public sealed class Relay<TRequest, TItem> : IStreamMiddleware<TRequest, TItem>
+{
+    public ValueTask<IAsyncEnumerator<TItem>> OpenAsync<TNext>(
+        TRequest request, TNext next, CancellationToken cancellationToken)
+        where TNext : struct, IStreamUpstream<TRequest, TItem>
+        => next.OpenAsync(request, cancellationToken);
+}
+```
+
+生成器は、アクセス可能な sealed class に、正確な制約を持つ public・非 virtual の generic 実装が
+直接宣言されている場合に、この具体型の経路を選びます。ほかの対応する型では interface 経由の呼び出しを維持します。
+[型付き middleware の移行ガイド](docs/migrating-stream-upstream.md)に詳しい条件をまとめています。
+
+列挙子は逐次操作し、処理中の Move を await してから破棄してください。EOF・失敗・途中終了の後も破棄が必要です。
+guard 付きの経路は最初の Move で入力を取得します。取消不可の token を使う、条件を満たす単純な iterator 経路は
+`GetAsyncEnumerator` で取得します。経路を変えるために token を差し替えず、実際の取消 token を渡してください。
+UI context への復帰や ambient state の分離は保証しません。
+[入力と所有権](docs/streaming-iterators.md)、[実行上の制約](docs/release/known-limitations.md)も参照してください。
+
+## 移行と IDE 支援
+
+0.6.0 では `ZendiatorHandlerAttribute` を `HandlerAttribute` に変更しました。
+`[ZendiatorHandler]` を `[Handler]` に変更し、パッケージのバージョンを揃えて利用側を再ビルドしてください。
+ほかの名前と曖昧になる場合は `[global::Zendiator.HandlerAttribute]` と書けます。
+標準の Stream middleware は `OpenAsync<TNext>` を直接公開します。
+旧実装との adapter や、具体型を直接呼び出すコードの変更は[移行ガイド](docs/migrating-stream-upstream.md)を確認してください。
+
+任意の [Zendiator.CodeFixes](src/Zendiator.CodeFixes/README.md) は、対応する ZEN0035 の診断に対して
+不足している `[Handler]` を追加します。バージョン 0.6.0 を `PrivateAssets="all"` 付きで導入してください。
+Fix All の対象は現在の文書だけで、処理順・Wrapper の動作・ライフタイムは書き換えません。
+コマンドラインのコンパイルでは IDE の修正は適用されません。
+
+[0.6.0 リリースノート](docs/release/0.6.0-release-notes.ja.md)と
+[MediatR からの移行ガイド](docs/migrating-from-mediatr.ja.md)も参照してください。1.0 より前の API は変更される場合があります。
 
 ## 性能比較
 
-[今回の実装](https://github.com/Htkym/zendiator/commit/88483069db6409e092efa0d5ef63452777f577c9)を2026-11-11に同じ環境で比較しました。以下の2表のN/A以外の101セルは、すべて今回測定した値です。各セルは **平均時間 / managed割当量（B/op）** です。時間とメモリは別の指標です。
+2026-11-11 に一部の利用場面を測定しました。各セルは **平均時間 / 割当量（B/op）** です。
+時間とメモリは別の指標です。
 
-|ケース|Zendiator (8848306)|Immediate.Handlers 4.2.0|MediatR 14.2.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
+|ケース|Zendiator|Immediate.Handlers 4.2.0|MediatR 14.2.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
 |---|---:|---:|---:|---:|---:|---:|
 |Send / Behavior 0|1.21 ns / 0 B|7.18 ns / 0 B|35.18 ns / 200 B|35.84 ns / 64 B|25.84 ns / 0 B|28.20 ns / 0 B|
 |Send / Behavior 5|9.38 ns / 0 B|16.78 ns / 0 B|130.72 ns / 1,016 B|79.88 ns / 544 B|34.16 ns / 0 B|155.00 ns / 0 B|
@@ -75,37 +177,28 @@ Zendiator.CodeFixesは任意の別packageです。CodeFixを使う場合は、`Z
 |Stream途中終了 / 16件入力 / Behavior 5 / 同期|365.93 ns / 1,016 B|254.44 ns / 1,104 B|717.95 ns / 3,592 B|340.93 ns / 1,688 B|282.08 ns / 1,104 B|572.81 ns / 1,808 B|
 |Stream途中終了 / 16件入力 / Behavior 5 / 非同期|1.84 μs / 1,456 B|1.96 μs / 1,752 B|3.03 μs / 4,720 B|2.13 μs / 2,336 B|2.02 μs / 1,752 B|2.47 μs / 2,536 B|
 |Behavior短絡 / 3段 / 繰り返し|4.49 ns / 0 B|4.77 ns / 0 B|77.26 ns / 704 B|53.36 ns / 496 B|27.00 ns / 0 B|55.23 ns / 384 B|
-|非同期Hook成功 / 初回|790.62 ns / 480 B|1.20 μs / 504 B|1.19 μs / 1,352 B|1.01 μs / 808 B|1.04 μs / 560 B|1.73 μs / 856 B|
-|非同期Hook成功 / 繰り返し|30.31 ns / 0 B|48.63 ns / 0 B|556.91 ns / 944 B|514.80 ns / 496 B|67.41 ns / 0 B|487.82 ns / 480 B|
-|非同期Hook失敗 / 初回・外側|3.62 μs / 1,712 B|8.12 μs / 3,808 B|8.64 μs / 3,384 B|6.16 μs / 3,216 B|6.44 μs / 2,968 B|9.82 μs / 4,872 B|
+|非同期Hook成功 / 初回|0.791 μs / 480 B|1.199 μs / 504 B|1.194 μs / 1,352 B|1.006 μs / 808 B|1.042 μs / 560 B|1.733 μs / 856 B|
+|非同期Hook成功 / 繰り返し|0.030 μs / 0 B|0.049 μs / 0 B|0.557 μs / 944 B|0.515 μs / 496 B|0.067 μs / 0 B|0.488 μs / 480 B|
+|非同期Hook失敗 / 初回・外側|3.621 μs / 1,712 B|8.124 μs / 3,808 B|8.635 μs / 3,384 B|6.155 μs / 3,216 B|6.445 μs / 2,968 B|9.820 μs / 4,872 B|
 
-新規scopeの時間は作成・初回解決・送信・破棄を含みます。Streamは後始末を含む操作全体の値で、途中終了は16件入力のうち1件を消費して停止します。同期／非同期は列挙側の完了パターンを分けています。初回・繰り返し・外側Hook失敗は測定範囲が異なるため、その差を単純な例外処理コストとは解釈できません。N/Aは対象の比較結果がないことを示し、ゼロではありません。
+新規 scope の値は作成・初回解決・Send・破棄を含みます。Stream は操作全体の値で、
+途中終了は 16 件の入力から 1 件だけ消費します。Hook の初回・繰り返し・外側失敗は測定範囲が異なります。
+N/A は適用できる比較結果がないことを示します。
 
-### 補足の利用場面
+Windows 11 x64、Intel Core Ultra 7 258V、SDK 10.0.403 / runtime 10.0.14、
+BenchmarkDotNet 0.15.8、Release、affinity 1。ウォームアップ 20 回、実測 12 回、
+要求測定時間 500 ms、各ケース 1 launch です。初回・cold のケースは 16384 invocations です。
+1 launch の観測から、一般的な順位や条件を揃えた変更前後の改善は確定しません。
+Foundatio は intercepted 経路を使い、API と DI 登録の形もライブラリ間で異なります。
 
-|ケース|Zendiator (8848306)|Immediate.Handlers 4.2.0|MediatR 14.2.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
-|---|---:|---:|---:|---:|---:|---:|
-|Stream 1024件 / Behavior 0 / 非同期|140.56 μs / 115,457 B|49.48 μs / 393 B|77.98 μs / 865 B|51.86 μs / 457 B|49.60 μs / 393 B|53.53 μs / 392 B|
-|Relay 1024件 / 5段 / 非同期|153.22 μs / 116,361 B|49.62 μs / 392 B|236.21 μs / 3,323 B|49.36 μs / 937 B|49.83 μs / 393 B|54.89 μs / 393 B|
-|Stream途中終了 / 16件入力 / Behavior 0 / 同期|58.43 ns / 160 B|39.96 ns / 144 B|134.95 ns / 536 B|73.01 ns / 208 B|66.07 ns / 144 B|66.29 ns / 144 B|
+[丸め前の結果](benchmarks/results/20261111-8848306-summary.csv)と
+[全数値観測](benchmarks/results/20261111-8848306-readme.json)に、
+測定対象のソース・表外の利用場面・ばらつきを保存しています。
+[測定範囲](benchmarks/README.md#read-the-comparison)も参照してください。
 
-両表には競合の時間や割当量が少ない利用場面も含めています。これらの観測値は全般的な速度優位、無条件の非劣化、条件を揃えた変更前後の改善を示していません。
+## Native AOT
 
-### 測定条件
-
-Windows 11 x64、Intel Core Ultra 7 258V、SDK 10.0.403、.NET runtime 10.0.14（dotnet host 11.0.0）、DI 10.0.12、BenchmarkDotNet 0.15.8、Release、workstation GC、affinity mask 1。ウォームアップ20回、実測12回、要求測定時間500 ms、各ケース1 launchです。初回・cold失敗ケースは16384 invocations、unroll factor 1です。BDNのオーバーヘッド調整・外れ値処理後の統計対象は9–12点です。
-
-UseCaseの64セルと、保存済み定義から復元したFoundatio／ShortCircuit／Hの37セルは別の測定群で、各群の比較可能なライブラリ間で順序を交代しています。1 launchかつ測定時刻が異なるため、独立した再実行による再現性は証明できません。両測定群でZendiatorとAbstractionsのDLL bytesは一致しています。
-
-[丸め前の結果とばらつき](benchmarks/results/20261111-8848306-summary.csv)にMean、StdDev、標準誤差、信頼区間の半幅、統計対象Nを記載しました。[全数値観測](benchmarks/results/20261111-8848306-readme.json)にはBDNの全観測、job条件、assembly hash、元reportのhashを含めています。10月の結果を今回の表へ混在させていません。
-
-数ns級の微差はオーバーヘッド調整の影響を受けやすく、軽量な処理を使ったこの測定から実アプリの起動時間やHTTP・非同期I/Oの応答時間は予測できません。APIやDI登録の形はライブラリ間で異なり、標準列挙とtyped terminalも別の処理です。Foundatioはintercepted経路の値で、native runtimeのopen generic経路とは異なります。
-
-[測定範囲](benchmarks/README.md#read-the-comparison)と[Streamの比較](benchmarks/README.md#stream-comparison-boundaries)も参照してください。リンク先の過去の0.4.0データは別の測定です。
-
-## 制限と移行
-
-- [既知の制限](docs/release/known-limitations.md)
-- [0.4.0リリースノート](docs/release/0.4.0-release-notes.ja.md)
-- [公開済み0.4.0の使い方](https://github.com/Htkym/zendiator/blob/v0.4.0/README.ja.md)
-- [MediatRからの移行](docs/migrating-from-mediatr.ja.md)
+パッケージを使うアプリケーションは、標準の型付き Stream 経路を含め、win-x64 の native executable として
+publish・実行を確認しています。値型の型引数で open-generic DI Handler を実行時に閉じる構成には、
+既知の制約があります。struct の cursor や上流 port 全般が未対応という意味ではありません。
+ほかの RID は未確認です。利用前に[既知の制約](docs/release/known-limitations.md)を確認してください。

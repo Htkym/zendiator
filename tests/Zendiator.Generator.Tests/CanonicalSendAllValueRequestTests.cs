@@ -71,7 +71,7 @@ public sealed partial class GeneratorTests
             var mode = ValueHandlerMode(profile, id);
             var fail = async ? "return p." + (isVoid ? "FailedVoid" : "FailedResponse") + "();" : "throw p.Failure;";
             text += $$"""
-                [ZendiatorHandler]public sealed class H{{id}}:{{(async ? "IRequestHandler" : "ISyncRequestHandler")}}<Ping{{(isVoid ? "" : ",int")}}>,{{disposable}}{
+                [Handler]public sealed class H{{id}}:{{(async ? "IRequestHandler" : "ISyncRequestHandler")}}<Ping{{(isVoid ? "" : ",int")}}>,{{disposable}}{
                     private readonly Probe p;public H{{id}}(Probe p){this.p=p;p.Created(this,"H{{id}}",{{(mode.EndsWith("owned", StringComparison.Ordinal) ? "true" : "false")}},{{(mode == "direct" ? "true" : "false")}});}
                     public {{ret}} {{method}}(Ping r,CancellationToken t){
                         r.Mark(p,"H{{id}}.body",t);p.Handlers.Add({{id}});if(p.FailBody({{id}})){ {{fail}} }

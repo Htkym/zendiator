@@ -197,7 +197,7 @@ public sealed partial class GeneratorTests
             using Probe=global::Zendiator.Generator.Tests.CanonicalAsyncProbe;
             namespace App {
                 public sealed record Ping : IRequest{{(isVoid ? "" : "<int>")}};
-                [ZendiatorHandler] public sealed partial class Handler<T> : {{contract}}, IAsyncDisposable where T:class {
+                [Handler] public sealed partial class Handler<T> : {{contract}}, IAsyncDisposable where T:class {
                     private readonly Probe _probe;
                     public Handler(Probe probe) { _probe=probe; probe.Construct(this); }
                     {{(isVoid ? "ValueTask" : "ValueTask<int>")}} {{contract}}.HandleAsync(Ping request,CancellationToken token)

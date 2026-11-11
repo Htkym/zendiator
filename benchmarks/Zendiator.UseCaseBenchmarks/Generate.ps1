@@ -25,11 +25,11 @@ foreach ($b in 0,1,3,5) {
     $lines.Add(@"
 public sealed record Ping$b(int Value = 41, Probe? Probe = null) : $marker, Z.IRequest<int>, M.IRequest<int>, G.IRequest<int>, D.IRequest<Ping$b, ValueTask<int>>;
 public sealed record Stream$b(int Count, bool Asynchronous, Probe? Probe = null) : $marker, Z.IStreamRequest<int>, M.IStreamRequest<int>, G.IStreamRequest<int>, DS.IStreamRequest<Stream$b, int>;
-[Z.ZendiatorHandler] public sealed class ZPing$b : Z.IRequestHandler<Ping$b,int> { public ValueTask<int> HandleAsync(Ping$b r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
+[Z.Handler] public sealed class ZPing$b : Z.IRequestHandler<Ping$b,int> { public ValueTask<int> HandleAsync(Ping$b r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class MPing$b : M.IRequestHandler<Ping$b,int> { public Task<int> Handle(Ping$b r,CancellationToken t) => Task.FromResult(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class GPing$b : G.IRequestHandler<Ping$b,int> { public ValueTask<int> Handle(Ping$b r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
 public sealed class DPing$b : D.IRequestHandler<Ping$b,ValueTask<int>> { public ValueTask<int> Handle(Ping$b r,CancellationToken t) => new(Work.Handle(r.Value,r.Probe,t)); }
-[Z.ZendiatorHandler] public sealed class ZStream$b : Z.IStreamSourceHandler<Stream$b,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Stream$b r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
+[Z.Handler] public sealed class ZStream$b : Z.IStreamSourceHandler<Stream$b,int,WorkStreamCursor> { public ValueTask<WorkStreamCursor> OpenAsync(Stream$b r,CancellationToken t) => new(new WorkStreamCursor(r.Count,r.Asynchronous,r.Probe,t)); }
 public sealed class MStream$b : M.IStreamRequestHandler<Stream$b,int> { public IAsyncEnumerable<int> Handle(Stream$b r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class GStream$b : G.IStreamRequestHandler<Stream$b,int> { public IAsyncEnumerable<int> Handle(Stream$b r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }
 public sealed class DStream$b : DS.IStreamRequestHandler<Stream$b,int> { public IAsyncEnumerable<int> Handle(Stream$b r,CancellationToken t) => Work.Stream(r.Count,r.Asynchronous,r.Probe,t); }

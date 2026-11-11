@@ -68,7 +68,7 @@ public sealed partial class GeneratorTests
             ? "public async ValueTask DisposeAsync(){await p.CleanupAsync(this,\"" + kind + "\",branch,request,p.Cancellation.Token).ConfigureAwait(false);p.CleanupDone(this);}"
             : "public void Dispose(){p.CleanupSync(this,\"" + kind + "\",branch,request,p.Cancellation.Token);p.CleanupDone(this);}";
         var handlers = string.Join("\n", Enumerable.Range(1, 3).Select(id => $$"""
-            [ZendiatorHandler]public sealed class H{{id}}:{{(async ? "IRequestHandler" : "ISyncRequestHandler")}}<Ping{{(isVoid ? "" : ",int")}}>,{{(async ? "IAsyncDisposable" : "IDisposable")}}{
+            [Handler]public sealed class H{{id}}:{{(async ? "IRequestHandler" : "ISyncRequestHandler")}}<Ping{{(isVoid ? "" : ",int")}}>,{{(async ? "IAsyncDisposable" : "IDisposable")}}{
                 private readonly Probe p;private Ping? request;private int branch;
                 public H{{id}}(Probe p){this.p=p;branch=p.Branch;p.Created(this,"H{{id}}",branch,{{(!borrowed && (!mixed || id == 1) ? "true" : "false")}},{{(mixed && id == 2 ? "true" : "false")}});}
                 public {{ret}} {{(async ? "HandleAsync" : "Handle")}}(Ping r,CancellationToken t){request=r;branch=p.Branch;{{(async ? "return p." + (isVoid ? "BodyVoid" : "BodyAsync") + "(r,r.Value," + id + ",t);" : (isVoid ? "" : "return ") + "p.Body(r,r.Value," + id + ",t);")}}}

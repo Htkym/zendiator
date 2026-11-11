@@ -11,8 +11,8 @@ public sealed partial class GeneratorTests
         namespace Fine{
         public sealed record A(int Value):ISyncRequest<int>;
         public sealed record B(int Value):ISyncRequest<int>;
-        [ZendiatorHandler]public sealed class HA:ISyncRequestHandler<A,int>{public int Handle(A r,CancellationToken t)=>r.Value;}
-        [ZendiatorHandler]public sealed class HB:ISyncRequestHandler<B,int>{public int Handle(B r,CancellationToken t)=>r.Value;}
+        [Handler]public sealed class HA:ISyncRequestHandler<A,int>{public int Handle(A r,CancellationToken t)=>r.Value;}
+        [Handler]public sealed class HB:ISyncRequestHandler<B,int>{public int Handle(B r,CancellationToken t)=>r.Value;}
         [ZendiatorComposition("fine")]public sealed class Reads;
         public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<Reads>(c=>{c.Handlers<A>(DispatchFamily.SendSync,typeof(HA));c.Handlers<B>(DispatchFamily.SendSync,typeof(HB));});}
         }
@@ -288,7 +288,7 @@ public sealed partial class GeneratorTests
         var a = SplitRouteHint(before, "A");
         var b = SplitRouteHint(before, "B");
         var shared = before.Single(p => p.Key.StartsWith("Zendiator.Composition.", StringComparison.Ordinal)).Key;
-        var changed = IncrementalRouteSource.Replace("c.Handlers<A>(DispatchFamily.SendSync,typeof(HA));c.Handlers<B>(DispatchFamily.SendSync,typeof(HB));", "c.Handlers<B>(DispatchFamily.SendSync,typeof(HB));c.Handlers<C>(DispatchFamily.SendSync,typeof(HC));c.Handlers<A>(DispatchFamily.SendSync,typeof(HA));") + "namespace Fine{public sealed record C(int Value):ISyncRequest<int>;[ZendiatorHandler]public sealed class HC:ISyncRequestHandler<C,int>{public int Handle(C r,CancellationToken t)=>r.Value;}}";
+        var changed = IncrementalRouteSource.Replace("c.Handlers<A>(DispatchFamily.SendSync,typeof(HA));c.Handlers<B>(DispatchFamily.SendSync,typeof(HB));", "c.Handlers<B>(DispatchFamily.SendSync,typeof(HB));c.Handlers<C>(DispatchFamily.SendSync,typeof(HC));c.Handlers<A>(DispatchFamily.SendSync,typeof(HA));") + "namespace Fine{public sealed record C(int Value):ISyncRequest<int>;[Handler]public sealed class HC:ISyncRequestHandler<C,int>{public int Handle(C r,CancellationToken t)=>r.Value;}}";
         driver = IncrementalRouteRun(driver, changed, "split-order-after");
         var after = SplitFiles(driver);
         Assert.Equal(before[a], after[a]);

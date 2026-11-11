@@ -86,7 +86,7 @@ public sealed partial class GeneratorTests
                 public readonly global::Zendiator.Generator.Tests.StreamHookRaceSource<string> FirstMap=new("v2","manual"),LaterMap=new("v3","manual");
                 public int Opened,Pulls,Reads,Filters,Maps,Disposals;
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>{
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>{
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){p.Opened++;return new(new Cursor(p));}
             }
             public sealed class Cursor(Probe p):IAsyncEnumerator<int>{
@@ -153,7 +153,7 @@ public sealed partial class GeneratorTests
                 public readonly HashSet<int> Closed=new();
                 public readonly Exception MoveError=new FormatException("move"),CleanupError=new ArithmeticException("cleanup");
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>{
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>{
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t)=>new(new Cursor(p,r.Mode,++p.Opened));
             }
             public sealed class Cursor(Probe p,string mode,int id):IAsyncEnumerator<int>{

@@ -44,7 +44,7 @@ public sealed partial class GeneratorTests
         var ns = source.IndexOf("namespace App{", StringComparison.Ordinal);
         Assert.True(split > ns);
         // No producer generator/catalog is needed for the existing-DLL explicit fallback.
-        var producerSource = source[..split].Replace("[ZendiatorHandler]", "") + "}";
+        var producerSource = source[..split].Replace("[Handler]", "") + "}";
         var name = k.Async + "-" + k.Struct + "-" + k.Result + "-" + k.Wrapper;
         var producerBytes = CompileExplicitMetadataProducer(producerSource, name);
         var reference = MetadataReference.CreateFromImage(producerBytes);

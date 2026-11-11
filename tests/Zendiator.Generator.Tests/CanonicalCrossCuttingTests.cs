@@ -42,7 +42,7 @@ public sealed partial class GeneratorTests
             }
             """;
         var handler = $$"""
-            [ZendiatorHandler]public sealed class H:{{(async ? "IRequestHandler" : "ISyncRequestHandler")}}<Ping,int>,{{disposable}}{
+            [Handler]public sealed class H:{{(async ? "IRequestHandler" : "ISyncRequestHandler")}}<Ping,int>,{{disposable}}{
                 private readonly Probe _p;private readonly Ping _r;private readonly int _id;public H(Probe p,Ping r){_p=p;_r=r;_id=p.Create(this,"h",r);}
                 public {{result}} {{(async ? "HandleAsync" : "Handle")}}(Ping r,CancellationToken t){AssertOwner(r);{{(async ? "if(_p.Mode==\"reentrant\"&&r.Depth==0)return Nested(r,t);return _p.Value(\"h.body\",r,_id,r.Value);" : "_p.Sync(\"h.body\",r,_id);return r.Value;")}}}
                 private void AssertOwner(Ping r){_p.Check(_r.Stamp,r);}

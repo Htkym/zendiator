@@ -33,7 +33,7 @@ public sealed partial class GeneratorTests
                 public readonly TaskCompletionSource OpenStarted=new(),OpenGate=new(),CleanupStarted=new(),CleanupGate=new();
                 public Func<Task<IAsyncEnumerator<int>>>? Retained;
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Leaf>{
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Leaf>{
                 public async ValueTask<Leaf> OpenAsync(Items r,CancellationToken t){
                     var id=++p.Opens;
                     if(r.Mode=="repeat"&&id==1){p.OpenStarted.SetResult();await p.OpenGate.Task.ConfigureAwait(false);}
@@ -131,7 +131,7 @@ public sealed partial class GeneratorTests
             public sealed record Items(bool Different):IStreamRequest<int>;
             public sealed class Tag1;public sealed class Tag2;public sealed class Tag3;public sealed class Tag4;public sealed class Tag5;
             public sealed class Probe{public int Generic,Legacy,Opened,Disposed,ServicesDisposed;public readonly List<IAsyncEnumerator<int>> Aliases=new();public CancellationToken Other;}
-            [ZendiatorHandler]internal sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Leaf>,IDisposable{
+            [Handler]internal sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Leaf>,IDisposable{
                 public ValueTask<Leaf> OpenAsync(Items r,CancellationToken t){p.Opened++;return new(new Leaf(p,t));}public void Dispose()=>p.ServicesDisposed++;
             }
             internal struct Leaf:IAsyncEnumerator<int>{
@@ -184,7 +184,7 @@ public sealed partial class GeneratorTests
             """
             public sealed record Items:IStreamRequest<int>;
             public sealed class Probe{public int Legacy,Generic,Overrides;}
-            [ZendiatorHandler]public sealed class Handler:IStreamSourceHandler<Items,int,Leaf>{public ValueTask<Leaf> OpenAsync(Items r,CancellationToken t)=>new(new Leaf());}
+            [Handler]public sealed class Handler:IStreamSourceHandler<Items,int,Leaf>{public ValueTask<Leaf> OpenAsync(Items r,CancellationToken t)=>new(new Leaf());}
             public sealed class Leaf:IAsyncEnumerator<int>{public int Current=>0;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}
             public sealed class Overloaded(Probe p):IStructStreamMiddleware<Items,int>{
                 public ValueTask<IAsyncEnumerator<int>> OpenAsync(Items r,IStreamUpstream<Items,int> next,CancellationToken t){p.Legacy++;return next.OpenAsync(r,t);}
@@ -238,7 +238,7 @@ public sealed partial class GeneratorTests
         var source = NativeStreamFixture("c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));c.Pipeline<Items>(DispatchFamily.Stream,Stage.Wrapper<Invalid>());",
             """
             public sealed record Items:IStreamRequest<int>;
-            [ZendiatorHandler]public sealed class Handler:IStreamSourceHandler<Items,int,Leaf>{public ValueTask<Leaf> OpenAsync(Items r,CancellationToken t)=>new(new Leaf());}
+            [Handler]public sealed class Handler:IStreamSourceHandler<Items,int,Leaf>{public ValueTask<Leaf> OpenAsync(Items r,CancellationToken t)=>new(new Leaf());}
             public sealed class Leaf:IAsyncEnumerator<int>{public int Current=>0;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}
             public sealed class Invalid:IStructStreamMiddleware<Items,int>{
                 public ValueTask<IAsyncEnumerator<int>> OpenAsync(Items r,IStreamUpstream<Items,int> next,CancellationToken t)=>next.OpenAsync(r,t);
@@ -257,7 +257,7 @@ public sealed partial class GeneratorTests
     {
         var source = NativeStreamFixture("c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));c.Pipeline<Items>(DispatchFamily.Stream,Stage.Wrapper<Relay>());", """
             public sealed record Items:IStreamRequest<int>;
-            [ZendiatorHandler]internal sealed class Handler:IStreamSourceHandler<Items,int,Leaf>{public ValueTask<Leaf> OpenAsync(Items r,CancellationToken t)=>new(new Leaf());}
+            [Handler]internal sealed class Handler:IStreamSourceHandler<Items,int,Leaf>{public ValueTask<Leaf> OpenAsync(Items r,CancellationToken t)=>new(new Leaf());}
             internal struct Leaf:IAsyncEnumerator<int>{public int Current=>0;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}
             public sealed class Relay:IStructStreamMiddleware<Items,int>{
                 public ValueTask<IAsyncEnumerator<int>> OpenAsync(Items r,IStreamUpstream<Items,int> next,CancellationToken t)=>next.OpenAsync(r,t);
@@ -356,7 +356,7 @@ public sealed partial class GeneratorTests
         var source = NativeStreamFixture("c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));c.Pipeline<Items>(DispatchFamily.Stream,Stage.Wrapper<Mutable>());", """
             public sealed record Items:IStreamRequest<int>;
             public sealed class Probe{public int Legacy,Generic,DisposedCalls;public readonly List<int> Calls=new();}
-            [ZendiatorHandler]public sealed class Handler:IStreamSourceHandler<Items,int,Leaf>{public ValueTask<Leaf> OpenAsync(Items r,CancellationToken t)=>new(new Leaf());}
+            [Handler]public sealed class Handler:IStreamSourceHandler<Items,int,Leaf>{public ValueTask<Leaf> OpenAsync(Items r,CancellationToken t)=>new(new Leaf());}
             public sealed class Leaf:IAsyncEnumerator<int>{public int Current=>0;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}
             public struct Mutable:IStructStreamMiddleware<Items,int>,IDisposable{
                 private readonly Probe p;private int calls;public Mutable(Probe p){this.p=p;calls=0;}
@@ -386,7 +386,7 @@ public sealed partial class GeneratorTests
         var source = NativeStreamFixture("c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));c.Pipeline<Items>(DispatchFamily.Stream,Stage.Wrapper<Owned,Factory>());", """
             public sealed record Items(string Mode):IStreamRequest<int>;
             public sealed class Probe{public int Created,Returned,Generic,Opened,LeafClosed,FactoryDisposed,HandlerDisposed;}
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Leaf>,IDisposable{
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Leaf>,IDisposable{
                 public ValueTask<Leaf> OpenAsync(Items r,CancellationToken t){p.Opened++;if(r.Mode=="open")throw new ArithmeticException("open");return new(new Leaf(p));}
                 public void Dispose()=>p.HandlerDisposed++;
             }

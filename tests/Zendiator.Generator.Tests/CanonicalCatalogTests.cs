@@ -78,7 +78,7 @@ public sealed partial class GeneratorTests
         {
             producer = producer.Replace("public sealed class Hook:", "internal sealed class Hook:").Replace("public sealed class Handler:", "internal sealed class Handler:").Replace("public sealed class Factory:", "internal sealed class Factory:");
             producer = producer.Replace("namespace App{", "[assembly:global::System.Runtime.CompilerServices.InternalsVisibleTo(\"" + consumerName + "\")]\nnamespace App{");
-            producer += "namespace App{public sealed record ExportedPing:ISyncRequest<int>;[ZendiatorHandler]public sealed class Exported:ISyncRequestHandler<ExportedPing,int>{public int Handle(ExportedPing r,CancellationToken t)=>1;}}";
+            producer += "namespace App{public sealed record ExportedPing:ISyncRequest<int>;[Handler]public sealed class Exported:ISyncRequestHandler<ExportedPing,int>{public int Handle(ExportedPing r,CancellationToken t)=>1;}}";
         }
         else
         {

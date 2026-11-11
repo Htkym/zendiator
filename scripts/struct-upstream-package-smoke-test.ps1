@@ -113,7 +113,7 @@ public static class Program
 [ZendiatorComposition("struct-package")] public sealed class App;
 public sealed record Items : IStreamRequest<int>;
 public sealed class Probe { public int Generic, Legacy, Closed; }
-[ZendiatorHandler] internal sealed class Handler(Probe p) : IStreamSourceHandler<Items, int, Leaf>
+[Handler] internal sealed class Handler(Probe p) : IStreamSourceHandler<Items, int, Leaf>
 {
     public ValueTask<Leaf> OpenAsync(Items request, CancellationToken token) => new(new Leaf(p, token));
 }
@@ -157,7 +157,7 @@ public sealed class EagerProbe
     public int Calls;
 }
 
-[ZendiatorHandler]
+[Handler]
 public sealed class EagerHandler : ISyncRequestHandler<EagerRequest, int>, IDisposable
 {
     private readonly EagerProbe probe;

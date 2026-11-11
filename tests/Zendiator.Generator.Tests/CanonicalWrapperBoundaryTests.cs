@@ -77,7 +77,7 @@ public sealed partial class GeneratorTests
             using Probe=global::Zendiator.Generator.Tests.WrapperBoundaryProbe;
             namespace Boundary{
             public sealed record Ping(int Mode):IRequest<int>;
-            [ZendiatorHandler]public sealed class Handler:IRequestHandler<Ping,int>{public ValueTask<int> HandleAsync(Ping r,CancellationToken t)=>throw new System.InvalidOperationException("Short circuit must not call the handler.");}
+            [Handler]public sealed class Handler:IRequestHandler<Ping,int>{public ValueTask<int> HandleAsync(Ping r,CancellationToken t)=>throw new System.InvalidOperationException("Short circuit must not call the handler.");}
             public sealed class Wrapper(Probe p):IAsyncSendWrapper<Ping,int>{public ValueTask<int> InvokeAsync<N>(Ping r,N n,CancellationToken t) where N:IAsyncSendContinuation<Ping,int> =>p.Invoke(r.Mode);}
             [ZendiatorComposition("boundary")]public sealed class App;
             public static class Bridge{

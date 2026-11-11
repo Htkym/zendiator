@@ -17,7 +17,7 @@ public sealed partial class GeneratorTests
             """
             public sealed record Items:IStreamRequest<int>;
             public sealed class Probe{public int Generic,Opened,Closed;}
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Leaf>{
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Leaf>{
                 public ValueTask<Leaf> OpenAsync(Items r,CancellationToken t){p.Opened++;return new(new Leaf(p));}
             }
             public sealed class Leaf(Probe p):IAsyncEnumerator<int>{private int i;public int Current=>42;
@@ -55,7 +55,7 @@ public sealed partial class GeneratorTests
             "c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));c.Pipeline<Items>(DispatchFamily.Stream,Stage.Wrapper<Empty>());",
             """
             public sealed record Items:IStreamRequest<int>;
-            [ZendiatorHandler]public sealed class Handler:IStreamSourceHandler<Items,int,Leaf>{public ValueTask<Leaf> OpenAsync(Items r,CancellationToken t)=>new(new Leaf());}
+            [Handler]public sealed class Handler:IStreamSourceHandler<Items,int,Leaf>{public ValueTask<Leaf> OpenAsync(Items r,CancellationToken t)=>new(new Leaf());}
             public sealed class Leaf:IAsyncEnumerator<int>{public int Current=>0;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}
             public sealed class Empty:IStreamMiddleware<Items,int>;
             """, "await Task.CompletedTask;");

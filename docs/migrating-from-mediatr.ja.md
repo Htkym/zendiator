@@ -521,7 +521,7 @@ Transient として登録されている場合も同様です。
 
 ## ストリームの書き換え
 
-消費側は標準IAsyncEnumerableのまま使えます。Handlerは名前付きcursorを開くIStreamSourceHandlerへ移し、ZendiatorHandler属性とHandlers/Pipelineで明示します。yield本体の状態、実I/O、取消し、finallyの所有資源の破棄をcursorへ移してください。private compiler iterator型を公開cursor型には使えません。
+消費側は標準IAsyncEnumerableのまま使えます。Handlerは名前付きcursorを開くIStreamSourceHandlerへ移し、Handler属性とHandlers/Pipelineで明示します。yield本体の状態、実I/O、取消し、finallyの所有資源の破棄をcursorへ移してください。private compiler iterator型を公開cursor型には使えません。
 
 StreamAsyncは標準IAsyncEnumerableを実装するsource classを返します。typed terminalはStreamSource(request, apiToken).ConsumeAsync(sink, enumerationToken)へ移してください。StreamSourceはreadonlyの計画値であり、IAsyncEnumerableではありません。任意middlewareはIStreamMiddlewareとStage.Wrapper、専用Filter/MapはStage.Hookを使います。旧Stream Behavior登録・Validator・OwnsStreamは使用しません。
 

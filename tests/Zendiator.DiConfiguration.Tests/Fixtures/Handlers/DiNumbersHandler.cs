@@ -3,7 +3,7 @@ using Zendiator.DependencyInjection;
 
 namespace Zendiator.DiConfiguration.Tests;
 
-[ZendiatorHandler]
+[Handler]
 public sealed class DiNumbersHandler : IStreamSourceHandler<DiNumbers, int, DiNumbersCursor>
 {
     public static int Calls;

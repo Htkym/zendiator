@@ -18,7 +18,7 @@ public sealed class StreamValidationTrace
     public CancellationToken ObservedToken;
 }
 
-[ZendiatorHandler]
+[Handler]
 public sealed class SharedStreamValidator : IStreamMiddleware<ValidatedStream, int>, IStreamMiddleware<OtherValidatedStream, int>,
     IRequestHandler<ValidationLookup, int>, IDisposable
 {
@@ -73,7 +73,7 @@ public static class EntryValidators<T>
     }
 }
 
-[ZendiatorHandler]
+[Handler]
 public sealed class ValidatedStreamHandler : IStreamSourceHandler<ValidatedStream, int, DiNumbersCursor>, IDisposable
 {
     private readonly StreamValidationTrace _trace;
@@ -109,7 +109,7 @@ public sealed class ValidatedStreamBehavior : IStreamMiddleware<ValidatedStream,
     }
 }
 
-[ZendiatorHandler]
+[Handler]
 public sealed class OtherValidatedStreamHandler : IStreamSourceHandler<OtherValidatedStream, int, DiNumbersCursor>
 {
     public OtherValidatedStreamHandler(StreamValidationTrace trace) => trace.OtherHandlerConstructions++;

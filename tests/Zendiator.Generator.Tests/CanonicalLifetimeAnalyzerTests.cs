@@ -118,13 +118,13 @@ public sealed partial class GeneratorTests
         public sealed record Ping : ISyncRequest<int>;
         public sealed record Pong : IRequest<int>;
         public sealed record Numbers : IStreamRequest<int>;
-        [ZendiatorHandler] public sealed class SyncHandler : ISyncRequestHandler<Ping,int> {
+        [Handler] public sealed class SyncHandler : ISyncRequestHandler<Ping,int> {
             public int Handle(Ping r,CancellationToken token)=>42;
         }
-        [ZendiatorHandler] public sealed class AsyncHandler : IRequestHandler<Pong,int> {
+        [Handler] public sealed class AsyncHandler : IRequestHandler<Pong,int> {
             public ValueTask<int> HandleAsync(Pong r,CancellationToken token)=>new(42);
         }
-        [ZendiatorHandler] public sealed class StreamHandler : IStreamSourceHandler<Numbers,int,StreamHandler.Cursor> {
+        [Handler] public sealed class StreamHandler : IStreamSourceHandler<Numbers,int,StreamHandler.Cursor> {
             public ValueTask<Cursor> OpenAsync(Numbers r,CancellationToken token)=>new(new Cursor());
             public sealed class Cursor:IAsyncEnumerator<int>{public int Current=>42;public async ValueTask<bool> MoveNextAsync(){await Task.Yield();return false;}public ValueTask DisposeAsync()=>default;}
         }

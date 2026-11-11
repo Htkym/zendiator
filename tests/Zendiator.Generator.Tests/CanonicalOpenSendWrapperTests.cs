@@ -21,7 +21,7 @@ public sealed partial class GeneratorTests
         using Zendiator.Generator.Tests;
         namespace OpenSendWrapper {
         public sealed record Query<TMarker>(int Value):IRequest<int>;
-        [ZendiatorHandler]public sealed class Handler<TMarker>:IRequestHandler<Query<TMarker>,int>,IDisposable {
+        [Handler]public sealed class Handler<TMarker>:IRequestHandler<Query<TMarker>,int>,IDisposable {
             private readonly Probe p;
             public Handler(Probe p){this.p=p;p.Created.Add(this);p.Events.Add("resolve:H");}
             public ValueTask<int> HandleAsync(Query<TMarker> r,CancellationToken token){

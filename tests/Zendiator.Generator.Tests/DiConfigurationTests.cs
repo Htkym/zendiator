@@ -134,7 +134,7 @@ public sealed class DiConfigurationTests
             public sealed record NewSync : ISyncRequest<int>;
             public sealed record NewSyncVoid : ISyncRequest;
             public sealed record NewStream : IStreamRequest<int>;
-            [ZendiatorHandler] public sealed class Marked : IRequestHandler<NewPing,int>, IRequestHandler<NewVoid>,
+            [Handler] public sealed class Marked : IRequestHandler<NewPing,int>, IRequestHandler<NewVoid>,
                 ISyncRequestHandler<NewSync,int>, ISyncRequestHandler<NewSyncVoid>, IStreamSourceHandler<NewStream,int,Marked.Cursor>, INotificationHandler<UserCreated> {
                 public ValueTask<int> HandleAsync(NewPing request, CancellationToken ct) => new(2);
                 public ValueTask HandleAsync(NewVoid request, CancellationToken ct) => default;

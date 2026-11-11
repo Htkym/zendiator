@@ -1,4 +1,14 @@
-# Standard typed Stream middleware
+# Migrate to 0.6.0
+
+## Handler marker
+
+Replace `[ZendiatorHandler]` with `[Handler]` from namespace `Zendiator`.
+The public type is now `Zendiator.HandlerAttribute`; the old type is removed.
+Use `[global::Zendiator.HandlerAttribute]` when a local name is ambiguous.
+Keep runtime, Abstractions, generator and optional CodeFix packages at 0.6.0,
+and rebuild consumers. This does not rename your handler classes or methods.
+
+## Standard typed Stream middleware
 
 `IStreamMiddleware<TRequest,TItem>` now exposes `OpenAsync<TNext>` directly. A separate
 `IStructStreamMiddleware` declaration is no longer required. The compatibility name remains available.

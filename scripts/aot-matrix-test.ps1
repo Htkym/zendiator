@@ -180,14 +180,14 @@ public sealed class NamesCursor : IAsyncEnumerator<string>
     }
 }
 
-[ZendiatorHandler]
+[Handler]
 public sealed class GetNamesHandler : IStreamSourceHandler<GetNames, string, NamesCursor>
 {
     public ValueTask<NamesCursor> OpenAsync(GetNames request, CancellationToken cancellationToken) =>
         new(new NamesCursor(request.Count, "n-", cancellationToken));
 }
 
-[ZendiatorHandler]
+[Handler]
 public sealed class GNamesHandler<T> : IStreamSourceHandler<GNames<T>, string, NamesCursor>
 {
     public ValueTask<NamesCursor> OpenAsync(GNames<T> request, CancellationToken cancellationToken) =>

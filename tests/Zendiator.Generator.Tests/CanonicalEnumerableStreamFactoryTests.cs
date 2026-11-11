@@ -17,7 +17,7 @@ public sealed partial class GeneratorTests
             public string? FirstMoveAmbient;public SynchronizationContext? FirstMoveContext;
             public Cursor? Last;
         }
-        [ZendiatorHandler]public sealed class Handler:IStreamHandler<Items,int>,IDisposable{
+        [Handler]public sealed class Handler:IStreamHandler<Items,int>,IDisposable{
             private readonly Probe p;public Handler(Probe p){this.p=p;p.Resolved++;}
             public IAsyncEnumerable<int> Handle(Items request,CancellationToken token){
                 p.Handled++;p.HandlerTokens.Add(token);Probe.Ambient.Value="Handle";
@@ -76,7 +76,7 @@ public sealed partial class GeneratorTests
                 public sealed class Map:IStreamItemMap<Items,int>{
                     int IStreamItemMap<Items,int>.Map(Items request,int item,CancellationToken token)=>item;
                 }
-                [ZendiatorHandler]public sealed class SessionHandler(Probe p):IStreamHandler<Items,int>,IAsyncDisposable{
+                [Handler]public sealed class SessionHandler(Probe p):IStreamHandler<Items,int>,IAsyncDisposable{
                     public IAsyncEnumerable<int> Handle(Items request,CancellationToken token)=>new Feed(p,request.Mode);
                     public ValueTask DisposeAsync()=>default;
                 }
@@ -86,7 +86,7 @@ public sealed partial class GeneratorTests
                 public sealed class Relay:IStreamMiddleware<Items,int>{
                     public ValueTask<IAsyncEnumerator<int>> OpenAsync(Items request,IStreamUpstream<Items,int> next,CancellationToken token)=>next.OpenAsync(request,token);
                 }
-                [ZendiatorHandler]public sealed class NativeHandler(Probe p):IStreamSourceHandler<Items,int,Cursor>{
+                [Handler]public sealed class NativeHandler(Probe p):IStreamSourceHandler<Items,int,Cursor>{
                     public ValueTask<Cursor> OpenAsync(Items request,CancellationToken token)=>new(new Cursor(p,request.Mode));
                 }
                 """, "await Task.CompletedTask;");

@@ -16,7 +16,7 @@ public sealed partial class GeneratorTests
                 public readonly global::Zendiator.Generator.Tests.StreamHookRaceSource<bool> First=new(true,"manual"),Second=new(true,"manual"),Race=new(true,"before-registration"),Inline=new(true,"inside-registration"),DirectA=new(true,"manual"),DirectB=new(true,"manual");
                 public int Opened,Pulls,Reads,Disposals;
             }
-            [ZendiatorHandler]public sealed class Handler<MoveCompletion>(Probe p):IStreamSourceHandler<Items<MoveCompletion>,int,Cursor>{
+            [Handler]public sealed class Handler<MoveCompletion>(Probe p):IStreamSourceHandler<Items<MoveCompletion>,int,Cursor>{
                 public ValueTask<Cursor> OpenAsync(Items<MoveCompletion> r,CancellationToken t){p.Opened++;return new(new Cursor(p));}
             }
             public sealed class Cursor(Probe p):IAsyncEnumerator<int>{
@@ -142,7 +142,7 @@ public sealed partial class GeneratorTests
                 public readonly global::Zendiator.Generator.Tests.StreamHookRaceSource<bool> Gate=new(true,"manual");
                 public int Pulls,Reads,Disposals;public bool SawPayloadAtResult;
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>{
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>{
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t)=>new(new Cursor(p));
             }
             public sealed class Cursor(Probe p):IAsyncEnumerator<int>,System.Threading.Tasks.Sources.IValueTaskSource<bool>{

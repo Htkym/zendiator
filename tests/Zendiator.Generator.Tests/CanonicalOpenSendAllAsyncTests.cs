@@ -19,12 +19,12 @@ public sealed partial class GeneratorTests
         return $$"""
             namespace {{ns}} {
             public sealed record Request<TLeft,TRight>(int Value):IRequest{{(isVoid ? "" : "<int>")}};
-            [ZendiatorHandler]public sealed class ZHandler<TLeft,TRight>:IRequestHandler<{{request}}{{contract}}>,IDisposable where TLeft:class,new() where TRight:class {
+            [Handler]public sealed class ZHandler<TLeft,TRight>:IRequestHandler<{{request}}{{contract}}>,IDisposable where TLeft:class,new() where TRight:class {
                 private readonly AllAsyncFixture.Probe p;public ZHandler(AllAsyncFixture.Probe p){this.p=p;p.Created.Add(GetType());}
                 public {{result}} HandleAsync({{request}} r,CancellationToken t){p.Body("Z",r,r.Value,t);return p.{{(isVoid ? "Done(\"handler\")" : "Value(\"handler\",r.Value+20)")}};}
                 public void Dispose(){p.Disposed.Add(GetType());}
             }
-            [ZendiatorHandler]public sealed class AHandler<TLeft,TRight>:IRequestHandler<Request<TLeft,TRight>{{contract}}>,IDisposable where TLeft:class,OpenAllFixture.ISecond,new() where TRight:class {
+            [Handler]public sealed class AHandler<TLeft,TRight>:IRequestHandler<Request<TLeft,TRight>{{contract}}>,IDisposable where TLeft:class,OpenAllFixture.ISecond,new() where TRight:class {
                 private readonly AllAsyncFixture.Probe p;public AHandler(AllAsyncFixture.Probe p){this.p=p;p.Created.Add(GetType());}
                 public {{result}} HandleAsync(Request<TLeft,TRight> r,CancellationToken t){p.Body("A",r,r.Value,t);return p.{{(isVoid ? "Done(\"handler\")" : "Value(\"handler\",r.Value+10)")}};}
                 public void Dispose(){p.Disposed.Add(GetType());}
@@ -135,14 +135,14 @@ public sealed partial class GeneratorTests
         Reject("Multiple", normal, $"Stage.Hook(typeof({hook}))", "c.Handlers<AsyncSentinel.Request>(DispatchFamily.SendAsync,typeof(AsyncSentinel.Handler));c.Pipeline<AsyncSentinel.Request>(DispatchFamily.SendAsync);");
         Reject("Three", normal + ",typeof(Third<,>)", $"Stage.Hook(typeof({hook}))");
         return OpenSendAllAsyncSource() + "namespace AllAsyncRejected {" + string.Join("\n", declarations) + "public static class Registration {" + string.Join("\n", registrations) + "}" + """
-            [ZendiatorHandler]public sealed class Unused<X,Y,Z>:IRequestHandler<OpenAllAsyncResponse.Request<X,Y>,int>{public ValueTask<int> HandleAsync(OpenAllAsyncResponse.Request<X,Y> r,CancellationToken t)=>new(0);}
-            [ZendiatorHandler]public sealed class StructHandler<X,Y>:IRequestHandler<OpenAllAsyncResponse.Request<X,Y>,int> where X:struct{public ValueTask<int> HandleAsync(OpenAllAsyncResponse.Request<X,Y> r,CancellationToken t)=>new(0);}
+            [Handler]public sealed class Unused<X,Y,Z>:IRequestHandler<OpenAllAsyncResponse.Request<X,Y>,int>{public ValueTask<int> HandleAsync(OpenAllAsyncResponse.Request<X,Y> r,CancellationToken t)=>new(0);}
+            [Handler]public sealed class StructHandler<X,Y>:IRequestHandler<OpenAllAsyncResponse.Request<X,Y>,int> where X:struct{public ValueTask<int> HandleAsync(OpenAllAsyncResponse.Request<X,Y> r,CancellationToken t)=>new(0);}
             public sealed record OtherRequest<X,Y>:IRequest<int>;
-            [ZendiatorHandler]public sealed class OtherHandler<X,Y>:IRequestHandler<OtherRequest<X,Y>,int>{public ValueTask<int> HandleAsync(OtherRequest<X,Y> r,CancellationToken t)=>new(0);}
-            [ZendiatorHandler]public sealed class Third<X,Y>:IRequestHandler<OpenAllAsyncResponse.Request<X,Y>,int>{public ValueTask<int> HandleAsync(OpenAllAsyncResponse.Request<X,Y> r,CancellationToken t)=>new(0);}
+            [Handler]public sealed class OtherHandler<X,Y>:IRequestHandler<OtherRequest<X,Y>,int>{public ValueTask<int> HandleAsync(OtherRequest<X,Y> r,CancellationToken t)=>new(0);}
+            [Handler]public sealed class Third<X,Y>:IRequestHandler<OpenAllAsyncResponse.Request<X,Y>,int>{public ValueTask<int> HandleAsync(OpenAllAsyncResponse.Request<X,Y> r,CancellationToken t)=>new(0);}
             public sealed record DualRequest<X,Y>:IRequest,IRequest<int>;
-            [ZendiatorHandler]public sealed class DualVoid<X,Y>:IRequestHandler<DualRequest<X,Y>>{public ValueTask HandleAsync(DualRequest<X,Y> r,CancellationToken t)=>default;}
-            [ZendiatorHandler]public sealed class DualResult<X,Y>:IRequestHandler<DualRequest<X,Y>,int>{public ValueTask<int> HandleAsync(DualRequest<X,Y> r,CancellationToken t)=>new(0);}
+            [Handler]public sealed class DualVoid<X,Y>:IRequestHandler<DualRequest<X,Y>>{public ValueTask HandleAsync(DualRequest<X,Y> r,CancellationToken t)=>default;}
+            [Handler]public sealed class DualResult<X,Y>:IRequestHandler<DualRequest<X,Y>,int>{public ValueTask<int> HandleAsync(DualRequest<X,Y> r,CancellationToken t)=>new(0);}
             public sealed class DualHook<X,Y>:IAsyncSendRequestTransform<DualRequest<X,Y>>,IAsyncSendSuccessObserver<DualRequest<X,Y>>,IAsyncSendExceptionObserver<DualRequest<X,Y>>,IAsyncSendFinallyObserver<DualRequest<X,Y>>{
                 public ValueTask<DualRequest<X,Y>> BeforeAsync(DualRequest<X,Y> r,CancellationToken t)=>new(r);public ValueTask AfterAsync(DualRequest<X,Y> r,CancellationToken t)=>default;
                 public ValueTask OnExceptionAsync(DualRequest<X,Y> r,Exception e,CancellationToken t)=>default;public ValueTask FinallyAsync(DualRequest<X,Y> r,SendExitInfo e,CancellationToken t)=>default;
