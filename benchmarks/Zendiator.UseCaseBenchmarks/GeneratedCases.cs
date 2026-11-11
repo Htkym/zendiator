@@ -110,7 +110,7 @@ public static partial class IStream5 { private static IAsyncEnumerable<int> Hand
 public sealed class ZBehavior1<T,R> : Z.IPipelineBehavior<T,R> where T : Z.IRequest<R>, ILevel1
 { public ValueTask<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IRequestContinuation<T,R> { Work.Enter(r,1); return next.InvokeAsync(r,t); } }
 public sealed class ZSBehavior1<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, ILevel1
-{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Enter(r,1); return next.OpenAsync(r,t); } }
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamUpstream<T,R> { Work.Enter(r,1); return next.OpenAsync(r,t); } }
 public sealed class MBehavior1<T,R> : M.IPipelineBehavior<T,R> where T : notnull,IWork
 { public Task<R> Handle(T r,M.RequestHandlerDelegate<R> next,CancellationToken t) { Work.Enter(r,1); return next(t); } }
 public sealed class MSBehavior1<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
@@ -126,7 +126,7 @@ public sealed class ISBehavior1<T,R> : I.StreamingBehavior<T,R> where T:IWork
 public sealed class ZBehavior2<T,R> : Z.IPipelineBehavior<T,R> where T : Z.IRequest<R>, ILevel2
 { public ValueTask<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IRequestContinuation<T,R> { Work.Enter(r,2); return next.InvokeAsync(r,t); } }
 public sealed class ZSBehavior2<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, ILevel2
-{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Enter(r,2); return next.OpenAsync(r,t); } }
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamUpstream<T,R> { Work.Enter(r,2); return next.OpenAsync(r,t); } }
 public sealed class MBehavior2<T,R> : M.IPipelineBehavior<T,R> where T : notnull,IWork
 { public Task<R> Handle(T r,M.RequestHandlerDelegate<R> next,CancellationToken t) { Work.Enter(r,2); return next(t); } }
 public sealed class MSBehavior2<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
@@ -142,7 +142,7 @@ public sealed class ISBehavior2<T,R> : I.StreamingBehavior<T,R> where T:IWork
 public sealed class ZBehavior3<T,R> : Z.IPipelineBehavior<T,R> where T : Z.IRequest<R>, ILevel3
 { public ValueTask<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IRequestContinuation<T,R> { Work.Enter(r,3); return next.InvokeAsync(r,t); } }
 public sealed class ZSBehavior3<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, ILevel3
-{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Enter(r,3); return next.OpenAsync(r,t); } }
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamUpstream<T,R> { Work.Enter(r,3); return next.OpenAsync(r,t); } }
 public sealed class MBehavior3<T,R> : M.IPipelineBehavior<T,R> where T : notnull,IWork
 { public Task<R> Handle(T r,M.RequestHandlerDelegate<R> next,CancellationToken t) { Work.Enter(r,3); return next(t); } }
 public sealed class MSBehavior3<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
@@ -158,7 +158,7 @@ public sealed class ISBehavior3<T,R> : I.StreamingBehavior<T,R> where T:IWork
 public sealed class ZBehavior4<T,R> : Z.IPipelineBehavior<T,R> where T : Z.IRequest<R>, ILevel4
 { public ValueTask<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IRequestContinuation<T,R> { Work.Enter(r,4); return next.InvokeAsync(r,t); } }
 public sealed class ZSBehavior4<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, ILevel4
-{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Enter(r,4); return next.OpenAsync(r,t); } }
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamUpstream<T,R> { Work.Enter(r,4); return next.OpenAsync(r,t); } }
 public sealed class MBehavior4<T,R> : M.IPipelineBehavior<T,R> where T : notnull,IWork
 { public Task<R> Handle(T r,M.RequestHandlerDelegate<R> next,CancellationToken t) { Work.Enter(r,4); return next(t); } }
 public sealed class MSBehavior4<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
@@ -174,7 +174,7 @@ public sealed class ISBehavior4<T,R> : I.StreamingBehavior<T,R> where T:IWork
 public sealed class ZBehavior5<T,R> : Z.IPipelineBehavior<T,R> where T : Z.IRequest<R>, ILevel5
 { public ValueTask<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IRequestContinuation<T,R> { Work.Enter(r,5); return next.InvokeAsync(r,t); } }
 public sealed class ZSBehavior5<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, ILevel5
-{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Enter(r,5); return next.OpenAsync(r,t); } }
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamUpstream<T,R> { Work.Enter(r,5); return next.OpenAsync(r,t); } }
 public sealed class MBehavior5<T,R> : M.IPipelineBehavior<T,R> where T : notnull,IWork
 { public Task<R> Handle(T r,M.RequestHandlerDelegate<R> next,CancellationToken t) { Work.Enter(r,5); return next(t); } }
 public sealed class MSBehavior5<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
@@ -215,7 +215,7 @@ public sealed class DRBehavior5_4 : DS.IStreamPipelineBehavior<Relay5,int>
 public sealed class DRBehavior5_5 : DS.IStreamPipelineBehavior<Relay5,int>
 { public required DS.IStreamRequestHandler<Relay5,int> NextPipeline {get;set;} public IAsyncEnumerable<int> Handle(Relay5 r,CancellationToken t) { Work.Relay(r,5); return NextPipeline.Handle(r,t); } }
 public sealed class ZRBehavior1<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, IRelayLevel1
-{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Relay(r,1); return next.OpenAsync(r,t); } }
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamUpstream<T,R> { Work.Relay(r,1); return next.OpenAsync(r,t); } }
 public sealed class MRBehavior1<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
 { public IAsyncEnumerable<R> Handle(T r,M.StreamHandlerDelegate<R> next,CancellationToken t) { Work.Relay(r,1); return next(); } }
 public sealed class GRBehavior1<T,R> : G.IStreamPipelineBehavior<T,R> where T : G.IStreamMessage,IWork
@@ -223,7 +223,7 @@ public sealed class GRBehavior1<T,R> : G.IStreamPipelineBehavior<T,R> where T : 
 public sealed class IRBehavior1<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override IAsyncEnumerable<R> HandleAsync(T r,CancellationToken t) { Work.Relay(r,1); return Next(r,t); } }
 public sealed class ZRBehavior2<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, IRelayLevel2
-{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Relay(r,2); return next.OpenAsync(r,t); } }
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamUpstream<T,R> { Work.Relay(r,2); return next.OpenAsync(r,t); } }
 public sealed class MRBehavior2<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
 { public IAsyncEnumerable<R> Handle(T r,M.StreamHandlerDelegate<R> next,CancellationToken t) { Work.Relay(r,2); return next(); } }
 public sealed class GRBehavior2<T,R> : G.IStreamPipelineBehavior<T,R> where T : G.IStreamMessage,IWork
@@ -231,7 +231,7 @@ public sealed class GRBehavior2<T,R> : G.IStreamPipelineBehavior<T,R> where T : 
 public sealed class IRBehavior2<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override IAsyncEnumerable<R> HandleAsync(T r,CancellationToken t) { Work.Relay(r,2); return Next(r,t); } }
 public sealed class ZRBehavior3<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, IRelayLevel3
-{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Relay(r,3); return next.OpenAsync(r,t); } }
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamUpstream<T,R> { Work.Relay(r,3); return next.OpenAsync(r,t); } }
 public sealed class MRBehavior3<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
 { public IAsyncEnumerable<R> Handle(T r,M.StreamHandlerDelegate<R> next,CancellationToken t) { Work.Relay(r,3); return next(); } }
 public sealed class GRBehavior3<T,R> : G.IStreamPipelineBehavior<T,R> where T : G.IStreamMessage,IWork
@@ -239,7 +239,7 @@ public sealed class GRBehavior3<T,R> : G.IStreamPipelineBehavior<T,R> where T : 
 public sealed class IRBehavior3<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override IAsyncEnumerable<R> HandleAsync(T r,CancellationToken t) { Work.Relay(r,3); return Next(r,t); } }
 public sealed class ZRBehavior4<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, IRelayLevel4
-{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Relay(r,4); return next.OpenAsync(r,t); } }
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamUpstream<T,R> { Work.Relay(r,4); return next.OpenAsync(r,t); } }
 public sealed class MRBehavior4<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
 { public IAsyncEnumerable<R> Handle(T r,M.StreamHandlerDelegate<R> next,CancellationToken t) { Work.Relay(r,4); return next(); } }
 public sealed class GRBehavior4<T,R> : G.IStreamPipelineBehavior<T,R> where T : G.IStreamMessage,IWork
@@ -247,7 +247,7 @@ public sealed class GRBehavior4<T,R> : G.IStreamPipelineBehavior<T,R> where T : 
 public sealed class IRBehavior4<T,R> : I.StreamingBehavior<T,R> where T:IWork
 { public override IAsyncEnumerable<R> HandleAsync(T r,CancellationToken t) { Work.Relay(r,4); return Next(r,t); } }
 public sealed class ZRBehavior5<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, IRelayLevel5
-{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Relay(r,5); return next.OpenAsync(r,t); } }
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamUpstream<T,R> { Work.Relay(r,5); return next.OpenAsync(r,t); } }
 public sealed class MRBehavior5<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
 { public IAsyncEnumerable<R> Handle(T r,M.StreamHandlerDelegate<R> next,CancellationToken t) { Work.Relay(r,5); return next(); } }
 public sealed class GRBehavior5<T,R> : G.IStreamPipelineBehavior<T,R> where T : G.IStreamMessage,IWork

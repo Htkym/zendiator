@@ -53,6 +53,20 @@ public static class Program
         var sink = new Sink(); await entry.StreamSource(new Items()).ConsumeAsync(sink);
         if (!values.SequenceEqual(new[] { 0, 1 }) || sink.Sum != 1 || p.Generic != 2 || p.Legacy != 0 || p.Closed != 2)
             throw new InvalidOperationException("Struct upstream package contract failed.");
+        IStreamMiddleware<Items, int> standard = scope.ServiceProvider.GetRequiredService<Relay>();
+        await using (var cursor = await standard.OpenAsync(new Items(), (IStreamUpstream<Items, int>)new DirectUpstream(p), default))
+        {
+            if (!await cursor.MoveNextAsync() || cursor.Current != 0)
+                throw new InvalidOperationException("Legacy caller did not reach the standard typed implementation.");
+        }
+        IStreamMiddleware<Items, int> legacy = new LegacyRelay(p);
+        await using (var cursor = await legacy.OpenAsync(new Items(), new DirectUpstream(p), default))
+        {
+            if (!await cursor.MoveNextAsync() || cursor.Current != 0)
+                throw new InvalidOperationException("Typed caller did not reach the legacy implementation.");
+        }
+        if (p.Generic != 3 || p.Legacy != 1 || p.Closed != 4)
+            throw new InvalidOperationException("Standard/legacy adapter calls or cleanup differ.");
         VerifyEagerDependencies();
         Console.WriteLine("STRUCT_UPSTREAM_PACKAGE_OK");
     }
@@ -110,13 +124,20 @@ internal struct Leaf(Probe p, CancellationToken token) : IAsyncEnumerator<int>
     public ValueTask<bool> MoveNextAsync() { token.ThrowIfCancellationRequested(); return new(++index < 2); }
     public ValueTask DisposeAsync() { p.Closed++; return default; }
 }
-public sealed class Relay(Probe p) : IStructStreamMiddleware<Items, int>
+public sealed class Relay(Probe p) : IStreamMiddleware<Items, int>
 {
-    public ValueTask<IAsyncEnumerator<int>> OpenAsync(Items request, IStreamUpstream<Items, int> next, CancellationToken token)
-    { p.Legacy++; return next.OpenAsync(request, token); }
     public ValueTask<IAsyncEnumerator<int>> OpenAsync<TNext>(Items request, TNext next, CancellationToken token)
         where TNext : struct, IStreamUpstream<Items, int>
     { if (!typeof(TNext).IsValueType) throw new InvalidOperationException("Expected value port."); p.Generic++; return next.OpenAsync(request, token); }
+}
+public readonly struct DirectUpstream(Probe p) : IStreamUpstream<Items, int>
+{
+    public ValueTask<IAsyncEnumerator<int>> OpenAsync(Items request, CancellationToken token) => new(new Leaf(p, token));
+}
+public sealed class LegacyRelay(Probe p) : IStreamMiddleware<Items, int>
+{
+    public ValueTask<IAsyncEnumerator<int>> OpenAsync(Items request, IStreamUpstream<Items, int> next, CancellationToken token)
+    { p.Legacy++; return next.OpenAsync(request, token); }
 }
 public sealed class Sink : IStreamSink<int>
 {

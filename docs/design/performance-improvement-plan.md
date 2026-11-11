@@ -56,3 +56,11 @@ Task.Yield、token check、probe、cleanup を減らす変更は採用しない�
 - 本計画全体では、未実施phase2の93セルとWP05/08/09の最終統合比較・採否整理が残る。今回その測定・新plan/seal・merge/releaseは開始していない。WP04を再び調査・再測定し続けることは次工程の前提にしない。
 
 - 開発案はWP01〜WP10の10項目（WP00は準備基盤で別枠）。WP04/05/08/09は実装を採用、WP01/02/03/06/07は不採用・条件不成立で終了、WP10は別系統の.NET 11評価を完了した。新規の製品実装が残る項目は0件で、採用文書のcommit/push・通常CI・残る統合性能評価はこの件数に混ぜない。WP04実装とgateのcommitは確認済み作業branchの変更前HEADに含まれている。
+
+## 2026-11-11：WP04標準契約とWP05自動選択の見直し
+
+ユーザーがWP04の破壊的変更も許容したことを受け、typed OpenAsync<TNext>を標準IStreamMiddlewareへ追加した。適格なsealed実装は生成側がstruct経路を自動選択し、IStructStreamMiddlewareという別名を必須としない。旧nongeneric実装と新generic-only実装はdefault interface adapterで接続し、DIの実行時型を無視するdirect callは増やさない。標準のbenchmark Stream/Relay middlewareとlogging sampleを移行した。ここから先は、前節の「新APIなし・既存opt-inのまま」と区別する。詳細は[移行とfallback条件](../migrating-stream-upstream.md)を参照。
+
+WP05の自動eager化は採らない。静的参照は実使用を保証せず、未使用scope、short-circuit、constructorの副作用・例外発生時点、runtime DI overrideとlifetimeを一律に保存できない。安全な自動動作は既存の初回実使用での解決とcacheであり、EagerDependenciesは活性化を早めることを選んだ明示指定として維持する。
+
+旧phase1/Relay診断のrawはこの変更後の新測定として使わない。全体再測定とREADME表更新は、この新sourceの統合・必要確認後に行う。API/NativeAOTの既存留保と、未確認の新adapter形状を区別する。main push・merge・releaseは行っていない。

@@ -8,8 +8,8 @@ public sealed class StreamLoggingBehavior<TRequest, TItem>(ILogger<StreamLogging
     : IStreamMiddleware<TRequest, TItem>
     where TRequest : IStreamRequest<TItem>
 {
-    public async ValueTask<IAsyncEnumerator<TItem>> OpenAsync(TRequest request,
-        IStreamUpstream<TRequest, TItem> next, CancellationToken cancellationToken)
+    public async ValueTask<IAsyncEnumerator<TItem>> OpenAsync<TNext>(TRequest request,
+        TNext next, CancellationToken cancellationToken) where TNext : struct, IStreamUpstream<TRequest, TItem>
     {
         logger.LogInformation("Streaming {Request}", typeof(TRequest).Name);
         try

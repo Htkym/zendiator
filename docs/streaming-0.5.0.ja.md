@@ -46,7 +46,7 @@ services.AddZendiator<App>(configuration =>
 });
 ~~~
 
-要求と順序はHandlers/Pipelineで明示します。Filter/Mapは専用hookとStage.Hook、所有sessionはHandlerEntry.Sessionやfactory付きstageを使います。任意middlewareはIStreamMiddleware.OpenAsyncとStage.Wrapperで登録し、nextはIStreamUpstreamです。この箇所はIAsyncEnumeratorへの明示的な型消去境界であり、typed hookと同じ費用とは扱いません。旧AddOpenStreamBehavior、Validator、OwnsStreamによるbackend選択は使用しません。
+要求と順序はHandlers/Pipelineで明示します。Filter/Mapは専用hookとStage.Hook、所有sessionはHandlerEntry.Sessionやfactory付きstageを使います。任意middlewareはIStreamMiddlewareとStage.Wrapperで登録します。標準のOpenAsync<TNext>で型付きupstreamを受け、適格なsealed実装では生成器がstruct経路を自動選択します。旧interface引数の実装も利用できます。[移行方法とfallback条件](migrating-stream-upstream.md)を参照してください。この箇所はIAsyncEnumeratorへの明示的な型消去境界であり、typed hookと同じ費用とは扱いません。旧AddOpenStreamBehavior、Validator、OwnsStreamによるbackend選択は使用しません。
 
 ## 標準列挙とtyped terminal
 

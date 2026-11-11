@@ -56,7 +56,7 @@ foreach ($i in 1..5) {
 public sealed class ZBehavior$i<T,R> : Z.IPipelineBehavior<T,R> where T : Z.IRequest<R>, ILevel$i
 { public ValueTask<R> HandleAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IRequestContinuation<T,R> { Work.Enter(r,$i); return next.InvokeAsync(r,t); } }
 public sealed class ZSBehavior$i<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, ILevel$i
-{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Enter(r,$i); return next.OpenAsync(r,t); } }
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamUpstream<T,R> { Work.Enter(r,$i); return next.OpenAsync(r,t); } }
 public sealed class MBehavior$i<T,R> : M.IPipelineBehavior<T,R> where T : notnull,IWork
 { public Task<R> Handle(T r,M.RequestHandlerDelegate<R> next,CancellationToken t) { Work.Enter(r,$i); return next(t); } }
 public sealed class MSBehavior$i<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork

@@ -39,3 +39,12 @@ package baseline before publication. No existing released member is changed.
 Performance is unmeasured. Compare the separate ordinary and opt-in series with the same source
 cursor, token checks, Task.Yield, probes, consumer and cleanup. Reject new boxing, added per-item
 dispatch, ownership changes, or time regressions. Object-size savings are a layout hypothesis.
+
+## Standard contract update (2026-11-11)
+
+The experiment above is historical. The generic overload is now on IStreamMiddleware itself;
+IStructStreamMiddleware is an optional compatibility name. The generator automatically selects the
+proved concrete generic implementation. Standard benchmark wrappers and the logging sample have
+been migrated. See [migration and fallback boundaries](../migrating-stream-upstream.md).
+The earlier unmeasured/experimental statements do not supersede the preserved WP04 adoption results.
+New final measurement and package/native verification must refer to this updated source, not the old canonical d2f3 build.

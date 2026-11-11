@@ -126,7 +126,8 @@ internal static class StageContractBinding
             }
             if (sync && !role.Wrapper && role.Completion == BoundCompletionKind.ValueTask)
                 Reject("AsyncHookOnSyncRoute", $"Stage {Name(type)} supplies an asynchronous callback on {family}; blocking conversion is unsupported.");
-            var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
+            var members = contract.GetMembers().OfType<IMethodSymbol>()
+                .Where(m => !role.Stream || !role.Wrapper || m.Arity == 0).ToArray();
             var implementation = members.Length == 1 ? type.FindImplementationForInterfaceMember(members[0]) as IMethodSymbol : null;
             if (implementation == null)
             {
@@ -141,7 +142,12 @@ internal static class StageContractBinding
             BoundStructStreamCallEmission? structStreamCall = null;
             if (role.Stream && role.Wrapper)
             {
-                structStreamCall = CanonicalStructStreamContractBinding.Bind(type, contract, compilation, out var structError);
+                structStreamCall = CanonicalStructStreamContractBinding.Bind(type, contract, compilation, out var structError, out var hasTypedImplementation);
+                if (Same(implementation, members[0]) && !hasTypedImplementation)
+                {
+                    Reject("StageContractMismatch", $"Middleware {Name(type)} must implement a typed or legacy OpenAsync overload.");
+                    continue;
+                }
                 if (structError != null)
                 {
                     Reject("StageContractMismatch", $"Middleware {Name(type)}: {structError}");

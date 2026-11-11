@@ -9,25 +9,30 @@ namespace Zendiator.SourceGenerator;
 internal static class CanonicalStructStreamContractBinding
 {
     internal static BoundStructStreamCallEmission? Bind(INamedTypeSymbol receiver, INamedTypeSymbol legacy,
-        Compilation compilation, out string? error)
+        Compilation compilation, out string? error, out bool hasTypedImplementation)
     {
         error = null;
+        hasTypedImplementation = false;
         var assembly = compilation.GetTypeByMetadataName(ContractNames.Handler)?.ContainingAssembly;
         var definition = assembly?.GetTypeByMetadataName(ContractNames.StructStreamMiddleware);
         var contracts = receiver.AllInterfaces.Where(i => Same(i.OriginalDefinition, definition) &&
             i.TypeArguments.Length == 2 && i.TypeArguments.Zip(legacy.TypeArguments, (left, right) =>
                 SymbolEqualityComparer.IncludeNullability.Equals(left, right)).All(equal => equal)).ToArray();
-        if (contracts.Length == 0)
+        var contract = contracts.Length == 0 ? legacy : contracts.Length == 1 ? contracts[0] : null;
+        var member = contract?.GetMembers().OfType<IMethodSymbol>().SingleOrDefault(m => m.Arity == 1 && m.MethodKind == MethodKind.Ordinary);
+        if (member == null && contracts.Length == 0)
             return null;
-        var contract = contracts.Length == 1 ? contracts[0] : null;
-        var member = contract?.GetMembers().OfType<IMethodSymbol>().SingleOrDefault();
         var method = member == null ? null : receiver.FindImplementationForInterfaceMember(member) as IMethodSymbol;
+        // A legacy-only receiver uses the standard interface adapter; keep its existing dispatch.
+        if (contracts.Length == 0 && Same(method, member))
+            return null;
         if (method == null || !Signature(method, legacy, compilation))
         {
             error = "IStructStreamMiddleware requires OpenAsync<TNext>(request, TNext next, token) returning " +
                 "ValueTask<IAsyncEnumerator<TItem>>, with exactly where TNext : struct, IStreamUpstream<TRequest,TItem>.";
             return null;
         }
+        hasTypedImplementation = !Same(method, member);
         // Never introduce a generic virtual/interface dispatch. Unsupported implementations keep
         // the old contract, including a runtime subtype supplied by DI for a nonsealed receiver.
         if (receiver.TypeKind != TypeKind.Class || !receiver.IsSealed || method.MethodKind != MethodKind.Ordinary ||
@@ -50,7 +55,7 @@ internal static class CanonicalStructStreamContractBinding
         if (method.IsStatic || method.Arity != 1 || method.Parameters.Length != 3 ||
             method.ReturnsByRef || method.ReturnsByRefReadonly ||
             method.Parameters.Any(p => p.RefKind != RefKind.None || p.ScopedKind != ScopedKind.None) ||
-            !Same(method.ReturnType, legacy.GetMembers().OfType<IMethodSymbol>().Single().ReturnType) ||
+            !Same(method.ReturnType, legacy.GetMembers().OfType<IMethodSymbol>().Single(m => m.Arity == 0).ReturnType) ||
             !Same(method.Parameters[0].Type, legacy.TypeArguments[0]) ||
             !Same(method.Parameters[1].Type, method.TypeParameters[0]) ||
             !Same(method.Parameters[2].Type, compilation.GetTypeByMetadataName("System.Threading.CancellationToken")))

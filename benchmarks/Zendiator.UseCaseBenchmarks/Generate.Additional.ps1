@@ -63,7 +63,7 @@ public sealed class DRBehavior${b}_$i : DS.IStreamPipelineBehavior<Relay$b,int>
     foreach($i in 1..5) {
         $lines.Add(@"
 public sealed class ZRBehavior$i<T,R> : Z.IStreamMiddleware<T,R> where T : Z.IStreamRequest<R>, IRelayLevel$i
-{ public ValueTask<IAsyncEnumerator<R>> OpenAsync(T r,Z.IStreamUpstream<T,R> next,CancellationToken t) { Work.Relay(r,$i); return next.OpenAsync(r,t); } }
+{ public ValueTask<IAsyncEnumerator<R>> OpenAsync<TNext>(T r,TNext next,CancellationToken t) where TNext:struct,Z.IStreamUpstream<T,R> { Work.Relay(r,$i); return next.OpenAsync(r,t); } }
 public sealed class MRBehavior$i<T,R> : M.IStreamPipelineBehavior<T,R> where T : notnull,IWork
 { public IAsyncEnumerable<R> Handle(T r,M.StreamHandlerDelegate<R> next,CancellationToken t) { Work.Relay(r,$i); return next(); } }
 public sealed class GRBehavior$i<T,R> : G.IStreamPipelineBehavior<T,R> where T : G.IStreamMessage,IWork

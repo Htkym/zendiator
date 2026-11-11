@@ -11,12 +11,17 @@ namespace Zendiator.Generator.Tests;
 public sealed partial class GeneratorTests
 {
     [Theory]
-    [InlineData("repeat")]
-    [InlineData("early")]
-    [InlineData("open-fault")]
-    [InlineData("move-fault")]
-    [InlineData("cleanup-fault")]
-    public async Task Struct_stream_port_copies_keep_open_cleanup_reopen_and_root_lifetimes(string mode)
+    [InlineData("repeat", false)]
+    [InlineData("repeat", true)]
+    [InlineData("early", false)]
+    [InlineData("early", true)]
+    [InlineData("open-fault", false)]
+    [InlineData("open-fault", true)]
+    [InlineData("move-fault", false)]
+    [InlineData("move-fault", true)]
+    [InlineData("cleanup-fault", false)]
+    [InlineData("cleanup-fault", true)]
+    public async Task Struct_stream_port_copies_keep_open_cleanup_reopen_and_root_lifetimes(string mode, bool standard)
     {
         var source = NativeStreamFixture("""
             c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));
@@ -106,7 +111,9 @@ public sealed partial class GeneratorTests
             try{await p.Retained!();throw new Exception("retained port reopened closed root");}catch(ObjectDisposedException){}
             Check.That(p.Generic==1&&p.Defaults==1,"generic retained port used without legacy dispatch");
             """.Replace("__MODE__", mode));
-        await RunNativeStreamFixture("struct-port-" + mode, source);
+        if (standard)
+            source = source.Replace("IStructStreamMiddleware", "IStreamMiddleware", StringComparison.Ordinal);
+        await RunNativeStreamFixture("struct-port-" + mode + "-" + standard, source);
     }
 
     [Theory]
@@ -243,8 +250,10 @@ public sealed partial class GeneratorTests
             d.GetMessage().Contains("struct, IStreamUpstream", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public void Struct_stream_opt_in_keeps_private_ports_and_typed_leaf_out_of_public_signature()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Struct_stream_opt_in_keeps_private_ports_and_typed_leaf_out_of_public_signature(bool standard)
     {
         var source = NativeStreamFixture("c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));c.Pipeline<Items>(DispatchFamily.Stream,Stage.Wrapper<Relay>());", """
             public sealed record Items:IStreamRequest<int>;
@@ -255,7 +264,9 @@ public sealed partial class GeneratorTests
                 public ValueTask<IAsyncEnumerator<int>> OpenAsync<TNext>(Items r,TNext next,CancellationToken t)where TNext:struct,IStreamUpstream<Items,int> =>next.OpenAsync(r,t);
             }
             """, "await Task.CompletedTask;");
-        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "StructStreamShape"), out var output, out var diagnostics);
+        if (standard)
+            source = source.Replace("IStructStreamMiddleware", "IStreamMiddleware", StringComparison.Ordinal);
+        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "StructStreamShape_" + standard), out var output, out var diagnostics);
         Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         var generated = driver.GetRunResult().Results.Single().GeneratedSources.Single(f => f.HintName.StartsWith("Zendiator.StreamCanonical.", StringComparison.Ordinal)).SourceText.ToString();
