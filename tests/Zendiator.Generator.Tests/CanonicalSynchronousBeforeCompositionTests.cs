@@ -31,7 +31,7 @@ public sealed partial class GeneratorTests
                         probe.Hit("query.before",request.Value,request.Step,token);return request with{Step=request.Step+1};
                     }
                 }
-                [ZendiatorHandler]public sealed class QueryHandler<X,Y>:IRequestHandler<Query<Y,X>,Y> where X:class,new() where Y:class,new(){
+                [Handler]public sealed class QueryHandler<X,Y>:IRequestHandler<Query<Y,X>,Y> where X:class,new() where Y:class,new(){
                     private readonly Probe probe;public QueryHandler(Probe probe){this.probe=probe;}
                     public ValueTask<Y> HandleAsync(Query<Y,X> request,CancellationToken token){
                         probe.Hit("query.handler",request.Value,request.Step,token);return new(request.Value);
@@ -43,7 +43,7 @@ public sealed partial class GeneratorTests
                         probe.Hit("command.before",request.Value,request.Step,token);return request with{Step=request.Step+1};
                     }
                 }
-                [ZendiatorHandler]public sealed class CommandHandler<X,Y>:IRequestHandler<Command<Y,X>> where X:class,new() where Y:class,new(){
+                [Handler]public sealed class CommandHandler<X,Y>:IRequestHandler<Command<Y,X>> where X:class,new() where Y:class,new(){
                     private readonly Probe probe;public CommandHandler(Probe probe){this.probe=probe;}
                     public ValueTask HandleAsync(Command<Y,X> request,CancellationToken token){
                         probe.Hit("command.handler",request.Value,request.Step,token);return default;

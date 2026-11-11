@@ -21,7 +21,7 @@ public sealed partial class GeneratorTests
             namespace {{ns}} {
             public sealed record Request<{{args}}>(int Value):ISyncRequest{{(isVoid ? "" : "<int>")}};
             // The handler and hook use reversed request arguments. Names alone cannot close either service.
-            [ZendiatorHandler]public sealed class Handler<{{args}}>:ISyncRequestHandler<{{receiverRequest}}{{(isVoid ? "" : ",int")}}>,IDisposable
+            [Handler]public sealed class Handler<{{args}}>:ISyncRequestHandler<{{receiverRequest}}{{(isVoid ? "" : ",int")}}>,IDisposable
                 where TLeft:class,new() {{(isVoid ? "" : "where TRight:class")}} {
                 private readonly OpenFixture.Probe p;public Handler(OpenFixture.Probe p){this.p=p;p.Created.Add(GetType());p.Trace.Add("resolve:H");}
                 public {{result}} Handle({{receiverRequest}} r,CancellationToken t){p.Record("handler",r,r.Value,t);p.Calls++;{{(isVoid ? "" : "return r.Value*2;")}}}
@@ -73,10 +73,10 @@ public sealed partial class GeneratorTests
     private const string OpenSendSyncSentinels = """
         namespace OpenSentinel {
         public sealed record Closed(int Value):ISyncRequest<int>;
-        [ZendiatorHandler]public sealed class ClosedHandler:ISyncRequestHandler<Closed,int>{public int Handle(Closed r,CancellationToken t)=>r.Value;}
+        [Handler]public sealed class ClosedHandler:ISyncRequestHandler<Closed,int>{public int Handle(Closed r,CancellationToken t)=>r.Value;}
         [ZendiatorComposition("closed")]public sealed class ClosedComposition;
         public readonly ref struct Scoped:ISyncRequest<int>;
-        [ZendiatorHandler]public sealed class ScopedHandler:ISyncRequestHandler<Scoped,int>{public int Handle(scoped Scoped r,CancellationToken t)=>1;}
+        [Handler]public sealed class ScopedHandler:ISyncRequestHandler<Scoped,int>{public int Handle(scoped Scoped r,CancellationToken t)=>1;}
         public sealed class Observer:IScopedSendBeforeObserver<Scoped>,IScopedSendResponseObserver<Scoped,int>,IScopedSendExceptionObserver<Scoped>,IScopedSendFinallyObserver<Scoped>{
             public void Before(scoped Scoped r,CancellationToken t){}public void After(scoped Scoped r,int value,CancellationToken t){}
             public void OnException(scoped Scoped r,Exception e,CancellationToken t){}public void Finally(scoped Scoped r,SendExitInfo exit,CancellationToken t){}
@@ -129,7 +129,7 @@ public sealed partial class GeneratorTests
         Reject("Multiple", handler, $"Stage.Hook(typeof({hook}))", extra: "c.Handlers<OpenSentinel.Closed>(DispatchFamily.SendSync,typeof(OpenSentinel.ClosedHandler));c.Pipeline<OpenSentinel.Closed>(DispatchFamily.SendSync);");
         return OpenSendSyncSource() + "namespace OpenRejected {" + string.Join("\n", declarations) + "public static class Register {" + string.Join("\n", registrations) + "}" + """
             public sealed class UnusedHook<X,Y,Z>:ISendRequestTransform<OpenResponse.Request<Y,X>>{public OpenResponse.Request<Y,X> Before(OpenResponse.Request<Y,X> r,CancellationToken t)=>r;}
-            [ZendiatorHandler]public sealed class UnusedHandler<X,Y,Z>:ISyncRequestHandler<OpenResponse.Request<Y,X>,int>{public int Handle(OpenResponse.Request<Y,X> r,CancellationToken t)=>0;}
+            [Handler]public sealed class UnusedHandler<X,Y,Z>:ISyncRequestHandler<OpenResponse.Request<Y,X>,int>{public int Handle(OpenResponse.Request<Y,X> r,CancellationToken t)=>0;}
             public sealed class StructHook<X,Y>:ISendRequestTransform<OpenResponse.Request<Y,X>> where X:struct{public OpenResponse.Request<Y,X> Before(OpenResponse.Request<Y,X> r,CancellationToken t)=>r;}
             public sealed class WrongResponse<X,Y>:ISendResponseTransform<OpenResponse.Request<Y,X>,string>{public string After(OpenResponse.Request<Y,X> r,string value,CancellationToken t)=>value;}
             public sealed class Factory<X,Y>;

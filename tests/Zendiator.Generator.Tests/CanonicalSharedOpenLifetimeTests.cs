@@ -34,7 +34,7 @@ public sealed partial class GeneratorTests
                 public sealed class Second;
                 public sealed record Ping<T>(int Value):IRequest<int>;
                 public sealed record Pong<T>(int Value):IRequest<int>;
-                [ZendiatorHandler]public sealed class Handler<T>:IRequestHandler<Ping<T>,int>,
+                [Handler]public sealed class Handler<T>:IRequestHandler<Ping<T>,int>,
                     IRequestHandler<Pong<T>,int>,IDisposable {
                     private readonly Probe probe;
                     public Handler(Probe probe){this.probe=probe;probe.Construct(this);}

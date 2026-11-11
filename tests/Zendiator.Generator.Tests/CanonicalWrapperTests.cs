@@ -145,7 +145,7 @@ public sealed partial class GeneratorTests
                     public {{(async ? "ValueTask" : "void")}} {{(async ? "FinallyAsync" : "Finally")}}(Ping r,SendExitInfo e,CancellationToken t){_p.Hit(_id+".finally",r,t,exit:e);{{(async ? "return default;" : "")}}}
                     {{disposable}} {{(async ? "{_p.DisposeHook();return default;}" : "=>_p.DisposeHook();")}}
                 }
-                [ZendiatorHandler]public sealed class Handler:{{hc}}<Ping{{result}}>,{{ctorDispose}} {
+                [Handler]public sealed class Handler:{{hc}}<Ping{{result}}>,{{ctorDispose}} {
                     private readonly Probe _p;public Handler(Probe p){_p=p;p.Construct(this);}
                     public {{(async ? (isVoid ? "ValueTask" : "ValueTask<int>") : (isVoid ? "void" : "int"))}} {{(async ? "HandleAsync" : "Handle")}}(Ping r,CancellationToken t){ {{(async ? "return _p." + (isVoid ? "HandleVoidAsync" : "HandleAsync") + "(this,r,r.Value,t);" : (isVoid ? "" : "return ") + "_p.Handle(this,r,r.Value,t);")}} }
                     {{disposable}} {{(async ? "=>_p.ReleaseAsync(this);" : "=>_p.Release(this);")}}

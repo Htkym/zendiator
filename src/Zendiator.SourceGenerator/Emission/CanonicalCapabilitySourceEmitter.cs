@@ -24,6 +24,7 @@ internal static class CanonicalCapabilitySourceEmitter
             var result = async ? (h.ResultName == null ? "global::System.Threading.Tasks.ValueTask" : "global::System.Threading.Tasks.ValueTask<" + h.ResultName + ">") : h.ResultName ?? "void";
             var typed = CanOptimizeAsync(c);
             var dependencies = CanonicalRouteDependenciesEmitter.Plan(r, c.Family);
+            var outcomeBoundary = typed && dependencies != null;
             b.AppendLine($$"""
                 namespace {{r.Namespace}} {
                 public interface IZendiator { {{result}} {{(async ? "SendAsync" : "Send")}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken=default); }
@@ -38,14 +39,18 @@ internal static class CanonicalCapabilitySourceEmitter
             CanonicalRouteDependenciesEmitter.Emit(b, dependencies);
             if (typed)
                 b.AppendLine("private readonly struct SendInvoker { private readonly global::System.IServiceProvider _provider; internal SendInvoker(global::System.IServiceProvider provider) { _provider=provider; }");
+            if (outcomeBoundary)
+                EmitOutcomeBoundary(b, h.RequestName, h.ResultName!);
             if (typed)
                 b.AppendLine(PoolingBuilderAttribute);
             b.AppendLine($$"""
-                    {{(typed ? "internal" : "private")}} {{(async ? "async " : "")}}{{result}} {{(typed ? "InvokeAsync" : "Execute")}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken){cancellationToken.ThrowIfCancellationRequested();
+                    {{(outcomeBoundary ? "private" : typed ? "internal" : "private")}} {{(async ? "async " : "")}}{{(outcomeBoundary ? "global::System.Threading.Tasks.ValueTask<SendOutcome>" : result)}} {{(outcomeBoundary ? "InvokeOutcomeAsync" : typed ? "InvokeAsync" : "Execute")}}({{h.RequestName}} request,global::System.Threading.CancellationToken cancellationToken){
+                    {{(outcomeBoundary ? "try {" : "")}}
+                    cancellationToken.ThrowIfCancellationRequested();
                 """);
             CanonicalRouteDependenciesEmitter.Acquire(b, dependencies);
             if (typed && dependencies != null)
-                CanonicalAsyncFailureDataEmitter.Emit(b, c, dependencies);
+                CanonicalAsyncFailureDataEmitter.Emit(b, c, dependencies, outcomeBoundary);
             else
             {
                 if (h.ResultName != null)
@@ -54,6 +59,8 @@ internal static class CanonicalCapabilitySourceEmitter
                 if (h.ResultName != null)
                     b.AppendLine("return response;");
             }
+            if (outcomeBoundary)
+                b.AppendLine("} catch (global::System.Exception boundaryFailure) { return new SendOutcome(default!, boundaryFailure); }");
             b.AppendLine("}");
             if (typed)
             {
@@ -138,6 +145,33 @@ internal static class CanonicalCapabilitySourceEmitter
         b.AppendLine("}");
         Cleanup(b, hook.Factory, receiver, async);
     }
+    private static void EmitOutcomeBoundary(StringBuilder b, string request, string result)
+    {
+        b.AppendLine($$"""
+            private readonly struct SendOutcome {
+                internal readonly {{result}} Result;
+                internal readonly global::System.Exception? Error;
+                internal SendOutcome({{result}} result, global::System.Exception? error) { Result = result; Error = error; }
+            }
+            internal global::System.Threading.Tasks.ValueTask<{{result}}> InvokeAsync({{request}} request, global::System.Threading.CancellationToken cancellationToken) {
+                var pending = InvokeOutcomeAsync(request, cancellationToken);
+                if (pending.IsCompletedSuccessfully) {
+                    var outcome = pending.GetAwaiter().GetResult();
+                    if (outcome.Error is null) return new global::System.Threading.Tasks.ValueTask<{{result}}>(outcome.Result);
+                    var failure = global::System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder<{{result}}>.Create();
+                    failure.SetException(outcome.Error);
+                    return failure.Task;
+                }
+                return AwaitOutcome(pending);
+            }
+            private static async global::System.Threading.Tasks.ValueTask<{{result}}> AwaitOutcome(global::System.Threading.Tasks.ValueTask<SendOutcome> pending) {
+                var outcome = await pending.ConfigureAwait(false);
+                if (outcome.Error is not null) global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(outcome.Error).Throw();
+                return outcome.Result;
+            }
+            """);
+    }
+
     private static void EmitTypedCalls(StringBuilder b, CanonicalCapabilityCompositionEmission c)
     {
         var h = c.Registration.Handler;

@@ -156,12 +156,12 @@ public sealed partial class GeneratorTests
         return sample.Replace(command, command + "configuration.Handlers(typeof(Ping<>), DispatchFamily.SendAsync, typeof(PingHandler<>));configuration.Handlers<ArrayStatus>(DispatchFamily.SendAsync, typeof(ArrayStatusHandler));") + """
 
             public sealed record Ping<T> : IRequest where T : class;
-            [ZendiatorHandler]
+            [Handler]
             public sealed class PingHandler<T> : IRequestHandler<Ping<T>> where T : class {
                 public ValueTask HandleAsync(Ping<T> request, CancellationToken token) { token.ThrowIfCancellationRequested(); return ValueTask.CompletedTask; }
             }
             public sealed record ArrayStatus : IRequest<IReadOnlyList<InventoryStatus?>[]>;
-            [ZendiatorHandler]
+            [Handler]
             public sealed class ArrayStatusHandler : IRequestHandler<ArrayStatus, IReadOnlyList<InventoryStatus?>[]> {
                 public ValueTask<IReadOnlyList<InventoryStatus?>[]> HandleAsync(ArrayStatus request, CancellationToken token) { token.ThrowIfCancellationRequested(); return new(Array.Empty<IReadOnlyList<InventoryStatus?>>()); }
             }

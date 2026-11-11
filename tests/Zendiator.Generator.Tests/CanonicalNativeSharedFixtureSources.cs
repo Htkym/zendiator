@@ -24,7 +24,7 @@ public sealed partial class GeneratorTests
         c.StreamPipeline<ChangeRequest,long>(Stage.Hook(typeof(ToReference<>)),Stage.Hook<ToFinal>());
         """) + """
         public sealed record ChangeRequest:IStreamRequest<int>;
-        [ZendiatorHandler] public sealed class ChangeHandler(global::Zendiator.Generator.Tests.CanonicalStreamTypeChangeProbe p):IStreamSourceHandler<ChangeRequest,int,ChangeHandler.Cursor>{
+        [Handler] public sealed class ChangeHandler(global::Zendiator.Generator.Tests.CanonicalStreamTypeChangeProbe p):IStreamSourceHandler<ChangeRequest,int,ChangeHandler.Cursor>{
             public ValueTask<Cursor> OpenAsync(ChangeRequest r,CancellationToken t)=>new(new Cursor(p.Start(r,t).GetAsyncEnumerator(t)));
             public sealed class Cursor(System.Collections.Generic.IAsyncEnumerator<int> inner):System.Collections.Generic.IAsyncEnumerator<int>{
                 public int Current=>inner.Current;public ValueTask<bool> MoveNextAsync()=>inner.MoveNextAsync();public ValueTask DisposeAsync()=>inner.DisposeAsync();
@@ -47,7 +47,7 @@ public sealed partial class GeneratorTests
             public int Marker;public long Pad;public SharedState? Shared;
             public Items(SharedState shared){Marker=7;Pad=11;Shared=shared;}
         }
-        [ZendiatorHandler]public sealed class H:IStreamSourceHandler<Items,int,Source.Cursor>,IDisposable{
+        [Handler]public sealed class H:IStreamSourceHandler<Items,int,Source.Cursor>,IDisposable{
             private readonly PublicValueRequestProbe p;public H(PublicValueRequestProbe p){this.p=p;p.Resolved.Add("H");}
             public ValueTask<Source.Cursor> OpenAsync(Items r,CancellationToken t){
                 p.Starts++;p.Record("H",r.Marker,r.Pad,r.Shared,r.Shared?.Version??-1);

@@ -19,7 +19,7 @@ public sealed partial class GeneratorTests
     private static string GettingStartedWithoutMarker(string name = "AddNumbersHandler")
     {
         using var reader = new StreamReader(typeof(GeneratorTests).Assembly.GetManifestResourceStream("Zendiator.GettingStarted.Source")!);
-        return reader.ReadToEnd().Replace("\r\n", "\n").Replace("[ZendiatorHandler]\npublic sealed class " + name,
+        return reader.ReadToEnd().Replace("\r\n", "\n").Replace("[Handler]\npublic sealed class " + name,
             "public sealed class " + name);
     }
 
@@ -66,7 +66,7 @@ public sealed partial class GeneratorTests
     {
         using var exports = new System.Composition.Hosting.ContainerConfiguration().WithAssembly(typeof(MissingHandlerAttributeCodeFixProvider).Assembly).CreateContainer();
         Assert.IsType<MissingHandlerAttributeCodeFixProvider>(Assert.Single(exports.GetExports<CodeFixProvider>()));
-        var source = GettingStartedWithoutMarker().Replace("public sealed class AddNumbersHandler", "// keep Handler documentation\n#nullable enable\n[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]\npublic sealed class AddNumbersHandler");
+        var source = GettingStartedWithoutMarker().Replace("[Handler]", "[global::Zendiator.HandlerAttribute]").Replace("public sealed class AddNumbersHandler", "// keep Handler documentation\n#nullable enable\n[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]\npublic sealed class AddNumbersHandler") + "\npublic sealed class HandlerAttribute : System.Attribute {}\n";
         var (workspace, document) = HandlerFixWorkspace(source);
         using (workspace)
         {
@@ -78,7 +78,7 @@ public sealed partial class GeneratorTests
             var action = Assert.Single(await HandlerFixActions(document, renamedMessage));
             document = await ApplyHandlerFix(workspace, document, action);
             var fixedSource = (await document.GetTextAsync()).ToString();
-            Assert.Equal(source.Replace("[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]", "[global::Zendiator.ZendiatorHandlerAttribute]\n[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]"), fixedSource);
+            Assert.Equal(source.Replace("[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]", "[global::Zendiator.HandlerAttribute]\n[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]"), fixedSource);
             Assert.Empty(await HandlerFixDiagnostics(document));
             Assert.Empty(await HandlerFixActions(document, diagnostic));
             SyncDriver().RunGeneratorsAndUpdateCompilation((await document.Project.GetCompilationAsync())!, out var output, out var diagnostics);
@@ -111,8 +111,8 @@ public sealed partial class GeneratorTests
         foreach (var invalid in new[]
         {
             source.Replace("public int Handle(AddNumbers request", "public long Handle(AddNumbers request"),
-            source.Replace("public sealed class AddNumbersHandler", "[ZendiatorHandler]\npublic sealed class AddNumbersHandler"),
-            source.Replace("public sealed class AddNumbersHandler", "[Other.ZendiatorHandler]\npublic sealed class AddNumbersHandler") + "\nnamespace Other { public sealed class ZendiatorHandlerAttribute : System.Attribute {} }\n",
+            source.Replace("public sealed class AddNumbersHandler", "[Handler]\npublic sealed class AddNumbersHandler"),
+            source.Replace("public sealed class AddNumbersHandler", "[Other.Handler]\npublic sealed class AddNumbersHandler") + "\nnamespace Other { public sealed class HandlerAttribute : System.Attribute {} }\n",
             source.Replace("public sealed class AddNumbersHandler", "public sealed class AddNumbersHandler<"),
             source.Replace("configuration.Handlers<AddNumbers>", "configuration.UseLocalHandlers();\n            configuration.Handlers<AddNumbers>")
         })
@@ -137,7 +137,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public async Task MissingHandlerAttributeFix_DocumentFixAll_DeduplicatesTypes_AndExcludesCrossDocumentPartials()
     {
-        var source = GettingStartedWithoutMarker().Replace("[ZendiatorHandler]\npublic sealed class GreetHandler", "public sealed class GreetHandler")
+        var source = GettingStartedWithoutMarker().Replace("[Handler]\npublic sealed class GreetHandler", "public sealed class GreetHandler")
             .Replace("public sealed class AddNumbersHandler", "public sealed partial class AddNumbersHandler")
             + "\npublic sealed partial class AddNumbersHandler {}\n";
         source = source.Replace("[ZendiatorComposition(\"gettingStarted\")]", """
@@ -166,7 +166,7 @@ public sealed partial class GeneratorTests
             Assert.NotNull(action);
             document = await ApplyHandlerFix(workspace, document, action);
             var text = (await document.GetTextAsync()).ToString();
-            Assert.Equal(2, text.Split("[global::Zendiator.ZendiatorHandlerAttribute]").Length - 1);
+            Assert.Equal(2, text.Split("[global::Zendiator.HandlerAttribute]").Length - 1);
             Assert.Empty(await HandlerFixDiagnostics(document));
             var projectContext = new FixAllContext(document, provider, FixAllScope.Project, "Zendiator.AddHandlerAttribute", provider.FixableDiagnosticIds,
                 new HandlerFixDiagnosticProvider(diagnostics), CancellationToken.None);

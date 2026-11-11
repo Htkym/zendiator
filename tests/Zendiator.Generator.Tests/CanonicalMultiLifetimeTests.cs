@@ -92,7 +92,7 @@ public sealed partial class GeneratorTests
             using Probe=global::Zendiator.Generator.Tests.MultiLifetimeProbe;
             namespace Life{
                 public sealed record Ping(int Value):ISyncRequest<int>;public sealed record Pong(int Value):IRequest<int>;
-                [ZendiatorHandler]public sealed class Handler:ISyncRequestHandler<Ping,int>,IRequestHandler<Pong,int>,IDisposable{
+                [Handler]public sealed class Handler:ISyncRequestHandler<Ping,int>,IRequestHandler<Pong,int>,IDisposable{
                     private readonly Probe _p;public Handler(Probe p){_p=p;p.Construct(this);}
                     public int Handle(Ping r,CancellationToken t)=>_p.Hit(this,r.Value);public ValueTask<int> HandleAsync(Pong r,CancellationToken t)=>new(_p.Hit(this,r.Value));public void Dispose()=>_p.Release(this);
                 }

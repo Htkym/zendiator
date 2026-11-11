@@ -74,12 +74,15 @@ internal static class CanonicalStreamIdentityLeaseEmitter
 
     private static void EmitEdge(StringBuilder b, CanonicalStreamFallbackModel model, int child, int cursor)
     {
+        var structUpstream = CanonicalStructStreamUpstreamEmitter.Enabled(model.Segments.Single(s => s.Id == cursor));
+        var match = structUpstream ? "MatchUpstreamIdentity(_source)" : "_upstream?.MatchIdentity(_source)";
+        var detach = structUpstream ? "DetachUpstreamIdentity(child);" : "_upstream?.DetachIdentity(child);";
         b.AppendLine($$"""
             internal Cursor{{child}}? LeaseIdentitySource
             {
                 get
                 {
-                    var child = _upstream?.MatchIdentity(_source);
+                    var child = {{match}};
                     return child is not null && child.CancellationToken == Token ? child : null;
                 }
             }
@@ -90,7 +93,7 @@ internal static class CanonicalStreamIdentityLeaseEmitter
                     _source = default!;
                     _acquired = false;
                 }
-                _upstream?.DetachIdentity(child);
+                {{detach}}
             """);
         if (CanonicalStreamPrivateAdvanceEmitter.IsParent(model, cursor)
             || CanonicalStreamGroupAdvanceEmitter.HasIdentitySource(model, cursor))

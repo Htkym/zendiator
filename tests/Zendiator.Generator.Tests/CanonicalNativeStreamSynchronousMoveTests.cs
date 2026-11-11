@@ -17,7 +17,7 @@ public sealed partial class GeneratorTests
                 public Cursor? Alias;public int Opened,Pulls,Reads,Consumptions,CursorDisposals,SessionDisposals,FactoryDisposals;
                 public readonly List<string> Cleanup=new();
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){p.Opened++;var cursor=new Cursor(p);p.Alias=cursor;return new(cursor);}
                 public ValueTask DisposeAsync(){p.SessionDisposals++;p.Cleanup.Add("handler");return default;}
             }

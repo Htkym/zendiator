@@ -246,7 +246,13 @@ internal static class CanonicalStreamFallbackEmitter
         if (factory != null)
             b.AppendLine("private " + receiver + "? _receiver;");
         if (segment.Upstream != null)
-            b.AppendLine("private Upstream" + n + "? _upstream;");
+        {
+            if (CanonicalStructStreamUpstreamEmitter.Enabled(segment))
+                CanonicalStructStreamUpstreamEmitter.EmitOwner(b, h, segment,
+                    HasIdentitySource(model, n) || CanonicalStreamIdentityLeaseEmitter.HasEdge(model, n));
+            else
+                b.AppendLine("private Upstream" + n + "? _upstream;");
+        }
         b.AppendLine($$"""
                         public {{output}} Current
                         {
@@ -384,14 +390,22 @@ internal static class CanonicalStreamFallbackEmitter
             Acquire(b, factory, receiver, "_receiver");
         if (segment.Wrapper is { } wrapper)
         {
-            var wrapperValue = factory == null ? Resolve("_services", wrapper.WrapperName, wrapper.ContractName)
-                : "(" + wrapper.ContractName + ")_receiver!";
+            var structUpstream = CanonicalStructStreamUpstreamEmitter.Enabled(segment);
+            var contract = structUpstream ? wrapper.WrapperName : wrapper.ContractName;
+            var wrapperValue = factory == null ? Resolve("_services", wrapper.WrapperName, contract)
+                : "(" + contract + ")_receiver!";
             b.AppendLine("var wrapper = " + wrapperValue + ";");
-            b.AppendLine("_upstream = new Upstream" + segment.Id + "(this);");
-            b.AppendLine("_source = await wrapper." + wrapper.MethodName + "(_request, _upstream, Token).ConfigureAwait(false)");
+            if (structUpstream)
+                b.AppendLine("_source = await wrapper." + wrapper.StructStreamCall!.MethodName + "<Upstream" + segment.Id +
+                    ">(_request, new Upstream" + segment.Id + "(this), Token).ConfigureAwait(false)");
+            else
+            {
+                b.AppendLine("_upstream = new Upstream" + segment.Id + "(this);");
+                b.AppendLine("_source = await wrapper." + wrapper.MethodName + "(_request, _upstream, Token).ConfigureAwait(false)");
+            }
             b.AppendLine("""    ?? throw new global::System.InvalidOperationException("A Stream middleware returned a null cursor.");""");
             if (HasIdentitySource(model, segment.Id))
-                b.AppendLine("_identitySource = _upstream.MatchIdentity(_source);");
+                b.AppendLine(structUpstream ? "_identitySource = MatchUpstreamIdentity(_source);" : "_identitySource = _upstream.MatchIdentity(_source);");
         }
         else
         {
@@ -486,7 +500,9 @@ internal static class CanonicalStreamFallbackEmitter
         var depth = 1;
         if (segment.Upstream != null)
         {
-            b.AppendLine("try { var upstream = _upstream; _upstream = null; if (upstream is not null) await upstream.DisposeActiveAsync().ConfigureAwait(false); } finally {");
+            b.AppendLine(CanonicalStructStreamUpstreamEmitter.Enabled(segment)
+                ? "try { await DisposeActiveUpstreamAsync().ConfigureAwait(false); } finally {"
+                : "try { var upstream = _upstream; _upstream = null; if (upstream is not null) await upstream.DisposeActiveAsync().ConfigureAwait(false); } finally {");
             depth++;
         }
         void Cleanup(BoundAsyncFactoryEmission? factory, string field)
@@ -506,6 +522,11 @@ internal static class CanonicalStreamFallbackEmitter
 
     private static void EmitUpstream(StringBuilder b, BoundStreamHandlerEmission handler, CanonicalStreamFallbackSegment segment, int upstream, bool privateIdentityParent)
     {
+        if (CanonicalStructStreamUpstreamEmitter.Enabled(segment))
+        {
+            CanonicalStructStreamUpstreamEmitter.EmitPort(b, handler, segment);
+            return;
+        }
         var n = segment.Id;
         var item = segment.SourceItemName ?? handler.ItemName;
         b.AppendLine($$"""

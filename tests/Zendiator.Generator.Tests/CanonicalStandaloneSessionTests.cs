@@ -29,7 +29,7 @@ public sealed partial class GeneratorTests
         {
             source = source.Replace("public sealed class K0:", "public class K0Base<T>:").Replace("public K0(Probe p)", "public K0Base(Probe p)");
             source = source.Replace("public sealed class KF0:", "public class KF0Base<T>:").Replace("public KF0(Probe p)", "public KF0Base(Probe p)");
-            source = source.Replace("[ZendiatorHandler]public sealed class Handler:", "public class HandlerBase<T>:").Replace("public Handler(Probe p)", "public HandlerBase(Probe p)");
+            source = source.Replace("[Handler]public sealed class Handler:", "public class HandlerBase<T>:").Replace("public Handler(Probe p)", "public HandlerBase(Probe p)");
             var signature = async ? "public ValueTask OnExceptionAsync(Ping r,Exception e,CancellationToken t){_p.Hit(\"k1.exception\",r,t,e);return default;}" : "public void OnException(Ping r,Exception e,CancellationToken t){_p.Hit(\"k1.exception\",r,t,e);}";
             var explicitSignature = signature.Replace("public ValueTask OnExceptionAsync", "ValueTask IAsyncSendExceptionObserver<Ping>.OnExceptionAsync").Replace("public void OnException", "void ISendExceptionObserver<Ping>.OnException");
             Assert.Contains(signature, source);
@@ -38,7 +38,7 @@ public sealed partial class GeneratorTests
             Assert.Contains(request, source);
             source = source.Replace(request, "");
             source = source.Insert(source.IndexOf("namespace App{", StringComparison.Ordinal), "using Ping=global::App.Box<string>.Ping;using KF0=global::App.Factories<string>.Inner;");
-            source += "namespace App{public static class Box<T>where T:class{" + request + "}public sealed class K0:K0Base<string>{public K0(Probe p):base(p){}}public static class Factories<T>where T:class{public sealed class Inner:KF0Base<T>{public Inner(Probe p):base(p){}}}[ZendiatorHandler]public sealed partial class Handler:HandlerBase<string>{public Handler(Probe p):base(p){}}public sealed partial class Handler{}}";
+            source += "namespace App{public static class Box<T>where T:class{" + request + "}public sealed class K0:K0Base<string>{public K0(Probe p):base(p){}}public static class Factories<T>where T:class{public sealed class Inner:KF0Base<T>{public Inner(Probe p):base(p){}}}[Handler]public sealed partial class Handler:HandlerBase<string>{public Handler(Probe p):base(p){}}public sealed partial class Handler{}}";
         }
         return source + CanonicalWrapperHookSessionReference.Source(async, isVoid, false, roles.W0, roles.W1, roles.Handler, roles.Modes, patterns, standalone: true, explicitObserver: hierarchy);
     }

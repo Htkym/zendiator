@@ -16,6 +16,22 @@ if (args.Length > 0 && args[0] == "--artifact-gate")
     return;
 }
 
+if (args.Length > 0 && args[0] == "--validate-struct-upstream-child")
+{
+    if (args.Length != 3)
+        throw new ArgumentException("--validate-struct-upstream-child requires one type name and output directory");
+    StructUpstreamGate.RecordChild(args[1], Path.GetFullPath(args[2]));
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--validate-struct-upstream")
+{
+    if (args.Length != 2)
+        throw new ArgumentException("--validate-struct-upstream requires one output directory");
+    await StructUpstreamGate.Run(Path.GetFullPath(args[1]));
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--validate-native-pooling")
 {
     if (args.Length != 2)

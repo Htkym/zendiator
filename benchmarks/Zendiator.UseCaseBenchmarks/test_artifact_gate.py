@@ -1,11 +1,12 @@
 """Synthetic, non-.NET files exercise proof/bundle rejection and cache boundaries.
 
 The mocked gate never executes an application. Retained real-consumer activation,
-Windows Job behavior and 394 checks require a separately authorized validation.
+Windows Job behavior and 389+96 checks require a separately authorized validation.
 """
 
 import copy
 import json
+import itertools
 import os
 import shutil
 import tempfile
@@ -32,7 +33,7 @@ class ArtifactGateContracts(unittest.TestCase):
         self.framework.mkdir(parents=True)
         self.host = self.root / "runtime/dotnet"
         self.host.write_text("synthetic host; never execute")
-        for name in ("ArtifactGate.cs", "ArtifactEvidence.cs", "Program.cs", "ChildEvidence.cs"):
+        for name in ("ArtifactGate.cs", "ArtifactEvidence.cs", "Program.cs", "ChildEvidence.cs", "StructUpstreamGate.cs"):
             (self.project / name).write_text("synthetic implementation fingerprint")
         self.generated_project = self.build / "Zendiator.UseCaseBenchmarks-1.csproj"
         self.generated_source = self.build / "Zendiator.UseCaseBenchmarks-1.notcs"
@@ -91,12 +92,26 @@ class ArtifactGateContracts(unittest.TestCase):
         request_path = Path(args[-1])
         request = gate.read(request_path)
         outcomes = Path(request["output"]) / "correctness.json"
-        gate.write(outcomes, [{"status": "Passed"} for _ in range(394)])
+        gate.write(outcomes, [{"status": "Passed"} for _ in range(389)])
         proof = {key: request[key] for key in ("protocol", "session", "case", "childPid", "childProofSha256",
                  "gateImplementationSha256", "gateDriverSha256", "bundleFiles")}
-        proof.update(schemaVersion=1, benchmarkGateCases=394, requestHash=gate.sha(request_path),
+        proof.update(schemaVersion=1, benchmarkGateCases=389, requestHash=gate.sha(request_path),
                      correctnessSha256=gate.sha(outcomes), bundleBeforeAndAfterVerified=True,
                      assemblies=request["expectedAssemblies"], runtimeEvidence=request["expectedRuntime"])
+        extra = Path(request["output"]) / "struct-upstream"
+        cases = extra / "struct-upstream-correctness.json"
+        types = extra / "struct-upstream-driver-identification.json"
+        gate.write(cases, [dict(name=name, count=count, asynchronous=asynchronous, early=early, typed=typed,
+                               status="Passed", Handlers=1, Items=min(1, count) if early else count, Disposals=1)
+                           for name, count, asynchronous, early, typed in itertools.product(
+                               ("Stream0", "Stream5", "Relay5"), (0, 1, 16, 1024), (False, True), (False, True), (False, True))])
+        gate.write(types, [dict(Type=name, Library="Zendiator", Cases=56) for name in
+                           ("ZendiatorStructUpstreamStream0", "ZendiatorStructUpstreamStream5", "ZendiatorStructUpstreamRelay5")])
+        implementation = request["structUpstreamGateImplementationSha256"]
+        proof.update(structUpstreamGateImplementationSha256=implementation,
+                     structUpstreamGate=dict(schemaVersion=1, cases=96, driverTypes=3, implementationSha256=implementation,
+                         correctnessPath="struct-upstream/struct-upstream-correctness.json", correctnessSha256=gate.sha(cases),
+                         driverIdentificationPath="struct-upstream/struct-upstream-driver-identification.json", driverIdentificationSha256=gate.sha(types)))
         gate.write(Path(request["output"]) / "artifact-proof.json", proof)
 
     def validate(self, row, attempt):
@@ -186,7 +201,7 @@ class ArtifactGateContracts(unittest.TestCase):
                 gate.write(final_path, final)
                 hashes = {item["name"]: item["sha256"] for item in self.loads}
                 group = attempt.parents[2]
-                gate.write(group / "correctness.json", [{"status": "Passed"} for _ in range(394)])
+                gate.write(group / "correctness.json", [{"status": "Passed"} for _ in range(389)])
                 self.session.update(runtimeSha256=hashes["Zendiator"], benchmarkSha256=hashes["Zendiator.UseCaseBenchmarks"],
                                     generatorSha256="A" * 64, diSha256=hashes["Microsoft.Extensions.DependencyInjection"],
                                     runtime=self.runtime["framework"], gateSha256={"custom": gate.sha(group / "correctness.json")})
@@ -321,6 +336,64 @@ class ArtifactGateContracts(unittest.TestCase):
         row, second = self.case(2, pid=222)
         self.assertNotEqual(before, self.validate(row, second)["key"])
         self.assertEqual(len(self.gate_calls), 2)
+
+    def test_struct_gate_implementation_participates_explicitly_in_semantic_cache_key(self):
+        row, first = self.case(1)
+        before = self.validate(row, first)["key"]
+        (self.project / "StructUpstreamGate.cs").write_text("changed additional gate implementation")
+        row, second = self.case(2, pid=222)
+        self.assertNotEqual(before, self.validate(row, second)["key"])
+        self.assertEqual(len(self.gate_calls), 2)
+
+    def test_additional_proof_missing_mutated_failed_hash_count_and_classification_are_rejected(self):
+        row, attempt = self.case()
+        self.validate(row, attempt)
+        request_path = attempt / "artifact-gate-request.json"
+        request = gate.read(request_path)
+        proof_path = Path(request["output"]) / "artifact-proof.json"
+        cases_path = proof_path.parent / "struct-upstream/struct-upstream-correctness.json"
+        types_path = proof_path.parent / "struct-upstream/struct-upstream-driver-identification.json"
+        original_proof, original_cases, original_types = gate.read(proof_path), gate.read(cases_path), gate.read(types_path)
+        for mutation in ("missing-proof", "missing-results", "mutated-results", "failed-case", "wrong-hash", "wrong-count", "wrong-driver", "wrong-implementation", "duplicate-case", "duplicate-driver"):
+            with self.subTest(mutation=mutation):
+                proof, cases, types = copy.deepcopy(original_proof), copy.deepcopy(original_cases), copy.deepcopy(original_types)
+                gate.write(cases_path, cases); gate.write(types_path, types)
+                if mutation == "missing-proof": proof.pop("structUpstreamGate")
+                elif mutation == "missing-results": cases_path.unlink()
+                elif mutation == "mutated-results": cases[0]["Items"] = 999; gate.write(cases_path, cases)
+                elif mutation == "failed-case":
+                    cases[0]["status"] = "Failed"; gate.write(cases_path, cases)
+                    proof["structUpstreamGate"]["correctnessSha256"] = gate.sha(cases_path)
+                elif mutation == "wrong-hash": proof["structUpstreamGate"]["correctnessSha256"] = "0" * 64
+                elif mutation == "wrong-count":
+                    gate.write(cases_path, cases[:-1]); proof["structUpstreamGate"]["correctnessSha256"] = gate.sha(cases_path)
+                elif mutation == "wrong-driver":
+                    types[0]["Library"] = "Mediator"; gate.write(types_path, types)
+                    proof["structUpstreamGate"]["driverIdentificationSha256"] = gate.sha(types_path)
+                elif mutation == "wrong-implementation": proof["structUpstreamGate"]["implementationSha256"] = "0" * 64
+                elif mutation == "duplicate-case":
+                    cases[1] = copy.deepcopy(cases[0]); gate.write(cases_path, cases)
+                    proof["structUpstreamGate"]["correctnessSha256"] = gate.sha(cases_path)
+                elif mutation == "duplicate-driver":
+                    types[1] = copy.deepcopy(types[0]); gate.write(types_path, types)
+                    proof["structUpstreamGate"]["driverIdentificationSha256"] = gate.sha(types_path)
+                gate.write(proof_path, proof)
+                with self.assertRaises(ValueError): gate.verify_gate(request_path, proof_path)
+        gate.write(cases_path, original_cases); gate.write(types_path, original_types); gate.write(proof_path, original_proof)
+
+    def test_389_only_cache_is_not_reused_as_opt_in_proof(self):
+        row, first = self.case(1)
+        before = self.validate(row, first)
+        cache_path = first.parents[4] / "artifact-gate-cache" / (before["key"] + ".json")
+        cache = gate.read(cache_path)
+        proof_path = Path(cache["proofPath"])
+        proof = gate.read(proof_path); proof.pop("structUpstreamGate"); gate.write(proof_path, proof)
+        cache["proofSha256"] = gate.sha(proof_path); gate.write(cache_path, cache)
+        row, second = self.case(2, pid=222)
+        with self.assertRaisesRegex(ValueError, "struct upstream additional proof"):
+            self.validate(row, second)
+        self.assertEqual(len(self.gate_calls), 1)
+        self.assertFalse((second / "artifact-binding.json").exists())
 
     def test_corrupt_bundle_is_rejected_after_successful_gate(self):
         row, attempt = self.case()

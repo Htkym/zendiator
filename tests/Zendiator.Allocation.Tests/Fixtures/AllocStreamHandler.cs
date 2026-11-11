@@ -2,7 +2,7 @@ using Zendiator;
 
 namespace Zendiator.Allocation.Tests;
 
-[ZendiatorHandler]
+[Handler]
 public sealed class AllocStreamHandler : IStreamSourceHandler<AllocStream, int, AllocCursor>
 {
     public ValueTask<AllocCursor> OpenAsync(AllocStream request, CancellationToken cancellationToken) => new(new AllocCursor(request.Count, cancellationToken));

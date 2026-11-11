@@ -12,7 +12,7 @@ public sealed partial class GeneratorTests
     private static string ComposedMissingMarkerSource()
     {
         using var reader = new StreamReader(typeof(GeneratorTests).Assembly.GetManifestResourceStream("Zendiator.ComposedApp.Source")!);
-        return reader.ReadToEnd().Replace("\r\n", "\n").Replace("[ZendiatorHandler]\npublic sealed class RefreshInventoryHandler", "public sealed class RefreshInventoryHandler");
+        return reader.ReadToEnd().Replace("\r\n", "\n").Replace("[Handler]\npublic sealed class RefreshInventoryHandler", "public sealed class RefreshInventoryHandler");
     }
 
     private static string ComposedMarkerFolder(string profile)
@@ -38,10 +38,10 @@ public sealed partial class GeneratorTests
             Assert.True(workspace.TryApplyChanges(document.Project.AddAnalyzerReference(new HandlerFixGeneratorReference()).Solution));
             document = workspace.CurrentSolution.GetDocument(document.Id)!;
             var action = Assert.Single(await HandlerFixActions(document, diagnostic));
-            Assert.Equal("Add ZendiatorHandler attribute", action.Title);
+            Assert.Equal("Add Handler attribute", action.Title);
             document = await ApplyHandlerFix(workspace, document, action);
             var fixedSource = (await document.GetTextAsync()).ToString();
-            var expected = source.Replace("public sealed class RefreshInventoryHandler", "[global::Zendiator.ZendiatorHandlerAttribute]\npublic sealed class RefreshInventoryHandler");
+            var expected = source.Replace("public sealed class RefreshInventoryHandler", "[global::Zendiator.HandlerAttribute]\npublic sealed class RefreshInventoryHandler");
             Assert.Equal(expected, fixedSource);
             Assert.Empty(await HandlerFixActions(document, diagnostic));
             var output = (await document.Project.GetCompilationAsync())!;
@@ -80,8 +80,8 @@ public sealed partial class GeneratorTests
         var profiles = new[]
         {
             ("invalid", source.Replace("Stage.Wrapper(typeof(CountCache<>))", "Stage.Wrapper(typeof(InvalidCache<>))") + "\npublic sealed class InvalidCache<T> {}"),
-            ("unadopted", source.Replace("typeof(CachedCollector<>), typeof(WarehouseCollector<>)", "typeof(CachedCollector<>), typeof(WarehouseCollector<>), typeof(ThirdCollector<>)") + "\n[Zendiator.ZendiatorHandler]public sealed class ThirdCollector<T>:Zendiator.ISyncRequestHandler<CollectCounts<T>,int> where T:class { public int Handle(CollectCounts<T> r,System.Threading.CancellationToken t)=>0; }"),
-            ("ambiguous", source.Replace("typeof(RefreshInventoryHandler));", "typeof(RefreshInventoryHandler), typeof(OtherRefreshHandler));") + "\n[Zendiator.ZendiatorHandler]public sealed class OtherRefreshHandler:Zendiator.IRequestHandler<RefreshInventory> { public System.Threading.Tasks.ValueTask HandleAsync(RefreshInventory r,System.Threading.CancellationToken t)=>default; }")
+            ("unadopted", source.Replace("typeof(CachedCollector<>), typeof(WarehouseCollector<>)", "typeof(CachedCollector<>), typeof(WarehouseCollector<>), typeof(ThirdCollector<>)") + "\n[Zendiator.Handler]public sealed class ThirdCollector<T>:Zendiator.ISyncRequestHandler<CollectCounts<T>,int> where T:class { public int Handle(CollectCounts<T> r,System.Threading.CancellationToken t)=>0; }"),
+            ("ambiguous", source.Replace("typeof(RefreshInventoryHandler));", "typeof(RefreshInventoryHandler), typeof(OtherRefreshHandler));") + "\n[Zendiator.Handler]public sealed class OtherRefreshHandler:Zendiator.IRequestHandler<RefreshInventory> { public System.Threading.Tasks.ValueTask HandleAsync(RefreshInventory r,System.Threading.CancellationToken t)=>default; }")
         };
         foreach (var (profile, invalid) in profiles)
         {

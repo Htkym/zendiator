@@ -33,3 +33,5 @@ internal sealed record BoundStreamHookEmission(string HookName, string ContractN
         get; init;
     }
 }
+
+internal sealed record BoundStructStreamCallEmission(string MethodName);

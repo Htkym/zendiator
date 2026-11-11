@@ -43,7 +43,7 @@ namespace IteratorExample;
 
 public sealed record ReadNumbers(int Count) : IStreamRequest<int>;
 
-[ZendiatorHandler]
+[Handler]
 public sealed class ReadNumbersHandler : IStreamHandler<ReadNumbers, int>
 {
     public async IAsyncEnumerable<int> Handle(ReadNumbers request,

@@ -17,7 +17,7 @@ namespace Zendiator.CodeFixes;
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(MissingHandlerAttributeCodeFixProvider)), Shared]
 public sealed class MissingHandlerAttributeCodeFixProvider : CodeFixProvider
 {
-    private const string Title = "Add ZendiatorHandler attribute";
+    private const string Title = "Add Handler attribute";
     private const string EquivalenceKey = "Zendiator.AddHandlerAttribute";
     public override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create("ZEN0035");
     public override FixAllProvider GetFixAllProvider() => new DocumentFixAll();

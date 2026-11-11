@@ -143,6 +143,12 @@ jobs:
           $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
           ./scripts/pooled-producer-package-smoke-test.ps1 -PackageVersion $version -PackagesDir artifacts/packages -Aot
 
+      - name: Typed Stream standard contract package and Native AOT smoke
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
+          ./scripts/struct-upstream-package-smoke-test.ps1 -PackageVersion $version -PackagesDir artifacts/packages -WorkingDir (Join-Path $env:RUNNER_TEMP 'standard-stream-smoke') -Aot
+
       - name: Record validation outcome
         if: always()
         shell: pwsh

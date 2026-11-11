@@ -97,12 +97,12 @@ public sealed partial class GeneratorTests
                     private readonly Probe _p;public SyncBefore(Probe p){_p=p;p.Construct(5,this);}
                     public Ping Before(Ping r,CancellationToken t)=>r;
                 }
-                [ZendiatorHandler]public sealed class Handler:IRequestHandler<Ping,int>,IDisposable {
+                [Handler]public sealed class Handler:IRequestHandler<Ping,int>,IDisposable {
                     private readonly Probe _p;public Handler(Probe p){_p=p;p.Construct(3,this);}
                     public ValueTask<int> HandleAsync(Ping r,CancellationToken t)=>_p.Handle(3,this,r.Value);
                     public void Dispose()=>_p.Release(this);
                 }
-                [ZendiatorHandler]public sealed class OtherHandler:IRequestHandler<Pong,int>,IDisposable {
+                [Handler]public sealed class OtherHandler:IRequestHandler<Pong,int>,IDisposable {
                     private readonly Probe _p;public OtherHandler(Probe p){_p=p;p.Construct(4,this);}
                     public ValueTask<int> HandleAsync(Pong r,CancellationToken t)=>_p.Handle(4,this,r.Value);
                     public void Dispose()=>_p.Release(this);

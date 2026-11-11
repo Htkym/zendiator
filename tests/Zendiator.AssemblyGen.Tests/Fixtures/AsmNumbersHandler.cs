@@ -2,7 +2,7 @@ using global::Zendiator;
 
 namespace Zendiator.AssemblyGen.Tests;
 
-[ZendiatorHandler]
+[Handler]
 public sealed class AsmNumbersHandler : IStreamSourceHandler<AsmNumbers, int, AsmNumbersCursor>
 {
     public ValueTask<AsmNumbersCursor> OpenAsync(AsmNumbers request, CancellationToken cancellationToken) =>

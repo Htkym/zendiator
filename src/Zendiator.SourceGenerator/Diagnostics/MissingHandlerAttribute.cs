@@ -19,7 +19,7 @@ internal static class MissingHandlerAttribute
     internal const string HandlerKey = "Zendiator.Handler";
     internal const string SourceChecksumKey = "Zendiator.SourceChecksum";
     internal const string TargetChecksumKey = "Zendiator.TargetChecksum";
-    internal const string AttributeName = "Zendiator.ZendiatorHandlerAttribute";
+    internal const string AttributeName = "Zendiator.HandlerAttribute";
 
     internal sealed class Target
     {
@@ -77,7 +77,7 @@ internal static class MissingHandlerAttribute
             model.GetTypeInfo(expression.Type, ct).Type is not INamedTypeSymbol
             { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsSealed: true, Arity: 0, ContainingType: null, DeclaredAccessibility: Accessibility.Public } handler ||
             !Same(handler.ContainingAssembly, compilation.Assembly) || handler.BaseType?.SpecialType != SpecialType.System_Object ||
-            handler.GetAttributes().Any(a => a.AttributeClass?.Name == "ZendiatorHandlerAttribute"))
+            handler.GetAttributes().Any(a => a.AttributeClass?.Name == "HandlerAttribute"))
             return null;
 
         var declarations = handler.DeclaringSyntaxReferences.Select(r => r.GetSyntax(ct)).ToArray();

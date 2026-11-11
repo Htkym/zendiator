@@ -1,22 +1,20 @@
-# Getting started with 0.5.0
+# Getting started with 0.6.0
 
-Use matching 0.5.0 core packages. Before they are published to NuGet.org, obtain
-matching locally built packages and use your local package feed. See the
-[release notes](release/0.5.0-release-notes.md) before upgrading from 0.4.0.
+Use matching 0.6.0 packages from NuGet.org. See the
+[release notes](release/0.6.0-release-notes.md) for migration.
 
 ## Run the sample
 
 The [GettingStarted project](../samples/Zendiator.Sample.GettingStarted/Zendiator.Sample.GettingStarted.csproj)
 requires .NET 10 and C# 14. Its [source](../samples/Zendiator.Sample.GettingStarted/Program.cs)
 shows synchronous Send, asynchronous Send and Stream with ordered hooks.
-From the repository root, enter your package feed and version:
+From the repository root:
 
 ```powershell
-$feed = Read-Host 'Package feed path'
-$version = Read-Host 'Package version'
+$version = '0.6.0'
 $project = 'samples/Zendiator.Sample.GettingStarted/Zendiator.Sample.GettingStarted.csproj'
 
-dotnet restore $project -p:ZendiatorPackageVersion=$version --source $feed --source https://api.nuget.org/v3/index.json
+dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
 dotnet run --project $project -c Release --no-restore -p:ZendiatorPackageVersion=$version
 ```
 
@@ -200,11 +198,11 @@ Restore the ComposedApp project from the selected feed:
 
 ```powershell
 $project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
-dotnet restore $project -p:ZendiatorPackageVersion=$version --source $feed --source https://api.nuget.org/v3/index.json
+dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
 ```
 
 Open the project in current Visual Studio. If `RefreshInventoryHandler` is missing
-its attribute, use **Add ZendiatorHandler attribute** on ZEN0035. The fix adds only
+its attribute, use **Add Handler attribute** on ZEN0035. The fix adds only
 the attribute. Existing Type registrations in the App are preserved; the installed
 generator must accept the complete App after the edit. Ambiguous handlers, invalid
 contracts and unadopted compositions receive no speculative fix. If the action
@@ -221,7 +219,7 @@ Do not convert an arbitrary wrapper body to hooks without checking its intent.
 
 ## Migrating from 0.4.0
 
-- Mark selected handlers with `[ZendiatorHandler]` and select them explicitly
+- Mark selected handlers with `[Handler]` and select them explicitly
   with `Handlers` in the composition.
 - Declare each route's hooks and wrappers in an ordered `Pipeline` list. Use an
   empty list for a zero-stage Stream route. Eligible handler-only `SendSync` and
@@ -248,7 +246,7 @@ public sealed record Query<TMarker>(int Value) : IRequest<int>;
 public sealed record ClosedQuery(int Value) : IRequest<int>;
 ```
 
-Supply `[ZendiatorHandler]` classes `Handler<TMarker>` implementing
+Supply `[Handler]` classes `Handler<TMarker>` implementing
 `IRequestHandler<Query<TMarker>, int>` and `ClosedHandler` implementing
 `IRequestHandler<ClosedQuery, int>`, with your handler bodies and their DI dependencies.
 The open wrapper below calls the continuation once and logs completion in `finally`:

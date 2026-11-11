@@ -158,7 +158,7 @@ public sealed partial class GeneratorTests
                     ValueTask IAsyncSendFinallyObserver<Ping>.FinallyAsync(Ping r,SendExitInfo e,CancellationToken t){_probe.CheckToken(t);return _probe.Finally(_id,r,e);}
                     ValueTask IAsyncDisposable.DisposeAsync()=>_probe.DisposeHook(this,_id);
                 }
-                [ZendiatorHandler]public sealed class Handler:IRequestHandler<Ping{{(isVoid ? "" : ",int")}}>,IAsyncDisposable {
+                [Handler]public sealed class Handler:IRequestHandler<Ping{{(isVoid ? "" : ",int")}}>,IAsyncDisposable {
                     private readonly Probe _probe;public Handler(Probe p){_probe=p;p.HandlerConstruct();}
                     {{(isVoid ? "ValueTask" : "ValueTask<int>")}} {{handlerContract}}.HandleAsync(Ping r,CancellationToken t){_probe.CheckToken(t);return _probe.{{(isVoid ? "HandleVoid" : "Handle")}}(r{{(isVoid ? "" : ",r.Value")}});}
                     ValueTask IAsyncDisposable.DisposeAsync()=>_probe.DisposeHandler();

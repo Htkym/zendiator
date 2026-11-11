@@ -24,7 +24,7 @@ public sealed partial class GeneratorTests
                     if(mode is not ("pending-fault" or "pending-cancel"))Failed.Fail(Error);
                 }
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){p.Opened++;return new(new Cursor(p));}
                 public ValueTask DisposeAsync(){p.SessionDisposals++;p.Released.Add("handler");if(p.Mode=="pending-fault")throw p.CleanupError;return default;}
             }
@@ -106,7 +106,7 @@ public sealed partial class GeneratorTests
                 public System.Threading.Tasks.Sources.ValueTaskSourceStatus GetStatus(short token)=>inner.GetStatus(token);
                 public void OnCompleted(Action<object?> continuation,object? state,short token,System.Threading.Tasks.Sources.ValueTaskSourceOnCompletedFlags flags)=>inner.OnCompleted(continuation,state,token,flags);
             }
-            [ZendiatorHandler]public sealed class Handler(Flow f):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
+            [Handler]public sealed class Handler(Flow f):IStreamSourceHandler<Items,int,Cursor>,IAsyncDisposable{
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){f.Opened++;return new(new Cursor(f));}
                 public ValueTask DisposeAsync(){f.SessionDisposals++;f.Released.Add("handler");return default;}
             }

@@ -46,6 +46,10 @@ internal sealed record CompositionSelectionModel(string Identity, string Key,
     {
         get; init;
     }
+    public EquatableArray<string> EagerDependencies
+    {
+        get; init;
+    }
     public bool LazyClosedServiceCache
     {
         get; init;

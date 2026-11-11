@@ -303,7 +303,7 @@ internal sealed partial class CompositionListBinding
                 var candidate = _marked.FirstOrDefault(c => Same(c.Symbol, entry.Type.OriginalDefinition)) ?? BindExplicitMetadata(_compilation, entry.Type, _ct);
                 if (candidate == null)
                 {
-                    Reject("UnsupportedGenerationShape", entry.Anchor, $"Handler {Name(entry.Type)} requires a source ZendiatorHandler marker or a supported explicitly supplied metadata type.");
+                    Reject("UnsupportedGenerationShape", entry.Anchor, $"Handler {Name(entry.Type)} requires a source Handler marker or a supported explicitly supplied metadata type.");
                     if (Sources.TryGetValue(entry.Anchor, out var source) && source.SourceTree != null &&
                         Zendiator.Tooling.MissingHandlerAttribute.Find(_compilation, source.SourceTree, source.SourceSpan, _ct) is { } fix)
                     {

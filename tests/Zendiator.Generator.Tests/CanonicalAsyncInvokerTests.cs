@@ -14,10 +14,10 @@ public sealed partial class GeneratorTests
     private static string AsyncInvokerSource(string shape)
     {
         var source = AsyncHookSource("direct", false)
-            .Replace("[ZendiatorHandler]public sealed class Handler:", "public class HandlerBase:")
+            .Replace("[Handler]public sealed class Handler:", "public class HandlerBase:")
             .Replace("public Handler(Probe p)", "public HandlerBase(Probe p)")
             .Replace("ValueTask<int> IRequestHandler<Ping,int>.HandleAsync", "public ValueTask<int> HandleAsync");
-        source += "namespace App{[ZendiatorHandler]public sealed class Handler:HandlerBase{public Handler(Probe p):base(p){}}}";
+        source += "namespace App{[Handler]public sealed class Handler:HandlerBase{public Handler(Probe p):base(p){}}}";
         if (shape == "explicit")
             return source.Replace("public Hook(Probe p)", "public ValueTask<Ping> BeforeAsync(Ping r,CancellationToken t)=>throw new InvalidOperationException(\"Wrong public overload\");public Hook(Probe p)");
         source = source.Replace("ValueTask<Ping> IAsyncSendRequestTransform<Ping>.BeforeAsync", "public ValueTask<Ping> BeforeAsync")

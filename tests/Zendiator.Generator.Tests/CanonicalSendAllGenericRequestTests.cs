@@ -94,7 +94,7 @@ public sealed partial class GeneratorTests
         {
             var mode = AllGenericHandlerMode(c, id);
             text += $$"""
-                [ZendiatorHandler]public class H{{id}}:{{(async ? "IRequestHandler" : "ISyncRequestHandler")}}<Ping{{(isVoid ? "" : ",int")}}>,{{disposable}}{
+                [Handler]public class H{{id}}:{{(async ? "IRequestHandler" : "ISyncRequestHandler")}}<Ping{{(isVoid ? "" : ",int")}}>,{{disposable}}{
                     private readonly Probe p;public H{{id}}(Probe p){this.p=p;p.Created(this,"H{{id}}",{{(mode.EndsWith("owned", StringComparison.Ordinal) ? "true" : "false")}},{{(mode == "direct" ? "true" : "false")}});}
                     public {{ret}} {{(async ? "HandleAsync" : "Handle")}}(Ping r,CancellationToken t){
                         r.Mark(p,"H{{id}}.body",t);p.Handlers.Add({{id}});if({{(wrapper ? "p.FailBody(" + id + ")" : "p.Fail&&" + id + "==1")}})throw p.Failure;
@@ -111,7 +111,7 @@ public sealed partial class GeneratorTests
             reference = Regex.Replace(reference, @"\bHFactory\b", "F" + id);
             text += reference.Replace("namespace App {", "", StringComparison.Ordinal)[..^1];
         }
-        text += "[ZendiatorHandler]public sealed class GenericH3<T>:H3{public GenericH3(Probe p):base(p){}}";
+        text += "[Handler]public sealed class GenericH3<T>:H3{public GenericH3(Probe p):base(p){}}";
         var allRet = async ? isVoid ? "ValueTask" : "ValueTask<int[]>" : isVoid ? "void" : "int[]";
         var calls = string.Join("", new[] { 2, 1, 3 }.Select((id, i) => (isVoid ? "" : "results[" + i + "]=") + (async ? "await " : "") + "Reference" + id + ".Send(p,r,t)" + (async ? ".ConfigureAwait(false)" : "") + ";"));
         return text + "public static class ReferenceAll{public static " + (async ? "async " : "") + allRet + " Run(IServiceProvider p,Ping r,CancellationToken t){ArgumentNullException.ThrowIfNull(r);t.ThrowIfCancellationRequested();" + (isVoid ? "" : "var results=new int[3];") + calls + (isVoid ? "" : "return results;") + "}}}";

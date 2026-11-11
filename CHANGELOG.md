@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.5.1 (unreleased)
+## 0.6.0 (unreleased)
+
+- Rename the public handler marker to `HandlerAttribute`, used as `[Handler]`. Remove the old attribute name; rebuild consumers with matching packages.
+- Expose typed `OpenAsync<TNext>` on standard Stream middleware and automatically select struct upstream ports for eligible sealed implementations.
+- Preserve legacy interface adapters and DI ownership; document concrete-call migration and explicit eager-dependency activation.
+- Refresh the README's selected six-library comparison and normal NuGet setup.
+
+See [0.6.0 migration and release notes](docs/release/0.6.0-release-notes.md).
+
+## 0.5.1
 
 - Generate direct calls for eligible sealed Send wrappers while retaining interface fallbacks for other bindings.
 - Add the experimental, explicitly enabled `GeneratePooledProducer` attribute for supported private `async ValueTask<bool>` helpers. Unsupported source receives diagnostics; existing producers are unchanged unless opted in.

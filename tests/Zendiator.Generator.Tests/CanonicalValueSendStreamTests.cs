@@ -52,7 +52,7 @@ public sealed partial class GeneratorTests
             }
             """.Replace("__CONSUMER__", gate ? "" : ValueSendStreamConsumer).Replace("__REJECTED__", gate ? """
             public readonly record struct GenericSend<T>(T Value):ISyncRequest<int>;
-            [ZendiatorHandler]public sealed class GenericHandler:ISyncRequestHandler<GenericSend<int>,int>{
+            [Handler]public sealed class GenericHandler:ISyncRequestHandler<GenericSend<int>,int>{
                 public int Handle(GenericSend<int> r,CancellationToken t)=>r.Value;
             }
             [ZendiatorComposition("generic-send-stream")]public sealed class GenericMix;

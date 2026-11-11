@@ -21,15 +21,15 @@ public sealed partial class GeneratorTests
             public sealed record SyncPing(int Value):ISyncRequest<int>;
             public sealed record SyncNote(int Value):ISyncRequest;
             public sealed record SealedNote(int Value):ISyncRequest;
-            [ZendiatorHandler]public sealed class SealedHandler(Trace t):IRequestHandler<SealedPing,int>{public ValueTask<int> HandleAsync(SealedPing r,CancellationToken c){t.Calls.Add("handler");return new(r.Value);}}
-            [ZendiatorHandler]public sealed class InheritedHandler(Trace t):IRequestHandler<InheritedPing,int>{public ValueTask<int> HandleAsync(InheritedPing r,CancellationToken c){t.Calls.Add("handler");return new(r.Value);}}
-            [ZendiatorHandler]public sealed class VirtualHandler(Trace t):IRequestHandler<VirtualPing,int>{public ValueTask<int> HandleAsync(VirtualPing r,CancellationToken c){t.Calls.Add("handler");return new(r.Value);}}
-            [ZendiatorHandler]public sealed class ReimplementedHandler(Trace t):IRequestHandler<ReimplementedPing,int>{public ValueTask<int> HandleAsync(ReimplementedPing r,CancellationToken c){t.Calls.Add("handler");return new(r.Value);}}
-            [ZendiatorHandler]public sealed class ExplicitHandler(Trace t):IRequestHandler<ExplicitPing,int>{public ValueTask<int> HandleAsync(ExplicitPing r,CancellationToken c){t.Calls.Add("handler");return new(r.Value);}}
-            [ZendiatorHandler]public sealed class OverloadHandler(Trace t):IRequestHandler<OverloadPing,int>{public ValueTask<int> HandleAsync(OverloadPing r,CancellationToken c){t.Calls.Add("handler");return new(r.Value);}}
-            [ZendiatorHandler]public sealed class SyncHandler(Trace t):ISyncRequestHandler<SyncPing,int>{public int Handle(SyncPing r,CancellationToken c){t.Calls.Add("handler");return r.Value;}}
-            [ZendiatorHandler]public sealed class NoteHandler(Trace t):ISyncRequestHandler<SyncNote>{public void Handle(SyncNote r,CancellationToken c)=>t.Calls.Add("handler:"+r.Value);}
-            [ZendiatorHandler]public sealed class SealedNoteHandler(Trace t):ISyncRequestHandler<SealedNote>{public void Handle(SealedNote r,CancellationToken c)=>t.Calls.Add("handler:"+r.Value);}
+            [Handler]public sealed class SealedHandler(Trace t):IRequestHandler<SealedPing,int>{public ValueTask<int> HandleAsync(SealedPing r,CancellationToken c){t.Calls.Add("handler");return new(r.Value);}}
+            [Handler]public sealed class InheritedHandler(Trace t):IRequestHandler<InheritedPing,int>{public ValueTask<int> HandleAsync(InheritedPing r,CancellationToken c){t.Calls.Add("handler");return new(r.Value);}}
+            [Handler]public sealed class VirtualHandler(Trace t):IRequestHandler<VirtualPing,int>{public ValueTask<int> HandleAsync(VirtualPing r,CancellationToken c){t.Calls.Add("handler");return new(r.Value);}}
+            [Handler]public sealed class ReimplementedHandler(Trace t):IRequestHandler<ReimplementedPing,int>{public ValueTask<int> HandleAsync(ReimplementedPing r,CancellationToken c){t.Calls.Add("handler");return new(r.Value);}}
+            [Handler]public sealed class ExplicitHandler(Trace t):IRequestHandler<ExplicitPing,int>{public ValueTask<int> HandleAsync(ExplicitPing r,CancellationToken c){t.Calls.Add("handler");return new(r.Value);}}
+            [Handler]public sealed class OverloadHandler(Trace t):IRequestHandler<OverloadPing,int>{public ValueTask<int> HandleAsync(OverloadPing r,CancellationToken c){t.Calls.Add("handler");return new(r.Value);}}
+            [Handler]public sealed class SyncHandler(Trace t):ISyncRequestHandler<SyncPing,int>{public int Handle(SyncPing r,CancellationToken c){t.Calls.Add("handler");return r.Value;}}
+            [Handler]public sealed class NoteHandler(Trace t):ISyncRequestHandler<SyncNote>{public void Handle(SyncNote r,CancellationToken c)=>t.Calls.Add("handler:"+r.Value);}
+            [Handler]public sealed class SealedNoteHandler(Trace t):ISyncRequestHandler<SealedNote>{public void Handle(SealedNote r,CancellationToken c)=>t.Calls.Add("handler:"+r.Value);}
 
             public sealed class SealedWrapper(Trace t):IAsyncSendWrapper<SealedPing,int>{
                 public ValueTask<int> InvokeAsync<TNext>(SealedPing r,TNext next,CancellationToken c) where TNext:IAsyncSendContinuation<SealedPing,int>{t.Calls.Add("sealed");return next.InvokeAsync(r with{Value=r.Value+1},c);}

@@ -11,7 +11,7 @@ namespace Zendiator.SourceGenerator;
 /// <summary>Extracts marked source and explicitly supplied metadata targets. Interfaces verify these targets.</summary>
 internal static class MarkedHandlerDiscovery
 {
-    internal const string MarkerName = "Zendiator.ZendiatorHandlerAttribute";
+    internal const string MarkerName = "Zendiator.HandlerAttribute";
     // Symbols and locations stay in the current binding stream, outside value equality.
     internal sealed record Candidate(MarkedHandlerModel Model, INamedTypeSymbol Symbol, Location Location);
 

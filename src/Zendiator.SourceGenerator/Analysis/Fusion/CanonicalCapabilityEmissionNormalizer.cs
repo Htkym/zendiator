@@ -73,9 +73,7 @@ internal static class CanonicalCapabilityEmissionNormalizer
                 CatalogMarkerTypes = c.CatalogMarkerTypes,
                 ExternAliases = c.ExternAliases,
                 RegistrationStages = new(hooks.Select(s => new RegistrationStageEmission(s.HookName, "Hook", s.Factory?.FactoryName))),
-                RouteDependencyTypes = !sync && hf == null && !handler.HandlerIsValueType && hooks.Count != 0 &&
-                    hooks.All(s => !s.HookIsValueType && s.Factory == null) &&
-                    !hooks.All(s => s.Before is { Completion: BoundCompletionKind.Synchronous } && s.Success == null && s.Exception == null && s.Finally == null)
+                RouteDependencyTypes = UsesDependencyCarrier(route)
                     ? new(hooks.Select(s => s.HookName).Append(handler.HandlerName).Distinct(System.StringComparer.Ordinal)) : default
             };
             output.Add(new(registration, route.Family.Value, new(hooks), hf)
@@ -85,6 +83,14 @@ internal static class CanonicalCapabilityEmissionNormalizer
         }
         return new(new(output));
     }
+    internal static bool UsesDependencyCarrier(BoundPipelineModel route) =>
+        route.Family == BoundDispatchFamily.SendAsync && route.Handlers.Count == 1 &&
+        route.Handlers[0].Sessions.Count == 0 && route.Handlers[0].AsyncEmission is { HandlerIsValueType: false } &&
+        route.Stages.Count != 0 && route.Stages.All(stage => stage.Kind == FusionStageKind.Hook && stage.Sessions.Count == 0 &&
+            stage.Capabilities is { HookIsValueType: false, Factory: null }) &&
+        !route.Stages.All(stage => stage.Capabilities is
+        { Before.Completion: BoundCompletionKind.Synchronous, Success: null, Exception: null, Finally: null });
+
     internal static BoundAsyncFactoryEmission? Factory(BoundSessionModel s, bool sync)
     {
         if (!s.SuppliesCallbackReceiver || s.Ownership is not (FusionOwnership.OwnedSession or FusionOwnership.BorrowedResource))

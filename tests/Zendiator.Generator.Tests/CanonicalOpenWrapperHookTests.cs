@@ -37,7 +37,7 @@ public sealed partial class GeneratorTests
             public ValueTask<T> Value<T>(T value){var gate=new AsyncOnceGate<T>(value);Gates.Add(gate);gate.Complete();return gate.Task;}
             public ValueTask Done(){var gate=new AsyncOnceGate<int>(0);Gates.Add(gate);gate.Complete();return gate.Void;}
         }
-        [ZendiatorHandler]public sealed class Handler<T>:IRequestHandler<Query<T>{{response}}>,IDisposable where T:class,new() {
+        [Handler]public sealed class Handler<T>:IRequestHandler<Query<T>{{response}}>,IDisposable where T:class,new() {
             private readonly Probe p;public Handler(Probe p){this.p=p;p.Resolve(this,"H");}
             public {{result}} HandleAsync(Query<T> r,CancellationToken token){p.Hit("H",r,token);var gate=new AsyncOnceGate<int>(r.Value);p.Gates.Add(gate);p.Ready[p.HandlerCalls++].SetResult(gate);return gate.{{(isVoid ? "Void" : "Task")}};}
             public void Dispose(){p.Disposed.Add(this);}

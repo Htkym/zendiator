@@ -19,7 +19,7 @@ public sealed partial class GeneratorTests
             var request = "global::GenericCases." + (c.Void ? "Command" : "Response") + "<T>";
             var ret = c.Async ? c.Void ? "ValueTask" : "ValueTask<int>" : c.Void ? "void" : "int";
             text += $$"""
-                [ZendiatorHandler]public class {{name}}<T,B>:{{(c.Async ? "IRequestHandler" : "ISyncRequestHandler")}}<{{request}}{{(c.Void ? "" : ",int")}}>,{{(c.Async ? "IAsyncDisposable" : "IDisposable")}} where B:global::GenericCases.IBranchTag,new(){
+                [Handler]public class {{name}}<T,B>:{{(c.Async ? "IRequestHandler" : "ISyncRequestHandler")}}<{{request}}{{(c.Void ? "" : ",int")}}>,{{(c.Async ? "IAsyncDisposable" : "IDisposable")}} where B:global::GenericCases.IBranchTag,new(){
                     private readonly global::GenericCases.Probe p;private readonly int id;
                     public {{name}}(global::GenericCases.Probe p){this.p=p;id=new B().Id;p.Trace.Add("handler-type:"+GetType());p.Created(this,"H"+id,id==2,id==3);}
                     public {{ret}} {{(c.Async ? "HandleAsync" : "Handle")}}({{request}} r,CancellationToken t){
@@ -35,11 +35,11 @@ public sealed partial class GeneratorTests
     }
     private static string AllHandlerVisibilityExtras(AllGenericCase c) => $$"""
         namespace GenericCases.{{c.Name}}{
-        [ZendiatorHandler]internal sealed class InternalH<T>:H3{public InternalH(Probe p):base(p){} }
-        [ZendiatorHandler]internal sealed class InternalPlain:H3{public InternalPlain(Probe p):base(p){} }
-        internal static class InternalHost{[ZendiatorHandler]public sealed class Nested<T>:H3{public Nested(Probe p):base(p){} } }
-        public static class PublicHost{[ZendiatorHandler]public sealed class Nested<T>:H3{public Nested(Probe p):base(p){} } }
-        [ZendiatorHandler]public sealed class ConstrainedH<T>:H3 where T:class{public ConstrainedH(Probe p):base(p){} }
+        [Handler]internal sealed class InternalH<T>:H3{public InternalH(Probe p):base(p){} }
+        [Handler]internal sealed class InternalPlain:H3{public InternalPlain(Probe p):base(p){} }
+        internal static class InternalHost{[Handler]public sealed class Nested<T>:H3{public Nested(Probe p):base(p){} } }
+        public static class PublicHost{[Handler]public sealed class Nested<T>:H3{public Nested(Probe p):base(p){} } }
+        [Handler]public sealed class ConstrainedH<T>:H3 where T:class{public ConstrainedH(Probe p):base(p){} }
         }
         """;
     private static string AllClosedHandlerExtras(AllGenericCase c, bool wrapper = false, bool genericHook = false)

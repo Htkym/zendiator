@@ -59,7 +59,7 @@ public sealed partial class GeneratorTests
                     public {{ret}} {{(async ? "AfterAsync" : "After")}}(Ping request,{{r}} value,CancellationToken t){_p.Hit("after",request.Value);_p.AfterInput=value;{{r}} next={{transform}};_p.AfterOutput=next;return {{(async ? "new(next)" : "next")}};}
                     public void Finally(Ping request,SendExitInfo e,CancellationToken t){_p.Hit("finally",request.Value);}
                 }
-                [ZendiatorHandler]public sealed class Handler:{{(async ? "IRequestHandler" : "ISyncRequestHandler")}}<Ping,{{r}}>,{{(async ? "IAsyncDisposable" : "IDisposable")}}{
+                [Handler]public sealed class Handler:{{(async ? "IRequestHandler" : "ISyncRequestHandler")}}<Ping,{{r}}>,{{(async ? "IAsyncDisposable" : "IDisposable")}}{
                     private readonly Probe _p;public Handler(Probe p){_p=p;p.Construct(this);}
                     public {{ret}} {{(async ? "HandleAsync" : "Handle")}}(Ping request,CancellationToken t){{{(async ? "return _p.Body(request.Value," + make + ");" : "_p.Hit(\"body\",request.Value);" + r + " value=" + make + ";_p.HandlerResponse=value;return value;")}}}
                     public {{(async ? "ValueTask DisposeAsync()" : "void Dispose()")}}{_p.Dispose(this);{{(async ? "return default;" : "")}}}

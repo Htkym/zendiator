@@ -41,7 +41,7 @@ public sealed partial class GeneratorTests
                 public sealed class A;public sealed class B;public sealed class C;
                 public sealed class D;public sealed class E;public sealed class F;
                 public sealed record Ping<T>(int Value):ISyncRequest<int>;
-                [ZendiatorHandler]public sealed class Handler<T>:ISyncRequestHandler<Ping<T>,int>,IDisposable {
+                [Handler]public sealed class Handler<T>:ISyncRequestHandler<Ping<T>,int>,IDisposable {
                     private readonly Probe probe;
                     public Handler(Probe probe){this.probe=probe;probe.Construct(this);}
                     public int Handle(Ping<T> request,CancellationToken token)=>probe.Hit(this,request.Value);

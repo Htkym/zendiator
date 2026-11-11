@@ -58,7 +58,7 @@ public sealed partial class GeneratorTests
         return $$"""
             namespace OpenZero.{{profile}} {
             public sealed record Query<L,R>(int Value,Shared Shared):{{request}};
-            [ZendiatorHandler]public sealed class Handler<X,Y>:{{contract}},IDisposable where X:class,IRight,new() where Y:class,ILeft,new(){
+            [Handler]public sealed class Handler<X,Y>:{{contract}},IDisposable where X:class,IRight,new() where Y:class,ILeft,new(){
                 private readonly Probe p;public Handler(Probe p){this.p=p;p.Resolve(this);}
                 public {{result}} {{method}}(Query<Y,X> r,CancellationToken token){p.Hit(r,r.Shared,token);{{body}}}
                 public void Dispose()=>p.Dispose(this);
@@ -297,10 +297,10 @@ public sealed partial class GeneratorTests
     {
         var source = OpenSendZeroCommon + OpenSendZeroDefinition("SR") + """
             namespace OpenZero.SR {
-            [ZendiatorHandler]public sealed class Missing<X,Y,Unused>:ISyncRequestHandler<Query<Y,X>,int>{public int Handle(Query<Y,X> r,CancellationToken token)=>0;}
+            [Handler]public sealed class Missing<X,Y,Unused>:ISyncRequestHandler<Query<Y,X>,int>{public int Handle(Query<Y,X> r,CancellationToken token)=>0;}
             public sealed class Partial<X,Y>:ISendRequestTransform<Query<X,Y>>{public Query<X,Y> Before(Query<X,Y> r,CancellationToken token)=>r;}
             public sealed record OtherQuery<L,R>:ISyncRequest<int>;
-            [ZendiatorHandler]public sealed class OtherHandler<L,R>:ISyncRequestHandler<OtherQuery<L,R>,int>{public int Handle(OtherQuery<L,R> r,CancellationToken token)=>0;}
+            [Handler]public sealed class OtherHandler<L,R>:ISyncRequestHandler<OtherQuery<L,R>,int>{public int Handle(OtherQuery<L,R> r,CancellationToken token)=>0;}
             }
             """;
         const string handlers = "c.Handlers(typeof(Query<,>),DispatchFamily.SendSync,typeof(Handler<,>));";

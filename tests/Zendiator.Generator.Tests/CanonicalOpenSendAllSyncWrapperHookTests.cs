@@ -38,12 +38,12 @@ public sealed partial class GeneratorTests
                 if(Mode=="cancel"&&Branch==1){Inner.Cancel();throw Failure;}return result;
             }
         }
-        [ZendiatorHandler]public sealed class ZHandler<X,Y>:ISyncRequestHandler<Request<Y,X>,int>,IDisposable where X:class,new() where Y:class {
+        [Handler]public sealed class ZHandler<X,Y>:ISyncRequestHandler<Request<Y,X>,int>,IDisposable where X:class,new() where Y:class {
             private readonly Probe p;public ZHandler(Probe p){this.p=p;p.Resolve(this,"Z");}
             public int Handle(Request<Y,X> r,CancellationToken token)=>p.Body("Z",r,r.Value,r.Shared,token);
             public void Dispose(){p.Disposed.Add(this);}
         }
-        [ZendiatorHandler]public sealed class AHandler<X,Y>:ISyncRequestHandler<Request<X,Y>,int>,IDisposable where X:class,ILeft,new() where Y:class {
+        [Handler]public sealed class AHandler<X,Y>:ISyncRequestHandler<Request<X,Y>,int>,IDisposable where X:class,ILeft,new() where Y:class {
             private readonly Probe p;public AHandler(Probe p){this.p=p;p.Resolve(this,"A");}
             public int Handle(Request<X,Y> r,CancellationToken token)=>p.Body("A",r,r.Value,r.Shared,token);
             public void Dispose(){p.Disposed.Add(this);}
@@ -236,9 +236,9 @@ public sealed partial class GeneratorTests
         var source = OpenAllSyncWrapperHookSource + """
             namespace OpenAllWrapper {
             public sealed class Unbound<X,Y,Unused>:ISendWrapper<Request<X,Y>,int>{public int Invoke<N>(Request<X,Y> r,N next,CancellationToken t) where N:ISendContinuation<Request<X,Y>,int> =>next.Invoke(r,t);}
-            [ZendiatorHandler]public sealed class Missing<X,Y,Unused>:ISyncRequestHandler<Request<X,Y>,int>{public int Handle(Request<X,Y> r,CancellationToken t)=>0;}
-            [ZendiatorHandler]public sealed class StructHandler<X,Y>:ISyncRequestHandler<Request<X,Y>,int> where X:struct{public int Handle(Request<X,Y> r,CancellationToken t)=>0;}
-            [ZendiatorHandler]public sealed class Third<X,Y>:ISyncRequestHandler<Request<X,Y>,int>{public int Handle(Request<X,Y> r,CancellationToken t)=>0;}
+            [Handler]public sealed class Missing<X,Y,Unused>:ISyncRequestHandler<Request<X,Y>,int>{public int Handle(Request<X,Y> r,CancellationToken t)=>0;}
+            [Handler]public sealed class StructHandler<X,Y>:ISyncRequestHandler<Request<X,Y>,int> where X:struct{public int Handle(Request<X,Y> r,CancellationToken t)=>0;}
+            [Handler]public sealed class Third<X,Y>:ISyncRequestHandler<Request<X,Y>,int>{public int Handle(Request<X,Y> r,CancellationToken t)=>0;}
             public sealed class Partial<X,Y>:ISendRequestTransform<Request<X,Y>>{public Request<X,Y> Before(Request<X,Y> r,CancellationToken t)=>r;}
             public sealed class Factory<X,Y>:IBorrowedSessionFactory<Request<X,Y>,Logging<X,Y>> where X:class,IWrap where Y:class{public Logging<X,Y> Create(Request<X,Y> r,CancellationToken t)=>throw new NotSupportedException();}
             public sealed class HookFactory<X,Y>:IBorrowedSessionFactory<Request<X,Y>,Hook<Y,X>> where X:class where Y:class,IRight{public Hook<Y,X> Create(Request<X,Y> r,CancellationToken t)=>throw new NotSupportedException();}

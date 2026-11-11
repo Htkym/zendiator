@@ -16,7 +16,7 @@ public sealed partial class GeneratorTests
                 public int Resolved,Handled,Enumerated,Reads,Disposed,HandlerDisposals,Wrapped;
                 public readonly List<CancellationToken> HandlerTokens=new();public readonly List<int> Closed=new();
             }
-            [ZendiatorHandler]public sealed class Handler: IStreamHandler<Items,int>,IDisposable{
+            [Handler]public sealed class Handler: IStreamHandler<Items,int>,IDisposable{
                 private readonly Probe p;public Handler(Probe p){this.p=p;p.Resolved++;}
                 public IAsyncEnumerable<int> Handle(Items request,CancellationToken token){p.Handled++;p.HandlerTokens.Add(token);return new Feed(p,request.Count,token);}
                 public void Dispose()=>p.HandlerDisposals++;
@@ -84,7 +84,7 @@ public sealed partial class GeneratorTests
                 public readonly string Mode=mode;public readonly Exception Error=new InvalidOperationException("source");public readonly Exception CleanupError=new InvalidOperationException("cleanup");
                 public int Handled,Enumerated,Sessions,SessionDisposals,FactoryDisposals;
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamHandler<Items,int>,IAsyncDisposable{
+            [Handler]public sealed class Handler(Probe p):IStreamHandler<Items,int>,IAsyncDisposable{
                 public IAsyncEnumerable<int> Handle(Items request,CancellationToken token){p.Handled++;if(p.Mode=="handle-throw")throw p.Error;return p.Mode=="null-enumerable"?null!:new Feed(p);}
                 public ValueTask DisposeAsync(){p.SessionDisposals++;return p.Mode.EndsWith("-cleanup",StringComparison.Ordinal)?ValueTask.FromException(p.CleanupError):default;}
             }
@@ -125,7 +125,7 @@ public sealed partial class GeneratorTests
                 public int Constructed,Finals,Maps;public readonly List<int> Calls=new(),DisposedCalls=new();
                 public readonly List<global::Zendiator.Generator.Tests.AsyncOnceGate<bool>> Gates=new();
             }
-            [ZendiatorHandler]internal struct Handler<Enumerable,EnumerableAcquisition>:IStreamHandler<Items<Enumerable,EnumerableAcquisition>,int>,IDisposable where Enumerable:class,new() where EnumerableAcquisition:class,new(){
+            [Handler]internal struct Handler<Enumerable,EnumerableAcquisition>:IStreamHandler<Items<Enumerable,EnumerableAcquisition>,int>,IDisposable where Enumerable:class,new() where EnumerableAcquisition:class,new(){
                 private readonly Probe p;private int calls;public Handler(Probe p){this.p=p;calls=0;p.Constructed++;}
                 IAsyncEnumerable<int> IStreamHandler<Items<Enumerable,EnumerableAcquisition>,int>.Handle(Items<Enumerable,EnumerableAcquisition> request,CancellationToken token){
                     p.Calls.Add(++calls);var gate=new global::Zendiator.Generator.Tests.AsyncOnceGate<bool>(true);p.Gates.Add(gate);return Produce(p,request.Value,token,gate);
@@ -177,7 +177,7 @@ public sealed partial class GeneratorTests
                 public ValueTask<Cursor> OpenAsync(Items request,CancellationToken token)=>new(new Cursor());
             }
             public sealed class Cursor:IAsyncEnumerator<int>{public int Current=>0;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}
-            """.Replace("__MARKER__", dual ? "[ZendiatorHandler]" : "")
+            """.Replace("__MARKER__", dual ? "[Handler]" : "")
             .Replace("__TYPED__", dual ? ",IStreamSourceHandler<Items,int,Cursor>" : "");
         var source = NativeStreamFixture("c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));c.Pipeline<Items>(DispatchFamily.Stream);", declarations, "await Task.CompletedTask;");
         var compilation = SyncCompilation(source, "EnumerableStreamRejected_" + dual);

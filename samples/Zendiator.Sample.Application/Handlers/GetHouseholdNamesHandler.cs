@@ -3,7 +3,7 @@ using Zendiator.Sample.Contracts;
 namespace Zendiator.Sample.Application;
 
 /// <summary>Opens a cursor; asynchronous item production starts on its first move.</summary>
-[ZendiatorHandler]
+[Handler]
 public sealed class GetHouseholdNamesHandler : IStreamSourceHandler<GetHouseholdNames, string, HouseholdNameCursor>
 {
     public ValueTask<HouseholdNameCursor> OpenAsync(GetHouseholdNames request, CancellationToken cancellationToken) =>

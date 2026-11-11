@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Zendiator.DiConfiguration.Tests;
 
-[ZendiatorHandler]
+[Handler]
 public sealed class MixedHandler : IRequestHandler<MixedFirst, int>, IRequestHandler<MixedSecond, int>,
     ISyncRequestHandler<MixedSyncFirst, int>, ISyncRequestHandler<MixedSyncSecond, int>,
     IStreamSourceHandler<MixedStreamFirst, int, MixedCursor>, IStreamSourceHandler<MixedStreamSecond, int, MixedCursor>

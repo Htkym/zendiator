@@ -8,7 +8,7 @@ namespace BeforeRelayComparison;
 
 public sealed record Items(int Count, Probe? Probe = null) : IStreamRequest<int>, IWork;
 
-[ZendiatorHandler]
+[Handler]
 public sealed class Handler : IStreamHandler<Items, int>
 {
     public IAsyncEnumerable<int> Handle(Items request, CancellationToken token) =>

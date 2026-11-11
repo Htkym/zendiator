@@ -11,7 +11,7 @@ public sealed partial class GeneratorTests
     private static string SendAllAsyncModule(bool isVoid)
     {
         var handlers = string.Join("\n", Enumerable.Range(1, 3).Select(id =>
-            "[ZendiatorHandler]public sealed class H" + id + ":IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">,IAsyncDisposable{" +
+            "[Handler]public sealed class H" + id + ":IRequestHandler<Ping" + (isVoid ? "" : ",int") + ">,IAsyncDisposable{" +
             "private readonly Probe p;public H" + id + "(Probe p){this.p=p;p.Resolved.Add(\"H" + id + "\");}" +
             "public " + (isVoid ? "ValueTask" : "ValueTask<int>") + " HandleAsync(Ping r,CancellationToken t)=>p." + (isVoid ? "BodyVoid" : "Body") + "(r," + id + ",r.Value,r.Shared,t);" +
             "public ValueTask DisposeAsync(){p.Ended.Add(\"H" + id + "\");return default;}}"));

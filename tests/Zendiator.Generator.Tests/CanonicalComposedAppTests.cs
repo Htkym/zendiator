@@ -223,14 +223,14 @@ public sealed partial class GeneratorTests
     {
         var declarations = ComposedDeclarations(ComposedSample());
         const string collect = "typeof(CachedCollector<>), typeof(WarehouseCollector<>)";
-        const string extra = "public sealed record Extra : IRequest<int>;[ZendiatorHandler]public sealed class ExtraHandler:IRequestHandler<Extra,int>{public ValueTask<int> HandleAsync(Extra request,CancellationToken token)=>new(0);}";
+        const string extra = "public sealed record Extra : IRequest<int>;[Handler]public sealed class ExtraHandler:IRequestHandler<Extra,int>{public ValueTask<int> HandleAsync(Extra request,CancellationToken token)=>new(0);}";
         foreach (var (name, source, expected) in new[]
         {
             ("unbound", declarations.Replace("class LookupHandler<T>", "class LookupHandler<T, Unused>").Replace("typeof(LookupHandler<>)", "typeof(LookupHandler<,>)"), "ZEN0035"),
             ("ambiguous", declarations.Replace("CachedCount<TMarker>(string Key) : IRequest<int>", "CachedCount<TMarker>(string Key) : IRequest<int>, IRequest<object>"), "ZEN0035"),
             ("overlap", declarations.Replace("configuration.Handlers<RefreshInventory>", "configuration.Handlers<Lookup<Product>>(DispatchFamily.SendAsync, typeof(LookupHandler<Product>));configuration.Handlers<RefreshInventory>"), "ZEN0028"),
             ("orphan", declarations.Replace("configuration.Handlers<RefreshInventory>", "configuration.AddHandler(typeof(ExtraHandler));configuration.Handlers<RefreshInventory>") + extra, "ZEN0037"),
-            ("unadopted-three-branches", declarations.Replace(collect, collect + ", typeof(ThirdCollector<>)") + "public sealed class ThirdCollector<TMarker>:ISyncRequestHandler<CollectCounts<TMarker>,int> where TMarker:class{public int Handle(CollectCounts<TMarker> request,CancellationToken token)=>0;}".Replace("public sealed class", "[ZendiatorHandler]public sealed class"), "ZEN0035"),
+            ("unadopted-three-branches", declarations.Replace(collect, collect + ", typeof(ThirdCollector<>)") + "public sealed class ThirdCollector<TMarker>:ISyncRequestHandler<CollectCounts<TMarker>,int> where TMarker:class{public int Handle(CollectCounts<TMarker> request,CancellationToken token)=>0;}".Replace("public sealed class", "[Handler]public sealed class"), "ZEN0035"),
             ("invalid-factory", declarations.Replace("typeof(ReadNumbersHandler));", "HandlerEntry.Session(typeof(ReadNumbersHandler), typeof(InvalidFactory)));") + "public sealed class InvalidFactory;", "ZEN0025"),
         })
         {

@@ -25,7 +25,7 @@ public sealed partial class GeneratorTests
         """;
     private static string ListFixture(string body, bool defaultComposition = false) => Head + Request + Handler +
         string.Concat(new[] { "A", "B", "C" }.Select(n => Handler.Replace("class Handler", "class " + n)
-            .Replace("public sealed class " + n, "[ZendiatorHandler] public sealed class " + n))) + ListStages +
+            .Replace("public sealed class " + n, "[Handler] public sealed class " + n))) + ListStages +
         SelectedComposition.Replace(defaultComposition ? "AddZendiator<Reads>" : "__unused__", "AddZendiator")
             .Replace("c.AddHandler<Handler>()", "{ " + body + " }");
     private static CompositionSelectionModel Selection(GeneratorDriver driver) => Assert.Single(Assert.IsType<CompositionSelectionCatalog>(
@@ -177,7 +177,7 @@ public sealed partial class GeneratorTests
     {
         var source = ListFixture("c.Handlers<Ping>(DispatchFamily.SendAsync, typeof(A)); c.Pipeline<Ping>(" + stages + ");") + """
             public sealed record Other : IRequest<int>;
-            [ZendiatorHandler] public sealed class OtherHandler : IRequestHandler<Other,int> { public ValueTask<int> HandleAsync(Other r,CancellationToken c)=>new(1); }
+            [Handler] public sealed class OtherHandler : IRequestHandler<Other,int> { public ValueTask<int> HandleAsync(Other r,CancellationToken c)=>new(1); }
             public sealed class Wrong : ISendRequestTransform<Other> { public Other Before(Other r,CancellationToken c)=>r; }
             public sealed class Dual : ISendRequestTransform<Ping>,IAsyncSendRequestTransform<Ping> {
                 public Ping Before(Ping r,CancellationToken c)=>r; public ValueTask<Ping> BeforeAsync(Ping r,CancellationToken c)=>new(r);
@@ -199,7 +199,7 @@ public sealed partial class GeneratorTests
         var source = ListFixture("c.Handlers<Ping>(DispatchFamily.SendSync, typeof(Sync)); c.Pipeline<Ping>(DispatchFamily.SendSync, Stage.Hook<Mixed<string>>());")
             .Replace("record struct Ping : IRequest<int>", "record struct Ping : IRequest<int>, ISyncRequest<int>")
             .Replace("[GenerateZendiator] public sealed partial class Zendiator;", "") + """
-            [ZendiatorHandler] public sealed class Sync : ISyncRequestHandler<Ping,int> { public int Handle(Ping r,CancellationToken c)=>1; }
+            [Handler] public sealed class Sync : ISyncRequestHandler<Ping,int> { public int Handle(Ping r,CancellationToken c)=>1; }
             """;
         var sync = BindLists(source, "ZEN0030");
         Assert.Equal(BoundDispatchFamily.SendSync, Assert.Single(Selection(sync).Pipelines).Family);
@@ -223,7 +223,7 @@ public sealed partial class GeneratorTests
     {
         var source = ListFixture("c.Handlers<Items>(DispatchFamily.Stream,typeof(ItemsHandler)); c.Pipeline<Items>(Stage.Hook<Map>(),Stage.Wrapper<StreamOpaque>(),Stage.Hook<Filter>());") + """
             public sealed record Items : IStreamRequest<int>;
-            [ZendiatorHandler] public sealed class ItemsHandler : IStreamSourceHandler<Items,int,ItemsHandler.Cursor> {
+            [Handler] public sealed class ItemsHandler : IStreamSourceHandler<Items,int,ItemsHandler.Cursor> {
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken c)=>throw new NotImplementedException();
                 public sealed class Cursor:System.Collections.Generic.IAsyncEnumerator<int>{public int Current=>0;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}
             }
@@ -268,9 +268,9 @@ public sealed partial class GeneratorTests
     {
         var source = ListFixture("c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(A)); c.Pipeline<Ping>();")
             .Replace("[GenerateZendiator] public sealed partial class Zendiator;", "");
-        BindLists(source.Replace("[ZendiatorHandler] public sealed class A", "[ZendiatorHandler] public abstract class A"), "ZEN0035");
+        BindLists(source.Replace("[Handler] public sealed class A", "[Handler] public abstract class A"), "ZEN0035");
         var open = source.Replace("typeof(A)", "typeof(Open<>)") +
-            "[ZendiatorHandler] public sealed class Open<T> : IRequestHandler<Ping,int> { public ValueTask<int> HandleAsync(Ping r,CancellationToken c)=>new(1); }";
+            "[Handler] public sealed class Open<T> : IRequestHandler<Ping,int> { public ValueTask<int> HandleAsync(Ping r,CancellationToken c)=>new(1); }";
         BindLists(open, "ZEN0035");
         var internalRequest = source.Replace("public readonly record struct Ping", "internal readonly record struct Ping")
             .Replace("public sealed class Handler", "internal sealed class Handler");
@@ -403,7 +403,7 @@ public sealed partial class GeneratorTests
         Assert.Empty(diagnostics);
         Assert.Equal("CS0535", Assert.Single(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error)).Id);
         Assert.True(Assert.Single(Selection(driver).Pipelines).Stages[0].CompilerOwnsError);
-        source = ListFixture("c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(A));").Replace("[ZendiatorHandler] public sealed class A", "[ZendiatorHandler,ZendiatorHandler] public sealed class A");
+        source = ListFixture("c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(A));").Replace("[Handler] public sealed class A", "[Handler,Handler] public sealed class A");
         driver = Driver().RunGeneratorsAndUpdateCompilation(Compilation(source), out output, out diagnostics);
         Assert.Empty(diagnostics);
         Assert.Equal("CS0579", Assert.Single(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error)).Id);

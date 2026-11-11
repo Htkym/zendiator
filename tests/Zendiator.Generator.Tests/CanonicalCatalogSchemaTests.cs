@@ -9,7 +9,7 @@ public sealed partial class GeneratorTests
     [Fact]
     public void Catalog_v1_nested_generic_unicode_constraint_fingerprint_survives_real_metadata()
     {
-        var source = "using System.Threading;using System.Threading.Tasks;using Zendiator;namespace 公開{public sealed record Box<T,U>(T Value):IRequest<T> where T:class where U:class;public class Outer<U> where U:class{[ZendiatorHandler]public sealed class Inner<T>:IRequestHandler<Box<T,U>,T> where T:class,new(){public ValueTask<T> HandleAsync(Box<T,U> r,CancellationToken t)=>new(r.Value);}}}";
+        var source = "using System.Threading;using System.Threading.Tasks;using Zendiator;namespace 公開{public sealed record Box<T,U>(T Value):IRequest<T> where T:class where U:class;public class Outer<U> where U:class{[Handler]public sealed class Inner<T>:IRequestHandler<Box<T,U>,T> where T:class,new(){public ValueTask<T> HandleAsync(Box<T,U> r,CancellationToken t)=>new(r.Value);}}}";
         var bytes = CatalogProducerBytes(source, "generic-unicode", "CatalogGeneric_" + Guid.NewGuid().ToString("N"), true);
         var reference = MetadataReference.CreateFromImage(bytes);
         var compilation = SyncCompilation("public sealed class Consumer;", "CatalogGenericConsumer").AddReferences(reference);

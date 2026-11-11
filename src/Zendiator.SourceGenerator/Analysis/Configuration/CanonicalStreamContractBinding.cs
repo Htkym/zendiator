@@ -32,7 +32,7 @@ internal static class CanonicalStreamContractBinding
             : cursor == null || valueTask == null ? null : valueTask.Construct(cursor);
         if (result == null)
             return false;
-        var members = contract.GetMembers().OfType<IMethodSymbol>().ToArray();
+        var members = contract.GetMembers().OfType<IMethodSymbol>().Where(m => !middleware || m.Arity == 0).ToArray();
         return members.Length == 1 && Method(members[0]) && Method(implementation);
 
         bool Method(IMethodSymbol method)

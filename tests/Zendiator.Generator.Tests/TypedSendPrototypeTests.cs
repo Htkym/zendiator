@@ -32,7 +32,7 @@ public sealed partial class GeneratorTests
             public void Exit(string phase,object request,bool outer,SendExitInfo exit,CancellationToken token){Check(exit.Success==(Mode=="success")&&ReferenceEquals(exit.Error,Mode=="success"?null:Failure),"entered exit and exception identity");Record(phase+":"+exit.Success,request,outer,token);}
             public void Error(string phase,object request,bool outer,Exception e,CancellationToken token){Check(ReferenceEquals(e,Failure),"original exception identity");Record(phase,request,outer,token);}
         }
-        [ZendiatorHandler]public sealed class Handler:ISyncRequestHandler<Inner,int>,IDisposable {
+        [Handler]public sealed class Handler:ISyncRequestHandler<Inner,int>,IDisposable {
             private readonly Probe p;public Handler(Probe p){this.p=p;p.Resolve("H");}
             public int Handle(Inner r,CancellationToken t){p.Record("handler",r,false,t);p.Calls++;return r.Value*2;}
             public void Dispose(){p.Disposed.Add("H");}
@@ -83,8 +83,8 @@ public sealed partial class GeneratorTests
 
     private const string TypedSendRejected = """
         namespace TypedFixture {
-        [ZendiatorHandler]public sealed class WrongHandler:ISyncRequestHandler<OtherInner,int>{public int Handle(OtherInner r,CancellationToken t)=>0;}
-        [ZendiatorHandler]public struct StructHandler:ISyncRequestHandler<Inner,int>{public int Handle(Inner r,CancellationToken t)=>0;}
+        [Handler]public sealed class WrongHandler:ISyncRequestHandler<OtherInner,int>{public int Handle(OtherInner r,CancellationToken t)=>0;}
+        [Handler]public struct StructHandler:ISyncRequestHandler<Inner,int>{public int Handle(Inner r,CancellationToken t)=>0;}
         public sealed class WrongResponseMap:Zendiator.SendTypeConnectionPrototype.IResponseMap<Inner,int,long>,ISendExceptionObserver<Inner>,ISendFinallyObserver<Inner>{public long Map(Inner r,int value,CancellationToken t)=>value;public void OnException(Inner r,Exception e,CancellationToken t){}public void Finally(Inner r,SendExitInfo exit,CancellationToken t){}}
         public sealed class NullableResponseMap:Zendiator.SendTypeConnectionPrototype.IResponseMap<Inner,int,string?>,ISendExceptionObserver<Inner>,ISendFinallyObserver<Inner>{public string? Map(Inner r,int value,CancellationToken t)=>null;public void OnException(Inner r,Exception e,CancellationToken t){}public void Finally(Inner r,SendExitInfo exit,CancellationToken t){}}
         public sealed class RequestMismatch:Zendiator.SendTypeConnectionPrototype.IRoute<Outer,Inner,int,string,WrongHandler,RequestMap,ResponseMap>;

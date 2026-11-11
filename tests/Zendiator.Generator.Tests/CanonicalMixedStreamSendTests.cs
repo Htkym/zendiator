@@ -27,7 +27,7 @@ public sealed partial class GeneratorTests
             public void End(string name)=>Ended.Add(name);
             public static void Check(bool ok,string text){if(!ok)throw new InvalidOperationException(text);}
         }
-        [ZendiatorHandler]public sealed class ItemsHandler:IStreamSourceHandler<Items,int,ItemsHandler.Cursor>,IDisposable{
+        [Handler]public sealed class ItemsHandler:IStreamSourceHandler<Items,int,ItemsHandler.Cursor>,IDisposable{
             private readonly Probe p;public ItemsHandler(Probe p){this.p=p;p.Resolve("H");}
             public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){p.SourceStarts++;return new(new Cursor(p,t));}
             public sealed class Cursor(Probe p,CancellationToken token):IAsyncEnumerator<int>{
@@ -52,12 +52,12 @@ public sealed partial class GeneratorTests
             public bool Accept(Items r,int item,CancellationToken t)=>item<6;
             public void Dispose()=>p.End("F2");
         }
-        [ZendiatorHandler]public sealed class QueryHandler:ISyncRequestHandler<Query,int>,IDisposable{
+        [Handler]public sealed class QueryHandler:ISyncRequestHandler<Query,int>,IDisposable{
             private readonly Probe p;public QueryHandler(Probe p){this.p=p;p.Resolve("Q");}
             public int Handle(Query r,CancellationToken t){p.Sends++;return r.Value+1;}
             public void Dispose()=>p.End("Q");
         }
-        [ZendiatorHandler]public sealed class ReplacementQueryHandler:ISyncRequestHandler<Query,int>{
+        [Handler]public sealed class ReplacementQueryHandler:ISyncRequestHandler<Query,int>{
             public int Handle(Query r,CancellationToken t)=>r.Value+1;
         }
         [ZendiatorComposition("mixed-read")]public sealed class Reads;

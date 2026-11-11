@@ -46,7 +46,7 @@ public sealed partial class GeneratorTests
             public Second(Probe p):base(p,"B",3){}
             public override ValueTask<Request<X,Y>> BeforeAsync(Request<X,Y> request,CancellationToken token){P.Hit("B.before",request,token);var next=new Request<X,Y>(request.Value+10);P.SavedB=next;return P.Value("B.before",next);}
         }
-        [ZendiatorHandler]public sealed class Handler<X,Y>:IRequestHandler<Request<Y,X>,int>,IDisposable where X:class,new() where Y:class {
+        [Handler]public sealed class Handler<X,Y>:IRequestHandler<Request<Y,X>,int>,IDisposable where X:class,new() where Y:class {
             private readonly Probe p;public Handler(Probe p){this.p=p;p.Resolve("H",GetType());}
             public ValueTask<int> HandleAsync(Request<Y,X> request,CancellationToken token){p.Hit("handler",request,token);p.Calls++;return p.Value("handler",request.Value*2);}
             public void Dispose(){p.Disposed.Add(GetType());}

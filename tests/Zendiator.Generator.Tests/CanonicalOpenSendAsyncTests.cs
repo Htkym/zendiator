@@ -21,7 +21,7 @@ public sealed partial class GeneratorTests
         return $$"""
             namespace {{ns}} {
             public sealed record Request<{{args}}>(int Value):IRequest{{(isVoid ? "" : "<int>")}};
-            [ZendiatorHandler]public sealed class Handler<{{args}}>:IRequestHandler<{{receiverRequest}}{{(isVoid ? "" : ",int")}}>,IDisposable
+            [Handler]public sealed class Handler<{{args}}>:IRequestHandler<{{receiverRequest}}{{(isVoid ? "" : ",int")}}>,IDisposable
                 where TLeft:class,new() {{(isVoid ? "" : "where TRight:class")}} {
                 private readonly OpenAsyncFixture.Probe p;public Handler(OpenAsyncFixture.Probe p){this.p=p;p.Created.Add(GetType());p.Trace.Add("resolve:H");}
                 public {{result}} HandleAsync({{receiverRequest}} r,CancellationToken t){p.Hit("handler",r,r.Value,t);p.Calls++;return p.{{(isVoid ? "Done(\"handler\")" : "Value(\"handler\",r.Value*2)")}};}
@@ -107,13 +107,13 @@ public sealed partial class GeneratorTests
         } }
         namespace AsyncSentinel {
         public sealed record Request(int Value):IRequest<int>;
-        [ZendiatorHandler]public sealed class Handler:IRequestHandler<Request,int>{public ValueTask<int> HandleAsync(Request r,CancellationToken t)=>new(r.Value);}
+        [Handler]public sealed class Handler:IRequestHandler<Request,int>{public ValueTask<int> HandleAsync(Request r,CancellationToken t)=>new(r.Value);}
         [ZendiatorComposition("closedAsync")]public sealed class Composition;
         public static class Registration{public static IServiceCollection Add(IServiceCollection s)=>s.AddZendiator<Composition>(c=>{c.Handlers<Request>(DispatchFamily.SendAsync,typeof(Handler));c.Pipeline<Request>(DispatchFamily.SendAsync);});}
         }
         namespace AsyncStreamSentinel {
         public sealed record Request<T>(T Value):IStreamRequest<T>;
-        [ZendiatorHandler]public sealed class Handler<T>:IStreamSourceHandler<Request<T>,T,Handler<T>.Cursor> where T:class,new(){
+        [Handler]public sealed class Handler<T>:IStreamSourceHandler<Request<T>,T,Handler<T>.Cursor> where T:class,new(){
             public ValueTask<Cursor> OpenAsync(Request<T> r,CancellationToken t)=>throw new NotImplementedException();
             public sealed class Cursor:IAsyncEnumerator<T>{public T Current=>default!;public ValueTask<bool> MoveNextAsync()=>new(false);public ValueTask DisposeAsync()=>default;}
         }

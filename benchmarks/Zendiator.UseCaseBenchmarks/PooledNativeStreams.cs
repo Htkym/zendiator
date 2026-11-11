@@ -12,42 +12,42 @@ public sealed record InputPooled3(int Count, bool Asynchronous, Probe? Probe = n
 public sealed record InputOrdinary5(int Count, bool Asynchronous, Probe? Probe = null) : IStreamRequest<int>, ILevel5;
 public sealed record InputPooled5(int Count, bool Asynchronous, Probe? Probe = null) : IStreamRequest<int>, ILevel5;
 
-[ZendiatorHandler]
+[Handler]
 public sealed class OrdinaryInput0 : IStreamSourceHandler<InputOrdinary0, int, WorkStreamCursor>
 {
     public ValueTask<WorkStreamCursor> OpenAsync(InputOrdinary0 request, CancellationToken token) =>
         new(new WorkStreamCursor(request.Count, request.Asynchronous, request.Probe, token));
 }
 
-[ZendiatorHandler]
+[Handler]
 public sealed class PooledInput0 : IStreamSourceHandler<InputPooled0, int, PooledWorkStreamCursor>
 {
     public ValueTask<PooledWorkStreamCursor> OpenAsync(InputPooled0 request, CancellationToken token) =>
         new(new PooledWorkStreamCursor(request.Count, request.Asynchronous, request.Probe, token));
 }
 
-[ZendiatorHandler]
+[Handler]
 public sealed class OrdinaryInput3 : IStreamSourceHandler<InputOrdinary3, int, WorkStreamCursor>
 {
     public ValueTask<WorkStreamCursor> OpenAsync(InputOrdinary3 request, CancellationToken token) =>
         new(new WorkStreamCursor(request.Count, request.Asynchronous, request.Probe, token));
 }
 
-[ZendiatorHandler]
+[Handler]
 public sealed class PooledInput3 : IStreamSourceHandler<InputPooled3, int, PooledWorkStreamCursor>
 {
     public ValueTask<PooledWorkStreamCursor> OpenAsync(InputPooled3 request, CancellationToken token) =>
         new(new PooledWorkStreamCursor(request.Count, request.Asynchronous, request.Probe, token));
 }
 
-[ZendiatorHandler]
+[Handler]
 public sealed class OrdinaryInput5 : IStreamSourceHandler<InputOrdinary5, int, WorkStreamCursor>
 {
     public ValueTask<WorkStreamCursor> OpenAsync(InputOrdinary5 request, CancellationToken token) =>
         new(new WorkStreamCursor(request.Count, request.Asynchronous, request.Probe, token));
 }
 
-[ZendiatorHandler]
+[Handler]
 public sealed class PooledInput5 : IStreamSourceHandler<InputPooled5, int, PooledWorkStreamCursor>
 {
     public ValueTask<PooledWorkStreamCursor> OpenAsync(InputPooled5 request, CancellationToken token) =>

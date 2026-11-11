@@ -6,6 +6,10 @@ internal sealed record BoundWrapperEmission(string WrapperName, string ContractN
     {
         get; init;
     }
+    public BoundStructStreamCallEmission? StructStreamCall
+    {
+        get; init;
+    }
     public BoundAsyncCallTargetEmission? CallTarget
     {
         get; init;

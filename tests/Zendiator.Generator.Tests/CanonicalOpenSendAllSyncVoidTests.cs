@@ -35,12 +35,12 @@ public sealed partial class GeneratorTests
                 if(Mode=="cancel"&&Branch==1){Cancellation.Cancel();throw Failure;}
             }
         }
-        [ZendiatorHandler]public sealed class ZHandler<X,Y>:ISyncRequestHandler<Request<Y,X>>,IDisposable where X:class,new() where Y:class {
+        [Handler]public sealed class ZHandler<X,Y>:ISyncRequestHandler<Request<Y,X>>,IDisposable where X:class,new() where Y:class {
             private readonly Probe p;public ZHandler(Probe p){this.p=p;p.Resolve(this,"Z");}
             public void Handle(Request<Y,X> r,CancellationToken token)=>p.Body("Z",r,r.Value,r.Shared,token);
             public void Dispose(){p.Disposed.Add(this);}
         }
-        [ZendiatorHandler]public sealed class AHandler<X,Y>:ISyncRequestHandler<Request<X,Y>>,IDisposable where X:class,ILeft,new() where Y:class {
+        [Handler]public sealed class AHandler<X,Y>:ISyncRequestHandler<Request<X,Y>>,IDisposable where X:class,ILeft,new() where Y:class {
             private readonly Probe p;public AHandler(Probe p){this.p=p;p.Resolve(this,"A");}
             public void Handle(Request<X,Y> r,CancellationToken token)=>p.Body("A",r,r.Value,r.Shared,token);
             public void Dispose(){p.Disposed.Add(this);}
@@ -186,16 +186,16 @@ public sealed partial class GeneratorTests
     {
         var source = OpenSendAllSyncVoidSource + """
             namespace OpenAllVoid {
-            [ZendiatorHandler]public sealed class Unbound<X,Y,Unused>:ISyncRequestHandler<Request<X,Y>>{public void Handle(Request<X,Y> r,CancellationToken t){}}
-            [ZendiatorHandler]public sealed class StructHandler<X,Y>:ISyncRequestHandler<Request<X,Y>> where X:struct{public void Handle(Request<X,Y> r,CancellationToken t){}}
-            [ZendiatorHandler]public sealed class Third<X,Y>:ISyncRequestHandler<Request<X,Y>>{public void Handle(Request<X,Y> r,CancellationToken t){}}
+            [Handler]public sealed class Unbound<X,Y,Unused>:ISyncRequestHandler<Request<X,Y>>{public void Handle(Request<X,Y> r,CancellationToken t){}}
+            [Handler]public sealed class StructHandler<X,Y>:ISyncRequestHandler<Request<X,Y>> where X:struct{public void Handle(Request<X,Y> r,CancellationToken t){}}
+            [Handler]public sealed class Third<X,Y>:ISyncRequestHandler<Request<X,Y>>{public void Handle(Request<X,Y> r,CancellationToken t){}}
             public sealed class Partial<X,Y>:ISendRequestTransform<Request<X,Y>>{public Request<X,Y> Before(Request<X,Y> r,CancellationToken t)=>r;}
             public sealed class Wrapper<X,Y>:ISendWrapper<Request<X,Y>>{public void Invoke<N>(Request<X,Y> r,N next,CancellationToken t) where N:ISendContinuation<Request<X,Y>> =>next.Invoke(r,t);}
             public sealed class HookFactory<X,Y>:IBorrowedSessionFactory<Request<X,Y>,Hook<Y,X>> where X:class where Y:class,IRight{public Hook<Y,X> Create(Request<X,Y> r,CancellationToken t)=>throw new NotSupportedException();}
             public sealed class HandlerFactory<X,Y>:IBorrowedSessionFactory<Request<X,Y>,AHandler<X,Y>> where X:class,ILeft,new() where Y:class{public AHandler<X,Y> Create(Request<X,Y> r,CancellationToken t)=>throw new NotSupportedException();}
             public sealed record DualRequest<X,Y>:ISyncRequest,ISyncRequest<int>;
-            [ZendiatorHandler]public sealed class DualVoid<X,Y>:ISyncRequestHandler<DualRequest<X,Y>>{public void Handle(DualRequest<X,Y> r,CancellationToken t){}}
-            [ZendiatorHandler]public sealed class DualResult<X,Y>:ISyncRequestHandler<DualRequest<X,Y>,int>{public int Handle(DualRequest<X,Y> r,CancellationToken t)=>0;}
+            [Handler]public sealed class DualVoid<X,Y>:ISyncRequestHandler<DualRequest<X,Y>>{public void Handle(DualRequest<X,Y> r,CancellationToken t){}}
+            [Handler]public sealed class DualResult<X,Y>:ISyncRequestHandler<DualRequest<X,Y>,int>{public int Handle(DualRequest<X,Y> r,CancellationToken t)=>0;}
             public sealed class DualHook<X,Y>:ISendRequestTransform<DualRequest<X,Y>>,ISendSuccessObserver<DualRequest<X,Y>>,ISendExceptionObserver<DualRequest<X,Y>>,ISendFinallyObserver<DualRequest<X,Y>>{
                 public DualRequest<X,Y> Before(DualRequest<X,Y> r,CancellationToken t)=>r;public void After(DualRequest<X,Y> r,CancellationToken t){}public void OnException(DualRequest<X,Y> r,Exception e,CancellationToken t){}public void Finally(DualRequest<X,Y> r,SendExitInfo e,CancellationToken t){}
             }

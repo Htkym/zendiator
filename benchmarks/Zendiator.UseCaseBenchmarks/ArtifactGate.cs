@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.Loader;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace Competitive;
@@ -7,7 +8,8 @@ namespace Competitive;
 internal sealed record ArtifactGateRequest(string Protocol, string Session, string Case, string ChildProofSha256,
     int ChildPid, string BundleRoot, string Output, string ConsumerPath, string RuntimeConfigPath, string DepsPath,
     RuntimeEvidence ExpectedRuntime, LoadedAssemblyEvidence[] ExpectedAssemblies,
-    Dictionary<string, string> BundleFiles, string GateImplementationSha256, string GateDriverSha256);
+    Dictionary<string, string> BundleFiles, string GateImplementationSha256, string GateDriverSha256,
+    string StructUpstreamGateImplementationSha256);
 
 internal static class ArtifactGate
 {
@@ -21,6 +23,8 @@ internal static class ArtifactGate
         var request = JsonSerializer.Deserialize<ArtifactGateRequest>(File.ReadAllText(requestPath), ArtifactEvidence.JsonOptions)
             ?? throw new InvalidOperationException("Artifact gate request is empty");
         if (request.Protocol != Protocol || request.ExpectedAssemblies.Length == 0 ||
+            request.StructUpstreamGateImplementationSha256 is not { Length: 64 } ||
+            request.StructUpstreamGateImplementationSha256.Any(c => !(c is >= '0' and <= '9' or >= 'A' and <= 'F')) ||
             request.ExpectedAssemblies.Select(a => a.Name).Distinct(StringComparer.Ordinal).Count() != request.ExpectedAssemblies.Length)
             throw new InvalidOperationException("Invalid artifact gate identity");
         var attempt = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(requestPath))!;
@@ -78,12 +82,23 @@ internal static class ArtifactGate
             if (Correctness.Results.Count != 389)
                 throw new InvalidOperationException($"Expected 389 benchmark-gate results, got {Correctness.Results.Count}");
             Correctness.Save(request.Output);
+            var defaultCorrectness = System.IO.Path.Combine(request.Output, "correctness.json");
+            var defaultCorrectnessSha256 = ArtifactEvidence.Hash(defaultCorrectness);
+            var structOutput = System.IO.Path.Combine(request.Output, "struct-upstream");
+            // Both gates run in this same preserved consumer with the same strict resolver.
+            // The original 389 results/file remain separate and unchanged.
+            await StructUpstreamGate.Run(structOutput);
+            var structEvidence = CheckStructUpstreamEvidence(structOutput);
+            if (Correctness.Results.Count != 389 || ArtifactEvidence.Hash(defaultCorrectness) != defaultCorrectnessSha256)
+                throw new InvalidOperationException("The additional gate changed the original 389-case evidence");
             var loaded = ArtifactEvidence.Assemblies();
             CheckBindings(request, loaded);
             CheckRuntime(request);
             CheckBundle(request);
             if (ArtifactEvidence.Hash(requestPath) != requestHash)
                 throw new InvalidOperationException("Artifact gate request changed while validating");
+            if (CheckStructUpstreamEvidence(structOutput) != structEvidence)
+                throw new InvalidOperationException("Struct upstream evidence changed while validating");
             ArtifactEvidence.Write(System.IO.Path.Combine(request.Output, "artifact-proof.json"), new
             {
                 schemaVersion = 1,
@@ -95,21 +110,69 @@ internal static class ArtifactGate
                 requestHash,
                 request.GateImplementationSha256,
                 request.GateDriverSha256,
+                request.StructUpstreamGateImplementationSha256,
+                structUpstreamGate = new
+                {
+                    schemaVersion = 1,
+                    cases = 96,
+                    correctnessPath = "struct-upstream/struct-upstream-correctness.json",
+                    correctnessSha256 = structEvidence.CorrectnessSha256,
+                    driverTypes = 3,
+                    driverIdentificationPath = "struct-upstream/struct-upstream-driver-identification.json",
+                    driverIdentificationSha256 = structEvidence.DriverSha256,
+                    implementationSha256 = request.StructUpstreamGateImplementationSha256
+                },
                 processId = Environment.ProcessId,
                 startedFrom = "preserved consumer entry, separate process",
                 benchmarkGateCases = Correctness.Results.Count,
-                correctnessSha256 = ArtifactEvidence.Hash(System.IO.Path.Combine(request.Output, "correctness.json")),
+                correctnessSha256 = defaultCorrectnessSha256,
                 bundleBeforeAndAfterVerified = true,
                 request.BundleFiles,
                 runtimeEvidence = ArtifactEvidence.Runtime(request.RuntimeConfigPath, request.DepsPath),
                 assemblies = loaded,
-                scope = "389 benchmark-gate checks; focused notification contracts and full-suite tests remain separate"
+                scope = "389 existing benchmark-gate checks plus separate 96 struct-upstream parity cases and three driver type classifications; focused contracts and full-suite tests remain separate"
             });
         }
         finally
         {
             AssemblyLoadContext.Default.Resolving -= Resolve;
         }
+    }
+
+    private static (string CorrectnessSha256, string DriverSha256) CheckStructUpstreamEvidence(string output)
+    {
+        var correctness = File.ReadAllBytes(System.IO.Path.Combine(output, "struct-upstream-correctness.json"));
+        var driver = File.ReadAllBytes(System.IO.Path.Combine(output, "struct-upstream-driver-identification.json"));
+        using var cases = JsonDocument.Parse(correctness);
+        using var types = JsonDocument.Parse(driver);
+        var expected = new HashSet<(string, int, bool, bool, bool)>();
+        foreach (var name in new[] { "Stream0", "Stream5", "Relay5" })
+            foreach (var count in new[] { 0, 1, 16, 1024 })
+                foreach (var asynchronous in new[] { false, true })
+                    foreach (var early in new[] { false, true })
+                        foreach (var typed in new[] { false, true })
+                            expected.Add((name, count, asynchronous, early, typed));
+        if (cases.RootElement.ValueKind != JsonValueKind.Array || cases.RootElement.GetArrayLength() != 96)
+            throw new InvalidOperationException("Expected all 96 struct upstream parity cases");
+        foreach (var row in cases.RootElement.EnumerateArray())
+        {
+            var name = row.GetProperty("name").GetString()!;
+            var count = row.GetProperty("count").GetInt32();
+            var asynchronous = row.GetProperty("asynchronous").GetBoolean();
+            var early = row.GetProperty("early").GetBoolean();
+            var typed = row.GetProperty("typed").GetBoolean();
+            if (!expected.Remove((name, count, asynchronous, early, typed)) || row.GetProperty("status").GetString() != "Passed" ||
+                row.GetProperty("Handlers").GetInt32() != 1 || row.GetProperty("Disposals").GetInt32() != 1 ||
+                row.GetProperty("Items").GetInt32() != (early ? Math.Min(1, count) : count))
+                throw new InvalidOperationException("Struct upstream parity evidence is duplicate, incomplete or failed");
+        }
+        var expectedTypes = new HashSet<string>(new[] { "ZendiatorStructUpstreamStream0", "ZendiatorStructUpstreamStream5", "ZendiatorStructUpstreamRelay5" }, StringComparer.Ordinal);
+        if (expected.Count != 0 || types.RootElement.ValueKind != JsonValueKind.Array || types.RootElement.GetArrayLength() != 3)
+            throw new InvalidOperationException("Expected the complete struct upstream case/type coverage");
+        foreach (var row in types.RootElement.EnumerateArray())
+            if (!expectedTypes.Remove(row.GetProperty("Type").GetString()!) || row.GetProperty("Library").GetString() != "Zendiator" || row.GetProperty("Cases").GetInt32() != 56)
+                throw new InvalidOperationException("Struct upstream driver classification failed");
+        return (Convert.ToHexString(SHA256.HashData(correctness)), Convert.ToHexString(SHA256.HashData(driver)));
     }
 
     private static void CheckBundle(ArtifactGateRequest request)

@@ -86,13 +86,13 @@ public sealed partial class GeneratorTests
             public readonly record struct EmptyItems:IStreamRequest<int>;
             public sealed record Items(int Count):IStreamRequest<int>;
             public sealed class Probe{public int Resolved,ServiceResolutions,Opened,EmptyOpened,Produced,Reads,CursorDisposals,ServiceDisposals,Filters,Maps,DisposedMapCalls;public readonly List<int> MapVersions=new();}
-            [ZendiatorHandler] public sealed class Handler: IStreamSourceHandler<PlainItems,int,Cursor>,IStreamSourceHandler<Items,int,Cursor>,IDisposable{
+            [Handler] public sealed class Handler: IStreamSourceHandler<PlainItems,int,Cursor>,IStreamSourceHandler<Items,int,Cursor>,IDisposable{
                 private readonly Probe p;public Handler(Probe p){this.p=p;p.Resolved++;p.ServiceResolutions++;}
                 public ValueTask<Cursor> OpenAsync(PlainItems r,CancellationToken t){p.Opened++;return new(new Cursor(p,r.Count,t));}
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){p.Opened++;return new(new Cursor(p,r.Count,t));}
                 public void Dispose()=>p.ServiceDisposals++;
             }
-            [ZendiatorHandler]public sealed class EmptyHandler(Probe p):IStreamSourceHandler<EmptyItems,int,EmptyCursor>{
+            [Handler]public sealed class EmptyHandler(Probe p):IStreamSourceHandler<EmptyItems,int,EmptyCursor>{
                 public ValueTask<EmptyCursor> OpenAsync(EmptyItems r,CancellationToken t){p.EmptyOpened++;return new(default(EmptyCursor));}
             }
             public readonly struct EmptyCursor:IAsyncEnumerator<int>{
@@ -178,7 +178,7 @@ public sealed partial class GeneratorTests
                 public readonly global::Zendiator.Generator.Tests.AsyncOnceGate<bool> Middle=new(true);
                 public readonly global::Zendiator.Generator.Tests.AsyncOnceGate<int> Cleanup=new(0);
             }
-            [ZendiatorHandler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>{
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>{
                 public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){p.Opened++;p.Seen=Probe.Ambient.Value;p.OpenGate=new(new Cursor(p,t));return p.OpenGate.Task;}
             }
             public sealed class Cursor(Probe p,CancellationToken token):IAsyncEnumerator<int>{

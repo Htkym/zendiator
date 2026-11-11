@@ -10,7 +10,7 @@ public sealed partial class GeneratorTests
     private static string SendAllSyncModule(bool isVoid)
     {
         var handlers = string.Join("\n", Enumerable.Range(1, 3).Select(id =>
-            "[ZendiatorHandler]public sealed class H" + id + ":ISyncRequestHandler<Ping" + (isVoid ? "" : ",int") + ">,IDisposable{" +
+            "[Handler]public sealed class H" + id + ":ISyncRequestHandler<Ping" + (isVoid ? "" : ",int") + ">,IDisposable{" +
             "private readonly Probe p;public H" + id + "(Probe p){this.p=p;p.Resolved.Add(\"H" + id + "\");}" +
             "public " + (isVoid ? "void" : "int") + " Handle(Ping r,CancellationToken t){" + (isVoid ? "" : "return ") +
             "p.Body(r," + id + ",r.Value,r.Shared,t);}public void Dispose()=>p.Ended.Add(\"H" + id + "\");}"));

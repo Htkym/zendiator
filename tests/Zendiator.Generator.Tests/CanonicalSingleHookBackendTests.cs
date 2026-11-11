@@ -101,7 +101,7 @@ public sealed partial class GeneratorTests
             using Probe=global::Zendiator.Generator.Tests.GeneratorTests.ReferenceSendProbe;
             namespace App {
                 public sealed record Ping : ISyncRequest{{(isVoid ? "" : "<int>")}};
-                [ZendiatorHandler] public sealed partial class Handler<T> : ISyncRequestHandler<Ping{{result}}>,IDisposable where T:class {
+                [Handler] public sealed partial class Handler<T> : ISyncRequestHandler<Ping{{result}}>,IDisposable where T:class {
                     private readonly Probe _probe; public Handler(Probe probe) { _probe=probe; probe.ConstructHandler(); }
                     {{(isVoid ? "void" : "int")}} ISyncRequestHandler<Ping{{result}}>.Handle(Ping request,CancellationToken token) { {{(isVoid ? "" : "return ")}}_probe.Handle(request,token); }
                     void IDisposable.Dispose()=>_probe.HandlerDisposals++;

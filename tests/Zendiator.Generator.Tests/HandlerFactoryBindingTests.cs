@@ -81,7 +81,7 @@ public sealed partial class GeneratorTests
         var source = HandlerFactoryFixture(mutation is "async-on-sync" or "missing-sync-cleanup" ? "SendSync" : "SendAsync", asyncFactory: mutation == "async-on-sync");
         source = mutation switch
         {
-            "missing-marker" => source.Replace("[ZendiatorHandler] public sealed partial class A", "public sealed partial class A")
+            "missing-marker" => source.Replace("[Handler] public sealed partial class A", "public sealed partial class A")
                 .Replace("public sealed class Handler :", "public abstract class Handler :"),
             "wrong-request" => source.Replace("IOwnedSessionFactory<Ping,A>", "IOwnedSessionFactory<Other,A>")
                 .Replace(".Create(Ping r", ".Create(Other r") + "public sealed class Other {}",
