@@ -46,3 +46,13 @@ Task.Yield、token check、probe、cleanup を減らす変更は採用しない�
 - WP10は.NET 11 RCの126/126セルの実験、既存公式分析、独立数値照合、日本語校正を完了した。[実験結果](../performance/wp10-runtime-async-results.md)に利得・悪化・制約を併記した。.NET 10 shippingへの効果とは分けて扱い、新しいPE/PDB・generated-sourceの意味検証などの補強監査は未検証のままとする。
 - 残る工程は、fresh A/B/S/EとStrict consumerの実API・protocol・stageの確認完了、master freezeとpreflight、final210、9代表ケースの結果・採否・再現証跡の最終更新である。final210はphase1の117セルでWP04を判断し、別途GOを得た後にphase2の93セルを進める。
 - 現行shipping sourceのCI成功は、最終性能比較の完了を代替しない。原計画§15.2・§16.3に沿って、同条件でのbaseline比と競合比較を区別し、既存契約、opt-inとdefaultの区別、再現可能な証跡をそろえて全体の完了を判断する。
+
+## 2026-11-11：WP04 の採用判断と診断の終了
+
+- final combinedのphase1は117/117セルと既存保存結果解析を完了した。A/B/Sはbaseline ordinary／final ordinary／同physical finalのstruct-upstream opt-inである。WP04はstruct upstream、WP05はeager依存注入であり混同しない。
+- ユーザーの明示的な採用判断に従い、約200 B/op削減を選べる既存WP04 opt-inの採用を確定する。既定経路の切替や全A→B集合の一括採用は行わない。同期Relayの限定12セルでは全6対の削減を維持したが、時間の元悪化は一貫再現しなかった。Count1024のB高値、修正待ち時間差と負荷確認の限界を残し、速度改善確定とはしない。
+- 安全な追加改善原因が特定できなかったため、同期Relay診断・推測による性能変更・追加測定は終了した。結果・適用条件・API／NativeAOT留保は[WP04採用記録](../performance/experiments/wp04-optin-adoption.md#2026-11-11phase1-と同期-relay-限定診断後の結論)へ追記した。既存レビューや測定は再実行しない。
+- WP04の実装は既存のままで、新しいAPI・既定値変更はない。今回の文書差分を通常の作業branchで確認・確定する作業が残る。過去の実装統合commitと現在HEADは区別し、未確認のbranch/CI状態を成功扱いしない。
+- 本計画全体では、未実施phase2の93セルとWP05/08/09の最終統合比較・採否整理が残る。今回その測定・新plan/seal・merge/releaseは開始していない。WP04を再び調査・再測定し続けることは次工程の前提にしない。
+
+- 開発案はWP01〜WP10の10項目（WP00は準備基盤で別枠）。WP04/05/08/09は実装を採用、WP01/02/03/06/07は不採用・条件不成立で終了、WP10は別系統の.NET 11評価を完了した。新規の製品実装が残る項目は0件で、採用文書のcommit/push・通常CI・残る統合性能評価はこの件数に混ぜない。WP04実装とgateのcommitは確認済み作業branchの変更前HEADに含まれている。
