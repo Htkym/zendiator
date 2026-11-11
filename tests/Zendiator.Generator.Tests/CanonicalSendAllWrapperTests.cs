@@ -124,7 +124,9 @@ public sealed partial class GeneratorTests
         var original = WrapperHookSource(async, isVoid, false, WrapperProfile(profile));
         var root = CSharpSyntaxTree.ParseText(original).GetCompilationUnitRoot();
         var ns = root.Members.OfType<NamespaceDeclarationSyntax>().ToArray();
-        var handler = ns.SelectMany(n => n.Members).OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "Handler").ToFullString();
+        // Keep the marker outside the Handler type-name substitution below.
+        var handler = ns.SelectMany(n => n.Members).OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "Handler").ToFullString()
+            .Replace("[Handler]", "[global::Zendiator.HandlerAttribute]", StringComparison.Ordinal);
         var text = "";
         foreach (var n in ns)
         {
