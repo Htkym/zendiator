@@ -203,49 +203,44 @@ with 0.4.0 is not promised.
 
 ## Performance
 
-Selected workloads for the [measured 0.5.0 candidate](https://github.com/Htkym/zendiator/commit/927827653e229b01afdd8bb97c00b9093ad049ab) were compared on the same machine on 2026-10-31. Each cell shows **mean time / allocated bytes per operation (B/op)**. Time and memory are separate metrics, and the table does not cover every workload.
+The [current implementation](https://github.com/Htkym/zendiator/commit/88483069db6409e092efa0d5ef63452777f577c9) was compared on the same machine on 2026-11-11. All 101 non-N/A cells in the two tables were measured in this run. Each cell shows **mean time / managed allocated bytes per operation (B/op)**. Time and memory are separate metrics.
 
-|Case|Zendiator candidate|Immediate.Handlers 4.2.0|MediatR 14.2.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
+|Case|Zendiator (8848306)|Immediate.Handlers 4.2.0|MediatR 14.2.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
 |---|---:|---:|---:|---:|---:|---:|
-|Send / 0 behaviors|1.45 ns / 0 B|8.79 ns / 0 B|40.06 ns / 200 B|46.52 ns / 64 B|28.83 ns / 0 B|31.25 ns / 0 B|
-|Send / 5 behaviors|10.16 ns / 0 B|16.81 ns / 0 B|135.93 ns / 1,016 B|83.05 ns / 544 B|33.28 ns / 0 B|148.19 ns / 0 B|
-|Resolve again in the same scope + Send / 0 behaviors|27.30 ns / 0 B|40.73 ns / 0 B|71.09 ns / 200 B|83.82 ns / 64 B|56.91 ns / 0 B|68.67 ns / 0 B|
-|Resolve again in the same scope + Send / 5 behaviors|30.13 ns / 0 B|45.40 ns / 0 B|151.70 ns / 1,016 B|113.12 ns / 544 B|57.99 ns / 0 B|180.64 ns / 0 B|
-|New scope + 1 Send + dispose / 5 behaviors|151.47 ns / 704 B|117.48 ns / 568 B|202.87 ns / 1,400 B|178.18 ns / 920 B|633.17 ns / 1,712 B|412.67 ns / 856 B|
-|Notification / 16 subscribers / sync|111.33 ns / 0 B|N/A|918.50 ns / 4,784 B|183.21 ns / 0 B|159.29 ns / 0 B|692.02 ns / 0 B|
-|Stream 1024 items / 5 behaviors / sync|13.41 μs / 1,216 B|100.17 μs / 1,107 B|201.14 μs / 3,593 B|101.33 μs / 1,689 B|99.35 μs / 1,105 B|116.64 μs / 1,809 B|
-|Stream 1024 items / 5 behaviors / async|165.82 μs / 116,562 B|263.09 μs / 1,754 B|490.69 μs / 4,726 B|261.25 μs / 2,339 B|245.04 μs / 1,755 B|289.13 μs / 2,539 B|
-|Stream early break / 16-item input / 5 behaviors / sync|415.19 ns / 1,216 B|291.92 ns / 1,104 B|813.08 ns / 3,592 B|372.38 ns / 1,688 B|308.40 ns / 1,104 B|624.94 ns / 1,808 B|
-|Stream early break / 16-item input / 5 behaviors / async|1.81 μs / 1,656 B|1.96 μs / 1,752 B|2.99 μs / 4,720 B|2.08 μs / 2,336 B|1.92 μs / 1,752 B|2.37 μs / 2,536 B|
-|Behavior short-circuit / 3 stages / repeated calls|7.09 ns / 0 B|3.99 ns / 0 B|78.10 ns / 704 B|51.94 ns / 496 B|27.93 ns / 0 B|54.64 ns / 384 B|
-|Async Hook success / first call|0.74 μs / 480 B|1.24 μs / 504 B|1.21 μs / 1,352 B|1.04 μs / 808 B|1.01 μs / 560 B|1.71 μs / 856 B|
-|Async Hook success / repeated calls|24.33 ns / 0 B|45.00 ns / 0 B|492.60 ns / 944 B|440.95 ns / 496 B|61.58 ns / 0 B|451.39 ns / 480 B|
-|Async Hook failure / first call, outer Hook|6.54 μs / 2,520 B|8.09 μs / 3,809 B|6.55 μs / 3,448 B|5.87 μs / 3,216 B|6.00 μs / 2,968 B|9.57 μs / 4,872 B|
+|Send / 0 behaviors|1.21 ns / 0 B|7.18 ns / 0 B|35.18 ns / 200 B|35.84 ns / 64 B|25.84 ns / 0 B|28.20 ns / 0 B|
+|Send / 5 behaviors|9.38 ns / 0 B|16.78 ns / 0 B|130.72 ns / 1,016 B|79.88 ns / 544 B|34.16 ns / 0 B|155.00 ns / 0 B|
+|Resolve again in the same scope + Send / 0 behaviors|24.51 ns / 0 B|35.45 ns / 0 B|54.81 ns / 200 B|77.00 ns / 64 B|53.51 ns / 0 B|63.15 ns / 0 B|
+|Resolve again in the same scope + Send / 5 behaviors|40.05 ns / 0 B|44.60 ns / 0 B|148.61 ns / 1,016 B|115.75 ns / 544 B|57.53 ns / 0 B|185.89 ns / 0 B|
+|New scope + 1 Send + dispose / 5 behaviors|148.91 ns / 704 B|113.39 ns / 568 B|208.90 ns / 1,400 B|151.09 ns / 920 B|406.93 ns / 1,712 B|413.65 ns / 856 B|
+|Notification / 16 subscribers / sync|107.85 ns / 0 B|N/A|900.10 ns / 4,784 B|188.95 ns / 0 B|146.04 ns / 0 B|685.74 ns / 0 B|
+|Stream 1024 items / 5 behaviors / sync|12.13 μs / 1,016 B|89.41 μs / 1,106 B|182.81 μs / 3,593 B|90.55 μs / 1,688 B|89.69 μs / 1,104 B|106.04 μs / 1,808 B|
+|Stream 1024 items / 5 behaviors / async|147.51 μs / 116,362 B|229.28 μs / 1,753 B|448.74 μs / 4,724 B|227.71 μs / 2,338 B|226.34 μs / 1,755 B|280.33 μs / 2,538 B|
+|Stream early break / 16-item input / 5 behaviors / sync|365.93 ns / 1,016 B|254.44 ns / 1,104 B|717.95 ns / 3,592 B|340.93 ns / 1,688 B|282.08 ns / 1,104 B|572.81 ns / 1,808 B|
+|Stream early break / 16-item input / 5 behaviors / async|1.84 μs / 1,456 B|1.96 μs / 1,752 B|3.03 μs / 4,720 B|2.13 μs / 2,336 B|2.02 μs / 1,752 B|2.47 μs / 2,536 B|
+|Behavior short-circuit / 3 stages / repeated calls|4.49 ns / 0 B|4.77 ns / 0 B|77.26 ns / 704 B|53.36 ns / 496 B|27.00 ns / 0 B|55.23 ns / 384 B|
+|Async Hook success / first call|790.62 ns / 480 B|1.20 μs / 504 B|1.19 μs / 1,352 B|1.01 μs / 808 B|1.04 μs / 560 B|1.73 μs / 856 B|
+|Async Hook success / repeated calls|30.31 ns / 0 B|48.63 ns / 0 B|556.91 ns / 944 B|514.80 ns / 496 B|67.41 ns / 0 B|487.82 ns / 480 B|
+|Async Hook failure / first call, outer Hook|3.62 μs / 1,712 B|8.12 μs / 3,808 B|8.64 μs / 3,384 B|6.16 μs / 3,216 B|6.44 μs / 2,968 B|9.82 μs / 4,872 B|
 
 New-scope timings include creation, first resolution, Send and disposal. Stream timings cover the entire operation, including cleanup; early break consumes one item from a 16-item input. Sync/async distinguishes enumeration completion patterns. First-call, repeated-call and outer-Hook-failure workloads have different boundaries, so their differences are not simply exception costs. N/A means no applicable comparison result, not zero.
 
-### Interpreting the results
+### Supplementary workloads
 
-- Some peers have lower time and allocation for new-scope and synchronous
-  early-termination workloads.
-- In the table's asynchronous Stream with 5 behaviors and 1024 items, Zendiator
-  has a lower observed mean time, but allocates 116,562 B versus 1,754–4,726 B
-  for peers.
-- Outside this table, **asynchronous Stream with 0 behaviors and 1024 items** is
-  unfavorable in both time and memory: Zendiator is 149.19 μs / 115,458 B, versus
-  53.90–92.56 μs / 393–865 B for peers.
-- **Asynchronous Relay with 5 stages and 1024 items**, also outside this table,
-  is 150.97 μs / 116,562 B for Zendiator. Immediate, Mediator, DispatchR and
-  Foundatio are 51.94–53.65 μs / 393–937 B; MediatR is 246.09 μs / 3,323 B.
-- In synchronous Stream early break with 0 behaviors and a 16-item input as well,
-  Zendiator is 58.49 ns / 160 B versus 42.80 ns / 144 B for Immediate.
+|Case|Zendiator (8848306)|Immediate.Handlers 4.2.0|MediatR 14.2.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
+|---|---:|---:|---:|---:|---:|---:|
+|Stream 1024 items / 0 behaviors / async|140.56 μs / 115,457 B|49.48 μs / 393 B|77.98 μs / 865 B|51.86 μs / 457 B|49.60 μs / 393 B|53.53 μs / 392 B|
+|Relay 1024 items / 5 stages / async|153.22 μs / 116,361 B|49.62 μs / 392 B|236.21 μs / 3,323 B|49.36 μs / 937 B|49.83 μs / 393 B|54.89 μs / 393 B|
+|Stream early break / 16-item input / 0 behaviors / sync|58.43 ns / 160 B|39.96 ns / 144 B|134.95 ns / 536 B|73.01 ns / 208 B|66.07 ns / 144 B|66.29 ns / 144 B|
 
-These observations, including the results outside this table, do not establish
-general speed superiority or universal performance improvement.
+Both tables include workloads where peers can have lower time or allocation. These observations do not establish general speed superiority, universal non-regression or a controlled before/after improvement.
 
 ### Measurement conditions
 
-Windows 11 x64, Intel Core Ultra 7 258V, .NET 10.0.14, BenchmarkDotNet 0.15.8, Release; 20 warmups, 12 measurements, requested 500 ms iterations, one launch per case. Cases were measured at different times; one launch does not establish independent-run reproducibility or a controlled before/after improvement.
+Windows 11 x64, Intel Core Ultra 7 258V, SDK 10.0.403, .NET runtime 10.0.14 (dotnet host 11.0.0), DI 10.0.12, BenchmarkDotNet 0.15.8, Release, workstation GC, affinity mask 1; 20 warmups, 12 actual measurements, requested 500 ms iterations, one launch per case. First-call and cold-failure cases use 16384 invocations and unroll factor 1. BDN retained 9–12 statistical observations after its overhead adjustment and outlier handling.
+
+The 64 UseCase cells and 37 restored Foundatio/ShortCircuit/H cells were collected in separate batches, with library rotation within each available comparison set. One launch and different collection times do not establish independent-run reproducibility. The Zendiator and Abstractions DLL bytes were identical across both batches.
+
+[Unrounded results and uncertainty](benchmarks/results/20261111-8848306-summary.csv) include Mean, StdDev, standard error, confidence margin and retained N. [Full numeric observations](benchmarks/results/20261111-8848306-readme.json) include every BDN measurement, job settings, assembly hashes and the original report hashes; October results are not mixed into these tables.
 
 Small differences of a few nanoseconds are sensitive to overhead adjustment. These lightweight workloads do not predict application startup, HTTP or asynchronous I/O latency. API and DI registration shapes differ between libraries; standard enumeration and typed terminals are different workloads. Foundatio uses its intercepted path here, not its native runtime open-generic path.
 

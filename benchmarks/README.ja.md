@@ -4,6 +4,12 @@
 
 チェックインしたfixtureで、ZendiatorとImmediate.Handlers 4.2.0、DispatchR.Mediator 2.3.1、Mediator 3.0.2、MediatR 14.2.0を比べます。入口と登録方法は各ライブラリの公開仕様に沿っています。全体はSend 125件、features 55件、streams 120件、relay 60件、74比較キーです。対応しない組合せは未測定として扱います。
 
+## 現在のREADMEの比較
+
+[ルートの性能表](../README.ja.md#性能比較)には、実装 `88483069db6409e092efa0d5ef63452777f577c9` を2026-11-11に測定した101セルを掲載しています。Foundatio.Mediator 1.3.3も含みます。[丸め前の値とばらつき](results/20261111-8848306-summary.csv)、[全数値観測・条件・report hash](results/20261111-8848306-readme.json)を保存しています。これはREADMEで選んだ利用場面の比較で、上記の全matrixではありません。
+
+以下の5ライブラリのUseCaseコマンドだけでは、この表全体を再現できません。Foundatio、ShortCircuit、Hは、保存した処理定義に測定用の入口を組み合わせています。比較を再現するときは、実装・処理定義・package版・job条件を揃えてください。以下の0.4.0の過去の表は、別の測定として維持しています。
+
 ## 比較の読み方
 
 [0.4.0の過去の測定結果](#historical-040-results)には、2026-10-08の全体比較から有利・不利な条件を含む8例を載せています。ソース版は `1c41d2b105073d2dc9be2c0e8684fdce2fa11f55` です。[丸めていない抜粋データ](results/20261008-1c41d2b-summary.csv)にはMean、信頼区間の半幅であるError、StdDev、標準誤差、N、管理ヒープの割り当てを別列で載せています。
@@ -31,7 +37,7 @@ FirstSendは測定iterationごとに事前作成したScopeを16384個使い、u
 現在の0.5.0を実行しても、当時の実装を再現したことにはなりません。
 ZendiatorのSendと、Notification以外のfeatureはcanonical compositionを使い、
 StreamとRelayはnative cursorを使います。Notificationは分離したlegacy登録を維持します。
-このfixtureを用意したことは、最終版0.5.0候補の新しい測定結果を示すものではありません。
+現在のREADMEの表は、上記の追加定義を含む別の101セルの測定です。
 
 .NET 10、PowerShell、Python 3を用意します。パッケージ版はlock fileで固定しています。
 リポジトリのルートから実行します。

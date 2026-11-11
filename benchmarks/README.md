@@ -4,6 +4,12 @@
 
 The checked-in fixture compares Zendiator with Immediate.Handlers 4.2.0, DispatchR.Mediator 2.3.1, Mediator 3.0.2 and MediatR 14.2.0. It uses each library's documented entry and registration. The full matrix contains Send 125, features 55, streams 120 and relay 60 cases, across 74 comparison keys. Unsupported combinations remain unmeasured.
 
+## Current README comparison
+
+The [root performance tables](../README.md#performance) contain a fresh 2026-11-11 comparison of 101 selected cells at implementation `88483069db6409e092efa0d5ef63452777f577c9`, including Foundatio.Mediator 1.3.3. [Unrounded data and uncertainty](results/20261111-8848306-summary.csv) and [all numeric observations, conditions and report hashes](results/20261111-8848306-readme.json) are included. These are selected README workloads, not the full matrix described above.
+
+The five-library UseCase commands below do not alone reproduce those tables: Foundatio, ShortCircuit and H additionally use preserved workload definitions with a measurement entry. Keep the implementation, workload definitions, package versions and job controls together when reproducing a comparison. The historical 0.4.0 results below remain a separate measurement.
+
 ## Read the comparison
 
 The [historical results below](#historical-040-results) show eight balanced examples from the 2026-10-08 full run at source `1c41d2b105073d2dc9be2c0e8684fdce2fa11f55`. [Selected unrounded data](results/20261008-1c41d2b-summary.csv) includes Mean, confidence-interval Error, StdDev, standard error, retained N and managed allocated bytes.
@@ -31,7 +37,7 @@ the historical table, use its pinned `1c41d2b` source and matching dependencies;
 running the current 0.5.0 checkout does not reproduce that historical implementation.
 For Zendiator, Send and non-notification feature cases use a canonical composition;
 Stream and Relay use native cursor sources. Notification retains a separate legacy
-registration. These fixtures do not supply a new measurement of the final 0.5.0 candidate.
+registration. The current README tables use the separate 101-cell measurement and additional definitions described above.
 
 Use .NET 10, PowerShell and Python 3. Package versions are locked. From the
 repository root:

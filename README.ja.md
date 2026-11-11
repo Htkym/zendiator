@@ -60,40 +60,44 @@ Zendiator.CodeFixesは任意の別packageです。CodeFixを使う場合は、`Z
 
 ## 性能比較
 
-[測定対象の0.5.0候補](https://github.com/Htkym/zendiator/commit/927827653e229b01afdd8bb97c00b9093ad049ab)について、2026-10-31に一部の利用場面を同じ環境で比較しました。各セルは **平均時間 / 割当量（B/op）** です。時間とメモリは別の指標であり、表は全条件を網羅していません。
+[今回の実装](https://github.com/Htkym/zendiator/commit/88483069db6409e092efa0d5ef63452777f577c9)を2026-11-11に同じ環境で比較しました。以下の2表のN/A以外の101セルは、すべて今回測定した値です。各セルは **平均時間 / managed割当量（B/op）** です。時間とメモリは別の指標です。
 
-|ケース|Zendiator 候補|Immediate.Handlers 4.2.0|MediatR 14.2.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
+|ケース|Zendiator (8848306)|Immediate.Handlers 4.2.0|MediatR 14.2.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
 |---|---:|---:|---:|---:|---:|---:|
-|Send / Behavior 0|1.45 ns / 0 B|8.79 ns / 0 B|40.06 ns / 200 B|46.52 ns / 64 B|28.83 ns / 0 B|31.25 ns / 0 B|
-|Send / Behavior 5|10.16 ns / 0 B|16.81 ns / 0 B|135.93 ns / 1,016 B|83.05 ns / 544 B|33.28 ns / 0 B|148.19 ns / 0 B|
-|同一scopeで再取得＋Send / Behavior 0|27.30 ns / 0 B|40.73 ns / 0 B|71.09 ns / 200 B|83.82 ns / 64 B|56.91 ns / 0 B|68.67 ns / 0 B|
-|同一scopeで再取得＋Send / Behavior 5|30.13 ns / 0 B|45.40 ns / 0 B|151.70 ns / 1,016 B|113.12 ns / 544 B|57.99 ns / 0 B|180.64 ns / 0 B|
-|新規scope＋1 Send＋破棄 / Behavior 5|151.47 ns / 704 B|117.48 ns / 568 B|202.87 ns / 1,400 B|178.18 ns / 920 B|633.17 ns / 1,712 B|412.67 ns / 856 B|
-|Notification / 16 subscribers / 同期|111.33 ns / 0 B|N/A|918.50 ns / 4,784 B|183.21 ns / 0 B|159.29 ns / 0 B|692.02 ns / 0 B|
-|Stream 1024件 / Behavior 5 / 同期|13.41 μs / 1,216 B|100.17 μs / 1,107 B|201.14 μs / 3,593 B|101.33 μs / 1,689 B|99.35 μs / 1,105 B|116.64 μs / 1,809 B|
-|Stream 1024件 / Behavior 5 / 非同期|165.82 μs / 116,562 B|263.09 μs / 1,754 B|490.69 μs / 4,726 B|261.25 μs / 2,339 B|245.04 μs / 1,755 B|289.13 μs / 2,539 B|
-|Stream途中終了 / 16件入力 / Behavior 5 / 同期|415.19 ns / 1,216 B|291.92 ns / 1,104 B|813.08 ns / 3,592 B|372.38 ns / 1,688 B|308.40 ns / 1,104 B|624.94 ns / 1,808 B|
-|Stream途中終了 / 16件入力 / Behavior 5 / 非同期|1.81 μs / 1,656 B|1.96 μs / 1,752 B|2.99 μs / 4,720 B|2.08 μs / 2,336 B|1.92 μs / 1,752 B|2.37 μs / 2,536 B|
-|Behavior短絡 / 3段 / 繰り返し|7.09 ns / 0 B|3.99 ns / 0 B|78.10 ns / 704 B|51.94 ns / 496 B|27.93 ns / 0 B|54.64 ns / 384 B|
-|非同期Hook成功 / 初回|0.74 μs / 480 B|1.24 μs / 504 B|1.21 μs / 1,352 B|1.04 μs / 808 B|1.01 μs / 560 B|1.71 μs / 856 B|
-|非同期Hook成功 / 繰り返し|24.33 ns / 0 B|45.00 ns / 0 B|492.60 ns / 944 B|440.95 ns / 496 B|61.58 ns / 0 B|451.39 ns / 480 B|
-|非同期Hook失敗 / 初回・外側|6.54 μs / 2,520 B|8.09 μs / 3,809 B|6.55 μs / 3,448 B|5.87 μs / 3,216 B|6.00 μs / 2,968 B|9.57 μs / 4,872 B|
+|Send / Behavior 0|1.21 ns / 0 B|7.18 ns / 0 B|35.18 ns / 200 B|35.84 ns / 64 B|25.84 ns / 0 B|28.20 ns / 0 B|
+|Send / Behavior 5|9.38 ns / 0 B|16.78 ns / 0 B|130.72 ns / 1,016 B|79.88 ns / 544 B|34.16 ns / 0 B|155.00 ns / 0 B|
+|同一scopeで再取得＋Send / Behavior 0|24.51 ns / 0 B|35.45 ns / 0 B|54.81 ns / 200 B|77.00 ns / 64 B|53.51 ns / 0 B|63.15 ns / 0 B|
+|同一scopeで再取得＋Send / Behavior 5|40.05 ns / 0 B|44.60 ns / 0 B|148.61 ns / 1,016 B|115.75 ns / 544 B|57.53 ns / 0 B|185.89 ns / 0 B|
+|新規scope＋1 Send＋破棄 / Behavior 5|148.91 ns / 704 B|113.39 ns / 568 B|208.90 ns / 1,400 B|151.09 ns / 920 B|406.93 ns / 1,712 B|413.65 ns / 856 B|
+|Notification / 16 subscribers / 同期|107.85 ns / 0 B|N/A|900.10 ns / 4,784 B|188.95 ns / 0 B|146.04 ns / 0 B|685.74 ns / 0 B|
+|Stream 1024件 / Behavior 5 / 同期|12.13 μs / 1,016 B|89.41 μs / 1,106 B|182.81 μs / 3,593 B|90.55 μs / 1,688 B|89.69 μs / 1,104 B|106.04 μs / 1,808 B|
+|Stream 1024件 / Behavior 5 / 非同期|147.51 μs / 116,362 B|229.28 μs / 1,753 B|448.74 μs / 4,724 B|227.71 μs / 2,338 B|226.34 μs / 1,755 B|280.33 μs / 2,538 B|
+|Stream途中終了 / 16件入力 / Behavior 5 / 同期|365.93 ns / 1,016 B|254.44 ns / 1,104 B|717.95 ns / 3,592 B|340.93 ns / 1,688 B|282.08 ns / 1,104 B|572.81 ns / 1,808 B|
+|Stream途中終了 / 16件入力 / Behavior 5 / 非同期|1.84 μs / 1,456 B|1.96 μs / 1,752 B|3.03 μs / 4,720 B|2.13 μs / 2,336 B|2.02 μs / 1,752 B|2.47 μs / 2,536 B|
+|Behavior短絡 / 3段 / 繰り返し|4.49 ns / 0 B|4.77 ns / 0 B|77.26 ns / 704 B|53.36 ns / 496 B|27.00 ns / 0 B|55.23 ns / 384 B|
+|非同期Hook成功 / 初回|790.62 ns / 480 B|1.20 μs / 504 B|1.19 μs / 1,352 B|1.01 μs / 808 B|1.04 μs / 560 B|1.73 μs / 856 B|
+|非同期Hook成功 / 繰り返し|30.31 ns / 0 B|48.63 ns / 0 B|556.91 ns / 944 B|514.80 ns / 496 B|67.41 ns / 0 B|487.82 ns / 480 B|
+|非同期Hook失敗 / 初回・外側|3.62 μs / 1,712 B|8.12 μs / 3,808 B|8.64 μs / 3,384 B|6.16 μs / 3,216 B|6.44 μs / 2,968 B|9.82 μs / 4,872 B|
 
 新規scopeの時間は作成・初回解決・送信・破棄を含みます。Streamは後始末を含む操作全体の値で、途中終了は16件入力のうち1件を消費して停止します。同期／非同期は列挙側の完了パターンを分けています。初回・繰り返し・外側Hook失敗は測定範囲が異なるため、その差を単純な例外処理コストとは解釈できません。N/Aは対象の比較結果がないことを示し、ゼロではありません。
 
-### 結果を見る際の注意
+### 補足の利用場面
 
-- 新規scopeや同期Streamの途中終了では、Zendiatorより時間が短く割当量が少ない競合があります。
-- 表の非同期Stream（Behavior 5、1024件）では、Zendiatorの平均時間は短い一方、割当量は116,562 Bで、競合の1,754–4,726 Bより多くなっています。
-- 表外の**非同期Stream（Behavior 0、1024件）** はZendiatorが149.19 μs / 115,458 B、競合が53.90–92.56 μs / 393–865 Bで、時間・メモリとも不利でした。
-- 表外の**非同期Relay（5段、1024件）** はZendiatorが150.97 μs / 116,562 Bで、Immediate、Mediator、DispatchR、Foundatioは51.94–53.65 μs / 393–937 B、MediatRは246.09 μs / 3,323 Bでした。
-- 同期Stream（Behavior 0、16件入力から途中終了）でも、Zendiatorの58.49 ns / 160 Bに対し、Immediateは42.80 ns / 144 Bでした。
+|ケース|Zendiator (8848306)|Immediate.Handlers 4.2.0|MediatR 14.2.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
+|---|---:|---:|---:|---:|---:|---:|
+|Stream 1024件 / Behavior 0 / 非同期|140.56 μs / 115,457 B|49.48 μs / 393 B|77.98 μs / 865 B|51.86 μs / 457 B|49.60 μs / 393 B|53.53 μs / 392 B|
+|Relay 1024件 / 5段 / 非同期|153.22 μs / 116,361 B|49.62 μs / 392 B|236.21 μs / 3,323 B|49.36 μs / 937 B|49.83 μs / 393 B|54.89 μs / 393 B|
+|Stream途中終了 / 16件入力 / Behavior 0 / 同期|58.43 ns / 160 B|39.96 ns / 144 B|134.95 ns / 536 B|73.01 ns / 208 B|66.07 ns / 144 B|66.29 ns / 144 B|
 
-表外の結果を含め、これらの観測値は全般的な速度優位や無条件の性能改善を示していません。
+両表には競合の時間や割当量が少ない利用場面も含めています。これらの観測値は全般的な速度優位、無条件の非劣化、条件を揃えた変更前後の改善を示していません。
 
 ### 測定条件
 
-Windows 11 x64、Intel Core Ultra 7 258V、.NET 10.0.14、BenchmarkDotNet 0.15.8、Release。ウォームアップ20回、測定12回、要求測定時間500 ms、各ケース1 launchです。測定日時はケース間で異なり、1 launchでは独立した再実行による再現性や、条件を揃えた変更前後の改善を証明できません。
+Windows 11 x64、Intel Core Ultra 7 258V、SDK 10.0.403、.NET runtime 10.0.14（dotnet host 11.0.0）、DI 10.0.12、BenchmarkDotNet 0.15.8、Release、workstation GC、affinity mask 1。ウォームアップ20回、実測12回、要求測定時間500 ms、各ケース1 launchです。初回・cold失敗ケースは16384 invocations、unroll factor 1です。BDNのオーバーヘッド調整・外れ値処理後の統計対象は9–12点です。
+
+UseCaseの64セルと、保存済み定義から復元したFoundatio／ShortCircuit／Hの37セルは別の測定群で、各群の比較可能なライブラリ間で順序を交代しています。1 launchかつ測定時刻が異なるため、独立した再実行による再現性は証明できません。両測定群でZendiatorとAbstractionsのDLL bytesは一致しています。
+
+[丸め前の結果とばらつき](benchmarks/results/20261111-8848306-summary.csv)にMean、StdDev、標準誤差、信頼区間の半幅、統計対象Nを記載しました。[全数値観測](benchmarks/results/20261111-8848306-readme.json)にはBDNの全観測、job条件、assembly hash、元reportのhashを含めています。10月の結果を今回の表へ混在させていません。
 
 数ns級の微差はオーバーヘッド調整の影響を受けやすく、軽量な処理を使ったこの測定から実アプリの起動時間やHTTP・非同期I/Oの応答時間は予測できません。APIやDI登録の形はライブラリ間で異なり、標準列挙とtyped terminalも別の処理です。Foundatioはintercepted経路の値で、native runtimeのopen generic経路とは異なります。
 
