@@ -69,12 +69,18 @@ public sealed partial class GeneratorTests
         var request = new StandardRequest();
         var typed = new StandardOnly();
         IStreamMiddleware<StandardRequest, int> typedContract = typed;
-        await using (await typedContract.OpenAsync(request, (IStreamUpstream<StandardRequest, int>)new StandardPort(), default)) { }
-        await using (await typedContract.OpenAsync(request, new StandardPort(), default)) { }
+        await using (await typedContract.OpenAsync(request, (IStreamUpstream<StandardRequest, int>)new StandardPort(), default))
+        {
+        }
+        await using (await typedContract.OpenAsync(request, new StandardPort(), default))
+        {
+        }
         Assert.Equal(2, typed.Calls);
         var legacy = new LegacyOnly();
         IStreamMiddleware<StandardRequest, int> legacyContract = legacy;
-        await using (await legacyContract.OpenAsync(request, new StandardPort(), default)) { }
+        await using (await legacyContract.OpenAsync(request, new StandardPort(), default))
+        {
+        }
         Assert.Equal(1, legacy.Calls);
         IStreamMiddleware<StandardRequest, int> empty = new EmptyStandard();
         Assert.Throws<NotSupportedException>(() => empty.OpenAsync(request, (IStreamUpstream<StandardRequest, int>)new StandardPort(), default));

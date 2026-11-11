@@ -52,14 +52,14 @@ cleanup permits reopening; early disposal, faults and root closure retain their 
 Private generated port types do not enter the public Mediator facade. The public stream enumerable
 and typed terminal signatures do not change.
 
-The new standard path uses the already tested concrete struct-port emitter. Prior diagnostic/native
-results remain historical evidence, not a new package AOT PASS. Generic interface adapter shapes need
-their own Native AOT verification; do not extrapolate managed fallback tests to every generic closure.
-The existing two unsupported value-type open-generic DI closures and unverified RIDs remain limitations.
+The concrete generated path keeps its upstream port in a value type. Generic interface adapters
+and runtime-created generic DI closures are different execution paths; support for one shape does
+not imply support for every closure. See [Native AOT limitations](release/known-limitations.md)
+for the supported deployment scope. Value-type open-generic DI closures remain limited.
 
 ## Eager dependencies are a separate choice
 
-WP05 stays explicit through `EagerDependencies`. Static reference or even an unconditional handler
+Eager dependency activation is explicit through `EagerDependencies`. Static reference or even an unconditional handler
 call does not prove that a caller will dispatch after resolving the Mediator. Earlier stages may
 short-circuit, throw or cancel; DI registrations and factories can change at runtime. Moving activation
 into the Mediator constructor can run side effects, throw earlier, resolve unused services or change
@@ -68,5 +68,4 @@ scoped/transient activation order. A usage heuristic cannot safely choose those 
 Without explicit eager selection, existing generated getters resolve a dependency at its actual first
 use and cache it within the existing ownership rules. This is the safe automatic behavior already in
 place. Prefetching at first dispatch would still resolve services before short-circuit/branch decisions;
-prefetching only at the exact call site is the current getter behavior. No new inference mode, runtime
-profiling or automatic global eager setting is introduced.
+prefetching only at the exact call site is the current getter behavior. Dependencies are not automatically made eager based on inferred usage.
