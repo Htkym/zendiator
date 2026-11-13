@@ -13,8 +13,7 @@ internal static class FoundatioRuntimeEvidence
             throw new InvalidOperationException("Expected workstation x64 runtime 10.0.14.");
     }
 
-    public static void Begin(object benchmark) => ChildEvidence.Record(benchmark.GetType().Name,
-        benchmark.GetType().GetProperty("Lifetime")?.GetValue(benchmark) as string ?? "Default");
+    public static void Begin(object benchmark) => ChildEvidence.Record(benchmark);
 
     public static void End(object benchmark)
     {
