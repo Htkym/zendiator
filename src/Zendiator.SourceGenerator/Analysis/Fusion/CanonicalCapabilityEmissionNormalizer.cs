@@ -73,8 +73,8 @@ internal static class CanonicalCapabilityEmissionNormalizer
                 CatalogMarkerTypes = c.CatalogMarkerTypes,
                 ExternAliases = c.ExternAliases,
                 RegistrationStages = new(hooks.Select(s => new RegistrationStageEmission(s.HookName, "Hook", s.Factory?.FactoryName))),
-                RouteDependencyTypes = UsesDependencyCarrier(route)
-                    ? new(hooks.Select(s => s.HookName).Append(handler.HandlerName).Distinct(System.StringComparer.Ordinal)) : default
+                RouteDependencyTypes = UsesDependencyCarrier(route, c.EagerDependencies)
+                    ? DependencyCarrierTypes(hooks.Select(s => s.HookName).Append(handler.HandlerName)) : default
             };
             output.Add(new(registration, route.Family.Value, new(hooks), hf)
             {
@@ -83,12 +83,32 @@ internal static class CanonicalCapabilityEmissionNormalizer
         }
         return new(new(output));
     }
-    internal static bool UsesDependencyCarrier(BoundPipelineModel route) =>
+    internal static bool UsesDependencyCarrier(BoundPipelineModel route, EquatableArray<string> eagerDependencies = default)
+    {
+        if (!HasDependencyCarrierShape(route) || route.SendGeneric != null || route.SendOpenRegistration != null)
+            return false;
+        var types = DependencyCarrierTypes(route.Stages.Select(stage => stage.Name).Append(route.Handlers[0].Name));
+        return types.Count >= 2 && (!SynchronousBeforeOnly(route) || !types.Any(type => eagerDependencies.Contains(type)));
+    }
+
+    // Eager eligibility keeps the previous structural rule, including one-receiver routes.
+    internal static bool ExcludesEagerDependencies(BoundPipelineModel route) =>
+        HasDependencyCarrierShape(route) && !SynchronousBeforeOnly(route);
+
+    internal static EquatableArray<string> DependencyCarrierTypes(IEnumerable<string> types)
+    {
+        var distinct = types.Distinct(System.StringComparer.Ordinal).ToArray();
+        return distinct.Length >= 2 ? new(distinct) : default;
+    }
+
+    private static bool HasDependencyCarrierShape(BoundPipelineModel route) =>
         route.Family == BoundDispatchFamily.SendAsync && route.Handlers.Count == 1 &&
         route.Handlers[0].Sessions.Count == 0 && route.Handlers[0].AsyncEmission is { HandlerIsValueType: false } &&
         route.Stages.Count != 0 && route.Stages.All(stage => stage.Kind == FusionStageKind.Hook && stage.Sessions.Count == 0 &&
-            stage.Capabilities is { HookIsValueType: false, Factory: null }) &&
-        !route.Stages.All(stage => stage.Capabilities is
+            stage.Capabilities is { HookIsValueType: false, Factory: null });
+
+    private static bool SynchronousBeforeOnly(BoundPipelineModel route) =>
+        route.Stages.All(stage => stage.Capabilities is
         { Before.Completion: BoundCompletionKind.Synchronous, Success: null, Exception: null, Finally: null });
 
     internal static BoundAsyncFactoryEmission? Factory(BoundSessionModel s, bool sync)

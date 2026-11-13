@@ -14,6 +14,7 @@ internal static class CanonicalAsyncFastPathEmitter
     internal static void Emit(StringBuilder b, CanonicalSyncCompositionEmission registration,
         BoundAsyncCallTargetEmission? handlerTarget, IEnumerable<HookCapabilityEmission> beforeHooks)
     {
+        var dependencies = CanonicalRouteDependenciesEmitter.Plan(registration, BoundDispatchFamily.SendAsync);
         var h = registration.Handler;
         var hooks = beforeHooks.ToArray();
         var generic = registration.Generic?.TypeParameters ?? "";
@@ -39,21 +40,23 @@ internal static class CanonicalAsyncFastPathEmitter
                         {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
                         cancellationToken.ThrowIfCancellationRequested();
             """);
+        CanonicalRouteDependenciesEmitter.Acquire(b, dependencies);
         for (var i = 0; i < hooks.Length; i++)
         {
             var hook = hooks[i];
             b.AppendLine($$"""
-                        var hook{{i}} = {{CanonicalServiceResolution.Emit(hook.HookName, hook.HookIsValueType)}};
+                        var hook{{i}} = {{CanonicalRouteDependenciesEmitter.Receiver(dependencies, hook.HookName, hook.HookIsValueType)}};
                         request = Before{{i}}{{generic}}(hook{{i}}, request, cancellationToken);
                         {{CanonicalCapabilitySourceEmitter.RequestGuard(h.RequestIsValueType, "global::System.ArgumentNullException.ThrowIfNull(request);")}}
                         cancellationToken.ThrowIfCancellationRequested();
                 """);
         }
         b.AppendLine($$"""
-                        var handler = {{CanonicalServiceResolution.Emit(h.HandlerName, h.HandlerIsValueType)}};
+                        var handler = {{CanonicalRouteDependenciesEmitter.Receiver(dependencies, h.HandlerName, h.HandlerIsValueType)}};
                         return Handle{{generic}}(handler, request, cancellationToken);
                     }
             """);
+        CanonicalRouteDependenciesEmitter.Emit(b, dependencies);
         const string token = "global::System.Threading.CancellationToken";
         for (var i = 0; i < hooks.Length; i++)
         {
