@@ -19,11 +19,11 @@ internal static class FoundatioRuntimeEvidence
     {
     }
 
-    public static object Capture(string phase) => new
+    public static object Capture(string phase, string? runtimeConfig = null, string? deps = null) => new
     {
         phase,
         entryProtocol = "zendiator-shared-measurement-v2",
-        runtimeEvidence = ArtifactEvidence.Runtime(),
+        runtimeEvidence = ArtifactEvidence.Runtime(runtimeConfig, deps),
         assemblies = ArtifactEvidence.Assemblies()
     };
 }

@@ -88,7 +88,7 @@ internal static class ArtifactGate
                     throw new InvalidOperationException($"Entry startup substituted a binding: {item.Name}");
             }
 #if SUPPLEMENTAL_BENCHMARK
-            await BenchmarkGate.Run(request.Output);
+            await BenchmarkGate.Run(request.Output, request.RuntimeConfigPath, request.DepsPath);
             var defaultCorrectness = System.IO.Path.Combine(request.Output, "correctness.json");
             var defaultCorrectnessSha256 = ArtifactEvidence.Hash(defaultCorrectness);
             using (var correctness = JsonDocument.Parse(File.ReadAllBytes(defaultCorrectness)))

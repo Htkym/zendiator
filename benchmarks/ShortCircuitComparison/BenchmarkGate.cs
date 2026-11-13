@@ -9,11 +9,11 @@ internal static class BenchmarkGate
     internal const string Suite = "short";
     internal const int ExpectedCases = 6;
 
-    internal static async Task Run(string output)
+    internal static async Task Run(string output, string? runtimeConfig = null, string? deps = null)
     {
         if (ConstructionLog.Instrumented)
             throw new InvalidOperationException("Timing-binary semantics require an uninstrumented assembly");
-        var details = await SemanticGate().ConfigureAwait(false);
+        var details = await SemanticGate(runtimeConfig, deps).ConfigureAwait(false);
         var records = JsonSerializer.SerializeToElement(details).GetProperty("semanticRecords").EnumerateArray().ToArray();
         if (records.Length != ExpectedCases || records.Select(row => row.GetProperty("actualType").GetString()).Distinct().Count() != ExpectedCases)
             throw new InvalidOperationException("Expected all six original short-circuit semantic records");
@@ -29,7 +29,7 @@ internal static class BenchmarkGate
         }).ToArray());
     }
 
-    private static async Task<object> SemanticGate()
+    private static async Task<object> SemanticGate(string? runtimeConfig, string? deps)
     {
         var rows = new List<object>();
         foreach (var peer in ShortRegistration.Peers)
@@ -111,7 +111,7 @@ internal static class BenchmarkGate
             di = "10.0.12",
             coveredCaseIds = ShortRegistration.Peers.Select(peer => "ShortCircuit/" + peer + "/WarmDispatch").ToArray(),
             semanticRecords = rows,
-            binding = Evidence.Capture("semantic-post-run-no-timing")
+            binding = Evidence.Capture("semantic-post-run-no-timing", runtimeConfig, deps)
         };
     }
 

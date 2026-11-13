@@ -5,7 +5,7 @@ internal static class BenchmarkGate
     internal const string Suite = "hooks";
     internal const int ExpectedCases = 18;
 
-    internal static async Task Run(string output)
+    internal static async Task Run(string output, string? runtimeConfig = null, string? deps = null)
     {
         Directory.CreateDirectory(output);
         await HPeerValidation.Run(Path.Combine(output, "h-validation.json")).ConfigureAwait(false);
