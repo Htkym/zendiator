@@ -120,6 +120,9 @@ exception-precedence and context rules. This input choice does not promise a spe
 
 The [ComposedApp sample](../samples/Zendiator.Sample.ComposedApp/Program.cs)
 uses `IStreamSourceHandler` with a named `NumberCursor` and typed Filter/Map hooks.
+Its source items remain `int`; the final `AsText` hook and
+`StreamPipeline<ReadNumbers, string>` expose `string` items to `StreamAsync`
+consumers. The preceding filters still operate on integers.
 Use that form for a source that already owns cursor state. The
 [GettingStarted sample](../samples/Zendiator.Sample.GettingStarted/Program.cs)
 uses the standard iterator input and `await foreach` instead.

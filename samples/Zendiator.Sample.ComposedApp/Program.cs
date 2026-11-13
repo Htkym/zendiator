@@ -20,20 +20,27 @@ public static class Program
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
         await using var scope = provider.CreateAsyncScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        var inventory = scope.ServiceProvider.GetRequiredService<IInventory>();
 
         Product product = await mediator.SendAsync(new Lookup<Product>("p-7"));
         await mediator.SendAsync(new RefreshInventory(3));
         var sum = mediator.Send(new Sum<Product>(20, 21));
         var count = await mediator.SendAsync(new CachedCount<Product>("current"));
+        var attemptsAfterRetry = inventory.PrimaryReadAttempts;
+        var cachedCount = await mediator.SendAsync(new CachedCount<Product>("current"));
+        var attemptsAfterCacheHit = inventory.PrimaryReadAttempts;
         var collected = mediator.SendAll(new CollectCounts<Product>(1));
         var read = await mediator.SendAllAsync(new ReadCounts<Product>(1));
-        var numbers = new List<int>();
+        var numbers = new List<string>();
         await foreach (var item in mediator.StreamAsync(new ReadNumbers(6)))
             numbers.Add(item);
 
         Console.WriteLine($"Product: {product.Name}");
         Console.WriteLine($"Sum: {sum}");
         Console.WriteLine($"Cached count: {count}");
+        Console.WriteLine($"Read attempts after retry: {attemptsAfterRetry}");
+        Console.WriteLine($"Cache hit: {cachedCount}");
+        Console.WriteLine($"Read attempts after cache hit: {attemptsAfterCacheHit}");
         Console.WriteLine($"SendAll: {string.Join(", ", collected)}");
         Console.WriteLine($"SendAllAsync: {string.Join(", ", read)}");
         Console.WriteLine($"StreamAsync: {string.Join(", ", numbers)}");
@@ -58,7 +65,7 @@ public static class AppServices
         configuration.Handlers(typeof(ReadCounts<>), DispatchFamily.SendAllAsync, typeof(PrimaryReader<>), typeof(ReplicaReader<>));
         configuration.Pipeline(typeof(ReadCounts<>), DispatchFamily.SendAllAsync, Stage.Hook(typeof(ReadHook<>)));
         configuration.Handlers<ReadNumbers>(DispatchFamily.Stream, typeof(ReadNumbersHandler));
-        configuration.Pipeline<ReadNumbers>(DispatchFamily.Stream, Stage.Hook<KeepEven>(), Stage.Hook<TimesTen>(), Stage.Hook<KeepAtMostForty>());
+        configuration.StreamPipeline<ReadNumbers, string>(Stage.Hook<KeepEven>(), Stage.Hook<TimesTen>(), Stage.Hook<KeepAtMostForty>(), Stage.Hook<AsText>());
     });
 }
 
@@ -91,6 +98,10 @@ public sealed class LookupHandler<T>(IEntityStore<T> store) : IRequestHandler<Lo
 
 public interface IInventory
 {
+    int PrimaryReadAttempts
+    {
+        get;
+    }
     int CachedCount
     {
         get;
@@ -106,6 +117,10 @@ public interface IInventory
 public sealed class InMemoryInventory : IInventory
 {
     private int _count = 2;
+    public int PrimaryReadAttempts
+    {
+        get; private set;
+    }
     public int CachedCount => _count;
     public int WarehouseCount => _count + 1;
     public ValueTask RefreshAsync(int count, CancellationToken token)
@@ -117,6 +132,7 @@ public sealed class InMemoryInventory : IInventory
     public ValueTask<int> ReadPrimaryAsync(CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
+        PrimaryReadAttempts++;
         return new(_count);
     }
     public ValueTask<int> ReadReplicaAsync(CancellationToken token)
@@ -159,7 +175,18 @@ public sealed class TransientCountException : Exception;
 [Handler]
 public sealed class CachedCountHandler<TMarker>(IInventory inventory) : IRequestHandler<CachedCount<TMarker>, int> where TMarker : class
 {
-    public ValueTask<int> HandleAsync(CachedCount<TMarker> request, CancellationToken token) => inventory.ReadPrimaryAsync(token);
+    private bool _failFirstRead = true;
+    public async ValueTask<int> HandleAsync(CachedCount<TMarker> request, CancellationToken token)
+    {
+        var count = await inventory.ReadPrimaryAsync(token).ConfigureAwait(false);
+        // Simulate one transient handler failure without changing other inventory readers.
+        if (_failFirstRead)
+        {
+            _failFirstRead = false;
+            throw new TransientCountException();
+        }
+        return count;
+    }
 }
 public sealed class CountCache<TMarker> : IAsyncSendWrapper<CachedCount<TMarker>, int> where TMarker : class
 {
@@ -286,4 +313,8 @@ public sealed class TimesTen : IStreamItemMap<ReadNumbers, int>
 public sealed class KeepAtMostForty : IStreamItemFilter<ReadNumbers, int>
 {
     public bool Accept(ReadNumbers request, int item, CancellationToken token) => item <= 40;
+}
+public sealed class AsText : IStreamItemMap<ReadNumbers, int, string>
+{
+    public string Map(ReadNumbers request, int item, CancellationToken token) => $"number={item}";
 }
