@@ -116,7 +116,7 @@ internal static class CanonicalAsyncEmissionNormalizer
         ExternAliases = c.ExternAliases,
         RouteDependencyTypes = c.Generic == null && c.OpenRegistration == null && c.Factory == null &&
             !c.Handler.HandlerIsValueType && c.Hooks.Count != 0 && c.Hooks.All(h => !h.HookIsValueType && h.Factory == null)
-            ? new(c.Hooks.Select(h => h.HookName).Append(c.Handler.HandlerName).Distinct(System.StringComparer.Ordinal)) : default,
+            ? CanonicalCapabilityEmissionNormalizer.DependencyCarrierTypes(c.Hooks.Select(h => h.HookName).Append(c.Handler.HandlerName)) : default,
         Hooks = new(c.Hooks.Select(h => new BoundSyncHookEmission(h.HookName,
             new(h.Before.ContractName, h.Before.MethodName), new(h.Success.ContractName, h.Success.MethodName),
             new(h.Exception.ContractName, h.Exception.MethodName), new(h.Finally.ContractName, h.Finally.MethodName))

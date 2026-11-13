@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <IsPackable>false</IsPackable>
-    <Version>0.6.0</Version>
+    <Version>0.7.0</Version>
     <Authors>tkym</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/Htkym/zendiator</RepositoryUrl>
@@ -13,7 +13,7 @@
     <PackageProjectUrl>https://github.com/Htkym/zendiator</PackageProjectUrl>
     <PackageTags>mediator;source-generator;CQRS;AOT</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Zendiator 0.6.0: HandlerAttribute replaces ZendiatorHandlerAttribute; standard typed Stream middleware accepts struct upstream ports. Rebuild consumers and see https://github.com/Htkym/zendiator/blob/v0.6.0/docs/release/0.6.0-release-notes.md</PackageReleaseNotes>
+    <PackageReleaseNotes>Zendiator 0.7.0 resolves eligible closed SendAsync receivers before the first Before callback and captures Transient receivers per route. Rebuild consumers; see docs/release/0.7.0-release-notes.md for migration.</PackageReleaseNotes>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>

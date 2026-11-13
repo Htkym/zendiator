@@ -28,7 +28,7 @@ public sealed class RouteDependencyProbe
     {
         Before.Enqueue((role, receiver));
         Trace.Enqueue("before:" + role);
-        if (role == 0 && OuterError is { } failure)
+        if ((role is 0 or 5) && OuterError is { } failure)
             throw failure;
         return new(request);
     }
@@ -49,24 +49,34 @@ public sealed class RouteDependencyProbe
 
 public sealed partial class GeneratorTests
 {
-    private sealed record RouteDependencyFixture(Type Mediator, Type Outer, Type Handler,
+    private sealed record RouteDependencyFixture(Type Mediator, Type Outer, Type Handler, Type SyncBefore,
         Type[] Carriers, string Generated, Action<IServiceCollection> Register,
         Func<object, int, CancellationToken, ValueTask<int>> Ping,
         Func<object, int, CancellationToken, ValueTask<int>> Pong,
+        Func<object, int, int> Plain, Func<object, int, IAsyncEnumerable<int>> Stream,
         Func<RouteDependencyProbe, int, object> New);
 
     private static readonly ConcurrentDictionary<string, Lazy<RouteDependencyFixture>> RouteDependencyFixtures = new();
 
     private static string RouteDependencySource(string shape)
     {
-        var eligible = shape == "eligible";
+        var eagerHook = shape == "sync-eager-hook";
+        var eagerHandler = shape == "sync-eager-handler";
+        var eligible = shape == "eligible" || eagerHook || eagerHandler;
+        var mixed = shape == "mixed";
+        var singleReceiver = shape == "one-receiver";
+        var syncBefore = shape == "sync-before" || eagerHook || eagerHandler || mixed;
         var outerKind = shape == "value-hook" ? "struct" : "sealed class";
-        var pipeline = shape == "no-hook" ? "" : shape == "sync-before"
+        var pipeline = shape == "no-hook" ? "" : singleReceiver
+            ? "c.Pipeline<Ping>(DispatchFamily.SendAsync,Stage.Hook<Handler>());" : syncBefore
             ? "c.Pipeline<Ping>(DispatchFamily.SendAsync,Stage.Hook<SyncBefore>());"
             : "c.Pipeline<Ping>(DispatchFamily.SendAsync,Stage.Hook<Outer>(),Stage.Hook<Middle>(),Stage.Hook<Inner>());";
         var second = eligible
             ? "c.Handlers<Pong>(DispatchFamily.SendAsync,typeof(OtherHandler));c.Pipeline<Pong>(DispatchFamily.SendAsync,Stage.Hook<Outer>());"
+            : mixed
+            ? "c.Handlers<Plain>(DispatchFamily.SendSync,typeof(Handler));c.Handlers<Items>(DispatchFamily.Stream,typeof(SyncBefore));c.Pipeline<Items>(DispatchFamily.Stream);"
             : "";
+        var eager = eagerHook ? ",EagerDependencies=new[]{typeof(SyncBefore)}" : eagerHandler ? ",EagerDependencies=new[]{typeof(Handler)}" : "";
         string Callbacks(string request, int role) => $$"""
             public ValueTask<{{request}}> BeforeAsync({{request}} r,CancellationToken t)=>_p.Transform({{role}},this,r,t);
             public ValueTask<int> AfterAsync({{request}} r,int value,CancellationToken t)=>new(value);
@@ -82,24 +92,35 @@ public sealed partial class GeneratorTests
             }
             """;
         return $$"""
-            using System;using System.Threading;using System.Threading.Tasks;using Zendiator;using Zendiator.DependencyInjection;
+            using System;using System.Collections.Generic;using System.Threading;using System.Threading.Tasks;using Zendiator;using Zendiator.DependencyInjection;
             using Microsoft.Extensions.DependencyInjection;using Probe=global::Zendiator.Generator.Tests.RouteDependencyProbe;
             namespace RouteCapture {
                 public sealed record Ping(int Value):IRequest<int>;
                 public sealed record Pong(int Value):IRequest<int>;
+                public sealed record Plain(int Value):ISyncRequest<int>;
+                public sealed record Items(int Value):IStreamRequest<int>;
+                public sealed class Cursor(int value):IAsyncEnumerator<int> {
+                    private bool _moved;public int Current=>value;
+                    public ValueTask<bool> MoveNextAsync(){var next=!_moved;_moved=true;return new(next);}
+                    public ValueTask DisposeAsync()=>default;
+                }
                 public {{outerKind}} Outer:{{Contracts("Ping")}},{{Contracts("Pong")}},IDisposable {
                     private readonly Probe _p;public Outer(Probe p){_p=p;p.Construct(0,this);}
                     {{Callbacks("Ping", 0)}}{{Callbacks("Pong", 0)}}
                     public void Dispose()=>_p.Release(this);
                 }
                 {{Hook("Middle", 1)}}{{Hook("Inner", 2)}}
-                public sealed class SyncBefore:ISendRequestTransform<Ping> {
+                {{(mixed ? "[Handler]" : "")}}public sealed class SyncBefore:ISendRequestTransform<Ping>,IDisposable{{(mixed ? ",IStreamSourceHandler<Items,int,Cursor>" : "")}} {
                     private readonly Probe _p;public SyncBefore(Probe p){_p=p;p.Construct(5,this);}
-                    public Ping Before(Ping r,CancellationToken t)=>r;
+                    public Ping Before(Ping r,CancellationToken t)=>_p.Transform(5,this,r,t).GetAwaiter().GetResult();
+                    {{(mixed ? "public ValueTask<Cursor> OpenAsync(Items r,CancellationToken t){_p.Handle(5,this,r.Value).GetAwaiter().GetResult();return new(new Cursor(r.Value));}" : "")}}
+                    public void Dispose()=>_p.Release(this);
                 }
-                [Handler]public sealed class Handler:IRequestHandler<Ping,int>,IDisposable {
+                [Handler]public sealed class Handler:IRequestHandler<Ping,int>,IDisposable{{(mixed ? ",ISyncRequestHandler<Plain,int>" : "")}}{{(singleReceiver ? ",ISendRequestTransform<Ping>" : "")}} {
                     private readonly Probe _p;public Handler(Probe p){_p=p;p.Construct(3,this);}
                     public ValueTask<int> HandleAsync(Ping r,CancellationToken t)=>_p.Handle(3,this,r.Value);
+                    {{(mixed ? "public int Handle(Plain r,CancellationToken t)=>_p.Handle(3,this,r.Value).GetAwaiter().GetResult();" : "")}}
+                    {{(singleReceiver ? "public Ping Before(Ping r,CancellationToken t)=>_p.Transform(3,this,r,t).GetAwaiter().GetResult();" : "")}}
                     public void Dispose()=>_p.Release(this);
                 }
                 [Handler]public sealed class OtherHandler:IRequestHandler<Pong,int>,IDisposable {
@@ -107,14 +128,16 @@ public sealed partial class GeneratorTests
                     public ValueTask<int> HandleAsync(Pong r,CancellationToken t)=>_p.Handle(4,this,r.Value);
                     public void Dispose()=>_p.Release(this);
                 }
-                [ZendiatorComposition("route-capture")]public sealed class Routes;
+                [ZendiatorComposition("route-capture"{{eager}})]public sealed class Routes;
                 public static class Bridge {
                     public static void Register(IServiceCollection s)=>s.AddZendiator<Routes>(c=>{
                         c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(Handler));{{pipeline}}{{second}}
                     });
                     public static ValueTask<int> Ping(object m,int value,CancellationToken token)=>((global::RouteCapture.Generated.Routes.IZendiator)m).SendAsync(new Ping(value),token);
                     public static ValueTask<int> Pong(object m,int value,CancellationToken token)=>{{(eligible ? "((global::RouteCapture.Generated.Routes.IZendiator)m).SendAsync(new Pong(value),token)" : "throw new NotSupportedException()")}};
-                    public static object New(Probe p,int role)=>role switch {0=>new Outer(p),1=>new Middle(p),2=>new Inner(p),3=>new Handler(p),4=>new OtherHandler(p),_=>throw new ArgumentOutOfRangeException(nameof(role))};
+                    public static int Plain(object m,int value)=>{{(mixed ? "((global::RouteCapture.Generated.Routes.IZendiator)m).Send(new Plain(value))" : "throw new NotSupportedException()")}};
+                    public static IAsyncEnumerable<int> Stream(object m,int value)=>{{(mixed ? "((global::RouteCapture.Generated.Routes.IZendiator)m).StreamAsync(new Items(value))" : "throw new NotSupportedException()")}};
+                    public static object New(Probe p,int role)=>role switch {0=>new Outer(p),1=>new Middle(p),2=>new Inner(p),3=>new Handler(p),4=>new OtherHandler(p),5=>new SyncBefore(p),_=>throw new ArgumentOutOfRangeException(nameof(role))};
                 }
             }
             """;
@@ -149,17 +172,20 @@ public sealed partial class GeneratorTests
         Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error));
         Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
-        AssertCanonicalOutputRoles(generated, routes: key == "eligible" ? 2 : 1);
+        if (key != "mixed")
+            AssertCanonicalOutputRoles(generated, routes: key == "eligible" || key.StartsWith("sync-eager-", StringComparison.Ordinal) ? 2 : 1);
         bytes.Position = 0;
         var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
         var mediator = assembly.GetType("RouteCapture.Generated.Routes.Zendiator")!;
         var bridge = assembly.GetType("RouteCapture.Bridge")!;
-        return new(mediator, assembly.GetType("RouteCapture.Outer")!, assembly.GetType("RouteCapture.Handler")!,
+        return new(mediator, assembly.GetType("RouteCapture.Outer")!, assembly.GetType("RouteCapture.Handler")!, assembly.GetType("RouteCapture.SyncBefore")!,
             mediator.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic).Where(t => t.Name.StartsWith("RouteDependencies_", StringComparison.Ordinal)).ToArray(),
             string.Join("\n", generated.Select(s => s.SourceText.ToString())),
             bridge.GetMethod("Register")!.CreateDelegate<Action<IServiceCollection>>(),
             bridge.GetMethod("Ping")!.CreateDelegate<Func<object, int, CancellationToken, ValueTask<int>>>(),
             bridge.GetMethod("Pong")!.CreateDelegate<Func<object, int, CancellationToken, ValueTask<int>>>(),
+            bridge.GetMethod("Plain")!.CreateDelegate<Func<object, int, int>>(),
+            bridge.GetMethod("Stream")!.CreateDelegate<Func<object, int, IAsyncEnumerable<int>>>(),
             bridge.GetMethod("New")!.CreateDelegate<Func<RouteDependencyProbe, int, object>>());
     })).Value;
 
@@ -200,7 +226,7 @@ public sealed partial class GeneratorTests
             Assert.NotSame(firstOuter, p.Before.Last(c => c.Role == 0).Receiver);
             var explicitCapture = ((IServiceProvider)mediator).GetService(f.Outer);
             Assert.NotNull(explicitCapture);
-            Assert.Same(explicitCapture, ((IServiceProvider)mediator).GetService(f.Outer));
+            Assert.NotSame(explicitCapture, ((IServiceProvider)mediator).GetService(f.Outer));
             Assert.DoesNotContain(p.Before, call => ReferenceEquals(explicitCapture, call.Receiver));
             Assert.Empty(p.Released);
         }
@@ -413,11 +439,104 @@ public sealed partial class GeneratorTests
         eligible.Register(services);
         Assert.All(eligible.Carriers, carrier => Assert.Contains(services, descriptor => descriptor.ServiceType == carrier &&
             descriptor.ImplementationType == carrier && descriptor.Lifetime == ServiceLifetime.Transient));
-        foreach (var shape in new[] { "no-hook", "value-hook", "sync-before" })
+        Assert.Single(RouteDependencyRuntimeFixture("sync-before").Carriers);
+        foreach (var shape in new[] { "no-hook", "value-hook", "one-receiver" })
         {
             var fallback = RouteDependencyRuntimeFixture(shape);
             Assert.Empty(fallback.Carriers);
             Assert.DoesNotContain("RouteDependencies_", fallback.Generated, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public async Task Synchronous_before_dependencies_are_constructed_together_validated_and_owned_by_DI()
+    {
+        var f = RouteDependencyRuntimeFixture("sync-before");
+        var p = new RouteDependencyProbe();
+        var services = RouteDependencyServices(f, p);
+        services.Remove(Assert.Single(services, descriptor => descriptor.ServiceType == f.Handler));
+        var failure = Assert.Throws<AggregateException>(() => services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true }));
+        Assert.Contains(f.Handler.FullName!, failure.Message, StringComparison.Ordinal);
+        Assert.Empty(p.Created);
+        using (var provider = RouteDependencyServices(f, p).BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
+        using (var scope = provider.CreateScope())
+        {
+            var mediator = RouteDependencyMediator(f, scope.ServiceProvider);
+            Assert.Empty(p.Created);
+            Assert.Equal(10, await f.Ping(mediator, 10, default));
+            Assert.Equal(new[] { "construct:5", "construct:3", "before:5", "handle:3" }, p.Trace);
+            Assert.Equal(11, await f.Ping(mediator, 11, default));
+            Assert.Equal(2, p.Created.Count);
+            Assert.Same(p.Before.First().Receiver, p.Before.Last().Receiver);
+            Assert.Same(p.Handled.First().Receiver, p.Handled.Last().Receiver);
+            Assert.Empty(p.Released);
+        }
+        AssertRouteDependencyDisposal(p);
+    }
+
+    [Fact]
+    public async Task Carrier_routes_keep_direct_Send_and_Stream_captures_for_shared_receiver_types()
+    {
+        var f = RouteDependencyRuntimeFixture("mixed");
+        var p = new RouteDependencyProbe();
+        using (var provider = RouteDependencyServices(f, p).BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
+        using (var scope = provider.CreateScope())
+        {
+            var mediator = RouteDependencyMediator(f, scope.ServiceProvider);
+            var directHandler = ((IServiceProvider)mediator).GetService(f.Handler);
+            var directHook = ((IServiceProvider)mediator).GetService(f.SyncBefore);
+            Assert.NotNull(directHandler);
+            Assert.NotNull(directHook);
+            Assert.Equal(20, f.Plain(mediator, 20));
+            Assert.Same(directHandler, p.Handled.Last().Receiver);
+            var items = new List<int>();
+            await foreach (var item in f.Stream(mediator, 21))
+                items.Add(item);
+            Assert.Equal(new[] { 21 }, items);
+            Assert.Same(directHook, p.Handled.Last().Receiver);
+            Assert.Equal(22, await f.Ping(mediator, 22, default));
+            var carrierHook = p.Before.Last().Receiver;
+            var carrierHandler = p.Handled.Last().Receiver;
+            Assert.NotSame(directHook, carrierHook);
+            Assert.NotSame(directHandler, carrierHandler);
+            Assert.Equal(23, await f.Ping(mediator, 23, default));
+            Assert.Same(carrierHook, p.Before.Last().Receiver);
+            Assert.Same(carrierHandler, p.Handled.Last().Receiver);
+            Assert.Same(directHandler, ((IServiceProvider)mediator).GetService(f.Handler));
+            Assert.Same(directHook, ((IServiceProvider)mediator).GetService(f.SyncBefore));
+            Assert.Equal(4, p.Created.Count);
+            Assert.Empty(p.Released);
+        }
+        AssertRouteDependencyDisposal(p);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Explicit_eager_synchronous_route_keeps_injected_identity_and_other_routes_use_carriers(bool eagerHook)
+    {
+        var f = RouteDependencyRuntimeFixture(eagerHook ? "sync-eager-hook" : "sync-eager-handler");
+        var p = new RouteDependencyProbe { OuterError = new InvalidOperationException("eager Before failure") };
+        using (var provider = RouteDependencyServices(f, p).BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }))
+        using (var scope = provider.CreateScope())
+        {
+            var mediator = RouteDependencyMediator(f, scope.ServiceProvider);
+            var injected = Assert.Single(p.Created);
+            Assert.Equal(eagerHook ? 5 : 3, injected.Role);
+            Assert.Single(f.Carriers);
+            Assert.Same(p.OuterError, Assert.Throws<InvalidOperationException>(() => { _ = f.Ping(mediator, 29, default); }));
+            Assert.Equal(eagerHook ? 1 : 2, p.Created.Count);
+            Assert.Empty(p.Handled);
+            p.OuterError = null;
+            Assert.Equal(30, await f.Ping(mediator, 30, default));
+            Assert.Equal(31, await f.Ping(mediator, 31, default));
+            Assert.Equal(2, p.Created.Count);
+            Assert.Same(injected.Receiver, eagerHook ? p.Before.First().Receiver : p.Handled.First().Receiver);
+            Assert.Same(injected.Receiver, ((IServiceProvider)mediator).GetService(eagerHook ? f.SyncBefore : f.Handler));
+            Assert.Equal(32, await f.Pong(mediator, 32, default));
+            Assert.Equal(4, p.Created.Count);
+            Assert.Empty(p.Released);
+        }
+        AssertRouteDependencyDisposal(p);
     }
 }

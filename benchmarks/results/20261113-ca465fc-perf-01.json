@@ -1,0 +1,2293 @@
+{
+  "measuredUtcDate": "2026-11-13",
+  "implementationRevision": "ca465fc9373ca7cf2463401f2ed1c2c2ec639b73",
+  "baselineImplementationRevision": "8572cda3293ff2bdf288d7220b9bbebf4ccf4db3",
+  "measuredProductVersion": "0.6.0",
+  "adoptedNextMinorVersion": "0.7.0",
+  "scope": "PERF-01: all 15 A/B pairs in each of two separate forward/reverse blocks; 13 Zendiator cases and 2 unchanged Immediate controls.",
+  "adoptionDecision": {
+    "status": "adopted-by-explicit-user-benefit-tradeoff-judgment",
+    "basis": "The user explicitly accepted the measured ScopeK1 and warm Send5 benefits together with the retained regressions, allocation tradeoff and unresolved cause.",
+    "priorStrictCommonNonRegressionGate": "not passed",
+    "exception": "PERF-01 was adopted by explicit user judgment despite the reverse Send0.ResolveSend common-set regression. The original classifications and gate result remain unchanged.",
+    "scopeK1TimeAndAllocationCap": "passed in both blocks: faster than same-block candidate Immediate with disjoint intervals, and 624 B <= 704 B",
+    "scopeK1MinimumAllocationEffortGoal": "not met: 624 B versus Immediate 568 B, a remaining 56 B difference",
+    "versionBoundary": "Both measured revisions identify product version 0.6.0. Adoption targets the next 0.7.0 minor version. These measurements do not measure a newly versioned 0.7.0 package; the adopted performance implementation is the measured ca465fc candidate, with version/documentation changes recorded separately.",
+    "publicationBoundary": "This decision record does not itself merge a PR or release a package."
+  },
+  "conditions": {
+    "sdk": "10.0.404",
+    "runtime": ".NET 10.0.14 x64",
+    "gc": "workstation",
+    "benchmarkDotNet": "0.15.8",
+    "configuration": "Release",
+    "affinityMask": 1,
+    "warmupCount": 20,
+    "iterationCount": 12,
+    "requestedIterationMilliseconds": 500,
+    "launchCount": 1,
+    "firstAndColdInvocationCount": 16384,
+    "firstAndColdUnrollFactor": 1,
+    "fixedInvocationException": "Requested iteration duration is not enforced for FirstSend and ColdOuterFailure.",
+    "host": {
+      "BenchmarkDotNetCaption": "BenchmarkDotNet",
+      "BenchmarkDotNetVersion": "0.15.8",
+      "OsVersion": "Windows 11 (10.0.26300.9818)",
+      "ProcessorName": "Intel Core Ultra 7 258V",
+      "PhysicalProcessorCount": 1,
+      "PhysicalCoreCount": 8,
+      "LogicalCoreCount": 8,
+      "RuntimeVersion": ".NET 10.0.14 (10.0.14, 10.0.1426.52326)",
+      "Architecture": "X64",
+      "HasAttachedDebugger": false,
+      "HasRyuJit": true,
+      "Configuration": "RELEASE",
+      "DotNetCliVersion": "10.0.404",
+      "ChronometerFrequency": {
+        "Hertz": 10000000
+      },
+      "HardwareTimerKind": "Unknown"
+    },
+    "matrix": "benchmarks/performance-plan/perf-01.json",
+    "profile": "Release; affinity 1; 20 warmup; 12 measurement; 500 ms requested iteration; 1 launch"
+  },
+  "denominators": {
+    "uniqueCases": 15,
+    "zendiatorUniqueCases": 13,
+    "commonNonRegressionUniqueCases": 10,
+    "unchangedPeerUniqueCases": 2,
+    "pairsPerBlock": 15,
+    "timedCasesPerBlock": 30,
+    "blocks": 2,
+    "totalPairEvaluations": 30,
+    "totalTimedCases": 60,
+    "correctnessGates": "Separate from timing denominators: existing UseCase389 + struct96; Hook18; Short6"
+  },
+  "classificationRule": "Only non-overlapping confidence intervals count as improvement/regression; overlap remains overlap regardless of mean direction. Raw confidence Level is a BDN enum value, not a percent.",
+  "percentConvention": "100 * (candidateMean / baselineMean - 1); negative means lower observed time.",
+  "pooling": "None: forward and reverse remain separate; no block or case discarded.",
+  "zendiator13": {
+    "uniqueCases": 13,
+    "perBlock": {
+      "forward": {
+        "improvement": 7,
+        "overlap": 6,
+        "regression": 0
+      },
+      "reverse": {
+        "improvement": 4,
+        "overlap": 8,
+        "regression": 1
+      }
+    },
+    "crossBlockCounts": {
+      "bothImprovement": 3,
+      "anyImprovement": 8,
+      "bothOverlap": 4,
+      "anyRegression": 1
+    },
+    "crossBlockCases": {
+      "bothImprovement": [
+        {
+          "Type": "ZendiatorSend5",
+          "Method": "ScopeK1",
+          "Lifetime": "Scoped"
+        },
+        {
+          "Type": "ZendiatorSend5",
+          "Method": "Typed",
+          "Lifetime": "Scoped"
+        },
+        {
+          "Type": "ZendiatorSend5",
+          "Method": "ScopeK10",
+          "Lifetime": "Scoped"
+        }
+      ],
+      "anyImprovement": [
+        {
+          "Type": "ZendiatorSend5",
+          "Method": "ScopeK1",
+          "Lifetime": "Scoped"
+        },
+        {
+          "Type": "ZendiatorSend0",
+          "Method": "Typed",
+          "Lifetime": "Scoped"
+        },
+        {
+          "Type": "ZendiatorSend5",
+          "Method": "Typed",
+          "Lifetime": "Scoped"
+        },
+        {
+          "Type": "ZendiatorSend5",
+          "Method": "ResolveSend",
+          "Lifetime": "Scoped"
+        },
+        {
+          "Type": "ZendiatorNotification16",
+          "Method": "Dispatch"
+        },
+        {
+          "Type": "ZendiatorStream5",
+          "Method": "Full",
+          "Count": 1024,
+          "Asynchronous": false
+        },
+        {
+          "Type": "ZendiatorSend5",
+          "Method": "ScopeK10",
+          "Lifetime": "Scoped"
+        },
+        {
+          "Type": "ZendiatorSend5",
+          "Method": "FirstSend",
+          "Lifetime": "Scoped"
+        }
+      ],
+      "bothOverlap": [
+        {
+          "Type": "ZendiatorShortCircuit",
+          "Method": "WarmDispatch",
+          "Project": "short"
+        },
+        {
+          "Type": "HZendiatorBenchmarks",
+          "Method": "FirstSend",
+          "Project": "hooks"
+        },
+        {
+          "Type": "HZendiatorBenchmarks",
+          "Method": "WarmSend",
+          "Project": "hooks"
+        },
+        {
+          "Type": "HZendiatorBenchmarks",
+          "Method": "ColdOuterFailure",
+          "Project": "hooks"
+        }
+      ],
+      "anyRegression": [
+        {
+          "Type": "ZendiatorSend0",
+          "Method": "ResolveSend",
+          "Lifetime": "Scoped"
+        }
+      ]
+    },
+    "positiveAllocationDeltas": {
+      "forward": [],
+      "reverse": []
+    }
+  },
+  "common10": {
+    "uniqueCases": 10,
+    "perBlock": {
+      "forward": {
+        "improvement": 4,
+        "overlap": 6,
+        "regression": 0
+      },
+      "reverse": {
+        "improvement": 2,
+        "overlap": 7,
+        "regression": 1
+      }
+    },
+    "crossBlockCounts": {
+      "bothImprovement": 1,
+      "anyImprovement": 5,
+      "bothOverlap": 4,
+      "anyRegression": 1
+    },
+    "crossBlockCases": {
+      "bothImprovement": [
+        {
+          "Type": "ZendiatorSend5",
+          "Method": "Typed",
+          "Lifetime": "Scoped"
+        }
+      ],
+      "anyImprovement": [
+        {
+          "Type": "ZendiatorSend0",
+          "Method": "Typed",
+          "Lifetime": "Scoped"
+        },
+        {
+          "Type": "ZendiatorSend5",
+          "Method": "Typed",
+          "Lifetime": "Scoped"
+        },
+        {
+          "Type": "ZendiatorSend5",
+          "Method": "ResolveSend",
+          "Lifetime": "Scoped"
+        },
+        {
+          "Type": "ZendiatorNotification16",
+          "Method": "Dispatch"
+        },
+        {
+          "Type": "ZendiatorStream5",
+          "Method": "Full",
+          "Count": 1024,
+          "Asynchronous": false
+        }
+      ],
+      "bothOverlap": [
+        {
+          "Type": "ZendiatorShortCircuit",
+          "Method": "WarmDispatch",
+          "Project": "short"
+        },
+        {
+          "Type": "HZendiatorBenchmarks",
+          "Method": "FirstSend",
+          "Project": "hooks"
+        },
+        {
+          "Type": "HZendiatorBenchmarks",
+          "Method": "WarmSend",
+          "Project": "hooks"
+        },
+        {
+          "Type": "HZendiatorBenchmarks",
+          "Method": "ColdOuterFailure",
+          "Project": "hooks"
+        }
+      ],
+      "anyRegression": [
+        {
+          "Type": "ZendiatorSend0",
+          "Method": "ResolveSend",
+          "Lifetime": "Scoped"
+        }
+      ]
+    },
+    "positiveAllocationDeltas": {
+      "forward": [],
+      "reverse": []
+    }
+  },
+  "allocationAcross13ZendiatorCases": {
+    "forward": {
+      "decrease": 5,
+      "same": 8,
+      "increase": 0
+    },
+    "reverse": {
+      "decrease": 5,
+      "same": 8,
+      "increase": 0
+    }
+  },
+  "zendiatorRegressionAcrossBlocks": {
+    "bothBlocks": 0,
+    "oneBlockOnly": 1
+  },
+  "resolve0AcrossBlocksDescriptiveOnly": {
+    "baseline": {
+      "forwardMeanNs": 28.88803385964266,
+      "reverseMeanNs": 25.94383843630448,
+      "observedDeltaNs": -2.944195423338183,
+      "observedDeltaPercent": -10.191747343010771
+    },
+    "candidate": {
+      "forwardMeanNs": 29.962436689829847,
+      "reverseMeanNs": 29.949775655464062,
+      "observedDeltaNs": -0.012661034365784474,
+      "observedDeltaPercent": -0.04225635750807477
+    }
+  },
+  "blocks": {
+    "forward": {
+      "auditReceipt": "forward-acceptance-v2.json",
+      "auditReceiptSha256": "A51819C46B1E70DCAE514F5F28332D1589AB1CF0BADFBD42313304E20F1C4B18",
+      "comparisonSha256": "FC7F2B2DF43FE0A94936F9A571064D3281CA23E62219CD81CDA1BB3124432FFC",
+      "outcomeSha256": "7D14E5BF7BFF237314B4C6793F35C91EAC5554D081C2F23B0A0469EF0B2335FB",
+      "artifactRoot": "forward",
+      "auditArtifactRoot": "validation",
+      "sessionSha256": "0293734B8016BFDAA0C2D2C2E6A6891FAA14E52A31EED2E21B0CA3599DF74A02",
+      "matrixSha256": "2AD0DA6F476D7B4292906628E39BFF22A4326541732CC05F1F2E2E8E4B010188",
+      "executionPlanSha256": "6E79AB692989D5C6C1AA0B05B3034CC16C9ECD1BDD752435D97D85A537041A96",
+      "reverseOrder": false,
+      "workerEvidence": {
+        "baseline": {
+          "sessionSha256": "F499D7E0848718A94ABED4E8612CE2A428C3EF1EE0DF17BFDAD141F82EB7F417",
+          "runInfoSha256": "4C797EFBF00408121D36A6DDBEE7D4AA2D86263902C1094C7E10D3AA12370EFA",
+          "outcomeSha256": "767BB295DEED0B2F85D37CF206346E6FDC5D4854480D9FC17579728B57A01596",
+          "csvSha256": "D496D4C66DAA79C29AA2274341B5E0346B7B397CDCB89AEF6CFB89BBF828D9A0",
+          "sourceDigest": "FC6A09F4EAA0214973B24C6895770783CCA1984F7B58BE8E009437AEFE3B0171",
+          "productSha256": "278E122764F44E577614165A9C3A08806466F4ADBEEC2BB258026E494F7E64A9",
+          "host": {
+            "BenchmarkDotNetCaption": "BenchmarkDotNet",
+            "BenchmarkDotNetVersion": "0.15.8",
+            "OsVersion": "Windows 11 (10.0.26300.9818)",
+            "ProcessorName": "Intel Core Ultra 7 258V",
+            "PhysicalProcessorCount": 1,
+            "PhysicalCoreCount": 8,
+            "LogicalCoreCount": 8,
+            "RuntimeVersion": ".NET 10.0.14 (10.0.14, 10.0.1426.52326)",
+            "Architecture": "X64",
+            "HasAttachedDebugger": false,
+            "HasRyuJit": true,
+            "Configuration": "RELEASE",
+            "DotNetCliVersion": "10.0.404",
+            "ChronometerFrequency": {
+              "Hertz": 10000000
+            },
+            "HardwareTimerKind": "Unknown"
+          }
+        },
+        "candidate": {
+          "sessionSha256": "91A53D1C7D1F4BD56107918D378FB743AE299B3EA0BCB2B47D9E3DA9E4B5F485",
+          "runInfoSha256": "6F0EE5639E637B2562BC44DCB00DE0F4F7162744D743E043991FB4E80AC1C99A",
+          "outcomeSha256": "767BB295DEED0B2F85D37CF206346E6FDC5D4854480D9FC17579728B57A01596",
+          "csvSha256": "9DE99C4BBD4E70E76BB0A487EDCE47DBA41BBD1A0229B4303AED4B4437714797",
+          "sourceDigest": "D393D1E30D0AC9458A2B0C9894BA8563B464B0BCC51EB541552870B2FB2C6C06",
+          "productSha256": "38363ADB2F81379FA2F4815CE62C66EEC76D0ACDBD8C551B98291F1D2683B2BB",
+          "host": {
+            "BenchmarkDotNetCaption": "BenchmarkDotNet",
+            "BenchmarkDotNetVersion": "0.15.8",
+            "OsVersion": "Windows 11 (10.0.26300.9818)",
+            "ProcessorName": "Intel Core Ultra 7 258V",
+            "PhysicalProcessorCount": 1,
+            "PhysicalCoreCount": 8,
+            "LogicalCoreCount": 8,
+            "RuntimeVersion": ".NET 10.0.14 (10.0.14, 10.0.1426.52326)",
+            "Architecture": "X64",
+            "HasAttachedDebugger": false,
+            "HasRyuJit": true,
+            "Configuration": "RELEASE",
+            "DotNetCliVersion": "10.0.404",
+            "ChronometerFrequency": {
+              "Hertz": 10000000
+            },
+            "HardwareTimerKind": "Unknown"
+          }
+        }
+      },
+      "controllerSourceDigests": {
+        "baseline": "239FA4C0AE20FB034856B7CEC8C7B3EBBC71543FD6BE99C5CADAD2D68BB6F071",
+        "candidate": "4AF30AC528137B22E540BC1A3395D2294D9518ECE6B30773E3AC9005F33CD874"
+      },
+      "scopeK1VsSameBlockCandidateImmediate": {
+        "classification": "improvement",
+        "meanRatioCandidateOverBaseline": 0.8226554640483341,
+        "allocatedBytesDelta": 56,
+        "zendiatorFasterWithDisjointCI": true,
+        "allocatedBytes": 624,
+        "allocationAtMost704": true,
+        "ratioConvention": "candidate Zendiator mean divided by same-block candidate Immediate mean; allocation delta uses the same reference"
+      }
+    },
+    "reverse": {
+      "auditReceipt": "reverse-acceptance-v2.json",
+      "auditReceiptSha256": "C7AECECBD2F38B8EC9032A7B50615311103C324C9E9739AD0A91883B3F2B9C7C",
+      "comparisonSha256": "BE4F49D465538088A40FAB7E13E2C542B043ADF87E4129C6478F7C6EC8D8D639",
+      "outcomeSha256": "60DCB0251B01C3FC2C7718B0EDA6407799A195C3E07C21EAAB946C9A0784D4F5",
+      "artifactRoot": "reverse",
+      "auditArtifactRoot": "validation",
+      "sessionSha256": "F5B320FDF49CD2D442F35679CC6B7696D20107EDB7E3DAA862931084F4440CCC",
+      "matrixSha256": "2AD0DA6F476D7B4292906628E39BFF22A4326541732CC05F1F2E2E8E4B010188",
+      "executionPlanSha256": "FFD7CB554C8636A6551F9B5B85E7EB88A72D8F19DE5EFA896CF3A53C296ED9D5",
+      "reverseOrder": true,
+      "workerEvidence": {
+        "baseline": {
+          "sessionSha256": "EEF02EFC889E55E845163BBB0C6FFB22D1A7F39B7D15DEFEA4BBFC81F03AE07F",
+          "runInfoSha256": "20097477AF9466121A7455A08D63197EFC4D2C6A31A4EB9012FC79213BA2FC6A",
+          "outcomeSha256": "767BB295DEED0B2F85D37CF206346E6FDC5D4854480D9FC17579728B57A01596",
+          "csvSha256": "A3E7BB6BFA90FEC49EBCACE4C7AFA4A0C53F0483945B54C73325E583278C3421",
+          "sourceDigest": "FC6A09F4EAA0214973B24C6895770783CCA1984F7B58BE8E009437AEFE3B0171",
+          "productSha256": "278E122764F44E577614165A9C3A08806466F4ADBEEC2BB258026E494F7E64A9",
+          "host": {
+            "BenchmarkDotNetCaption": "BenchmarkDotNet",
+            "BenchmarkDotNetVersion": "0.15.8",
+            "OsVersion": "Windows 11 (10.0.26300.9818)",
+            "ProcessorName": "Intel Core Ultra 7 258V",
+            "PhysicalProcessorCount": 1,
+            "PhysicalCoreCount": 8,
+            "LogicalCoreCount": 8,
+            "RuntimeVersion": ".NET 10.0.14 (10.0.14, 10.0.1426.52326)",
+            "Architecture": "X64",
+            "HasAttachedDebugger": false,
+            "HasRyuJit": true,
+            "Configuration": "RELEASE",
+            "DotNetCliVersion": "10.0.404",
+            "ChronometerFrequency": {
+              "Hertz": 10000000
+            },
+            "HardwareTimerKind": "Unknown"
+          }
+        },
+        "candidate": {
+          "sessionSha256": "DB71F5CE263C24869B213B94A9A12F31074615063D5C63208BD78EAE711F3CC2",
+          "runInfoSha256": "FE9D491584A0619A66DBE1ED256E6477164B3C2089138DD0FECFAE48BBD4A56E",
+          "outcomeSha256": "767BB295DEED0B2F85D37CF206346E6FDC5D4854480D9FC17579728B57A01596",
+          "csvSha256": "8728C32F31BFCFB0AA4D93A0741DB6F54AB10EFEE3641AC22A8B336857202644",
+          "sourceDigest": "D393D1E30D0AC9458A2B0C9894BA8563B464B0BCC51EB541552870B2FB2C6C06",
+          "productSha256": "38363ADB2F81379FA2F4815CE62C66EEC76D0ACDBD8C551B98291F1D2683B2BB",
+          "host": {
+            "BenchmarkDotNetCaption": "BenchmarkDotNet",
+            "BenchmarkDotNetVersion": "0.15.8",
+            "OsVersion": "Windows 11 (10.0.26300.9818)",
+            "ProcessorName": "Intel Core Ultra 7 258V",
+            "PhysicalProcessorCount": 1,
+            "PhysicalCoreCount": 8,
+            "LogicalCoreCount": 8,
+            "RuntimeVersion": ".NET 10.0.14 (10.0.14, 10.0.1426.52326)",
+            "Architecture": "X64",
+            "HasAttachedDebugger": false,
+            "HasRyuJit": true,
+            "Configuration": "RELEASE",
+            "DotNetCliVersion": "10.0.404",
+            "ChronometerFrequency": {
+              "Hertz": 10000000
+            },
+            "HardwareTimerKind": "Unknown"
+          }
+        }
+      },
+      "controllerSourceDigests": {
+        "baseline": "239FA4C0AE20FB034856B7CEC8C7B3EBBC71543FD6BE99C5CADAD2D68BB6F071",
+        "candidate": "4AF30AC528137B22E540BC1A3395D2294D9518ECE6B30773E3AC9005F33CD874"
+      },
+      "scopeK1VsSameBlockCandidateImmediate": {
+        "classification": "improvement",
+        "meanRatioCandidateOverBaseline": 0.8151959279313128,
+        "allocatedBytesDelta": 56,
+        "zendiatorFasterWithDisjointCI": true,
+        "allocatedBytes": 624,
+        "allocationAtMost704": true,
+        "ratioConvention": "candidate Zendiator mean divided by same-block candidate Immediate mean; allocation delta uses the same reference"
+      }
+    }
+  },
+  "canonicalControlGitObjects": {
+    "Directory.Build.props": "100644 blob f9fd82cb3644c1d02ea95ecfe17c8e0f964d20c1",
+    "benchmarks/Directory.Build.props": "100644 blob 3597c73363c540384ad1b3202d1bfab9fe61f353",
+    "benchmarks/FoundatioReleaseComparison/BenchmarkGate.cs": "100644 blob 734dd4ffdfb218c6e7a7631f8b0aa9ab4a791bab",
+    "benchmarks/FoundatioReleaseComparison/FoundatioAdapters.cs": "100644 blob b62c92a567b7b927f2b73dd6f64e0db964ce0c23",
+    "benchmarks/FoundatioReleaseComparison/FoundatioBenchmarkScaffold.cs": "100644 blob e7c009b6610dd2e9f43e32113f80e40457a1b2b6",
+    "benchmarks/FoundatioReleaseComparison/FoundatioFeatures.cs": "100644 blob 9e037aac34f72f5fb3152704e58094069522ad01",
+    "benchmarks/FoundatioReleaseComparison/FoundatioFreshScopes.cs": "100644 blob 4a7a6014eef5ba26ab05821a55715d19c4e77096",
+    "benchmarks/FoundatioReleaseComparison/FoundatioReleaseComparison.csproj": "100644 blob 1cf585bfc239136a0cd1788a74586662ab9b3fb3",
+    "benchmarks/FoundatioReleaseComparison/FoundatioSemanticSnapshot.cs": "100644 blob 57cdc2b1badb29a75b53435be5030bbc622bc924",
+    "benchmarks/FoundatioReleaseComparison/FoundatioSemanticValidation.cs": "100644 blob 9b2a80846d04b5fa63cbf85cc3dcd7582ba61030",
+    "benchmarks/FoundatioReleaseComparison/FoundatioStreamAdapters.cs": "100644 blob a7db18f2f02b1d0fa90f242cba323533a984c81d",
+    "benchmarks/FoundatioReleaseComparison/Program.cs.frozen": "100644 blob dd22132030f1a6ed98b71002a5993cda66095753",
+    "benchmarks/FoundatioReleaseComparison/packages.lock.json": "100644 blob da3a45645045a93e2f3979981203d2b2bc260a99",
+    "benchmarks/HPeerComparison/BenchmarkGate.cs": "100644 blob 1d8b1c31f6cf7d35dc6195ae6825507bdcf95cb4",
+    "benchmarks/HPeerComparison/FoundatioConfiguration.cs": "100644 blob 9a2ac5dac6f54c903e9afe00e5e18b6ac1afbf68",
+    "benchmarks/HPeerComparison/FoundatioHAdapters.cs": "100644 blob 22083cab4a813eed6bf7bcd214fa919cf2e647f8",
+    "benchmarks/HPeerComparison/FoundatioHBenchmarks.cs": "100644 blob 537d2abda71aded4e4a6de00a6b415b7718fcd4d",
+    "benchmarks/HPeerComparison/HAdapters.cs": "100644 blob 79136604ee31edbfb75a9f80189290adb5158dee",
+    "benchmarks/HPeerComparison/HAllPeersPriorityAdmission.cs": "100644 blob 579e6bd1e041221041b189feade30cba489e0a63",
+    "benchmarks/HPeerComparison/HAllPeersTimingAdmission.cs": "100644 blob 77e18ad66c45ef7ce675d72a96013d6fde2daaaa",
+    "benchmarks/HPeerComparison/HBenchmarks.cs": "100644 blob acda2ce4590fc89dfaa18b98a21cb380e8fbf2b3",
+    "benchmarks/HPeerComparison/HPeerComparison.csproj": "100644 blob fccd2658d680ee2b4e13b536a2307f7e8d226a5f",
+    "benchmarks/HPeerComparison/HValidation.cs": "100644 blob e9b7b6acbd88467097691cd01e969d2c60042400",
+    "benchmarks/HPeerComparison/HWork.cs": "100644 blob 6062129bb183e0cafa3553cc4af6084513707a32",
+    "benchmarks/HPeerComparison/Program.cs.frozen": "100644 blob 570ac414461d0f816423cd5e1945fbb43aa2bafc",
+    "benchmarks/HPeerComparison/packages.lock.json": "100644 blob d81107be308fc4375608c9af2f7656684ae85b4b",
+    "benchmarks/Measurement/MeasurementProgram.cs": "100644 blob 52c62914e3602287546a9e7c4272ec8798d81808",
+    "benchmarks/Measurement/RuntimeEvidence.cs": "100644 blob 8c971d66d605ad3f06b79998362f3aeb6f39bd9b",
+    "benchmarks/README.ja.md": "100644 blob fd671794ee4700d4aea97da83bda51fb958e158b",
+    "benchmarks/README.md": "100644 blob f322efdff61d27369725bbfc814eac066bff71ef",
+    "benchmarks/Run-Comparison.ps1": "100644 blob 249a0db102b0565c0fdb8649e378c46ace8db735",
+    "benchmarks/Run-Jit.ps1": "100644 blob 417bb9522ed9d820ac11e7d68bfd8212c4c19fa9",
+    "benchmarks/ShortCircuitComparison/BenchmarkGate.cs": "100644 blob 85af6b4a0435e20aebfba9cc7ab3723548c8bfff",
+    "benchmarks/ShortCircuitComparison/Program.cs.frozen": "100644 blob e3ec024daccf9f9e0ef87c2b25c58da7c36a6b47",
+    "benchmarks/ShortCircuitComparison/ShortAdapters.cs": "100644 blob 7811c5dfb5eca5749a04d402ce1a8bbf31f144e7",
+    "benchmarks/ShortCircuitComparison/ShortBenchmarks.cs": "100644 blob d5dae4b97e225e5ed175f41331033f8ec6a94177",
+    "benchmarks/ShortCircuitComparison/ShortCircuitComparison.csproj": "100644 blob 93bedd76c9f6b95242a792ecb6c5ed009ed71428",
+    "benchmarks/ShortCircuitComparison/ShortWork.cs": "100644 blob 24827bceb904b160c92c86dade68313b51caa8c9",
+    "benchmarks/ShortCircuitComparison/packages.lock.json": "100644 blob df736d023510a4bdbfb5d4401c296e3f6631c7e9",
+    "benchmarks/Zendiator.BeforeRelayBenchmarks/ComparisonSource.cs": "100644 blob bd5c8ed25c746975b7bc1c52555f6461fe1c7523",
+    "benchmarks/Zendiator.BeforeRelayBenchmarks/Program.cs": "100644 blob 65a2e025a072be82fd68b94a14d8a3750bc487ef",
+    "benchmarks/Zendiator.BeforeRelayBenchmarks/README.md": "100644 blob f57713c7c09528129f0df14e5eda27aa74fccdd9",
+    "benchmarks/Zendiator.BeforeRelayBenchmarks/Zendiator.BeforeRelayBenchmarks.csproj": "100644 blob 00f8a232cfb1f2eaca58cdd7d38922d7fcc1ad6d",
+    "benchmarks/Zendiator.BeforeRelayBenchmarks/packages.lock.json": "100644 blob 0c07393e2e1c8225cb0ddd96209e98d7fe3f592a",
+    "benchmarks/Zendiator.StreamScreening/CompletionGate.cs": "100644 blob 268f93c5781c8f3274ca7ab34862d657df9ab632",
+    "benchmarks/Zendiator.StreamScreening/FixtureSources.cs": "100644 blob fb83f1122dcb9f365e5c6869bd391273a00860eb",
+    "benchmarks/Zendiator.StreamScreening/Program.cs": "100644 blob 4154c5b278d6cdf2069b42db8b37bb652426700e",
+    "benchmarks/Zendiator.StreamScreening/ScreeningRun.cs": "100644 blob 3c6d72e9a8b9a65c997af9531ac9eeefb45b8bf8",
+    "benchmarks/Zendiator.StreamScreening/Zendiator.StreamScreening.csproj": "100644 blob 670a40d5414c5a799bf58a7e397b81fa0cb56396",
+    "benchmarks/Zendiator.StreamScreening/run_screening.py": "100644 blob 95e058b4fc4532bf622a64a0465d7d3affee4761",
+    "benchmarks/Zendiator.StreamScreening/summarize_screening.py": "100644 blob 621f7cf461685f62c3fca8a7cde80eb01b0101c2",
+    "benchmarks/Zendiator.UseCaseBenchmarks/.editorconfig": "100644 blob 7f47a29a4656fe64fe0113af5ecb47981a5de967",
+    "benchmarks/Zendiator.UseCaseBenchmarks/AllocationBreakdown.cs": "100644 blob d78bebd0ca8566d3c7f94fa7bfa0c42410d7c472",
+    "benchmarks/Zendiator.UseCaseBenchmarks/ArtifactEvidence.cs": "100644 blob 9fd33e581b5606e72f081c24afd03aa122fc47cd",
+    "benchmarks/Zendiator.UseCaseBenchmarks/ArtifactGate.cs": "100644 blob 115298191500efe7775a81e7e67e829757e87dbd",
+    "benchmarks/Zendiator.UseCaseBenchmarks/CanonicalBenchmarkAdapters.cs": "100644 blob daa5b7ab3aa611beb73afa8596d80ee15732d32a",
+    "benchmarks/Zendiator.UseCaseBenchmarks/ChildEvidence.cs": "100644 blob 02d8f01781b321f923c8686320de933e3e0f2a92",
+    "benchmarks/Zendiator.UseCaseBenchmarks/Correctness.cs": "100644 blob a4489f4a7319528c39597985c8741232f3a60b79",
+    "benchmarks/Zendiator.UseCaseBenchmarks/Generate.Additional.ps1": "100644 blob b5fba362766fa6c1348d8e2f5bb2e325f1bfe1c5",
+    "benchmarks/Zendiator.UseCaseBenchmarks/Generate.ps1": "100644 blob c25c6f5207ee9c6f6973acbfbd51d578d57d21f4",
+    "benchmarks/Zendiator.UseCaseBenchmarks/GeneratedCases.cs": "100644 blob 712931cf43c17cce6ca98f2c5cd3834c25dd5234",
+    "benchmarks/Zendiator.UseCaseBenchmarks/InterleavedOrderer.cs": "100644 blob 7eb291f93579beba238ce7f755d7ac251a86e121",
+    "benchmarks/Zendiator.UseCaseBenchmarks/PooledNativeProducer.cs": "100644 blob e043b06b7c30c2e345eb5197aaf0947945044ac6",
+    "benchmarks/Zendiator.UseCaseBenchmarks/PooledNativeStreamGate.cs": "100644 blob 8e02e82ee81590e96f205ad600917eabfd6bcbc4",
+    "benchmarks/Zendiator.UseCaseBenchmarks/PooledNativeStreams.cs": "100644 blob e378939fd5eada77d3e0288fb3fc596b15aa1fec",
+    "benchmarks/Zendiator.UseCaseBenchmarks/Program.cs": "100644 blob f96685a9329d4f517dd7fab838da812111836b84",
+    "benchmarks/Zendiator.UseCaseBenchmarks/RegistrationAudit.cs": "100644 blob 4112ee10b6fb12f9477d6c84b93c06445d97cb0b",
+    "benchmarks/Zendiator.UseCaseBenchmarks/SameProducerStreams.cs": "100644 blob 6c528b387c67e526242678eaf2c18c27c2f65432",
+    "benchmarks/Zendiator.UseCaseBenchmarks/StreamAllocationProfile.cs": "100644 blob 244f2959a3fa66d2172db6108f4357d717198796",
+    "benchmarks/Zendiator.UseCaseBenchmarks/StructUpstreamGate.cs": "100644 blob 8117aa6792f089a28461d0131bd12fa4860ca0e6",
+    "benchmarks/Zendiator.UseCaseBenchmarks/StructUpstreamStreams.cs": "100644 blob 1ff19dc3beae201ca2a4d5b4068757bd1802b1a8",
+    "benchmarks/Zendiator.UseCaseBenchmarks/Work.cs": "100644 blob 3dcc907d83c274460a1abbb286d72fe9f7da288a",
+    "benchmarks/Zendiator.UseCaseBenchmarks/Zendiator.UseCaseBenchmarks.csproj": "100644 blob 6da258299dc12eda5dda59e7b97592e1282d0956",
+    "benchmarks/Zendiator.UseCaseBenchmarks/analyze.py": "100644 blob aac028e5cbdf1dd354d67e390e5662e8b363cca8",
+    "benchmarks/Zendiator.UseCaseBenchmarks/artifact_gate.py": "100644 blob 2af710fd991f12123f03904597c98bfa37e00571",
+    "benchmarks/Zendiator.UseCaseBenchmarks/build_case_lists.py": "100644 blob fd1e23c00ef9625fe98186533bd5992ba106a29f",
+    "benchmarks/Zendiator.UseCaseBenchmarks/compare_struct_upstream.py": "100644 blob b25a10baacc8f35e23d01936722f5f08245de04e",
+    "benchmarks/Zendiator.UseCaseBenchmarks/features.json": "100644 blob f5e8c3457ca1f4beeb556aec851ad1a2bea65759",
+    "benchmarks/Zendiator.UseCaseBenchmarks/interleaved_plan.py": "100644 blob 125b20f2ce94520f991bffaaeb4f199fd15cfce1",
+    "benchmarks/Zendiator.UseCaseBenchmarks/make_report.py": "100644 blob d8a58e1863bce38e8904e1edaea506a247f09693",
+    "benchmarks/Zendiator.UseCaseBenchmarks/measurement_suites.py": "100644 blob 57cf4a46acd5705bd9220dc5ae801c3b5defd31f",
+    "benchmarks/Zendiator.UseCaseBenchmarks/owned_process.py": "100644 blob 30aa46b50b349e1c1de7758cf04c6589d25e8a10",
+    "benchmarks/Zendiator.UseCaseBenchmarks/packages.lock.json": "100644 blob 8225a29a7a14698586f550eae590ced58c526413",
+    "benchmarks/Zendiator.UseCaseBenchmarks/pooled-native-input.md": "100644 blob 527b08cc0390199992d2e0db76668348d2b83c38",
+    "benchmarks/Zendiator.UseCaseBenchmarks/relay.json": "100644 blob ef85508e6790dc7f6aecbfb33753e4a2d4181548",
+    "benchmarks/Zendiator.UseCaseBenchmarks/review-notification.json": "100644 blob 8c647b3727cd448a215e733934a9af24913feeff",
+    "benchmarks/Zendiator.UseCaseBenchmarks/review-p0-ab.json": "100644 blob 21f54ab98b98cb46c5eff4e32b9d28c8049ed57c",
+    "benchmarks/Zendiator.UseCaseBenchmarks/run_ab.py": "100644 blob e34f97f7da71b17f82a7f6ce38e015a19316ac3c",
+    "benchmarks/Zendiator.UseCaseBenchmarks/run_interleaved.py": "100644 blob c2ca732f53af2781afd87070001e084b48c5e371",
+    "benchmarks/Zendiator.UseCaseBenchmarks/same-producer-streams.json": "100644 blob 0d900e10e6111561dda495235bfac454a6dac0ca",
+    "benchmarks/Zendiator.UseCaseBenchmarks/send.json": "100644 blob e62660c300b17085953b06f47678b3e96d6e2788",
+    "benchmarks/Zendiator.UseCaseBenchmarks/smoke.json": "100644 blob 8081937ecd1b19ec0fe6328478d2c9ff46dabe70",
+    "benchmarks/Zendiator.UseCaseBenchmarks/streams.json": "100644 blob 028ef90e11a40738f1da98e3c42daf47d657c1bf",
+    "benchmarks/Zendiator.UseCaseBenchmarks/struct-upstream.md": "100644 blob 36f84ca32846c51ac3954cf971096a910ddddddc",
+    "benchmarks/Zendiator.UseCaseBenchmarks/test_artifact_gate.py": "100644 blob a633ea958a63b4c17630919852c76dd77c20587a",
+    "benchmarks/Zendiator.UseCaseBenchmarks/test_baseline.py": "100644 blob 582dc05104508cbf99eee6acd3f58ccab613addf",
+    "benchmarks/Zendiator.UseCaseBenchmarks/test_driver_audit.py": "100644 blob 7808703e482c186c99780719ef918d55630d84ed",
+    "benchmarks/Zendiator.UseCaseBenchmarks/verify_baseline.py": "100644 blob f9ecce4671f09f688d5d4aaf2c7e69e6f13b600b",
+    "benchmarks/performance-plan/README.md": "100644 blob 2a5b4cc38c00a04db1f1521b8f5584fa9438bc93",
+    "benchmarks/performance-plan/initial.json": "100644 blob d1c0edd8083869c2d42b35c11f82b8f9c31165ce",
+    "benchmarks/performance-plan/original-workloads.json": "100644 blob eb4d7085117bcd8194254e741dffb9c5f54807cc",
+    "benchmarks/performance-plan/perf-01.json": "100644 blob 80af04003d2184b577f0be7b9f6c1ea9c4d85b4a",
+    "benchmarks/performance-plan/post-060-baseline.json": "100644 blob cbb86bae6dab6f9c181cf19757b572da86d6758c",
+    "benchmarks/performance-plan/post-060-full-baseline.json": "100644 blob 012c6472f5524a3dec76b3b00b374da72ae6a103",
+    "benchmarks/performance-plan/worker-smoke.json": "100644 blob e3b5f6b47ef97a5116f954c3c98406198df04ace",
+    "benchmarks/performance-plan/wp02.json": "100644 blob 03c993697004fc66535a6fc78e422a70a4cb6541",
+    "benchmarks/performance-plan/wp03.json": "100644 blob 25b3b50066ff5a4e4f456c1e87295b0139d5f6e6",
+    "benchmarks/performance-plan/wp04-struct-upstream-pairs.json": "100644 blob e09220919f5d02b47c80a339c5754df8af12a400",
+    "benchmarks/performance-plan/wp04-struct-upstream.json": "100644 blob 5ff549e804bacbbca2ab64e2f90fe39f7fcddce4",
+    "benchmarks/performance-plan/wp05-decomposition.json": "100644 blob 03b316eb9a3d1e300e0e2fb24d87c12581f95551",
+    "benchmarks/results/20261008-1c41d2b-summary.csv": "100644 blob 04dd8143c169b1d767acc644654b4b523a730ab7",
+    "benchmarks/results/20261111-8848306-readme.json": "100644 blob 2ef34032c2521f6091955cc9b0497eaf8068b51a",
+    "benchmarks/results/20261111-8848306-summary.csv": "100644 blob 473de5bb99fca7aef8e95077751b399c997fc3e6",
+    "global.json": "100644 blob ebd0c5d8b48b09a4e74a5c7d5ce485e4eb2b324c",
+    "samples/Zendiator.Sample.Application/Zendiator.Sample.Application.csproj": "100644 blob 527f9295bf38310fb27378dbb0c1935be3a8e341",
+    "samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj": "100644 blob f2511574ff3bb1ac25b5816c5caa6777a23e07b0",
+    "samples/Zendiator.Sample.Contracts/Zendiator.Sample.Contracts.csproj": "100644 blob 894a0d420aa5e25814f2e5cf39481f9d254dd05a",
+    "samples/Zendiator.Sample.GenericLookup/Zendiator.Sample.GenericLookup.csproj": "100644 blob f2511574ff3bb1ac25b5816c5caa6777a23e07b0",
+    "samples/Zendiator.Sample.GettingStarted/Zendiator.Sample.GettingStarted.csproj": "100644 blob f2511574ff3bb1ac25b5816c5caa6777a23e07b0",
+    "samples/Zendiator.Sample.Host/Zendiator.Sample.Host.csproj": "100644 blob 642b2643b265d2b68345febe90e5e3c918f94b8b",
+    "src/Zendiator.Abstractions/Zendiator.Abstractions.csproj": "100644 blob 4d6cef79d26f43cf2a003c220e8fd244c76c1526",
+    "src/Zendiator.CodeFixes/Zendiator.CodeFixes.csproj": "100644 blob 84b971e1aa1f4d38099af218648958d7371591ca",
+    "src/Zendiator.SourceGenerator/Zendiator.SourceGenerator.csproj": "100644 blob eb91415063753d12e33e4bdfd38f1cdfa168fa0c",
+    "src/Zendiator/Zendiator.csproj": "100644 blob 6810627ab41da48a1f812ebe0776d8484136f257",
+    "src/Zendiator/buildTransitive/Zendiator.props": "100644 blob a5cc7707279336891b564f76d855596b19cd5bc3",
+    "tests/Zendiator.Allocation.Tests/Zendiator.Allocation.Tests.csproj": "100644 blob 235d324b04c3c34c70b1a41f699c867277d52aa2",
+    "tests/Zendiator.AssemblyGen.Tests/Zendiator.AssemblyGen.Tests.csproj": "100644 blob 51076ec315885f40ebff0c9e02b72b2f03a7a0e5",
+    "tests/Zendiator.CachePolicy.Tests/Zendiator.CachePolicy.Tests.csproj": "100644 blob 2338d1d429c643e25251b08e85640345cace5a34",
+    "tests/Zendiator.Configuration.Tests/Zendiator.Configuration.Tests.csproj": "100644 blob 29320d292975c8d0c14831ec6b8cdf4a9565c5b5",
+    "tests/Zendiator.DiConfiguration.Tests/Zendiator.DiConfiguration.Tests.csproj": "100644 blob 51076ec315885f40ebff0c9e02b72b2f03a7a0e5",
+    "tests/Zendiator.Generator.Tests/Zendiator.Generator.Tests.csproj": "100644 blob e1849f3862a93a5e5c90352d04ad8f08cd88ce16",
+    "tests/Zendiator.Tests/Zendiator.Tests.csproj": "100644 blob 51076ec315885f40ebff0c9e02b72b2f03a7a0e5"
+  },
+  "artifactRoots": {
+    "forward": {
+      "directoryName": "perf01-forward-20261113T095417Z",
+      "published": false
+    },
+    "reverse": {
+      "directoryName": "perf01-reverse-20261113T101911Z",
+      "published": false
+    },
+    "validation": {
+      "directoryName": "perf01-validation",
+      "published": false
+    },
+    "diagnostics": {
+      "directoryName": "post060-private-diagnostics",
+      "published": false
+    }
+  },
+  "artifactPathConvention": "Each result's reportPath is relative to artifactRoots[forward/reverse] selected by its containing block. Audit receipt paths are relative to artifactRoots.validation. These retained raw bundles have not been published.",
+  "reviewProvenance": {
+    "artifactRoot": "diagnostics",
+    "json": "perf01-forward-reverse-review.json",
+    "jsonSha256": "D056B1F172D38132366D86FB6127DBA9DA8FB439A3A988CBB8AB60911BD89C30",
+    "markdown": "perf01-forward-reverse-review.md",
+    "markdownSha256": "D71A9D9EED06803DF712E1D64E1FE69A90B897F53F9AC860E735E1B0936E90E5",
+    "validatorSha256": "3144E06ED6154FBF0AF718A7BA507E6BBCD8E4AC5416F0E57C086ACEAA09B949"
+  },
+  "diagnostics": {
+    "artifactRoot": "diagnostics",
+    "ilComparison": {
+      "file": "perf01-il-comparison.json",
+      "sha256": "BD422AEA1B2C36E4D0E9F6749B95AC8A763451DF0D2A7DC472E37C64BDD90D93"
+    },
+    "byteIdentityAudit": {
+      "file": "perf01-byte-identities.json",
+      "sha256": "06D7DB351C886D73429D479833BB0AD4DD55CAE4A6DCB95CB80761734E22C559"
+    },
+    "selectedManagedMethods": "Saved-child ResolveSend0 route, getter and benchmark methods, and Immediate ScopeK10/ScopeMany methods have equal normalized IL and implementation flags across baseline/candidate.",
+    "sameSideBlockIdentity": "Selected saved consumer, Zendiator and Abstractions DLL hashes are stable within each side across the forward and reverse blocks.",
+    "causalityLimit": "Equal managed IL does not rule out indirect effects from changed enclosing types, metadata, native JIT code, DI lookup/hash layout or machine state. The ResolveSend0 and unchanged Immediate ScopeK10 differences have no confirmed cause.",
+    "oldAaCorrection": "The earlier ab-smoke used the same source revision on both sides but different measured consumer/product DLL bytes. It is same-source rebuild A/A, not same-binary A/A, and does not establish a same-binary noise bound.",
+    "oldAaSourceRevision": "45e5bb94df2ae41df6e0941a419a46003c3698ff"
+  },
+  "limitations": [
+    "The prior strict common non-regression gate was not passed; explicit user acceptance is an exception, not a reclassification of the measured regression.",
+    "Reverse Send0.ResolveSend rises from 25.94383843630448 to 29.949775655464062 ns with disjoint intervals; forward overlaps. This result is retained.",
+    "Unchanged Immediate ScopeK10 regresses in both orders, by 14.728131% and 16.238053% in observed means. Its cause is unresolved; do not attribute every other improvement to the product change.",
+    "Only ScopeK1, warm Typed Send5 and ScopeK10 improve with disjoint intervals in both blocks. No Zendiator case regresses in both; one regresses in reverse only.",
+    "Observed block-to-block changes are descriptive, not a pooled estimate, additional controlled effect or explanation.",
+    "One machine and one launch per timed cell do not establish a universal ranking. Allocation and time are evaluated separately.",
+    "Correctness and saved-consumer gates are separate from timing denominators and from the performance adoption decision.",
+    "The complete raw consumer bundles and private diagnostic snapshots have not been published. This public file is a portable numeric/provenance index with relative paths and original SHA256 anchors.",
+    "Native AOT package checks do not establish Native AOT performance, and these values must not be labeled measurements of the newly versioned 0.7.0 package."
+  ],
+  "results": [
+    {
+      "case": {
+        "Type": "ZendiatorSend5",
+        "Method": "ScopeK1",
+        "Lifetime": "Scoped"
+      },
+      "library": "Zendiator",
+      "role": "target-or-diagnostic",
+      "forward": {
+        "case": {
+          "Type": "ZendiatorSend5",
+          "Method": "ScopeK1",
+          "Lifetime": "Scoped"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Send5",
+          "ScopeK1",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 141.44867455363274,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 139.42397228398096,
+          "ConfidenceUpperNs": 143.47337682328453,
+          "ConfidenceMarginNs": 2.0247022696517845,
+          "AllocatedBytes": 704
+        },
+        "candidate": {
+          "MeanNs": 94.21222601438474,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 92.73670013831199,
+          "ConfidenceUpperNs": 95.68775189045749,
+          "ConfidenceMarginNs": 1.475525876072752,
+          "AllocatedBytes": 624
+        },
+        "classification": "improvement",
+        "meanRatioCandidateOverBaseline": 0.6660523777383472,
+        "allocatedBytesDelta": -80,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0001/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "B5233146FE4F48B23C50130CDB6F174653E922C2D95C5AC88BD9C0B01330EFAF",
+            "bindingSha256": "45FAFB21C412C9F2797ADE50397B963F09F65A1C96EEB39CF8F7066727E086D0"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0001/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "AB9941E66CBC8AC18AB229E42469A331DB9DDC502FE16E959F4EBC602745E044",
+            "bindingSha256": "6A21D44878BB66F3248C90DA0C2DE2A9E038B584534BFCC814615270E8062A3E"
+          }
+        },
+        "meanDeltaNs": -47.236448539248,
+        "meanDeltaPercent": -33.39476222616528
+      },
+      "reverse": {
+        "case": {
+          "Type": "ZendiatorSend5",
+          "Method": "ScopeK1",
+          "Lifetime": "Scoped"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Send5",
+          "ScopeK1",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 161.6163203263495,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 156.61928277275496,
+          "ConfidenceUpperNs": 166.61335787994403,
+          "ConfidenceMarginNs": 4.997037553594547,
+          "AllocatedBytes": 704
+        },
+        "candidate": {
+          "MeanNs": 104.02521358516044,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 100.97635814630817,
+          "ConfidenceUpperNs": 107.07406902401272,
+          "ConfidenceMarginNs": 3.048855438852271,
+          "AllocatedBytes": 624
+        },
+        "classification": "improvement",
+        "meanRatioCandidateOverBaseline": 0.6436553769761856,
+        "allocatedBytesDelta": -80,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0015/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "36BEA3BC5761807291AA72E5D4D254A935C176A6E2A06421796FE4276EE9C40D",
+            "bindingSha256": "F6E1A1F33C62A90D48D6275BD21100D24A8EFA9C5F37A010BAC0E0488BC8C8D9"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0015/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "58B64EC6343EF555997DEBCC69CA445322A4FCDC0FEAB38A0D3144D628145C61",
+            "bindingSha256": "A454C37AA65A64863B219DCA12325D86D78E035673783B1F0ABD1C8360106D82"
+          }
+        },
+        "meanDeltaNs": -57.59110674118905,
+        "meanDeltaPercent": -35.63446230238144
+      }
+    },
+    {
+      "case": {
+        "Type": "ImmediateSend5",
+        "Method": "ScopeK1",
+        "Lifetime": "Scoped"
+      },
+      "library": "Immediate",
+      "role": "unchanged-peer-control",
+      "forward": {
+        "case": {
+          "Type": "ImmediateSend5",
+          "Method": "ScopeK1",
+          "Lifetime": "Scoped"
+        },
+        "library": "Immediate",
+        "comparisonKey": [
+          "Send5",
+          "ScopeK1",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 116.7364436617516,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 114.87989179726162,
+          "ConfidenceUpperNs": 118.59299552624157,
+          "ConfidenceMarginNs": 1.8565518644899695,
+          "AllocatedBytes": 568
+        },
+        "candidate": {
+          "MeanNs": 114.52209355148635,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 113.45909564747643,
+          "ConfidenceUpperNs": 115.58509145549627,
+          "ConfidenceMarginNs": 1.0629979040099218,
+          "AllocatedBytes": 568
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 0.9810312012186921,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0002/attempt-0001/results/Competitive.ImmediateSend5-report-full.json",
+            "reportSha256": "B0F75D5FF3BFDBDC7033DC2D681769452053612852E11BE3725907B2EB1CE4BA",
+            "bindingSha256": "1DEC55D13787188296E744DDF2E200E6094838CF06B80B64B3E6B83A40E61332"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0002/attempt-0001/results/Competitive.ImmediateSend5-report-full.json",
+            "reportSha256": "F85DB3F40415DB7EF4E329687A2111B6D0EAFCF000F0088D204AB922D1C0D20B",
+            "bindingSha256": "11E53D042C8C163265A7F9D03F57C17281A6BFB75C3E6E33C886750770D6DB36"
+          }
+        },
+        "meanDeltaNs": -2.2143501102652436,
+        "meanDeltaPercent": -1.896879878130786
+      },
+      "reverse": {
+        "case": {
+          "Type": "ImmediateSend5",
+          "Method": "ScopeK1",
+          "Lifetime": "Scoped"
+        },
+        "library": "Immediate",
+        "comparisonKey": [
+          "Send5",
+          "ScopeK1",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 123.9959524070722,
+          "N": 10,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 121.6872026267182,
+          "ConfidenceUpperNs": 126.30470218742619,
+          "ConfidenceMarginNs": 2.3087497803539923,
+          "AllocatedBytes": 568
+        },
+        "candidate": {
+          "MeanNs": 127.6076217028472,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 125.50274517572204,
+          "ConfidenceUpperNs": 129.71249822997234,
+          "ConfidenceMarginNs": 2.1048765271251555,
+          "AllocatedBytes": 568
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 1.0291273160588184,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0014/attempt-0001/results/Competitive.ImmediateSend5-report-full.json",
+            "reportSha256": "39E29DE4580B9057A536DA23D60A60B07C0215AD2C335767817CF065E9F16B0F",
+            "bindingSha256": "44DDE73A88D730DAA8FBC02821900CAA3EE2F48331CB185289C21E395EBF8C18"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0014/attempt-0001/results/Competitive.ImmediateSend5-report-full.json",
+            "reportSha256": "C982771704CDEC044F12FBF393BF5A9295086D7A736C8D5D61B68FED95E7CB51",
+            "bindingSha256": "CDEC5CECCDEE6F2354955A0A4FA7EF039FB414B1C22DA4E1F69DB1CAEAA2A5BF"
+          }
+        },
+        "meanDeltaNs": 3.611669295775002,
+        "meanDeltaPercent": 2.9127316058818353
+      }
+    },
+    {
+      "case": {
+        "Type": "ZendiatorSend0",
+        "Method": "Typed",
+        "Lifetime": "Scoped"
+      },
+      "library": "Zendiator",
+      "role": "common-non-regression",
+      "forward": {
+        "case": {
+          "Type": "ZendiatorSend0",
+          "Method": "Typed",
+          "Lifetime": "Scoped"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Send0",
+          "Typed",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 1.3989694954742928,
+          "N": 11,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 1.3838335251383889,
+          "ConfidenceUpperNs": 1.4141054658101968,
+          "ConfidenceMarginNs": 0.015135970335903921,
+          "AllocatedBytes": 0
+        },
+        "candidate": {
+          "MeanNs": 1.3388061557167548,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 1.3110070732631884,
+          "ConfidenceUpperNs": 1.366605238170321,
+          "ConfidenceMarginNs": 0.027799082453566406,
+          "AllocatedBytes": 0
+        },
+        "classification": "improvement",
+        "meanRatioCandidateOverBaseline": 0.9569945306511913,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0003/attempt-0001/results/Competitive.ZendiatorSend0-report-full.json",
+            "reportSha256": "BEED0E07016DA46BA66022B47FAF09F71D1262B49BBA30DB6F060CC160F6E3CE",
+            "bindingSha256": "A55065E492E86221185C7C1358C2BBC9F976CBEB633B9792091318E3FD2F7DC5"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0003/attempt-0001/results/Competitive.ZendiatorSend0-report-full.json",
+            "reportSha256": "40BF0500348D04DF7DAEC1823E1A9A11E176D78F77F490B27F7684567571C73F",
+            "bindingSha256": "988582096809122F7F081ED771C8CFBF72C3CD0CD79B64E8123817A63354E912"
+          }
+        },
+        "meanDeltaNs": -0.06016333975753807,
+        "meanDeltaPercent": -4.300546934880867
+      },
+      "reverse": {
+        "case": {
+          "Type": "ZendiatorSend0",
+          "Method": "Typed",
+          "Lifetime": "Scoped"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Send0",
+          "Typed",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 1.3881397662576604,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 1.3292734839687326,
+          "ConfidenceUpperNs": 1.4470060485465883,
+          "ConfidenceMarginNs": 0.0588662822889278,
+          "AllocatedBytes": 0
+        },
+        "candidate": {
+          "MeanNs": 1.4074245336599758,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 1.3617597375662176,
+          "ConfidenceUpperNs": 1.453089329753734,
+          "ConfidenceMarginNs": 0.04566479609375818,
+          "AllocatedBytes": 0
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 1.0138925257175695,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0013/attempt-0001/results/Competitive.ZendiatorSend0-report-full.json",
+            "reportSha256": "621E14291A4FCEB8F69F9377D431B336BF002952DFDAD5774F04CCE569150ADA",
+            "bindingSha256": "F1B17053C8BB8EC4738CE42E7F3977F2D57852009ED626D2EEDB40942D5C1583"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0013/attempt-0001/results/Competitive.ZendiatorSend0-report-full.json",
+            "reportSha256": "40D102C5BF48B2A3E4782E9B403512E422EB42FAF5655B16CB80A18DEC441F26",
+            "bindingSha256": "B54F5817C27E7375EC02C5AA1454FCC33A555328BA0BC3AA494B506135C2B19C"
+          }
+        },
+        "meanDeltaNs": 0.019284767402315328,
+        "meanDeltaPercent": 1.3892525717569493
+      }
+    },
+    {
+      "case": {
+        "Type": "ZendiatorSend0",
+        "Method": "ResolveSend",
+        "Lifetime": "Scoped"
+      },
+      "library": "Zendiator",
+      "role": "common-non-regression",
+      "forward": {
+        "case": {
+          "Type": "ZendiatorSend0",
+          "Method": "ResolveSend",
+          "Lifetime": "Scoped"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Send0",
+          "ResolveSend",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 28.88803385964266,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 28.745183583413528,
+          "ConfidenceUpperNs": 29.030884135871794,
+          "ConfidenceMarginNs": 0.14285027622913246,
+          "AllocatedBytes": 0
+        },
+        "candidate": {
+          "MeanNs": 29.962436689829847,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 28.527207264097893,
+          "ConfidenceUpperNs": 31.3976661155618,
+          "ConfidenceMarginNs": 1.4352294257319556,
+          "AllocatedBytes": 0
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 1.0371919679756452,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0004/attempt-0001/results/Competitive.ZendiatorSend0-report-full.json",
+            "reportSha256": "A7F941BF5E3AFEE836BDE9C4454757CD32B9E92C9E230785ADD7514E87D82724",
+            "bindingSha256": "95F6177387DD4644D99A6AC40E5F3037263B1C6FE2746C9C83A7373CA0EF8391"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0004/attempt-0001/results/Competitive.ZendiatorSend0-report-full.json",
+            "reportSha256": "1829F4A2EBED8C5005A10B9BCF13C54517C6EAA9EB7FE36EF6355803E1BF2134",
+            "bindingSha256": "B07682C40B0F62335FC501704391FCDABC89C8CC1D7AA463FE69190E9593250F"
+          }
+        },
+        "meanDeltaNs": 1.0744028301871857,
+        "meanDeltaPercent": 3.719196797564517
+      },
+      "reverse": {
+        "case": {
+          "Type": "ZendiatorSend0",
+          "Method": "ResolveSend",
+          "Lifetime": "Scoped"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Send0",
+          "ResolveSend",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 25.94383843630448,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 25.40179367003185,
+          "ConfidenceUpperNs": 26.485883202577106,
+          "ConfidenceMarginNs": 0.5420447662726291,
+          "AllocatedBytes": 0
+        },
+        "candidate": {
+          "MeanNs": 29.949775655464062,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 29.202990247732103,
+          "ConfidenceUpperNs": 30.69656106319602,
+          "ConfidenceMarginNs": 0.7467854077319579,
+          "AllocatedBytes": 0
+        },
+        "classification": "regression",
+        "meanRatioCandidateOverBaseline": 1.1544080390800568,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0012/attempt-0001/results/Competitive.ZendiatorSend0-report-full.json",
+            "reportSha256": "2A40D6342AE429FAC240B43370CE36ECF078F08B016F87519FE175F39D4BA12C",
+            "bindingSha256": "28ADDEF36A7079279A86A4CFB229DD896733C893D4A8ABA6FE21EE416183394A"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0012/attempt-0001/results/Competitive.ZendiatorSend0-report-full.json",
+            "reportSha256": "02BB3B1D283FF0C5491203B2523D078B1245976D8B8589CFEC3A9D85D80F4CB2",
+            "bindingSha256": "05CB7FD50DA14CE492A01E48FD2D42A09BFF6F1CF6ADB1A5344DF283E5BC20E1"
+          }
+        },
+        "meanDeltaNs": 4.005937219159584,
+        "meanDeltaPercent": 15.440803908005684
+      }
+    },
+    {
+      "case": {
+        "Type": "ZendiatorSend5",
+        "Method": "Typed",
+        "Lifetime": "Scoped"
+      },
+      "library": "Zendiator",
+      "role": "common-non-regression",
+      "forward": {
+        "case": {
+          "Type": "ZendiatorSend5",
+          "Method": "Typed",
+          "Lifetime": "Scoped"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Send5",
+          "Typed",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 10.196576814943066,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 9.891007046083498,
+          "ConfidenceUpperNs": 10.502146583802634,
+          "ConfidenceMarginNs": 0.3055697688595676,
+          "AllocatedBytes": 0
+        },
+        "candidate": {
+          "MeanNs": 4.962003812267153,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 4.905850246868178,
+          "ConfidenceUpperNs": 5.018157377666128,
+          "ConfidenceMarginNs": 0.056153565398974474,
+          "AllocatedBytes": 0
+        },
+        "classification": "improvement",
+        "meanRatioCandidateOverBaseline": 0.48663427955501154,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0005/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "D58BA6FDCC1D6E1F72D9A0E2C4DA0A11E351C92283DF31456DA59C626E0C7149",
+            "bindingSha256": "601CF5D96A9FCB2909D839916EFD4D882790F14C590A428732A33234FA281252"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0005/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "A687004E974BD1F19E3E2B5D2959A0D06FEC713C44CAAD06F0E2C82143713AC8",
+            "bindingSha256": "530C3D32DA545445566445251EB05F3D4702FFB7ED05D041C75797176E94FF3A"
+          }
+        },
+        "meanDeltaNs": -5.234573002675913,
+        "meanDeltaPercent": -51.33657204449884
+      },
+      "reverse": {
+        "case": {
+          "Type": "ZendiatorSend5",
+          "Method": "Typed",
+          "Lifetime": "Scoped"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Send5",
+          "Typed",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 10.316364277158193,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 10.127874411704493,
+          "ConfidenceUpperNs": 10.504854142611894,
+          "ConfidenceMarginNs": 0.18848986545370017,
+          "AllocatedBytes": 0
+        },
+        "candidate": {
+          "MeanNs": 5.238386477815006,
+          "N": 11,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 5.136111022009884,
+          "ConfidenceUpperNs": 5.340661933620129,
+          "ConfidenceMarginNs": 0.10227545580512254,
+          "AllocatedBytes": 0
+        },
+        "classification": "improvement",
+        "meanRatioCandidateOverBaseline": 0.5077744772364711,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0011/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "075E29929EE30B5A9FA2566768258920DDE0FD50B9EDD9A81E4667A236A50035",
+            "bindingSha256": "9D94955DAD82B9402D197B03A79AFF3430D1B562B19DB25E5FCCE7E14E3BB3EF"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0011/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "79B1701EBD2D39E28131DF3D41DC58330BC67453F6EAFC5BF78CE5D546E96F02",
+            "bindingSha256": "9E429073D51E51FD9E861EB5D32C29A912CE44CA36E9346F332646B156B40CF3"
+          }
+        },
+        "meanDeltaNs": -5.077977799343187,
+        "meanDeltaPercent": -49.22255227635289
+      }
+    },
+    {
+      "case": {
+        "Type": "ZendiatorSend5",
+        "Method": "ResolveSend",
+        "Lifetime": "Scoped"
+      },
+      "library": "Zendiator",
+      "role": "common-non-regression",
+      "forward": {
+        "case": {
+          "Type": "ZendiatorSend5",
+          "Method": "ResolveSend",
+          "Lifetime": "Scoped"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Send5",
+          "ResolveSend",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 31.611030291602457,
+          "N": 11,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 30.679626872427317,
+          "ConfidenceUpperNs": 32.5424337107776,
+          "ConfidenceMarginNs": 0.9314034191751417,
+          "AllocatedBytes": 0
+        },
+        "candidate": {
+          "MeanNs": 29.696189810633857,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 28.373274878008036,
+          "ConfidenceUpperNs": 31.01910474325968,
+          "ConfidenceMarginNs": 1.3229149326258196,
+          "AllocatedBytes": 0
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 0.9394249265745293,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0006/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "022194ADE375DF7A1A1FA41BF0FF3D5AAE1BF699922F0CA859F06DCE19D90B24",
+            "bindingSha256": "DFCD7C4E4A7355590B9991965388E7A5522C0AFF0E0263985B1DAB116B08B79B"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0006/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "8F19D6698593450416EEE71A057D7F332FAE67C61ADB2550CB9FA6F4AB8847BB",
+            "bindingSha256": "0943C6BF54ED065EB34FD53EA8BB67B68D1F0786145E5A241BC31D2890A7E032"
+          }
+        },
+        "meanDeltaNs": -1.9148404809686,
+        "meanDeltaPercent": -6.0575073425470745
+      },
+      "reverse": {
+        "case": {
+          "Type": "ZendiatorSend5",
+          "Method": "ResolveSend",
+          "Lifetime": "Scoped"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Send5",
+          "ResolveSend",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 42.08828486442662,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 41.28789655428011,
+          "ConfidenceUpperNs": 42.88867317457313,
+          "ConfidenceMarginNs": 0.800388310146506,
+          "AllocatedBytes": 0
+        },
+        "candidate": {
+          "MeanNs": 39.62768044320214,
+          "N": 10,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 39.19607014390947,
+          "ConfidenceUpperNs": 40.0592907424948,
+          "ConfidenceMarginNs": 0.43161029929266526,
+          "AllocatedBytes": 0
+        },
+        "classification": "improvement",
+        "meanRatioCandidateOverBaseline": 0.9415370707276265,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0010/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "4E03F79AFF9D67BA3F2B0BCFFA5FBA6E1D3FDA3874A8FCC9667301DDF0E8BCFF",
+            "bindingSha256": "E556705F00D6B16004015BCC474CD0F6DD1AA29D9A1DE2D7A8851BE03DC1D648"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0010/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "521BEDB3F323ED444704DCD91EF0582C4438DBAB96E959F76DE9A73BC936F41E",
+            "bindingSha256": "544AAC454A0ABC5E8FB89DCA0F3B784D32BFEE4DA520178594127A265FDDF75C"
+          }
+        },
+        "meanDeltaNs": -2.460604421224481,
+        "meanDeltaPercent": -5.846292927237351
+      }
+    },
+    {
+      "case": {
+        "Type": "ZendiatorNotification16",
+        "Method": "Dispatch"
+      },
+      "library": "Zendiator",
+      "role": "common-non-regression",
+      "forward": {
+        "case": {
+          "Type": "ZendiatorNotification16",
+          "Method": "Dispatch"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Notification16",
+          "Dispatch",
+          null,
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 123.63863217879883,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 121.21893418688393,
+          "ConfidenceUpperNs": 126.05833017071373,
+          "ConfidenceMarginNs": 2.4196979919148958,
+          "AllocatedBytes": 0
+        },
+        "candidate": {
+          "MeanNs": 113.99469148334163,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 111.85163218590651,
+          "ConfidenceUpperNs": 116.13775078077674,
+          "ConfidenceMarginNs": 2.1430592974351175,
+          "AllocatedBytes": 0
+        },
+        "classification": "improvement",
+        "meanRatioCandidateOverBaseline": 0.9219989696949193,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0007/attempt-0001/results/Competitive.ZendiatorNotification16-report-full.json",
+            "reportSha256": "E8B05E78C48CD59A6D815C4059B894470FF7297F5BAB1EC19131C35DBFAEC1CE",
+            "bindingSha256": "1D0ACD365BB0FCE7D3052596E5F6DF04CC5E336485F04B780141F37983D35D7F"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0007/attempt-0001/results/Competitive.ZendiatorNotification16-report-full.json",
+            "reportSha256": "B45317C2310DB98E7A81F9FB11428A591D99A2B6E133C9702D5823AE733977CD",
+            "bindingSha256": "58DF26CCCA39AD6391DE3FCD69072A20F5C4E2A168BED143D7FE73D84968E2C2"
+          }
+        },
+        "meanDeltaNs": -9.643940695457204,
+        "meanDeltaPercent": -7.800103030508065
+      },
+      "reverse": {
+        "case": {
+          "Type": "ZendiatorNotification16",
+          "Method": "Dispatch"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Notification16",
+          "Dispatch",
+          null,
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 115.45827511482884,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 113.45372873017355,
+          "ConfidenceUpperNs": 117.46282149948412,
+          "ConfidenceMarginNs": 2.0045463846552907,
+          "AllocatedBytes": 0
+        },
+        "candidate": {
+          "MeanNs": 115.72131997883893,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 113.85116447778599,
+          "ConfidenceUpperNs": 117.59147547989188,
+          "ConfidenceMarginNs": 1.8701555010529554,
+          "AllocatedBytes": 0
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 1.00227826774433,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0009/attempt-0001/results/Competitive.ZendiatorNotification16-report-full.json",
+            "reportSha256": "D5023BFF8E1C6913C93EFE24C93B0701D73988C19D4D68C26ADFFE202AF2D34F",
+            "bindingSha256": "E54B814EE7C500B78037A6628D36EACA3BBD73C9AD3C71ED69C6F32913CDE2F7"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0009/attempt-0001/results/Competitive.ZendiatorNotification16-report-full.json",
+            "reportSha256": "7347923D2CF755B4BB30F153ABA03E35D783D8728602FB5700102178CE879390",
+            "bindingSha256": "897BC42B1F1782AB7CD8354C68F6689EE8C12826F2F608DB6A5D312611BFCFB8"
+          }
+        },
+        "meanDeltaNs": 0.26304486401009797,
+        "meanDeltaPercent": 0.22782677443300425
+      }
+    },
+    {
+      "case": {
+        "Type": "ZendiatorStream5",
+        "Method": "Full",
+        "Count": 1024,
+        "Asynchronous": false
+      },
+      "library": "Zendiator",
+      "role": "common-non-regression",
+      "forward": {
+        "case": {
+          "Type": "ZendiatorStream5",
+          "Method": "Full",
+          "Count": 1024,
+          "Asynchronous": false
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Stream5",
+          "Full",
+          null,
+          1024,
+          false
+        ],
+        "baseline": {
+          "MeanNs": 12678.826410658306,
+          "N": 11,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 12534.492930142173,
+          "ConfidenceUpperNs": 12823.15989117444,
+          "ConfidenceMarginNs": 144.33348051613382,
+          "AllocatedBytes": 1016
+        },
+        "candidate": {
+          "MeanNs": 11853.904411764706,
+          "N": 11,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 11744.544087824988,
+          "ConfidenceUpperNs": 11963.264735704424,
+          "ConfidenceMarginNs": 109.36032393971799,
+          "AllocatedBytes": 1016
+        },
+        "classification": "improvement",
+        "meanRatioCandidateOverBaseline": 0.9349370381630796,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0008/attempt-0001/results/Competitive.ZendiatorStream5-report-full.json",
+            "reportSha256": "B15F2A7B57E3E9DBA109AC89DC8CDB0C93ED211CF3D7430D1A93DCB193138475",
+            "bindingSha256": "C42269E244D6CAB89CE6DDF0BE143A5B68B35CF2960E713B715F6B0E6CFBA453"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0008/attempt-0001/results/Competitive.ZendiatorStream5-report-full.json",
+            "reportSha256": "2B31F0684911E67D813473CB8A9E237E7B5244A157F3A21317D098FA6CD39C42",
+            "bindingSha256": "C360A34FFF32CF8DCAF964D1F17465FA40DB53CAA1772BBCEA13970F128BCC2C"
+          }
+        },
+        "meanDeltaNs": -824.9219988936002,
+        "meanDeltaPercent": -6.50629618369204
+      },
+      "reverse": {
+        "case": {
+          "Type": "ZendiatorStream5",
+          "Method": "Full",
+          "Count": 1024,
+          "Asynchronous": false
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Stream5",
+          "Full",
+          null,
+          1024,
+          false
+        ],
+        "baseline": {
+          "MeanNs": 12373.846043577985,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 12192.924757130877,
+          "ConfidenceUpperNs": 12554.767330025094,
+          "ConfidenceMarginNs": 180.9212864471075,
+          "AllocatedBytes": 1016
+        },
+        "candidate": {
+          "MeanNs": 12561.694889162562,
+          "N": 10,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 12450.922013513635,
+          "ConfidenceUpperNs": 12672.467764811488,
+          "ConfidenceMarginNs": 110.77287564892664,
+          "AllocatedBytes": 1016
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 1.0151811203180494,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0008/attempt-0001/results/Competitive.ZendiatorStream5-report-full.json",
+            "reportSha256": "7A89FC59D739A47CFE79AD0DD0470D0F0D4FD9BD55C4D97003FB43EC8B57763F",
+            "bindingSha256": "DB1C881363E5A40E36A5E16980F8699D0935DE3366E551B49647D5E04E93F0BD"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0008/attempt-0001/results/Competitive.ZendiatorStream5-report-full.json",
+            "reportSha256": "423C62E33FBEE6692247780489734E9EE629041283330EB81A2E42101CE3F3D3",
+            "bindingSha256": "0C21152FA355C188C52D865A5A9FD758509D2BB0442A5F28AE0025343DDFD49A"
+          }
+        },
+        "meanDeltaNs": 187.84884558457634,
+        "meanDeltaPercent": 1.5181120318049413
+      }
+    },
+    {
+      "case": {
+        "Type": "ZendiatorShortCircuit",
+        "Method": "WarmDispatch",
+        "Project": "short"
+      },
+      "library": "Zendiator",
+      "role": "common-non-regression",
+      "forward": {
+        "case": {
+          "Type": "ZendiatorShortCircuit",
+          "Method": "WarmDispatch",
+          "Project": "short"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "ShortCircuit",
+          "WarmDispatch",
+          null,
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 4.846207516802624,
+          "N": 11,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 4.829404797120923,
+          "ConfidenceUpperNs": 4.8630102364843255,
+          "ConfidenceMarginNs": 0.016802719681701227,
+          "AllocatedBytes": 0
+        },
+        "candidate": {
+          "MeanNs": 4.984403927768514,
+          "N": 10,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 4.385999542810738,
+          "ConfidenceUpperNs": 5.58280831272629,
+          "ConfidenceMarginNs": 0.5984043849577764,
+          "AllocatedBytes": 0
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 1.0285164039069188,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0009/attempt-0001/results/Competitive.ShortCircuit.ZendiatorShortCircuit-report-full.json",
+            "reportSha256": "CF6F9AD74DE932054FA46CAE90B20D5E5207A14B9A0E0C4E9CEF7AB125934066",
+            "bindingSha256": "1CFD791C5AC79A9E6ABD9BB4ADC5DD2B37DDD94BC120CDD6FDD0A79FAF9D7360"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0009/attempt-0001/results/Competitive.ShortCircuit.ZendiatorShortCircuit-report-full.json",
+            "reportSha256": "3FC492651D257B2D99AC537F559BB028223C4B1B8443F9848B58B25703BB06A2",
+            "bindingSha256": "FF9612333CD7DA0F79C721604AB95D146867E4FE7F26CFA05701ADA441EE7227"
+          }
+        },
+        "meanDeltaNs": 0.13819641096588953,
+        "meanDeltaPercent": 2.8516403906918786
+      },
+      "reverse": {
+        "case": {
+          "Type": "ZendiatorShortCircuit",
+          "Method": "WarmDispatch",
+          "Project": "short"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "ShortCircuit",
+          "WarmDispatch",
+          null,
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 4.430060471899847,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 4.338422906542145,
+          "ConfidenceUpperNs": 4.52169803725755,
+          "ConfidenceMarginNs": 0.0916375653577024,
+          "AllocatedBytes": 0
+        },
+        "candidate": {
+          "MeanNs": 4.259942860351603,
+          "N": 11,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 4.178303327960461,
+          "ConfidenceUpperNs": 4.341582392742745,
+          "ConfidenceMarginNs": 0.08163953239114159,
+          "AllocatedBytes": 0
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 0.9615992574757588,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0007/attempt-0001/results/Competitive.ShortCircuit.ZendiatorShortCircuit-report-full.json",
+            "reportSha256": "AD46DD77E7A2B17C3151447D06087AB5E603D60163516DE2FFB3F93A0A4DE18E",
+            "bindingSha256": "80C8D053286012F92CF04C1220A1D382D1CC456CAD2EB43544E9298851DCAAE3"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0007/attempt-0001/results/Competitive.ShortCircuit.ZendiatorShortCircuit-report-full.json",
+            "reportSha256": "50BCB8F288414D6C0B5DFD2C5E2F7DD8C1656DF8F64F592EEC30B911032621F6",
+            "bindingSha256": "9F5A0D6625FFF0939221F5EE332E3056603032DE217F4AC1984D10E8E25FF726"
+          }
+        },
+        "meanDeltaNs": -0.17011761154824434,
+        "meanDeltaPercent": -3.8400742524241194
+      }
+    },
+    {
+      "case": {
+        "Type": "HZendiatorBenchmarks",
+        "Method": "FirstSend",
+        "Project": "hooks"
+      },
+      "library": "Zendiator",
+      "role": "common-non-regression",
+      "forward": {
+        "case": {
+          "Type": "HZendiatorBenchmarks",
+          "Method": "FirstSend",
+          "Project": "hooks"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Hooks",
+          "FirstSend",
+          null,
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 860.7073974609375,
+          "N": 10,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 783.2351556278386,
+          "ConfidenceUpperNs": 938.1796392940364,
+          "ConfidenceMarginNs": 77.47224183309886,
+          "AllocatedBytes": 480
+        },
+        "candidate": {
+          "MeanNs": 829.990234375,
+          "N": 10,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 783.7776750307064,
+          "ConfidenceUpperNs": 876.2027937192936,
+          "ConfidenceMarginNs": 46.21255934429359,
+          "AllocatedBytes": 448
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 0.9643117240812008,
+        "allocatedBytesDelta": -32,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0010/attempt-0001/results/Competitive.HZendiatorBenchmarks-report-full.json",
+            "reportSha256": "D76CCBCAB546C9AA1F62BF2961AD25395AC418F77C9A5BEFB9ABC7D4BF2DF187",
+            "bindingSha256": "47E514D7500D8485EE3BE8C011089A0736BE06EBFE189EF3561F9A8DDB9D41CD"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0010/attempt-0001/results/Competitive.HZendiatorBenchmarks-report-full.json",
+            "reportSha256": "C394CFEACF23617BBF3C32483E0186B141426B787DA52886F8DC0385735EBAA8",
+            "bindingSha256": "D32EAE1BC1062D2A24443D15942F3BBAE35D2D41B0A78B0E3937CB478C85B7CA"
+          }
+        },
+        "meanDeltaNs": -30.7171630859375,
+        "meanDeltaPercent": -3.5688275918799195
+      },
+      "reverse": {
+        "case": {
+          "Type": "HZendiatorBenchmarks",
+          "Method": "FirstSend",
+          "Project": "hooks"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Hooks",
+          "FirstSend",
+          null,
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 897.5375088778409,
+          "N": 11,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 608.8898218339572,
+          "ConfidenceUpperNs": 1186.1851959217247,
+          "ConfidenceMarginNs": 288.6476870438837,
+          "AllocatedBytes": 480
+        },
+        "candidate": {
+          "MeanNs": 834.554443359375,
+          "N": 10,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 701.4416568020001,
+          "ConfidenceUpperNs": 967.6672299167499,
+          "ConfidenceMarginNs": 133.11278655737493,
+          "AllocatedBytes": 448
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 0.929826815152036,
+        "allocatedBytesDelta": -32,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0006/attempt-0001/results/Competitive.HZendiatorBenchmarks-report-full.json",
+            "reportSha256": "38080E229BEF2DD0528637E62B263B01F29A8764DCBF12EC6F1D40613CECD50A",
+            "bindingSha256": "B57D81217B4F5752A06187D62748EAA5CE6CED0B10E7F636F16A3A7A57F18D05"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0006/attempt-0001/results/Competitive.HZendiatorBenchmarks-report-full.json",
+            "reportSha256": "18A2A2DD0E5E19128BB2B7D2A0D2FD4FD3DC9E3270984859D71DBE109171BC7B",
+            "bindingSha256": "3D3109CE349341AEBF8663A59F8075E862BA6618613600BB3A91B895697AA74A"
+          }
+        },
+        "meanDeltaNs": -62.98306551846588,
+        "meanDeltaPercent": -7.017318484796398
+      }
+    },
+    {
+      "case": {
+        "Type": "HZendiatorBenchmarks",
+        "Method": "WarmSend",
+        "Project": "hooks"
+      },
+      "library": "Zendiator",
+      "role": "common-non-regression",
+      "forward": {
+        "case": {
+          "Type": "HZendiatorBenchmarks",
+          "Method": "WarmSend",
+          "Project": "hooks"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Hooks",
+          "WarmSend",
+          null,
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 31.17411725177018,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 30.95154295995398,
+          "ConfidenceUpperNs": 31.396691543586382,
+          "ConfidenceMarginNs": 0.22257429181620242,
+          "AllocatedBytes": 0
+        },
+        "candidate": {
+          "MeanNs": 31.010663621231878,
+          "N": 11,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 30.72312617007344,
+          "ConfidenceUpperNs": 31.298201072390317,
+          "ConfidenceMarginNs": 0.2875374511584388,
+          "AllocatedBytes": 0
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 0.9947567519163988,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0011/attempt-0001/results/Competitive.HZendiatorBenchmarks-report-full.json",
+            "reportSha256": "B5C03E568E7387D2E714A85B699EE7436CA9E820292FC08225F9FFBC5916C793",
+            "bindingSha256": "BD3B1C923AF828FA5BBBCEECC80FB7F64A96DD8B4DA4BE4E5E27A00F1DFA270C"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0011/attempt-0001/results/Competitive.HZendiatorBenchmarks-report-full.json",
+            "reportSha256": "4B47BC6069AD3C90703971C62E345AA9A80B4FB4D1A98CE9204C94368C14A1A6",
+            "bindingSha256": "E14702C37C4929A8286681DA8134382E5C0CDC9301CFC013402FF18722B411BF"
+          }
+        },
+        "meanDeltaNs": -0.16345363053830297,
+        "meanDeltaPercent": -0.5243248083601215
+      },
+      "reverse": {
+        "case": {
+          "Type": "HZendiatorBenchmarks",
+          "Method": "WarmSend",
+          "Project": "hooks"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Hooks",
+          "WarmSend",
+          null,
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 31.148571458095322,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 30.37201456854052,
+          "ConfidenceUpperNs": 31.925128347650123,
+          "ConfidenceMarginNs": 0.7765568895548018,
+          "AllocatedBytes": 0
+        },
+        "candidate": {
+          "MeanNs": 31.00085212889741,
+          "N": 11,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 30.600231397768578,
+          "ConfidenceUpperNs": 31.401472860026242,
+          "ConfidenceMarginNs": 0.40062073112883084,
+          "AllocatedBytes": 0
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 0.9952575889588824,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0005/attempt-0001/results/Competitive.HZendiatorBenchmarks-report-full.json",
+            "reportSha256": "3F27A126BC611F4AEC811CAB71C0AA941C6152FC2D0E96FDC41F955E4A62D702",
+            "bindingSha256": "98540FDA52D34A2BFA10C73D5B38177C60EF759EB3F233A27778B63B1A654B7A"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0005/attempt-0001/results/Competitive.HZendiatorBenchmarks-report-full.json",
+            "reportSha256": "32FCFA1AB902F44F0FDE454D118429686453D43C53143001CA3D0B253D480AFE",
+            "bindingSha256": "E189D229166C3EBE11EFE47505986FD89C44DFE5040940D34210F37C2866BEB2"
+          }
+        },
+        "meanDeltaNs": -0.14771932919791197,
+        "meanDeltaPercent": -0.4742411041117611
+      }
+    },
+    {
+      "case": {
+        "Type": "HZendiatorBenchmarks",
+        "Method": "ColdOuterFailure",
+        "Project": "hooks"
+      },
+      "library": "Zendiator",
+      "role": "common-non-regression",
+      "forward": {
+        "case": {
+          "Type": "HZendiatorBenchmarks",
+          "Method": "ColdOuterFailure",
+          "Project": "hooks"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Hooks",
+          "ColdOuterFailure",
+          null,
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 3912.39501953125,
+          "N": 10,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 3857.8607419484265,
+          "ConfidenceUpperNs": 3966.9292971140735,
+          "ConfidenceMarginNs": 54.53427758282353,
+          "AllocatedBytes": 1712
+        },
+        "candidate": {
+          "MeanNs": 3839.538019353693,
+          "N": 11,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 3669.186468269415,
+          "ConfidenceUpperNs": 4009.889570437971,
+          "ConfidenceMarginNs": 170.35155108427807,
+          "AllocatedBytes": 1680
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 0.9813779028411385,
+        "allocatedBytesDelta": -32,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0012/attempt-0001/results/Competitive.HZendiatorBenchmarks-report-full.json",
+            "reportSha256": "88C5AC0880E770E7FE5F801174AC0CBB921FBFD6BD3EA50D1A5C12F88B4152E6",
+            "bindingSha256": "F4BA3D7A9FBBF1C26AA828019C4DD29C77147F4EBDE1BAF31035BC6996A5AA97"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0012/attempt-0001/results/Competitive.HZendiatorBenchmarks-report-full.json",
+            "reportSha256": "CD2FE05C6A9FF27BA4C37163C472FA463B0F9B10772AD04207A0C5AD5BB702A0",
+            "bindingSha256": "8C873F2B1EA8BDE347990C26AFEB0EA1BACE223D04AF08D6F2868F47D5EBE3C1"
+          }
+        },
+        "meanDeltaNs": -72.85700017755698,
+        "meanDeltaPercent": -1.862209715886154
+      },
+      "reverse": {
+        "case": {
+          "Type": "HZendiatorBenchmarks",
+          "Method": "ColdOuterFailure",
+          "Project": "hooks"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Hooks",
+          "ColdOuterFailure",
+          null,
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 3929.76318359375,
+          "N": 10,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 3853.7544366336647,
+          "ConfidenceUpperNs": 4005.7719305538353,
+          "ConfidenceMarginNs": 76.00874696008536,
+          "AllocatedBytes": 1712
+        },
+        "candidate": {
+          "MeanNs": 3870.5851236979165,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 3583.7736870891213,
+          "ConfidenceUpperNs": 4157.396560306712,
+          "ConfidenceMarginNs": 286.81143660879513,
+          "AllocatedBytes": 1680
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 0.9849410620612219,
+        "allocatedBytesDelta": -32,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0004/attempt-0001/results/Competitive.HZendiatorBenchmarks-report-full.json",
+            "reportSha256": "38F9EE261ED0EE3C86C4D932D0E95F69E0E24C035383A0BF235D8BCFC6E4BA48",
+            "bindingSha256": "CE9F2CAEA07FD3A94EA74273A311FF9A006D6B4CD27520C471A6E7AE7AD93ED2"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0004/attempt-0001/results/Competitive.HZendiatorBenchmarks-report-full.json",
+            "reportSha256": "AB81ACA8264C290D51513EC79EFB2274F16A8540429D3F671C2322CD64FF1FC0",
+            "bindingSha256": "77D34782A4E743E1FDDFCBA5B6E74461ED81CF618202CA27BED85737A54AA6C1"
+          }
+        },
+        "meanDeltaNs": -59.178059895833485,
+        "meanDeltaPercent": -1.5058937938778105
+      }
+    },
+    {
+      "case": {
+        "Type": "ImmediateSend5",
+        "Method": "ScopeK10",
+        "Lifetime": "Scoped"
+      },
+      "library": "Immediate",
+      "role": "unchanged-peer-control",
+      "forward": {
+        "case": {
+          "Type": "ImmediateSend5",
+          "Method": "ScopeK10",
+          "Lifetime": "Scoped"
+        },
+        "library": "Immediate",
+        "comparisonKey": [
+          "Send5",
+          "ScopeK10",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 293.1637092074592,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 287.0897786254728,
+          "ConfidenceUpperNs": 299.2376397894456,
+          "ConfidenceMarginNs": 6.0739305819864375,
+          "AllocatedBytes": 568
+        },
+        "candidate": {
+          "MeanNs": 336.34124427727585,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 328.9871960422768,
+          "ConfidenceUpperNs": 343.6952925122749,
+          "ConfidenceMarginNs": 7.3540482349990475,
+          "AllocatedBytes": 568
+        },
+        "classification": "regression",
+        "meanRatioCandidateOverBaseline": 1.1472813097724242,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0013/attempt-0001/results/Competitive.ImmediateSend5-report-full.json",
+            "reportSha256": "4826EAD570824DE2A1A9707701B7346A4748689BCBFAA25769148D452BEF6E0D",
+            "bindingSha256": "C15089638A5DC3078D28E3BB0183B1706804EB980EFE809BDA6B4D70FD282AB0"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0013/attempt-0001/results/Competitive.ImmediateSend5-report-full.json",
+            "reportSha256": "2891BD233A37ED9F0FE4C88721C6446A995BD53952EFFB24236A5C745BDB77E1",
+            "bindingSha256": "60BC691D2CB7FF88F7809F559D2B36D9D53C5AD0AF6C70147C4FE512CA513DDB"
+          }
+        },
+        "meanDeltaNs": 43.177535069816656,
+        "meanDeltaPercent": 14.728130977242415
+      },
+      "reverse": {
+        "case": {
+          "Type": "ImmediateSend5",
+          "Method": "ScopeK10",
+          "Lifetime": "Scoped"
+        },
+        "library": "Immediate",
+        "comparisonKey": [
+          "Send5",
+          "ScopeK10",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 287.18712577548723,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 280.35941410816264,
+          "ConfidenceUpperNs": 294.0148374428118,
+          "ConfidenceMarginNs": 6.827711667324577,
+          "AllocatedBytes": 568
+        },
+        "candidate": {
+          "MeanNs": 333.8207230399015,
+          "N": 10,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 325.8798111514499,
+          "ConfidenceUpperNs": 341.7616349283531,
+          "ConfidenceMarginNs": 7.940911888451605,
+          "AllocatedBytes": 568
+        },
+        "classification": "regression",
+        "meanRatioCandidateOverBaseline": 1.1623805285090347,
+        "allocatedBytesDelta": 0,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0003/attempt-0001/results/Competitive.ImmediateSend5-report-full.json",
+            "reportSha256": "CB78A6C7A49272496D93745187B6A6082303EED269448DCEA076C5441ED09CA0",
+            "bindingSha256": "B0F2C9F8AB0B49D6116A6BD2976C0DCAF9EFA7E58192E4BDFB3F0C0B7FE76AA8"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0003/attempt-0001/results/Competitive.ImmediateSend5-report-full.json",
+            "reportSha256": "8573C7C5B1E24B65F9B6AEC11BF3E21A0F60D66DCC120BDFD62D34707BC927C8",
+            "bindingSha256": "407141BC5B2A2E6B6126ADACC61D0D590CB49BAE1A5F5E1AD2BFA79D7AB2C879"
+          }
+        },
+        "meanDeltaNs": 46.63359726441428,
+        "meanDeltaPercent": 16.238052850903472
+      }
+    },
+    {
+      "case": {
+        "Type": "ZendiatorSend5",
+        "Method": "ScopeK10",
+        "Lifetime": "Scoped"
+      },
+      "library": "Zendiator",
+      "role": "target-or-diagnostic",
+      "forward": {
+        "case": {
+          "Type": "ZendiatorSend5",
+          "Method": "ScopeK10",
+          "Lifetime": "Scoped"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Send5",
+          "ScopeK10",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 240.9634064865238,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 234.07158596231847,
+          "ConfidenceUpperNs": 247.85522701072915,
+          "ConfidenceMarginNs": 6.89182052420533,
+          "AllocatedBytes": 704
+        },
+        "candidate": {
+          "MeanNs": 155.53166897237068,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 152.0646424888629,
+          "ConfidenceUpperNs": 158.99869545587848,
+          "ConfidenceMarginNs": 3.467026483507781,
+          "AllocatedBytes": 624
+        },
+        "classification": "improvement",
+        "meanRatioCandidateOverBaseline": 0.6454576287751351,
+        "allocatedBytesDelta": -80,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0014/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "DE6104F8383698B5019F467F17E5120988B6DC43ACF285819731C5D866B37DC7",
+            "bindingSha256": "E1268B893FA0A423732B09A6309CFD0AC35DE01DCF0692B101B35BECD2358501"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0014/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "24825478E232BE616FFB4BA728BFB70EA7741AA30BD929AA965B5F1B22727C47",
+            "bindingSha256": "3A87F645B0195C0A059AF00D04951DEB8435D32B48E261B4EE8D57479C445BA0"
+          }
+        },
+        "meanDeltaNs": -85.43173751415313,
+        "meanDeltaPercent": -35.45423712248649
+      },
+      "reverse": {
+        "case": {
+          "Type": "ZendiatorSend5",
+          "Method": "ScopeK10",
+          "Lifetime": "Scoped"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Send5",
+          "ScopeK10",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 200.9225337145027,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 194.67500046115836,
+          "ConfidenceUpperNs": 207.17006696784702,
+          "ConfidenceMarginNs": 6.24753325334434,
+          "AllocatedBytes": 704
+        },
+        "candidate": {
+          "MeanNs": 146.6550500689664,
+          "N": 12,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 142.44215269948887,
+          "ConfidenceUpperNs": 150.86794743844393,
+          "ConfidenceMarginNs": 4.212897369477519,
+          "AllocatedBytes": 624
+        },
+        "classification": "improvement",
+        "meanRatioCandidateOverBaseline": 0.7299084246934358,
+        "allocatedBytesDelta": -80,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0002/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "203643D1A4C4C6F7CF33A414CEE1A6E1B8687997E9983A53F83A0556EF7280B5",
+            "bindingSha256": "240B440939701361BC2D752F757BC0C60AFB231D7D2239E5AA99A1CBB9970BC3"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0002/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "5B822B32D44C1AA4F4C8ED6C6DF19F10441FAD75FA1A2AF42C838B6F139BEF55",
+            "bindingSha256": "0FB46394224EC5D6593BE5A0F1F2B07B68F4D4E7219E46F43A38BB20A5E99BBB"
+          }
+        },
+        "meanDeltaNs": -54.26748364553629,
+        "meanDeltaPercent": -27.009157530656424
+      }
+    },
+    {
+      "case": {
+        "Type": "ZendiatorSend5",
+        "Method": "FirstSend",
+        "Lifetime": "Scoped"
+      },
+      "library": "Zendiator",
+      "role": "target-or-diagnostic",
+      "forward": {
+        "case": {
+          "Type": "ZendiatorSend5",
+          "Method": "FirstSend",
+          "Lifetime": "Scoped"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Send5",
+          "FirstSend",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 725.587158203125,
+          "N": 10,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 655.9027043985268,
+          "ConfidenceUpperNs": 795.2716120077232,
+          "ConfidenceMarginNs": 69.68445380459819,
+          "AllocatedBytes": 576
+        },
+        "candidate": {
+          "MeanNs": 467.9534912109375,
+          "N": 10,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 418.74171022043686,
+          "ConfidenceUpperNs": 517.1652722014381,
+          "ConfidenceMarginNs": 49.211780990500664,
+          "AllocatedBytes": 496
+        },
+        "classification": "improvement",
+        "meanRatioCandidateOverBaseline": 0.6449307790531981,
+        "allocatedBytesDelta": -80,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0015/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "FBA7202D0CA5EE867ED7A8A09019673F86C5627F46102E9CD0F8B367CFCE973F",
+            "bindingSha256": "C4881AFD2E8B84D05748A0AA4A60049285F2C323C95FFC3893916CA92DDE13EC"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0015/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "4AEC50D505303C91458CFA0F8524D1BA09D1CE7F2A5D2599DF524F717FEEA692",
+            "bindingSha256": "FAE807D9B90B870AEA941BD334BD4C42BDF724D5D8F05C9BE1306E5D73D91FE5"
+          }
+        },
+        "meanDeltaNs": -257.6336669921875,
+        "meanDeltaPercent": -35.50692209468019
+      },
+      "reverse": {
+        "case": {
+          "Type": "ZendiatorSend5",
+          "Method": "FirstSend",
+          "Lifetime": "Scoped"
+        },
+        "library": "Zendiator",
+        "comparisonKey": [
+          "Send5",
+          "FirstSend",
+          "Scoped",
+          null,
+          null
+        ],
+        "baseline": {
+          "MeanNs": 631.16455078125,
+          "N": 11,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 610.541482575745,
+          "ConfidenceUpperNs": 651.787618986755,
+          "ConfidenceMarginNs": 20.623068205505028,
+          "AllocatedBytes": 576
+        },
+        "candidate": {
+          "MeanNs": 452.601318359375,
+          "N": 10,
+          "ConfidenceLevel": 12,
+          "ConfidenceLowerNs": 226.37617503004347,
+          "ConfidenceUpperNs": 678.8264616887066,
+          "ConfidenceMarginNs": 226.22514332933153,
+          "AllocatedBytes": 496
+        },
+        "classification": "overlap",
+        "meanRatioCandidateOverBaseline": 0.7170892563581859,
+        "allocatedBytesDelta": -80,
+        "reports": {
+          "baseline": {
+            "reportPath": "baseline/runs/custom/cases/0001/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "84698E132964FFE1F0709B95AE7C7D9D7B8AE7901745EA3467E47BBEFD1C66D8",
+            "bindingSha256": "0D48B1445BD8EB83126D01570B7E163015FAEED61F57F299110ECDA884F31189"
+          },
+          "candidate": {
+            "reportPath": "candidate/runs/custom/cases/0001/attempt-0001/results/Competitive.ZendiatorSend5-report-full.json",
+            "reportSha256": "618FCD66464CEAAB3B9E3F34565BB8065B6229F04661EAFBBAF6089BD4ACAA07",
+            "bindingSha256": "685A931E312E000B3FCAD2B46F695996B7497FD0C32B96015D745C712937A1A4"
+          }
+        },
+        "meanDeltaNs": -178.563232421875,
+        "meanDeltaPercent": -28.291074364181412
+      }
+    }
+  ]
+}
