@@ -22,5 +22,6 @@
     <PackageReference Include="Immediate.Handlers" Version="[4.3.0]" />
     <PackageReference Include="BenchmarkDotNet" Version="[0.15.8]" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.0.12]" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="[10.0.9]" />
   </ItemGroup>
 </Project>

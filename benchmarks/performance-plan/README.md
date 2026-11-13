@@ -27,7 +27,10 @@ The package survey on 2026-11-13 selected these exact stable versions:
 
 MediatR 15.0.0 was released after the improvement plan's survey. The DI container
 is fixed at 10.0.12 and DI abstractions at 10.0.15; the latter accommodates the
-updated Immediate package. Restore and review every project's lock before the
+updated Immediate package. Logging abstractions are fixed at 10.0.9 in all four
+measured projects. The driver checks shared output DLL hashes before timing and
+retains the strict loaded-assembly checks during aggregation.
+Restore and review every project's lock before the
 run. Package pins and source changes do not establish new performance results.
 The 2026-11-11 table used SDK 10.0.403 and older competitor versions, so its
 numbers remain a separate measurement.

@@ -105,6 +105,35 @@ def check_binary_identity(session):
             raise ValueError("Built DLL identity changed")
 
 
+def check_shared_binary_identity(projects, session, resume=False):
+    copies = {}
+    for suite, project in projects.items():
+        root = resolve_path(project / "bin/Release/net10.0")
+        if not filesystem_path(root).is_dir():
+            raise ValueError(f"Missing selected project build output: {suite}: rootPath={root}")
+        for path in glob_paths(root, "*"):
+            if path.suffix.casefold() == ".dll" and filesystem_path(path).is_file():
+                copies.setdefault(path.name.casefold(), {})[suite] = resolve_path(path)
+    shared = {}
+    for name, paths in sorted(copies.items()):
+        if len(paths) < 2:
+            continue
+        shared[name] = {suite: {"rootPath": str(path), "sha256": sha(path)} for suite, path in paths.items()}
+        if len({assembly["sha256"] for assembly in shared[name].values()}) != 1:
+            details = "; ".join(f"{suite}: rootPath={assembly['rootPath']} sha256={assembly['sha256']}"
+                                for suite, assembly in shared[name].items())
+            raise ValueError(f"Shared DLL {name} differs across selected projects: {details}")
+    if resume:
+        previous = session.get("sharedDllPreflight")
+        if not isinstance(previous, dict):
+            raise ValueError("Missing shared DLL preflight identity; cannot resume")
+        if previous != shared:
+            changed = next(name for name in sorted(previous.keys() | shared.keys()) if previous.get(name) != shared.get(name))
+            raise ValueError(f"Shared DLL preflight identity changed; cannot resume: {changed}; "
+                             f"recorded={previous.get(changed)}; current={shared.get(changed)}")
+    session["sharedDllPreflight"] = shared
+
+
 def case_session(row, session, group):
     if "builds" not in session:
         return session
@@ -446,6 +475,8 @@ def main():
                 "generatorSha256": sha(generator) if filesystem_path(generator).exists() else None}
         write_json(output / "session.json", session)
     check_binary_identity(session)
+    check_shared_binary_identity(selected_projects, session, args.resume)
+    write_json(output / "session.json", session)
 
     completed_count = 0
     product_hash = None
