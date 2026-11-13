@@ -181,6 +181,43 @@ routes for typed queries, an update command, synchronous Send, SendAll and Strea
 in one App and DI scope. Each route declares its own pipeline, preserving hook
 order and the wrapper's own caching and retry behavior.
 
+The first `CachedCount<Product>("current")` call reads inventory, encounters one
+deliberate `TransientCountException` in its handler, and succeeds on the wrapper's
+single retry. The second call returns the cached value without invoking the
+handler. The two read-attempt snapshots both show `2`; they are taken before the
+later SendAll routes read the same inventory. The failure is confined to this
+handler. The wrapper retries only while its token is not canceled.
+
+The Stream starts with the named cursor's `int` items. Its stages run in order:
+`KeepEven` filters, `TimesTen` maps, `KeepAtMostForty` filters, and `AsText` maps
+`int` to `string`. `StreamPipeline<ReadNumbers, string>` declares the final type;
+`ReadNumbers` remains `IStreamRequest<int>` because its handler produces integers.
+The generated `StreamAsync` therefore returns `IAsyncEnumerable<string>`.
+
+Run the package-based example from the repository root:
+
+```powershell
+$version = '0.6.0'
+$project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
+
+dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
+dotnet run --project $project -c Release --no-restore -p:ZendiatorPackageVersion=$version
+```
+
+Expected output:
+
+```text
+Product: Keyboard
+Sum: 42
+Cached count: 3
+Read attempts after retry: 2
+Cache hit: 3
+Read attempts after cache hit: 2
+SendAll: 15, 16
+SendAllAsync: 25, 26
+StreamAsync: number=20, number=40
+```
+
 Each route must satisfy the supported contract for its dispatch family. An
 ineligible route blocks generation for the whole App. Compositions containing
 scoped ref-like requests remain outside this scope.
@@ -188,6 +225,47 @@ scoped ref-like requests remain outside this scope.
 This example uses class requests and DI-owned class handlers, hooks and wrappers.
 Await each returned `ValueTask` once. Keep the scope alive until asynchronous
 operations and Stream enumeration, including cleanup, have finished.
+
+### Choose a contract from an existing example
+
+| Purpose | Example and contract |
+|---|---|
+| Transform a request or observe/transform its result | [GettingStarted](../samples/Zendiator.Sample.GettingStarted/Program.cs): `TrimName` and `AddExclamation` are dedicated Send hooks |
+| Retry, cache or short-circuit a call | [ComposedApp](../samples/Zendiator.Sample.ComposedApp/Program.cs): `CountCache` controls zero or multiple continuation calls; `CachedCountHandler` supplies the one deliberate failure |
+| Filter a Stream and change its output type | ComposedApp: ordered Filter/Map hooks and `StreamPipeline<ReadNumbers, string>` |
+| Restrict the routes exposed by a module | [Sample.Application](../samples/Zendiator.Sample.Application/DependencyInjection.cs): `ApplicationStreams` selects only its declared Stream handler and pipeline |
+| Choose an input contract | GettingStarted uses a compiler iterator; ComposedApp retains a named cursor. See [input and lifetime choices](streaming-iterators.md#choose-an-input-contract) |
+
+All examples call a generated `IZendiator` entry. Hooks describe their dedicated
+operation; keep custom continuation control in a wrapper. DI owns borrowed
+handlers and stages, and each example keeps its scope alive through completion
+and disposal. The samples make no performance claim.
+
+### Inspect the generated composition
+
+Keep the existing `$project` and `$version`, and emit the compiler's generated
+files into the project's `obj` directory:
+
+```powershell
+dotnet build $project -c Release --no-restore -p:ZendiatorPackageVersion=$version -p:EmitCompilerGeneratedFiles=true -p:CompilerGeneratedFilesOutputPath=obj/generated
+```
+
+Recursively inspect the current build's generated files under that project's
+`obj/generated`. Search for `ComposedApp.Generated.App` and the handler/stage
+names rather than a fixed hash. Old build outputs can remain in `obj`; check that
+the files belong to the build you just ran.
+
+| Generated file pattern | What to inspect |
+|---|---|
+| `Zendiator.Composition.*.g.cs` | Selected `Handlers`, ordered `Pipeline` / `StreamPipeline`, DI registrations and captured-service storage |
+| `Zendiator.Route.*.g.cs` | The generated facade's request overloads and final Stream item type |
+| `Zendiator.StreamCanonical.*.g.cs` | Cursor ownership and the ordered Stream item transformations |
+
+Follow the generated `Service_`, `GenericService` or `RouteDependencies` members
+when present to identify captured receivers, then compare their DI registrations
+with the [capture rules](#route-local-capture-for-asynchronous-hooks). Native DI
+still owns constructor dependencies and disposal. These filenames and generated
+members are implementation details to inspect, not APIs to call or retain.
 
 ## Repair a missing handler marker
 
