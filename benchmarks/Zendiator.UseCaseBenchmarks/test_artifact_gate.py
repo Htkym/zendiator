@@ -20,13 +20,15 @@ import run_interleaved as driver
 from interleaved_plan import make_plan
 
 
-class ArtifactGateContracts(unittest.TestCase):
+class SyntheticArtifactGateFixture(unittest.TestCase):
+    consumer = "Zendiator.UseCaseBenchmarks"
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        self.project = self.root / "repo/benchmarks/Zendiator.UseCaseBenchmarks"
-        self.build = self.project / "bin/Release/net10.0/Zendiator.UseCaseBenchmarks-1"
+        self.project = self.root / "repo/benchmarks" / self.consumer
+        self.build = self.project / "bin/Release/net10.0" / (self.consumer + "-1")
         self.binaries = self.build / "bin/Release/net10.0"
         self.framework = self.root / "runtime/shared/Microsoft.NETCore.App/10.0.12"
         self.binaries.mkdir(parents=True)
@@ -35,21 +37,22 @@ class ArtifactGateContracts(unittest.TestCase):
         self.host.write_text("synthetic host; never execute")
         for name in ("ArtifactGate.cs", "ArtifactEvidence.cs", "Program.cs", "ChildEvidence.cs", "StructUpstreamGate.cs"):
             (self.project / name).write_text("synthetic implementation fingerprint")
-        self.generated_project = self.build / "Zendiator.UseCaseBenchmarks-1.csproj"
-        self.generated_source = self.build / "Zendiator.UseCaseBenchmarks-1.notcs"
+        self.generated_project = self.build / (self.consumer + "-1.csproj")
+        self.generated_source = self.build / (self.consumer + "-1.notcs")
         self.generated_project.write_text("<Project />")
         self.generated_source.write_text("synthetic BDN host StartupObject")
         self.session = {"sessionId": "session-A", "revision": "revision-A", "sourceDigest": "source-A",
                         "sdk": "10.0.401", "artifactGateProtocol": gate.PROTOCOL}
         self.loads = []
-        names = sorted(gate.REQUIRED | {"MediatR", "MediatR.Contracts", "Zendiator.UseCaseBenchmarks-1"})
+        names = sorted((gate.REQUIRED - {"Zendiator.UseCaseBenchmarks"}) |
+                       {self.consumer, "MediatR", "MediatR.Contracts", self.consumer + "-1"})
         for name in names:
             path = (self.framework if name == "System.Private.CoreLib" else self.binaries) / (name + ".dll")
             path.write_text("synthetic DLL: " + name)
             self.loads.append({"name": name, "fullName": name + ", Version=0.3.0.0",
                                "path": str(path), "mvid": str(uuid.uuid5(uuid.NAMESPACE_DNS, name)), "sha256": gate.sha(path)})
-        self.runtime_config = self.binaries / "Zendiator.UseCaseBenchmarks-1.runtimeconfig.json"
-        self.deps = self.binaries / "Zendiator.UseCaseBenchmarks-1.deps.json"
+        self.runtime_config = self.binaries / (self.consumer + "-1.runtimeconfig.json")
+        self.deps = self.binaries / (self.consumer + "-1.deps.json")
         self.framework_deps = self.framework / "Microsoft.NETCore.App.deps.json"
         gate.write(self.runtime_config, {"runtimeOptions": {"framework": {"name": "Microsoft.NETCore.App", "version": "10.0.0"}}})
         gate.write(self.deps, {"targets": {"synthetic": {}}})
@@ -65,9 +68,11 @@ class ArtifactGateContracts(unittest.TestCase):
                         "controls": {name: None for name in gate.CONTROLS}}
         self.gate_calls = []
 
-    def case(self, ordinal=1, type="ZendiatorNotification1", pid=111, results=None):
+    def case(self, ordinal=1, type="ZendiatorNotification1", pid=111, results=None, method="Dispatch", project=None):
         row = {"Library": "Zendiator" if type.startswith("Zendiator") else "MediatRHistorical",
-               "Case": {"Type": type, "Method": "Dispatch"}}
+               "Case": {"Type": type, "Method": method}}
+        if project is not None:
+            row["Case"]["Project"] = project
         results = results if results is not None else self.root / "results"
         attempt = results / f"runs/custom/cases/{ordinal:04d}/attempt-0001"
         gate.filesystem_path(attempt).mkdir(parents=True)
@@ -80,18 +85,31 @@ class ArtifactGateContracts(unittest.TestCase):
                  "assemblies": copy.deepcopy(self.loads)}
         gate.write(attempt / f"loaded-final-{pid}.json", final)
         gate.write(attempt / "build-artifacts.json", {"schemaVersion": 1, "reports": [{
-            "type": type, "method": "Dispatch", "buildSuccess": True, "paths": {
+            "type": type, "method": method, "buildSuccess": True, "paths": {
                 "buildArtifactsDirectoryPath": str(self.build), "binariesDirectoryPath": str(self.binaries),
                 "projectFilePath": str(self.generated_project), "programCodePath": str(self.generated_source),
-                "executablePath": str(self.binaries / "Zendiator.UseCaseBenchmarks-1.dll")}}]})
+                "executablePath": str(self.binaries / (self.consumer + "-1.dll"))}}]})
         return row, attempt
 
-    def mocked_gate(self, args, log, env, cwd):
+    def mocked_gate(self, args, log, env, cwd, usecase=False):
         # Supply a synthetic proof. Actual saved-consumer activation is covered by the authorized smoke.
         self.gate_calls.append(args)
         request_path = Path(args[-1])
         request = gate.read(request_path)
         outcomes = Path(request["output"]) / "correctness.json"
+        if request.get("benchmarkSuite", "usecase") != "usecase" and not usecase:
+            rows = [dict(status="Passed", type="Competitive.ShortCircuit." + name + "ShortCircuit", method="WarmDispatch")
+                    for name in ("Zendiator", "Immediate", "MediatR", "Mediator", "DispatchR", "Foundatio")]
+            gate.write(outcomes, rows)
+            gate.write(outcomes.parent / "details.json", {"fixture": "six native short-circuit entries"})
+            proof = {key: request[key] for key in ("protocol", "session", "case", "childPid", "childProofSha256",
+                     "gateImplementationSha256", "gateDriverSha256", "bundleFiles", "consumerName", "benchmarkSuite")}
+            proof.update(schemaVersion=1, benchmarkGateCases=6, requestHash=gate.sha(request_path),
+                         correctnessSha256=gate.sha(outcomes), bundleBeforeAndAfterVerified=True,
+                         assemblies=request["expectedAssemblies"], runtimeEvidence=request["expectedRuntime"],
+                         semanticFiles=gate.tree_hashes(outcomes.parent))
+            gate.write(outcomes.parent / "artifact-proof.json", proof)
+            return
         gate.write(outcomes, [{"status": "Passed"} for _ in range(389)])
         proof = {key: request[key] for key in ("protocol", "session", "case", "childPid", "childProofSha256",
                  "gateImplementationSha256", "gateDriverSha256", "bundleFiles")}
@@ -107,7 +125,7 @@ class ArtifactGateContracts(unittest.TestCase):
                                ("Stream0", "Stream5", "Relay5"), (0, 1, 16, 1024), (False, True), (False, True), (False, True))])
         gate.write(types, [dict(Type=name, Library="Zendiator", Cases=56) for name in
                            ("ZendiatorStructUpstreamStream0", "ZendiatorStructUpstreamStream5", "ZendiatorStructUpstreamRelay5")])
-        implementation = request["structUpstreamGateImplementationSha256"]
+        implementation = request["structUpstreamGateImplementationSha256"] or "A" * 64
         proof.update(structUpstreamGateImplementationSha256=implementation,
                      structUpstreamGate=dict(schemaVersion=1, cases=96, driverTypes=3, implementationSha256=implementation,
                          correctnessPath="struct-upstream/struct-upstream-correctness.json", correctnessSha256=gate.sha(cases),
@@ -118,6 +136,8 @@ class ArtifactGateContracts(unittest.TestCase):
         return gate.ensure_artifact_gate(row, attempt, self.session, self.project, self.mocked_gate,
                                         lambda: {"COLD_SKIP_GATE": "1"})
 
+
+class ArtifactGateContracts(SyntheticArtifactGateFixture):
     def test_missing_post_workload_snapshot_is_rejected(self):
         row, attempt = self.case()
         next(attempt.glob("loaded-final-*.json")).unlink()
@@ -453,6 +473,150 @@ class ArtifactGateContracts(unittest.TestCase):
         gate.write(binding_path, binding)
         with self.assertRaisesRegex(ValueError, "proof"):
             gate.check_artifact_binding(row, attempt, self.session, self.project)
+
+
+class SupplementalArtifactGateContracts(SyntheticArtifactGateFixture):
+    consumer = "ShortCircuitComparison"
+
+    def setUp(self):
+        super().setUp()
+        names = ("ArtifactGate.cs", "ArtifactEvidence.cs", "ChildEvidence.cs", "BenchmarkGate.cs",
+                 "MeasurementProgram.cs", "RuntimeEvidence.cs")
+        for name in names:
+            (self.project / name).write_text("synthetic supplemental implementation: " + name)
+        self.enterContext(patch.object(gate, "implementation_files",
+                                      return_value={name: self.project / name for name in names}))
+
+    def case(self, ordinal=1, type="ZendiatorShortCircuit", pid=111, results=None):
+        return super().case(ordinal, type, pid, results, method="WarmDispatch", project="short")
+
+    def test_saved_auxiliary_consumer_proves_its_suite_and_preserves_loaded_map(self):
+        row, attempt = self.case()
+        result = self.validate(row, attempt)
+        self.assertEqual(gate.check_artifact_binding(row, attempt, self.session, self.project), result)
+        request = gate.read(attempt / "artifact-gate-request.json")
+        proof = gate.read(Path(request["output"]) / "artifact-proof.json")
+        self.assertEqual((request["consumerName"], request["benchmarkSuite"], request["benchmarkGateCases"]),
+                         (self.consumer, "short", 6))
+        self.assertEqual((proof["consumerName"], proof["benchmarkSuite"], proof["benchmarkGateCases"]),
+                         (self.consumer, "short", 6))
+        loaded = {item["name"]: item for item in request["expectedAssemblies"]}
+        self.assertEqual(loaded.keys(), {item["name"] for item in self.loads})
+        self.assertIn(self.consumer + "-1", loaded)
+        self.assertTrue((gate.REQUIRED - {"Zendiator.UseCaseBenchmarks"}) | {self.consumer} <= loaded.keys())
+        self.assertTrue(gate.within(request["consumerPath"], attempt / "bundle"))
+        self.assertEqual(gate.sha(request["consumerPath"]), loaded[self.consumer]["sha256"])
+        self.assertEqual(set(proof["semanticFiles"]), {"correctness.json", "details.json"})
+        self.assertNotIn("structUpstreamGate", proof)
+        self.assertEqual(self.gate_calls[0][-3:], [request["consumerPath"], "--artifact-gate",
+                                                 str(attempt / "artifact-gate-request.json")])
+
+    def test_auxiliary_request_and_proof_suite_count_or_consumer_substitution_is_rejected(self):
+        row, attempt = self.case()
+        self.validate(row, attempt)
+        request_path = attempt / "artifact-gate-request.json"
+        original_request = gate.read(request_path)
+        proof_path = Path(original_request["output"]) / "artifact-proof.json"
+        original_proof = gate.read(proof_path)
+        for target, key in itertools.product(("request", "proof"),
+                                             ("benchmarkSuite", "benchmarkGateCases", "consumerName")):
+            replacements = {"benchmarkSuite": "hooks", "benchmarkGateCases": 18, "consumerName": "HPeerComparison"}
+            with self.subTest(target=target, key=key):
+                request, proof = copy.deepcopy(original_request), copy.deepcopy(original_proof)
+                (request if target == "request" else proof)[key] = replacements[key]
+                gate.write(request_path, request)
+                proof["requestHash"] = gate.sha(request_path)
+                gate.write(proof_path, proof)
+                with self.assertRaises(ValueError):
+                    gate.verify_gate(request_path, proof_path)
+        gate.write(request_path, original_request)
+        gate.write(proof_path, original_proof)
+
+    def test_auxiliary_missing_changed_or_unbound_semantic_details_are_rejected(self):
+        row, attempt = self.case()
+        self.validate(row, attempt)
+        request_path = attempt / "artifact-gate-request.json"
+        proof_path = Path(gate.read(request_path)["output"]) / "artifact-proof.json"
+        details = proof_path.parent / "details.json"
+        original_proof, original_details = gate.read(proof_path), gate.read(details)
+        for mutation in ("missing-file", "changed-file", "unbound-file"):
+            with self.subTest(mutation=mutation):
+                proof = copy.deepcopy(original_proof)
+                gate.write(details, original_details)
+                if mutation == "missing-file":
+                    details.unlink()
+                elif mutation == "changed-file":
+                    gate.write(details, {"fixture": "substituted semantic work"})
+                else:
+                    proof["semanticFiles"].pop("details.json")
+                gate.write(proof_path, proof)
+                with self.assertRaisesRegex(ValueError, "semantic details"):
+                    gate.verify_gate(request_path, proof_path)
+        gate.write(details, original_details)
+        gate.write(proof_path, original_proof)
+
+    def test_rehashed_auxiliary_correctness_must_pass_and_cover_the_measured_method(self):
+        row, attempt = self.case()
+        self.validate(row, attempt)
+        request_path = attempt / "artifact-gate-request.json"
+        proof_path = Path(gate.read(request_path)["output"]) / "artifact-proof.json"
+        outcomes = proof_path.parent / "correctness.json"
+        original_proof, original_outcomes = gate.read(proof_path), gate.read(outcomes)
+        for mutation in ("missing-case", "failed-case", "wrong-type", "wrong-method", "wrong-parameters"):
+            with self.subTest(mutation=mutation):
+                proof, rows = copy.deepcopy(original_proof), copy.deepcopy(original_outcomes)
+                if mutation == "missing-case":
+                    rows.pop()
+                elif mutation == "failed-case":
+                    rows[0]["status"] = "Failed"
+                elif mutation == "wrong-type":
+                    rows[0]["type"] = "Competitive.ShortCircuit.UnmeasuredEntry"
+                elif mutation == "wrong-method":
+                    rows[0]["method"] = "UnmeasuredMethod"
+                else:
+                    rows[0]["parameters"] = {"Count": 16}
+                gate.write(outcomes, rows)
+                proof["correctnessSha256"] = gate.sha(outcomes)
+                proof["semanticFiles"]["correctness.json"] = gate.sha(outcomes)
+                gate.write(proof_path, proof)
+                with self.assertRaisesRegex(ValueError, "semantic gate|does not cover"):
+                    gate.verify_gate(request_path, proof_path)
+        gate.write(outcomes, original_outcomes)
+        gate.write(proof_path, original_proof)
+
+    def test_auxiliary_child_requires_its_consumer_and_product_di_bindings(self):
+        required = (gate.REQUIRED - {"Zendiator.UseCaseBenchmarks"}) | {self.consumer}
+        for ordinal, missing in enumerate(sorted(required), 1):
+            with self.subTest(missing=missing):
+                row, attempt = self.case(ordinal)
+                setup_path = attempt / "child-setup.json"
+                setup = gate.read(setup_path)
+                setup["assemblies"] = [item for item in setup["assemblies"] if item["name"] != missing]
+                gate.write(setup_path, setup)
+                final_path = next(attempt.glob("loaded-final-*.json"))
+                final = gate.read(final_path)
+                final["assemblies"] = [item for item in final["assemblies"] if item["name"] != missing]
+                final["initialEvidenceSha256"] = gate.sha(setup_path)
+                gate.write(final_path, final)
+                with self.assertRaisesRegex(ValueError, "mandatory child bindings"):
+                    self.validate(row, attempt)
+        self.assertFalse(self.gate_calls)
+
+    def test_389_plus_96_proof_cannot_be_relabelled_as_a_six_case_auxiliary_suite(self):
+        row, attempt = self.case()
+
+        def legacy_proof(args, log, env, cwd):
+            self.mocked_gate(args, log, env, cwd, usecase=True)
+            request = gate.read(args[-1])
+            proof_path = Path(request["output"]) / "artifact-proof.json"
+            proof = gate.read(proof_path)
+            proof.update(consumerName=self.consumer, benchmarkSuite="short")
+            self.assertEqual((proof["benchmarkGateCases"], proof["structUpstreamGate"]["cases"]), (389, 96))
+            gate.write(proof_path, proof)
+
+        with self.assertRaisesRegex(ValueError, "proof is incomplete"):
+            gate.ensure_artifact_gate(row, attempt, self.session, self.project, legacy_proof, lambda: {})
+        self.assertFalse((attempt / "artifact-binding.json").exists())
 
 
 if __name__ == "__main__":

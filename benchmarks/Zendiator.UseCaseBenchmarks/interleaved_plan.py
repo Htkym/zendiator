@@ -14,21 +14,33 @@ from pathlib import Path
 from artifact_gate import filesystem_path, read
 
 
-LIBRARIES = ("Zendiator", "MediatRHistorical", "Mediator", "DispatchR", "Immediate")
-FIELDS = ("Type", "Method", "Lifetime", "Count", "Asynchronous")
+LIBRARIES = ("Zendiator", "MediatRHistorical", "Mediator", "DispatchR", "Immediate", "Foundatio")
+FIELDS = ("Type", "Method", "Lifetime", "Count", "Asynchronous", "Project")
+PROJECTS = ("usecase", "hooks", "short", "foundatio")
+HOOK_TYPES = {f"H{name}Benchmarks": name for name in LIBRARIES}
+SHORT_TYPES = {f"{name}ShortCircuit": name for name in LIBRARIES if name != "MediatRHistorical"}
+SHORT_TYPES["MediatRShortCircuit"] = "MediatRHistorical"
 BENCHMARK = re.compile(r"^// Benchmark: ([^.]+)\.([^:]+):.*?(?: \[([^]]+)\])?$")
 
 
 def library(case):
-    matches = [name for name in LIBRARIES if case["Type"].startswith(name)]
+    name = normalize_case(case)["Type"]
+    if name in HOOK_TYPES:
+        return HOOK_TYPES[name]
+    if name in SHORT_TYPES:
+        return SHORT_TYPES[name]
+    matches = [prefix for prefix in LIBRARIES if name.startswith(prefix)]
     if len(matches) != 1:
         raise ValueError(f"Cannot identify one library for {case!r}")
     return matches[0]
 
 
 def comparison_key(case):
+    case = normalize_case(case)
+    name = case["Type"]
+    family = "Hooks" if name in HOOK_TYPES else "ShortCircuit" if name in SHORT_TYPES else name[len(library(case)):]
     return (
-        case["Type"][len(library(case)) :],
+        family,
         case["Method"],
         case.get("Lifetime"),
         case.get("Count"),
@@ -40,11 +52,23 @@ def normalize_case(case):
     if not isinstance(case, dict) or any(not isinstance(case.get(field), str) or not case[field]
                                          for field in ("Type", "Method")):
         raise ValueError("Matrix cases require nonempty Type and Method strings")
+    if set(case) - set(FIELDS):
+        raise ValueError(f"Unknown matrix case fields: {sorted(set(case) - set(FIELDS))}")
+    project = case.get("Project")
+    if project is not None and project not in PROJECTS:
+        raise ValueError(f"Unknown benchmark Project: {project!r}")
+    name = case["Type"]
+    expected = ("hooks" if name in HOOK_TYPES else "short" if name in SHORT_TYPES
+                else "foundatio" if name.startswith("Foundatio") else "usecase")
+    if (project or "usecase") != expected:
+        raise ValueError(f"Benchmark type {name!r} requires Project {expected!r}")
     # C# MatrixCase treats omitted and explicit-null optional parameters identically.
-    return {name: value for name, value in case.items() if name not in FIELDS[2:] or value is not None}
+    return {name: value for name, value in case.items()
+            if (name not in FIELDS[2:] or value is not None) and not (name == "Project" and value == "usecase")}
 
 
 def identity(case):
+    case = normalize_case(case)
     return tuple(case.get(field) for field in FIELDS)
 
 
@@ -98,6 +122,10 @@ def verify_log(plan, path):
     if len(actual) != len(expected):
         raise ValueError(f"Log has {len(actual)} cases; plan has {len(expected)}")
     for ordinal, (want, got) in enumerate(zip(expected, actual), 1):
+        # BDN identifies the type and parameters; the selected project is a parent-driver control.
+        want = normalize_case(want)
+        if "Project" in want:
+            got["Project"] = want["Project"]
         if identity(want) != identity(got):
             raise ValueError(f"Execution order mismatch at {ordinal}: expected {want!r}; logged {got!r}")
 

@@ -26,7 +26,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6.0.0
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.403
+            10.0.x
 
       - name: Record validation environment
         shell: pwsh
@@ -41,10 +43,25 @@ jobs:
       - name: Restore
         run: dotnet restore Zendiator.slnx
 
+      - name: Restore supplemental benchmark fixtures
+        shell: pwsh
+        run: |
+          foreach ($name in 'HPeerComparison', 'ShortCircuitComparison', 'FoundatioReleaseComparison') {
+            dotnet restore "benchmarks/$name/$name.csproj" --locked-mode -p:ZendiatorFormalMeasurement=true
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
       - name: Verify tracked package locks
         shell: pwsh
         run: |
-          git diff --exit-code -- benchmarks/Zendiator.UseCaseBenchmarks/packages.lock.json benchmarks/Zendiator.BeforeRelayBenchmarks/packages.lock.json
+          $locks = @(
+            'benchmarks/Zendiator.UseCaseBenchmarks/packages.lock.json'
+            'benchmarks/Zendiator.BeforeRelayBenchmarks/packages.lock.json'
+            'benchmarks/HPeerComparison/packages.lock.json'
+            'benchmarks/ShortCircuitComparison/packages.lock.json'
+            'benchmarks/FoundatioReleaseComparison/packages.lock.json'
+          )
+          git diff --exit-code -- $locks
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build
@@ -55,7 +72,30 @@ jobs:
 
       - name: Validate use-case benchmark fixtures
         working-directory: benchmarks/Zendiator.UseCaseBenchmarks
-        run: dotnet ./bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll --validate-only
+        shell: pwsh
+        run: |
+          dotnet ./bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll --validate-only
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $output = Join-Path $env:RUNNER_TEMP ('zendiator-struct-gate-' + [Guid]::NewGuid().ToString('N'))
+          dotnet ./bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll --validate-struct-upstream $output
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build and validate supplemental benchmark fixtures
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($name in 'HPeerComparison', 'ShortCircuitComparison', 'FoundatioReleaseComparison') {
+            dotnet build "benchmarks/$name/$name.csproj" -c Release --no-restore -p:ZendiatorFormalMeasurement=true
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $env:COLD_RUN = Join-Path $env:RUNNER_TEMP ("zendiator-semantic-$name-" + [Guid]::NewGuid().ToString('N'))
+            Push-Location "benchmarks/$name"
+            try {
+              dotnet "./bin/Release/net10.0/$name.dll" --validate-only
+              if ($LASTEXITCODE -ne 0) { throw "Supplemental semantic gate failed: $name" }
+            } finally {
+              Pop-Location
+            }
+          }
 
       - name: Run Stream Before example
         working-directory: benchmarks/Zendiator.BeforeRelayBenchmarks

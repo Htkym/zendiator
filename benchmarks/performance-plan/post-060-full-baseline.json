@@ -1,0 +1,683 @@
+[
+  {
+    "Type": "ZendiatorSend0",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend0",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend0",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend0",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend0",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "FoundatioSend0",
+    "Method": "Typed",
+    "Lifetime": "Scoped",
+    "Project": "foundatio"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend5",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend5",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend5",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend5",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "FoundatioSend5",
+    "Method": "Typed",
+    "Lifetime": "Scoped",
+    "Project": "foundatio"
+  },
+  {
+    "Type": "ZendiatorSend0",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend0",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend0",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend0",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend0",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "FoundatioSend0",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped",
+    "Project": "foundatio"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend5",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend5",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend5",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend5",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "FoundatioSend5",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped",
+    "Project": "foundatio"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend5",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatRHistoricalSend5",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "MediatorSend5",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "DispatchRSend5",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "FoundatioSend5",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped",
+    "Project": "foundatio"
+  },
+  {
+    "Type": "ZendiatorNotification16",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatRHistoricalNotification16",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "MediatorNotification16",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "DispatchRNotification16",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "FoundatioNotification16",
+    "Method": "Dispatch",
+    "Project": "foundatio"
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "FoundatioStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false,
+    "Project": "foundatio"
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "FoundatioStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true,
+    "Project": "foundatio"
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "FoundatioStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false,
+    "Project": "foundatio"
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "FoundatioStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true,
+    "Project": "foundatio"
+  },
+  {
+    "Type": "ZendiatorShortCircuit",
+    "Method": "WarmDispatch",
+    "Project": "short"
+  },
+  {
+    "Type": "ImmediateShortCircuit",
+    "Method": "WarmDispatch",
+    "Project": "short"
+  },
+  {
+    "Type": "MediatRShortCircuit",
+    "Method": "WarmDispatch",
+    "Project": "short"
+  },
+  {
+    "Type": "MediatorShortCircuit",
+    "Method": "WarmDispatch",
+    "Project": "short"
+  },
+  {
+    "Type": "DispatchRShortCircuit",
+    "Method": "WarmDispatch",
+    "Project": "short"
+  },
+  {
+    "Type": "FoundatioShortCircuit",
+    "Method": "WarmDispatch",
+    "Project": "short"
+  },
+  {
+    "Type": "HZendiatorBenchmarks",
+    "Method": "FirstSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HImmediateBenchmarks",
+    "Method": "FirstSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HMediatRHistoricalBenchmarks",
+    "Method": "FirstSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HMediatorBenchmarks",
+    "Method": "FirstSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HDispatchRBenchmarks",
+    "Method": "FirstSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HFoundatioBenchmarks",
+    "Method": "FirstSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HZendiatorBenchmarks",
+    "Method": "WarmSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HImmediateBenchmarks",
+    "Method": "WarmSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HMediatRHistoricalBenchmarks",
+    "Method": "WarmSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HMediatorBenchmarks",
+    "Method": "WarmSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HDispatchRBenchmarks",
+    "Method": "WarmSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HFoundatioBenchmarks",
+    "Method": "WarmSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HZendiatorBenchmarks",
+    "Method": "ColdOuterFailure",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HImmediateBenchmarks",
+    "Method": "ColdOuterFailure",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HMediatRHistoricalBenchmarks",
+    "Method": "ColdOuterFailure",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HMediatorBenchmarks",
+    "Method": "ColdOuterFailure",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HDispatchRBenchmarks",
+    "Method": "ColdOuterFailure",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HFoundatioBenchmarks",
+    "Method": "ColdOuterFailure",
+    "Project": "hooks"
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "FoundatioStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true,
+    "Project": "foundatio"
+  },
+  {
+    "Type": "ZendiatorRelay5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateRelay5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalRelay5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorRelay5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRRelay5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "FoundatioRelay5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true,
+    "Project": "foundatio"
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "FoundatioStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false,
+    "Project": "foundatio"
+  },
+  {
+    "Type": "ZendiatorRelay5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateRelay5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatRHistoricalRelay5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatRHistoricalRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "MediatorRelay5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "MediatorRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "DispatchRRelay5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "DispatchRRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "FoundatioRelay5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false,
+    "Project": "foundatio"
+  },
+  {
+    "Type": "FoundatioRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false,
+    "Project": "foundatio"
+  },
+  {
+    "Type": "FoundatioRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true,
+    "Project": "foundatio"
+  },
+  {
+    "Type": "ZendiatorSend0",
+    "Method": "FirstSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "FirstSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  }
+]

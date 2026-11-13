@@ -1,0 +1,139 @@
+using System.Reflection;
+using System.Text.Json;
+using BenchmarkDotNet.Configs;
+using BenchmarkDotNet.Exporters.Json;
+using BenchmarkDotNet.Filters;
+using BenchmarkDotNet.Jobs;
+using BenchmarkDotNet.Running;
+using Microsoft.Extensions.DependencyInjection;
+using Perfolizer.Horology;
+using Competitive;
+using Competitive.FoundatioRelease;
+using Competitive.ReleaseValidation;
+
+internal static class Program
+{
+    public static async Task<int> Main(string[] args)
+    {
+        try
+        {
+            if (args is ["--list", "flat"])
+            {
+                BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
+                return 0;
+            }
+            FoundatioRuntimeEvidence.VerifyRuntime();
+            if (args is ["--validate", var historicalValidationOutput])
+            {
+                Environment.SetEnvironmentVariable("ROOT_V8_HOST_MODE", "semantic-only");
+                Environment.SetEnvironmentVariable("COLD_CAPTURE_CHILD", "0");
+                await HPeerValidation.Run(Path.GetFullPath(historicalValidationOutput)).ConfigureAwait(false);
+                string raw = Path.GetFullPath(historicalValidationOutput);
+                ArtifactEvidence.Write(raw + ".preparation.json", new
+                {
+                    schemaVersion = 1, phase = "completed-legacy-semantic-gate", passed = true,
+                    action = "HistoricalHPeerValidation", runtime = "10.0.14", di = "10.0.12",
+                    rawEvidence = new[] { new { path = raw, sha256 = ArtifactEvidence.Hash(raw), bytes = new FileInfo(raw).Length } },
+                    binding = FoundatioRuntimeEvidence.Capture("same-process-after-complete-h-peer-gate-no-timing")
+                });
+                return 0;
+            }
+            if (args is ["--binding-only", var bindingOutput])
+            {
+                Environment.SetEnvironmentVariable("ROOT_V8_HOST_MODE", "binding-only");
+                using var provider = HFoundatioRegistrationCandidate.Create(new HWork());
+                using var scope = provider.CreateScope();
+                _ = scope.ServiceProvider.GetRequiredService<Foundatio.Mediator.IMediator>();
+                ArtifactEvidence.Write(bindingOutput, FoundatioRuntimeEvidence.Capture("binding-only-no-workload"));
+                return 0;
+            }
+            if (args is ["--validate-only", var validationOutput])
+            {
+                Environment.SetEnvironmentVariable("ROOT_V8_HOST_MODE", "semantic-only");
+                Environment.SetEnvironmentVariable("COLD_CAPTURE_CHILD", "0");
+                var records = new { foundatioTimingPaths = await HFoundatioBenchmarks.ValidateTimingPathsAsync().ConfigureAwait(false),
+                    allPeersTiming = await HAllPeersTimingAdmission.RunAsync().ConfigureAwait(false),
+                    allPeersPriority = await HAllPeersPriorityAdmission.RunAsync().ConfigureAwait(false) };
+                ArtifactEvidence.Write(validationOutput, new
+                {
+                    schemaVersion = 1, phase = "new-semantic-gate", passed = true,
+                    runtime = "10.0.14", di = "10.0.12", newSemanticGate = true,
+                    semanticRecords = records,
+                    binding = FoundatioRuntimeEvidence.Capture("semantic-post-run-no-timing")
+                });
+                return 0;
+            }
+            if (args is ["--run", var requestPath, var output])
+                return RunAdmitted(requestPath, output);
+            throw new ArgumentException("Use --validate-only OUT, --binding-only OUT, --list flat, or admitted --run REQUEST OUTDIR");
+        }
+        catch (Exception failure)
+        {
+            Console.Error.WriteLine(failure);
+            return 1;
+        }
+    }
+
+    private static int RunAdmitted(string requestPath, string output)
+    {
+        requestPath = Path.GetFullPath(requestPath);
+        output = Path.GetFullPath(output);
+        if (Directory.Exists(output) || File.Exists(output))
+            throw new InvalidOperationException("Cell output must be a new path");
+        var request = FoundatioRuntimeEvidence.Admit(requestPath);
+        FoundatioRuntimeEvidence.VerifyRootHostPins(request);
+        var target = typeof(Program).Assembly.GetType(request.Type, throwOnError: true)!;
+        if (!target.IsClass || target.IsAbstract || target.GetMethod(request.Method, BindingFlags.Instance | BindingFlags.Public) is null)
+            throw new InvalidOperationException("Requested concrete benchmark method is absent");
+        Directory.CreateDirectory(output);
+        Environment.SetEnvironmentVariable("ROOT_V8_HOST_MODE", "timing-child");
+        Environment.SetEnvironmentVariable("ROOT_V8_CELL_REQUEST", requestPath);
+        Environment.SetEnvironmentVariable("ROOT_V8_CELL_OUTPUT", output);
+        Environment.SetEnvironmentVariable("COLD_CAPTURE_CHILD", "1");
+        Environment.SetEnvironmentVariable("COLD_EVIDENCE_DIR", output);
+        Environment.SetEnvironmentVariable("COLD_EXPECT_Z_SHA", null);
+        Environment.SetEnvironmentVariable("RuntimeFrameworkVersion", "10.0.14");
+        Environment.SetEnvironmentVariable("RollForward", "Disable");
+        var job = Job.Default.WithId(request.Job).WithWarmupCount(20).WithIterationCount(12)
+            .WithIterationTime(TimeInterval.FromMilliseconds(500)).WithLaunchCount(1)
+            .WithAffinity(new IntPtr(1));
+        if (request.InvocationCount is 16384) job = job.WithInvocationCount(16384).WithUnrollFactor(1);
+        job = V8BuildValidatedToolchain.WrapJob(job, requestPath, request.ExpectedBindingManifestPath);
+        var config = DefaultConfig.Instance.AddJob(job).AddExporter(JsonExporter.Full)
+            .WithArtifactsPath(output).WithOptions(ConfigOptions.KeepBenchmarkFiles)
+            .AddFilter(new SimpleFilter(benchmark =>
+                benchmark.Descriptor.Type.FullName == request.Type &&
+                benchmark.Descriptor.WorkloadMethod.Name == request.Method &&
+                FoundatioRuntimeEvidence.Equal(JsonSerializer.SerializeToElement(
+                    benchmark.Parameters.Items.ToDictionary(item => item.Name, item => item.Value)),
+                    JsonSerializer.SerializeToElement(request.Parameters))));
+        var summary = BenchmarkRunner.Run(target, config);
+        ArtifactEvidence.Write(Path.Combine(output, "build-artifacts.json"), new
+        {
+            reports = summary.Reports.Select(report => new
+            {
+                type = report.BenchmarkCase.Descriptor.Type.FullName,
+                method = report.BenchmarkCase.Descriptor.WorkloadMethod.Name,
+                isBuildSuccess = report.BuildResult.IsBuildSuccess,
+                paths = report.BuildResult.ArtifactsPaths
+            }).ToArray()
+        });
+        ArtifactEvidence.Write(Path.Combine(output, "outcome.json"), new
+        {
+            cases = summary.Reports.Length,
+            failures = summary.Reports.Count(report => !report.Success),
+            validationErrors = summary.HasCriticalValidationErrors ? 1 : 0
+        });
+        FoundatioRuntimeEvidence.VerifyRootHostPins(request);
+        if (summary.HasCriticalValidationErrors || summary.Reports.Length != 1 ||
+            summary.Reports.Any(report => !report.Success))
+            throw new InvalidOperationException("Expected exactly one successful admitted BDN case");
+        ArtifactEvidence.Write(Path.Combine(output, "host-return.json"), new
+        {
+            schemaVersion = 1, phase = "bdn-host-return", request.CaseId, validReportCount = summary.Reports.Length,
+            sourcePinsRecheckedOutsideTiming = true,
+            note = "Parent collector still requires exact actual-child setup/final, Execute ID and interceptor proof"
+        });
+        return 0;
+    }
+}

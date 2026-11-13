@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Competitive.ShortCircuit</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Zendiator.Generated.Interceptors;Foundatio.Mediator</InterceptorsNamespaces>
+    <DefineConstants>$(DefineConstants);SUPPLEMENTAL_BENCHMARK</DefineConstants>
+    <DefineConstants Condition="'$(ShortConstructionDiagnostics)' == 'true'">$(DefineConstants);SHORT_CONSTRUCTION_DIAGNOSTICS</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Zendiator/Zendiator.csproj" />
+    <ProjectReference Include="../../src/Zendiator.SourceGenerator/Zendiator.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <Compile Include="../Measurement/MeasurementProgram.cs" Link="MeasurementProgram.cs" />
+    <Compile Include="../Measurement/RuntimeEvidence.cs" Link="RuntimeEvidence.cs" />
+    <Compile Include="../Zendiator.UseCaseBenchmarks/ArtifactEvidence.cs" Link="ArtifactEvidence.cs" />
+    <Compile Include="../Zendiator.UseCaseBenchmarks/ChildEvidence.cs" Link="ChildEvidence.cs" />
+    <Compile Include="../Zendiator.UseCaseBenchmarks/ArtifactGate.cs" Link="ArtifactGate.cs" />
+    <PackageReference Include="MediatR" Version="[15.0.0]" />
+    <PackageReference Include="Mediator.SourceGenerator" Version="[3.0.2]" PrivateAssets="all" />
+    <PackageReference Include="Mediator.Abstractions" Version="[3.0.2]" />
+    <PackageReference Include="DispatchR.Mediator" Version="[2.3.1]" />
+    <PackageReference Include="DispatchR.Mediator.Abstractions" Version="[2.3.1]" />
+    <PackageReference Include="Immediate.Handlers" Version="[4.3.0]" />
+    <PackageReference Include="Foundatio.Mediator" Version="[1.3.3]" />
+    <PackageReference Include="Foundatio.Mediator.Abstractions" Version="[1.3.3]" />
+    <PackageReference Include="BenchmarkDotNet" Version="[0.15.8]" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.0.12]" />
+  </ItemGroup>
+</Project>
