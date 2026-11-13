@@ -14,7 +14,8 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import run_interleaved as driver
 import run_ab as ab
@@ -481,6 +482,66 @@ class SendDiagnosticContracts(unittest.TestCase):
 
 
 class ProcessIdentityContracts(unittest.TestCase):
+    def windows_snapshot_api(self, creation_time, exit_code):
+        from ctypes import wintypes as w
+        api = Mock(spec=("OpenProcess", "GetProcessTimes", "GetExitCodeProcess", "CloseHandle"))
+        api.OpenProcess.return_value = 12345
+        api.OpenProcess.side_effect = lambda rights, inherit, pid: api.OpenProcess.return_value if rights == 0x1000 else 0
+        def times(handle, creation, exit_time, kernel, user):
+            value = owned_process.ctypes.cast(creation, owned_process.ctypes.POINTER(w.FILETIME)).contents
+            value.dwHighDateTime, value.dwLowDateTime = creation_time >> 32, creation_time & 0xffffffff
+            return 1
+        def status(handle, exit_pointer):
+            owned_process.ctypes.cast(exit_pointer, owned_process.ctypes.POINTER(w.DWORD)).contents.value = exit_code
+            return 1
+        api.GetProcessTimes.side_effect = times
+        api.GetExitCodeProcess.side_effect = status
+        api.CloseHandle.return_value = 1
+        return api
+
+    def test_windows_snapshot_uses_only_query_rights_and_exact_handle_identity(self):
+        birth = 0x0123456789abcdef
+        tokens = []
+        for exit_code, ticks in ((259, birth), (0, birth), (42, birth), (259, birth + 1)):
+            with self.subTest(exit_code=exit_code, ticks=ticks):
+                api = self.windows_snapshot_api(ticks, exit_code)
+                with (patch.object(owned_process, "os", SimpleNamespace(name="nt")),
+                      patch.object(owned_process.ctypes, "WinDLL", return_value=api, create=True),
+                      patch.object(owned_process.ctypes, "get_last_error", return_value=5, create=True)):
+                    snapshot = owned_process.process_snapshot(123)
+                self.assertEqual(snapshot, {"pid": 123, "platform": "windows",
+                                 "startToken": str(ticks + 504911232000000000),
+                                 "state": "running" if exit_code == 259 else "terminated"})
+                tokens.append(int(snapshot["startToken"]))
+                api.OpenProcess.assert_called_once_with(0x1000, False, 123)
+                self.assertEqual(api.GetProcessTimes.call_args.args[0], api.OpenProcess.return_value)
+                self.assertEqual(api.GetExitCodeProcess.call_args.args[0], api.OpenProcess.return_value)
+                api.CloseHandle.assert_called_once_with(api.OpenProcess.return_value)
+        self.assertEqual(tokens[-1] - tokens[0], 1)
+
+    def test_windows_snapshot_query_failures_stay_unidentifiable(self):
+        for function, error in (("OpenProcess", 87), ("OpenProcess", 5), ("GetProcessTimes", 5),
+                                ("GetProcessTimes", 87), ("GetExitCodeProcess", 5), ("GetExitCodeProcess", 87)):
+            with self.subTest(function=function, error=error):
+                api = self.windows_snapshot_api(123, 259)
+                failed = getattr(api, function)
+                failed.side_effect, failed.return_value = None, 0
+                with (patch.object(owned_process, "os", SimpleNamespace(name="nt")),
+                      patch.object(owned_process.ctypes, "WinDLL", return_value=api, create=True),
+                      patch.object(owned_process.ctypes, "get_last_error", return_value=error, create=True)):
+                    if function == "OpenProcess" and error == 87:
+                        self.assertIsNone(owned_process.process_snapshot(123))
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, f"WinError {error}"):
+                            owned_process.process_snapshot(123)
+                if function == "OpenProcess":
+                    api.CloseHandle.assert_not_called()
+                    api.GetProcessTimes.assert_not_called()
+                else:
+                    api.CloseHandle.assert_called_once_with(api.OpenProcess.return_value)
+                if function != "GetExitCodeProcess":
+                    api.GetExitCodeProcess.assert_not_called()
+
     def test_current_process_identity_is_read_without_signals(self):
         identity = owned_process.process_identity(os.getpid())
         self.assertTrue(driver.process_alive(identity))
