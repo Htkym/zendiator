@@ -5,20 +5,20 @@ namespace Zendiator.SourceGenerator;
 internal static class GeneratorDiagnostics
 {
     internal static readonly DiagnosticDescriptor UnsupportedGenerationShape = Rule("ZEN0035", "Unsupported generation shape",
-        helpLinkUri: "https://github.com/Htkym/zendiator/blob/c7a391dfb49bf9d116c604dd75a70dc205f3814b/docs/diagnostics/ZEN0035.md");
+        helpLinkUri: "https://github.com/Htkym/zendiator/blob/main/docs/diagnostics/ZEN0035.md");
     internal static readonly DiagnosticDescriptor StageContractMismatch = Rule("ZEN0025", "Stage contract mismatch",
-        helpLinkUri: "https://github.com/Htkym/zendiator/blob/c7a391dfb49bf9d116c604dd75a70dc205f3814b/docs/diagnostics/ZEN0025.md");
+        helpLinkUri: "https://github.com/Htkym/zendiator/blob/main/docs/diagnostics/ZEN0025.md");
     internal static readonly DiagnosticDescriptor StageTypeMismatch = Rule("ZEN0026", "Stage type mismatch",
-        helpLinkUri: "https://github.com/Htkym/zendiator/blob/c7a391dfb49bf9d116c604dd75a70dc205f3814b/docs/diagnostics/configuration.md#zen0026-stage-type-mismatch");
+        helpLinkUri: "https://github.com/Htkym/zendiator/blob/main/docs/diagnostics/configuration.md#zen0026-stage-type-mismatch");
     internal static readonly DiagnosticDescriptor AmbiguousStageContract = Rule("ZEN0027", "Ambiguous stage contract");
     internal static readonly DiagnosticDescriptor AmbiguousPipelineOrder = Rule("ZEN0028", "Ambiguous pipeline order");
     internal static readonly DiagnosticDescriptor UnsupportedDispatchFamily = Rule("ZEN0029", "Unsupported dispatch family");
-    internal static readonly DiagnosticDescriptor AsyncHookOnSyncRoute = Rule("ZEN0030", "Async hook on synchronous route");
+    internal static readonly DiagnosticDescriptor AsyncHookOnSyncRoute = Rule("ZEN0030", "Asynchronous operation on synchronous route");
     internal static readonly DiagnosticDescriptor CapabilityResultShapeMismatch = Rule("ZEN0031", "Capability result shape mismatch");
     internal static readonly DiagnosticDescriptor InaccessibleStage = Rule("ZEN0033", "Inaccessible stage");
     internal static readonly DiagnosticDescriptor RefLikeCapture = Rule("ZEN0034", "Ref-like capture");
     internal static readonly DiagnosticDescriptor IncompleteExecutionContract = Rule("ZEN0037", "Incomplete execution contract",
-        helpLinkUri: "https://github.com/Htkym/zendiator/blob/c7a391dfb49bf9d116c604dd75a70dc205f3814b/docs/diagnostics/configuration.md#zen0037-incomplete-execution-contract");
+        helpLinkUri: "https://github.com/Htkym/zendiator/blob/main/docs/diagnostics/configuration.md#zen0037-incomplete-execution-contract");
 
     internal static readonly DiagnosticDescriptor[] Rules =
     {
@@ -36,5 +36,6 @@ internal static class GeneratorDiagnostics
     };
 
     internal static DiagnosticDescriptor Rule(string id, string title, string? helpLinkUri = null) =>
-        new(id, title, "{0}", "Zendiator", DiagnosticSeverity.Error, true, helpLinkUri: helpLinkUri);
+        new(id, title, "{0}", "Zendiator", DiagnosticSeverity.Error, true,
+            helpLinkUri: helpLinkUri ?? "https://github.com/Htkym/zendiator/blob/main/docs/diagnostics/configuration.md#" + id.ToLowerInvariant());
 }
