@@ -404,6 +404,10 @@ def main():
     parser.add_argument("--matrix", type=Path, help="Required for --group custom; enables a focused comparison")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--phase", choices=("all", "prepare", "case", "finish"), default="all",
+                        help="Custom-matrix worker phases for run_ab.py; normal runs use all")
+    parser.add_argument("--case-index", type=int, help="One-based case ordinal for --phase case")
+    parser.add_argument("--reverse", action="store_true", help="Reverse a custom worker's complete case plan")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--max-cases", type=int, help="Stop after this many completed cases; leave a resumable partial run")
     parser.add_argument("--expect-sdk", default="10.0.401")
@@ -411,12 +415,24 @@ def main():
     args = parser.parse_args()
     if (args.group == "custom") != (args.matrix is not None):
         parser.error("--matrix must be supplied exactly when --group custom is selected")
+    if args.phase != "all" and (args.group != "custom" or args.send_diagnostic is not None or args.max_cases is not None):
+        parser.error("Worker phases require a custom matrix without diagnostics or max-cases")
+    if (args.phase == "case") != (args.case_index is not None):
+        parser.error("--case-index must be supplied exactly for --phase case")
+    if args.phase in ("case", "finish") and not args.resume or args.phase == "prepare" and args.resume:
+        parser.error("case/finish require --resume; prepare requires a new output")
+    if args.reverse and args.phase == "all":
+        parser.error("--reverse is reserved for custom worker phases")
     groups = GROUPS if args.group == "all" else (args.group,)
     matrix_paths = {group: (resolve_path(args.matrix) if group == "custom" else PROJECT / f"{group}.json") for group in groups}
     plans = {}
     for group in groups:
         cases = [normalize_case(case) for case in read(matrix_paths[group])]
         plan, keys = make_plan(cases)
+        if args.reverse:
+            plan.reverse()
+        if args.case_index is not None and not 1 <= args.case_index <= len(plan):
+            parser.error("--case-index is outside the selected plan")
         plans[group] = (cases, plan)
         print(f"{group}: {len(plan)} cases, {keys} comparison keys; first: {plan[0]['Library']}")
     profile = send_diagnostic_profile(args.send_diagnostic, args.group, plans[groups[0]][0], args.resume, args.max_cases)
@@ -449,6 +465,8 @@ def main():
                "matrixSha256": {group: sha(matrix_paths[group]) for group in groups},
                "profile": profile, "artifactGateProtocol": ARTIFACT_GATE_PROTOCOL,
                "entryProtocol": "zendiator-shared-measurement-v2", "suites": selected_suites}
+    if args.phase != "all":
+        current.update(workerProtocol="zendiator-ab-worker-v1", reverse=args.reverse)
     if args.send_diagnostic is not None:
         current["sendDiagnostic"] = args.send_diagnostic
     if args.resume:
@@ -500,6 +518,8 @@ def main():
             if not gate_valid(proof, expected):
                 if filesystem_path(proof).exists():
                     raise ValueError(f"Existing gate evidence is invalid: {proof}")
+                if args.phase in ("case", "finish"):
+                    raise ValueError(f"Prepared worker gate is missing: {proof}")
                 env = clean_env()
                 env.update(COLD_RUN=str(gate_output), COLD_PINNED="1", COLD_EXPECT_CHILD_Z_SHA="SKIP")
                 run_logged(["dotnet", str(project / ("bin/Release/net10.0/" + consumer_name(project) + ".dll")), "--validate-only"], gate_output / "gate.log", env, cwd=project)
@@ -525,7 +545,11 @@ def main():
             session["gateSha256"][gate_key] = proof_sha
             proofs[suite] = proof
         write_json(output / "session.json", session)
+        if args.phase == "prepare":
+            continue
         for ordinal, row in enumerate(plan, 1):
+            if args.phase == "finish" or args.phase == "case" and ordinal != args.case_index:
+                continue
             case_dir = run / "cases" / f"{ordinal:04d}"
             if completed(row, case_dir, session):
                 completed_count += 1
@@ -559,6 +583,8 @@ def main():
             write_json(case_dir / "complete.json", check_case(row, attempt, session))
             completed_count += 1
             print(f"{group} {ordinal}/{len(plan)}: {row['Library']} {row['Case']['Type']}.{row['Case']['Method']}", flush=True)
+        if args.phase == "case":
+            continue
         child_hash = finish_group(run, plan, cases, session)
         if product_hash and child_hash != product_hash:
             raise ValueError("Child product DLL differs across groups")
@@ -570,6 +596,9 @@ def main():
             known_assemblies[name] = digest
     if source_digest() != session["sourceDigest"] or command(["git", "rev-parse", "HEAD"]) != session["revision"]:
         raise ValueError("Source changed during measurement")
+    if args.phase in ("prepare", "case"):
+        print(f"Verified {args.phase} worker: {output}")
+        return
     analysis = [sys.executable, str(PROJECT / "analyze.py"), str(output)]
     if args.group == "custom":
         analysis.extend(["--matrix", str(matrix_paths["custom"])])

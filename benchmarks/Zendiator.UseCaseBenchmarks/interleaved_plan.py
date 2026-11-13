@@ -95,6 +95,25 @@ def make_plan(cases):
     return plan, len(groups)
 
 
+def make_ab_plan(cases, reverse=False):
+    plan, _ = make_plan(cases)
+    if not plan:
+        raise ValueError("A/B matrix cannot be empty")
+    schedule = []
+    previous, block, member = None, -1, 0
+    for index, row in enumerate(plan, 1):
+        key = tuple(row["ComparisonKey"])
+        if key != previous:
+            previous, block, member = key, block + 1, 0
+        sides = ("baseline", "candidate") if (block + member) % 2 == 0 else ("candidate", "baseline")
+        schedule.extend(dict(row, Side=side, CaseIndex=index) for side in sides)
+        member += 1
+    if reverse:
+        schedule.reverse()
+        schedule = [dict(row, CaseIndex=len(plan) + 1 - row["CaseIndex"]) for row in schedule]
+    return [dict(row, Ordinal=index) for index, row in enumerate(schedule, 1)]
+
+
 def logged_cases(path):
     result = []
     for line in filesystem_path(path).read_text(encoding="utf-8").splitlines():
