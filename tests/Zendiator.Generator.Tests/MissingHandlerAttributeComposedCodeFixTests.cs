@@ -24,10 +24,14 @@ public sealed partial class GeneratorTests
         return folder;
     }
 
-    [Fact]
-    public async Task MissingHandlerAttributeFix_ComposedApp_changes_only_the_closed_marker_and_regenerates_all_routes()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MissingHandlerAttributeFix_ComposedApp_changes_only_the_closed_marker_and_regenerates_all_routes(bool literalStreamTypes)
     {
         var source = ComposedMissingMarkerSource();
+        if (literalStreamTypes)
+            source = source.Replace("configuration.StreamPipeline<ReadNumbers, string>(", "configuration.StreamPipeline(typeof(ReadNumbers), typeof(string), ");
         var (workspace, document) = HandlerFixWorkspace(source);
         using (workspace)
         {
@@ -49,7 +53,7 @@ public sealed partial class GeneratorTests
             AssertComposedProfile(output, "ComposedApp.Generated.App", ("Send", 1), ("SendAsync", 3), ("SendAll", 2), ("SendAllAsync", 1), ("StreamAsync", 1));
             var generated = await document.Project.GetSourceGeneratedDocumentsAsync();
             Assert.Equal(7, generated.Count(d => d.HintName.StartsWith("Zendiator.Route.", StringComparison.Ordinal)));
-            var folder = ComposedMarkerFolder("accepted");
+            var folder = ComposedMarkerFolder(literalStreamTypes ? "accepted-literal-stream" : "accepted");
             if (folder.Length != 0)
             {
                 File.WriteAllText(Path.Combine(folder, "missing-Program.cs"), source);
@@ -79,6 +83,7 @@ public sealed partial class GeneratorTests
         var source = ComposedMissingMarkerSource();
         var profiles = new[]
         {
+            ("invalid-stream-final", source.Replace("StreamPipeline<ReadNumbers, string>", "StreamPipeline<ReadNumbers, int>")),
             ("invalid", source.Replace("Stage.Wrapper(typeof(CountCache<>))", "Stage.Wrapper(typeof(InvalidCache<>))") + "\npublic sealed class InvalidCache<T> {}"),
             ("unadopted", source.Replace("typeof(CachedCollector<>), typeof(WarehouseCollector<>)", "typeof(CachedCollector<>), typeof(WarehouseCollector<>), typeof(ThirdCollector<>)") + "\n[Zendiator.Handler]public sealed class ThirdCollector<T>:Zendiator.ISyncRequestHandler<CollectCounts<T>,int> where T:class { public int Handle(CollectCounts<T> r,System.Threading.CancellationToken t)=>0; }"),
             ("ambiguous", source.Replace("typeof(RefreshInventoryHandler));", "typeof(RefreshInventoryHandler), typeof(OtherRefreshHandler));") + "\n[Zendiator.Handler]public sealed class OtherRefreshHandler:Zendiator.IRequestHandler<RefreshInventory> { public System.Threading.Tasks.ValueTask HandleAsync(RefreshInventory r,System.Threading.CancellationToken t)=>default; }")

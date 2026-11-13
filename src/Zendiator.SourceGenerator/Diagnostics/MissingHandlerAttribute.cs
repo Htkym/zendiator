@@ -159,16 +159,18 @@ internal static class MissingHandlerAttribute
                     if (statement is not ExpressionStatementSyntax { Expression: InvocationExpressionSyntax recorder } ||
                         recorder.Expression is not MemberAccessExpressionSyntax access ||
                         !Same(model.GetSymbolInfo(access.Expression, ct).Symbol, parameter) ||
-                        model.GetSymbolInfo(recorder, ct).Symbol is not IMethodSymbol { Arity: 0 or 1 } record ||
-                        !Same(record.ContainingType, configuration) || record.Name is not ("Handlers" or "Pipeline"))
+                        model.GetSymbolInfo(recorder, ct).Symbol is not IMethodSymbol record ||
+                        !Same(record.ContainingType, configuration) ||
+                        !(record.Name is "Handlers" or "Pipeline" && record.Arity is 0 or 1 ||
+                          record.Name == "StreamPipeline" && record.Arity is 0 or 2))
                         return false;
                     var offset = record.Arity == 0 ? 1 : 0;
-                    var request = record.Arity == 1 ? record.TypeArguments[0] :
+                    var request = record.Arity is 1 or 2 ? record.TypeArguments[0] :
                         recorder.ArgumentList.Arguments.FirstOrDefault()?.Expression is TypeOfExpressionSyntax type
                             ? model.GetTypeInfo(type.Type, ct).Type : null;
                     if (request == null || request.TypeKind == TypeKind.Error)
                         return false;
-                    requiresGenerationCheck |= record.Arity == 0;
+                    requiresGenerationCheck |= record.Arity == 0 || record.Name == "StreamPipeline";
                     if (record.Name == "Handlers")
                     {
                         if (recorder.ArgumentList.Arguments.Count < offset + 2 ||
