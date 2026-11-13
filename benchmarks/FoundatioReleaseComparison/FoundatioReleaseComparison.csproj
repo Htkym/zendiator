@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Foundatio.Mediator</InterceptorsNamespaces>
+    <DefineConstants>$(DefineConstants);SUPPLEMENTAL_BENCHMARK</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Zendiator/Zendiator.csproj" />
+    <Compile Include="../Zendiator.UseCaseBenchmarks/Work.cs" Link="Shared/Work.cs" />
+    <Compile Include="../Zendiator.UseCaseBenchmarks/ArtifactEvidence.cs" Link="Shared/ArtifactEvidence.cs" />
+    <Compile Include="../Zendiator.UseCaseBenchmarks/ChildEvidence.cs" Link="Shared/ChildEvidence.cs" />
+    <Compile Include="../Zendiator.UseCaseBenchmarks/ArtifactGate.cs" Link="Shared/ArtifactGate.cs" />
+    <Compile Include="../Measurement/MeasurementProgram.cs" Link="Shared/MeasurementProgram.cs" />
+    <Compile Include="../Measurement/RuntimeEvidence.cs" Link="Shared/RuntimeEvidence.cs" />
+    <PackageReference Include="Foundatio.Mediator" Version="[1.3.3]" />
+    <PackageReference Include="BenchmarkDotNet" Version="[0.15.8]" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.0.12]" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,227 @@
+using System.Reflection;
+using System.Text.Json;
+using BenchmarkDotNet.Configs;
+using BenchmarkDotNet.Exporters.Json;
+using BenchmarkDotNet.Filters;
+using BenchmarkDotNet.Jobs;
+using BenchmarkDotNet.Running;
+using Microsoft.Extensions.DependencyInjection;
+using Perfolizer.Horology;
+using Competitive;
+using Competitive.ShortCircuit;
+using Competitive.ReleaseValidation;
+using Evidence = Competitive.FoundatioRelease.FoundatioRuntimeEvidence;
+
+internal static class Program
+{
+    public static async Task<int> Main(string[] args)
+    {
+        try
+        {
+            if (args is ["--list", "flat"])
+            {
+                BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(["--list", "flat"]);
+                return 0;
+            }
+            Evidence.VerifyRuntime();
+            if (args is ["--binding-only", var bindingOutput])
+            {
+                RequireNewOutput(bindingOutput);
+                Environment.SetEnvironmentVariable("ROOT_V8_HOST_MODE", "binding-only");
+                foreach (var peer in ShortRegistration.Peers)
+                {
+                    using var provider = ShortRegistration.Create(peer, new ConstructionLog());
+                    using var scope = provider.CreateScope();
+                    _ = scope.ServiceProvider.GetRequiredService(ShortRegistration.EntryType(peer));
+                }
+                ArtifactEvidence.Write(bindingOutput, new
+                {
+                    schemaVersion = 1, phase = "binding-only-no-workload",
+                    shortConstructionDiagnosticsEnabled = ConstructionLog.Instrumented,
+                    binding = Evidence.Capture("binding-only-no-workload")
+                });
+                return 0;
+            }
+            if (args is ["--validate-only", var validationOutput])
+            {
+                if (ConstructionLog.Instrumented)
+                    throw new InvalidOperationException("Timing-binary semantics require an uninstrumented assembly");
+                RequireNewOutput(validationOutput);
+                Environment.SetEnvironmentVariable("ROOT_V8_HOST_MODE", "semantic-only");
+                ArtifactEvidence.Write(validationOutput, await SemanticGate().ConfigureAwait(false));
+                return 0;
+            }
+            if (args is ["--constructor-gate", var constructionOutput])
+            {
+                if (!ConstructionLog.Instrumented)
+                    throw new InvalidOperationException("Constructor counts require a separate diagnostics build");
+                RequireNewOutput(constructionOutput);
+                Environment.SetEnvironmentVariable("ROOT_V8_HOST_MODE", "constructor-diagnostics-only");
+                ArtifactEvidence.Write(constructionOutput, await SemanticGate().ConfigureAwait(false));
+                return 0;
+            }
+            if (args is ["--run", var requestPath, var output])
+                return RunAdmitted(requestPath, output);
+            throw new ArgumentException("Use --validate-only OUT, --constructor-gate OUT, --binding-only OUT, --list flat, or admitted --run REQUEST OUTDIR");
+        }
+        catch (Exception failure)
+        {
+            Console.Error.WriteLine(failure);
+            return 1;
+        }
+    }
+
+    private static int RunAdmitted(string requestPath, string output)
+    {
+        if (ConstructionLog.Instrumented)
+            throw new InvalidOperationException("A constructor-diagnostics assembly cannot run timing");
+        requestPath = Path.GetFullPath(requestPath);
+        output = Path.GetFullPath(output);
+        if (Directory.Exists(output) || File.Exists(output))
+            throw new InvalidOperationException("Cell output must be a new path");
+        var request = Evidence.Admit(requestPath);
+        Evidence.VerifyRootHostPins(request);
+        var peer = ShortRegistration.Peers.SingleOrDefault(value =>
+            request.Type == "Competitive.ShortCircuit." + value + "ShortCircuit");
+        if (peer is null ||
+            request.Profile != "ShortCircuit6" || request.Job != "ShortCircuitComparison" ||
+            request.Method != "WarmDispatch" || request.Parameters.Count != 0 || request.InvocationCount is not null)
+            throw new InvalidOperationException("The request is outside the fixed six normal-short-circuit cases");
+        var target = typeof(Program).Assembly.GetType(request.Type, throwOnError: true)!;
+        if (!target.IsClass || target.IsAbstract ||
+            target.GetMethod("WarmDispatch", BindingFlags.Instance | BindingFlags.Public) is null)
+            throw new InvalidOperationException("Requested concrete benchmark method is absent");
+        Directory.CreateDirectory(output);
+        Environment.SetEnvironmentVariable("ROOT_V8_HOST_MODE", "timing-child");
+        Environment.SetEnvironmentVariable("ROOT_V8_CELL_REQUEST", requestPath);
+        Environment.SetEnvironmentVariable("ROOT_V8_CELL_OUTPUT", output);
+        Environment.SetEnvironmentVariable("RuntimeFrameworkVersion", "10.0.14");
+        Environment.SetEnvironmentVariable("RollForward", "Disable");
+        var job = Job.Default.WithId(request.Job).WithWarmupCount(20).WithIterationCount(12)
+            .WithIterationTime(TimeInterval.FromMilliseconds(500)).WithLaunchCount(1)
+            .WithAffinity(new IntPtr(1));
+        job = V8BuildValidatedToolchain.WrapJob(job, requestPath, request.ExpectedBindingManifestPath);
+        var config = DefaultConfig.Instance.AddJob(job).AddExporter(JsonExporter.Full)
+            .WithArtifactsPath(output).WithOptions(ConfigOptions.KeepBenchmarkFiles)
+            .AddFilter(new SimpleFilter(benchmark =>
+                benchmark.Descriptor.Type.FullName == request.Type &&
+                benchmark.Descriptor.WorkloadMethod.Name == request.Method &&
+                Evidence.Equal(JsonSerializer.SerializeToElement(
+                    benchmark.Parameters.Items.ToDictionary(item => item.Name, item => item.Value)),
+                    JsonSerializer.SerializeToElement(request.Parameters))));
+        var summary = BenchmarkRunner.Run(target, config);
+        ArtifactEvidence.Write(Path.Combine(output, "build-artifacts.json"), new
+        {
+            reports = summary.Reports.Select(report => new
+            {
+                type = report.BenchmarkCase.Descriptor.Type.FullName,
+                method = report.BenchmarkCase.Descriptor.WorkloadMethod.Name,
+                isBuildSuccess = report.BuildResult.IsBuildSuccess,
+                paths = report.BuildResult.ArtifactsPaths
+            }).ToArray()
+        });
+        ArtifactEvidence.Write(Path.Combine(output, "outcome.json"), new
+        {
+            cases = summary.Reports.Length,
+            failures = summary.Reports.Count(report => !report.Success),
+            validationErrors = summary.HasCriticalValidationErrors ? 1 : 0
+        });
+        Evidence.VerifyRootHostPins(request);
+        if (summary.HasCriticalValidationErrors || summary.Reports.Length != 1 ||
+            summary.Reports.Any(report => !report.Success))
+            throw new InvalidOperationException("Expected exactly one successful admitted BDN case");
+        ArtifactEvidence.Write(Path.Combine(output, "host-return.json"), new
+        {
+            schemaVersion = 1, phase = "bdn-host-return", request.CaseId,
+            validReportCount = summary.Reports.Length,
+            shortConstructionDiagnosticsEnabled = ConstructionLog.Instrumented,
+            sourcePinsRecheckedOutsideTiming = true,
+            note = "Parent still requires the exact child setup/final, Execute ID and complete workload/interceptor binding"
+        });
+        return 0;
+    }
+
+    private static async Task<object> SemanticGate()
+    {
+        var rows = new List<object>();
+        foreach (var peer in ShortRegistration.Peers)
+        {
+            using var benchmark = Create(peer);
+            await benchmark.Setup().ConfigureAwait(false);
+            var afterWarm = benchmark.ConstructionSnapshot();
+            using var live = new CancellationTokenSource();
+            var liveProbe = new ShortProbe(live.Token);
+            var liveRequest = new ShortRequest(41, liveProbe);
+            var liveValue = await benchmark.GateDispatch(liveRequest, live.Token).ConfigureAwait(false);
+            CheckNormal(liveValue, liveProbe);
+
+            var noneProbe = new ShortProbe(CancellationToken.None);
+            var noneValue = await benchmark.GateDispatch(new ShortRequest(41, noneProbe), CancellationToken.None).ConfigureAwait(false);
+            CheckNormal(noneValue, noneProbe);
+
+            using var canceled = new CancellationTokenSource();
+            canceled.Cancel();
+            var canceledProbe = new ShortProbe(canceled.Token);
+            bool sawCancellation = false;
+            try
+            {
+                await benchmark.GateDispatch(new ShortRequest(41, canceledProbe), canceled.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException error)
+            {
+                if (error.CancellationToken != canceled.Token) throw new InvalidOperationException("Cancellation token changed");
+                sawCancellation = true;
+            }
+            if (!sawCancellation || canceledProbe.Events.Count != 0 || canceledProbe.HandlerCalls != 0)
+                throw new InvalidOperationException("Canceled request entered work or completed successfully");
+
+            rows.Add(new
+            {
+                caseId = "ShortCircuit/" + peer + "/WarmDispatch",
+                peer, actualType = benchmark.GetType().FullName, benchmarkType = benchmark.GetType().FullName,
+                method = "WarmDispatch", parameters = new Dictionary<string, object?>(),
+                benchmarkMethod = "WarmDispatch", dispatchMethod = "Dispatch",
+                entryType = ShortRegistration.EntryType(peer).FullName,
+                normalLive = new { result = liveValue, liveProbe.Events, liveProbe.HandlerCalls, liveProbe.TokenChecks },
+                normalNone = new { result = noneValue, noneProbe.Events, noneProbe.HandlerCalls, noneProbe.TokenChecks },
+                canceled = new { sawCancellation, canceledProbe.Events, canceledProbe.HandlerCalls },
+                afterWarm, afterChecks = benchmark.ConstructionSnapshot(),
+                registration = ((ShortState)benchmark).RegistrationDescriptors
+            });
+        }
+        return new
+        {
+            schemaVersion = 1,
+            phase = ConstructionLog.Instrumented ? "constructor-diagnostics-only" : "new-semantic-gate",
+            passed = true, newSemanticGate = !ConstructionLog.Instrumented,
+            shortConstructionDiagnosticsEnabled = ConstructionLog.Instrumented,
+            runtime = "10.0.14", di = "10.0.12",
+            coveredCaseIds = ShortRegistration.Peers.Select(peer => "ShortCircuit/" + peer + "/WarmDispatch").ToArray(),
+            semanticRecords = rows,
+            binding = Evidence.Capture("semantic-post-run-no-timing")
+        };
+    }
+
+    private static void RequireNewOutput(string output)
+    {
+        if (File.Exists(output) || Directory.Exists(output))
+            throw new InvalidOperationException("Preparation output must be new");
+    }
+
+    private static IShortBenchmark Create(string peer) => peer switch
+    {
+        "Zendiator" => new ZendiatorShortCircuit(),
+        "MediatR" => new MediatRShortCircuit(),
+        "Mediator" => new MediatorShortCircuit(),
+        "DispatchR" => new DispatchRShortCircuit(),
+        "Immediate" => new ImmediateShortCircuit(),
+        "Foundatio" => new FoundatioShortCircuit(),
+        _ => throw new ArgumentOutOfRangeException(nameof(peer))
+    };
+
+    private static void CheckNormal(int value, ShortProbe probe)
+    {
+        if (value != 42 || !probe.Events.SequenceEqual(new[] { 1 }) || probe.HandlerCalls != 0 || probe.TokenChecks != 1)
+            throw new InvalidOperationException("Expected outer Enter1 then normal 42 with no inner/handler work");
+    }
+}

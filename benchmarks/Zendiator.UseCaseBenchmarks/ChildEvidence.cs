@@ -8,6 +8,8 @@ internal static class ChildEvidence
 {
     private static int registered;
 
+    public static void Record(object benchmark, string scenario, string lifetime) => Record(scenario, "Default");
+
     public static void Record(string scenario, string lifetime)
     {
         if (Environment.GetEnvironmentVariable("COLD_CAPTURE_CHILD") != "1")
