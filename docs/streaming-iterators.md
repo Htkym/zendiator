@@ -32,6 +32,13 @@ scope alive through enumeration and awaited disposal, including serialization wh
 returning a source from an HTTP action. Do not return a source from an already
 disposed action-local scope.
 
+On guarded routes, the consumer root performs its dedicated initial scope probe
+when the first move starts initialization. Deferred inner opening and normal
+inner reopening do not repeat that initial probe. `StreamBefore` retains its
+additional scope checks, and native service resolution can still reject a disposed
+scope. These are not ongoing liveness checks; do not rely on a later
+move to detect scope disposal.
+
 ## Compiler iterator example
 
 ```csharp
