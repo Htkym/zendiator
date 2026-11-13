@@ -14,13 +14,16 @@ public sealed class MediatorLifetimeAnalyzer : DiagnosticAnalyzer
     private const string Guidance = "Keep the DI scope alive until dispatch completes; dispose the scope, not the mediator";
     private static readonly DiagnosticDescriptor Disposable = new(
         "ZEN0021", "Generated mediator is not disposable", Guidance,
-        "Zendiator", DiagnosticSeverity.Warning, true);
+        "Zendiator", DiagnosticSeverity.Warning, true,
+        helpLinkUri: "https://github.com/Htkym/zendiator/blob/main/docs/diagnostics/configuration.md#zen0021");
     private static readonly DiagnosticDescriptor EscapesScope = new(
         "ZEN0022", "Mediator escapes its using scope", Guidance,
-        "Zendiator", DiagnosticSeverity.Warning, true);
+        "Zendiator", DiagnosticSeverity.Warning, true,
+        helpLinkUri: "https://github.com/Htkym/zendiator/blob/main/docs/diagnostics/configuration.md#zen0022");
     private static readonly DiagnosticDescriptor SendAfterDispose = new(
         "ZEN0023", "Send follows scope disposal", Guidance,
-        "Zendiator", DiagnosticSeverity.Warning, true);
+        "Zendiator", DiagnosticSeverity.Warning, true,
+        helpLinkUri: "https://github.com/Htkym/zendiator/blob/main/docs/diagnostics/configuration.md#zen0023");
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
         ImmutableArray.Create(Disposable, EscapesScope, SendAfterDispose);
