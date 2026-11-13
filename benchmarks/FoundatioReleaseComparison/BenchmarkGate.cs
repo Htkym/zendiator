@@ -8,7 +8,7 @@ internal static class BenchmarkGate
     internal const string Suite = "foundatio";
     internal const int ExpectedCases = 16;
 
-    internal static async Task Run(string output)
+    internal static async Task Run(string output, string? runtimeConfig = null, string? deps = null)
     {
         var previousMode = Environment.GetEnvironmentVariable("ROOT_V8_HOST_MODE");
         Environment.SetEnvironmentVariable("ROOT_V8_HOST_MODE", "semantic-only");
