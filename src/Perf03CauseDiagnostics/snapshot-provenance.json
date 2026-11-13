@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "protocol": "zendiator-perf03-snapshot-v1",
+  "variant": "V0",
+  "measuredSourceRevision": "801b5300a044473bf95818b7895efd6e405207c8",
+  "acceptedSourceRevision": "8900fadaceb1ce6b933e24a3a2e7d20c956c49a1",
+  "measuredSourceTree": "cec30294783d9714c9bd7c936ed81604407546ce",
+  "acceptedSourceTree": "cec30294783d9714c9bd7c936ed81604407546ce",
+  "generatorSha256": "1E2DCE7056E4C5A844A84C6774DD6E34C7CA1B013117556490394360D9C61CAD",
+  "origin": "preserved PERF-02a normal-controller four-case forward candidate, case 0001",
+  "files": [
+    {
+      "originalFile": "Zendiator.StreamCanonical.DF7872ACF770B8DDDA6D6A61054B21A2251A08597B558387231219CCDDFB0B4B.g.cs",
+      "originalSha256": "2B47C431171A070C70D3863E75B17235331DBCEF6CF931DC2CEA765A90A32D77",
+      "diagnosticFile": "Zendiator.StreamCanonical.DF7872ACF770B8DDDA6D6A61054B21A2251A08597B558387231219CCDDFB0B4B.g.cs",
+      "diagnosticSha256": "90B37418F26AECA373AA3AFD981688DAF065422B779DDBF09CBACEC81F020843",
+      "transformations": [
+        "alias generated service to Competitive.Generated.Perf03NamedStreams.Zendiator",
+        "relocate namespace Competitive.Generated.BenchmarkStreams to Competitive.Perf03.Diagnostics",
+        "relocate StreamCursorState base type to Competitive.Perf03.Diagnostics"
+      ]
+    },
+    {
+      "originalFile": "Zendiator.StreamCanonical.B80A3F15A7016AF93086943F607702393A9513056C3C751D172215C32167550B.g.cs",
+      "originalSha256": "B0E2954DB24A034661176005F7AB1F1387818437190DD29E2322CFD7CD8817D7",
+      "diagnosticFile": "Zendiator.StreamCanonical.B80A3F15A7016AF93086943F607702393A9513056C3C751D172215C32167550B.g.cs",
+      "diagnosticSha256": "264BD7D6E149CAA795E5F44FDC89B4169F4C1E7BFC4D46BECF217F9D367A344D",
+      "transformations": [
+        "alias generated service to Competitive.Generated.Perf03NamedStreams.Zendiator",
+        "relocate namespace Competitive.Generated.BenchmarkStreams to Competitive.Perf03.Diagnostics",
+        "relocate StreamCursorState base type to Competitive.Perf03.Diagnostics"
+      ]
+    },
+    {
+      "originalFile": "src/Zendiator/Streaming/StreamCursorState.cs",
+      "originalSha256": "7728F01608C93A3C1B2AADB38351053DAE69559215A0CA3620216EB30488DDED",
+      "committedGitBlobSha256": "05926E569679B35CA6840ECF569F68761BD6E513C66E0701120F1988FA83FC97",
+      "diagnosticFile": "StreamCursorState.cs",
+      "diagnosticSha256": "B4377F1137DF0F86002334B98ABD09080922BA164DAB53032EA4810EEF4B9FDA",
+      "transformations": [
+        "relocate namespace Zendiator.Streaming to Competitive.Perf03.Diagnostics"
+      ]
+    }
+  ],
+  "scope": "Namespace-isolated V0 snapshot; generated-service alias compatibility and normal-route parity require the separate saved-consumer gate.",
+  "generatorIdentityScope": "Preserved generated-build bundle analyzer binary; the earlier workspace manifest records its own distinct prebuild analyzer digest.",
+  "workspaceManifestGeneratorSha256": "BA2D5A3C513212B6EBB293247C9DE28320A48EDA074DD7F612975B49A4243927",
+  "generatorCommittedSourceDigestSha256": "5A9A02788BC573EDB87ADB50ACC74BE0AACFF684B4E139DD6850C354A9C063EA",
+  "generatorCommittedSourceFileCount": 147,
+  "originEvidence": {
+    "sourceRevision": "801b5300a044473bf95818b7895efd6e405207c8",
+    "sourceDigestSha256": "7A24E52436C540FFEC740536179AAC4DB84756DF89CFDCCA249C40CA75D06DCD",
+    "artifactGateRequestSha256": "FEFA455BCAAA6AB1FFD439AFEA9F793E30C5C5CDBFE19EE89C3245A720D03A30",
+    "artifactBindingSha256": "07A0047CBFCD313493A9437581F1988C4110CE869658D88AB3B32BEB600FCFAF",
+    "savedGeneratorBundleFile": "bin/Release/net10.0/Zendiator.SourceGenerator.dll",
+    "savedGeneratorBundleSha256": "1E2DCE7056E4C5A844A84C6774DD6E34C7CA1B013117556490394360D9C61CAD",
+    "savedCanonicalHashesMatchRequestAndManifest": true
+  }
+}

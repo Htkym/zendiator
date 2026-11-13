@@ -619,5 +619,275 @@ class SupplementalArtifactGateContracts(SyntheticArtifactGateFixture):
         self.assertFalse((attempt / "artifact-binding.json").exists())
 
 
+class Perf03ArtifactGateContracts(SyntheticArtifactGateFixture):
+    def setUp(self):
+        super().setUp()
+        for name in ("Perf03CauseGate.cs", "Perf03CauseStreams.cs"):
+            (self.project / name).write_text("synthetic PERF03 gate fingerprint")
+        self.diagnostics = self.project.parent.parent / "src/Perf03CauseDiagnostics"
+        (self.diagnostics / "originals").mkdir(parents=True)
+        for name in gate.PERF03_DIAGNOSTIC_FILES:
+            (self.diagnostics / name).write_text("synthetic diagnostic implementation or original source")
+        (self.diagnostics / "Perf03CauseVariant.cs").write_text('internal static class Perf03CauseVariant { internal const string Id = "V0"; }')
+        self.original_control = next(name for name in gate.PERF03_DIAGNOSTIC_FILES if name.endswith(".g.cs.txt"))
+
+    def perf03_case(self, ordinal=1, pid=111, case=None):
+        case = case or gate.perf03_case_set()[0]
+        row, attempt = self.case(ordinal, type=case["Type"], method=case["Method"], pid=pid)
+        row["Case"] = dict(case)
+        return row, attempt
+
+    @staticmethod
+    def synthetic_contracts(relay):
+        names = ["cold-disposal", "early-disposal", "producer-failure", "pre-cancelled-api", "cancel-after-first",
+                 "distinct-enumeration-token", "current-lifecycle", "ambient-context"] + (["relay-failure"] if relay else [])
+        rows = []
+        for name in names:
+            started = name not in {"cold-disposal", "pre-cancelled-api", "relay-failure"}
+            outcome = ("ArithmeticException" if name in {"producer-failure", "relay-failure"} else
+                       "OperationCanceledException" if name in {"pre-cancelled-api", "cancel-after-first", "distinct-enumeration-token"} else "Completed")
+            items = (1 if name in {"early-disposal", "ambient-context", "cancel-after-first", "distinct-enumeration-token"} else
+                     1024 if name == "current-lifecycle" else 0)
+            observed = dict(outcome=outcome, items=items, Handlers=int(started), Disposals=int(started),
+                            events=([1, 2, 3, 4, 5, 100] if relay else [100]) if started else [])
+            rows.append(dict(name=name, status="Passed", normal=observed, isolated=copy.deepcopy(observed)))
+        return rows
+
+    def mocked_perf03_gate(self, args, log, env, cwd):
+        self.mocked_gate(args, log, env, cwd)
+        request = gate.read(args[-1])
+        proof_path = Path(request["output"]) / "artifact-proof.json"
+        proof = gate.read(proof_path)
+        rows = []
+        for case in request["perf03CauseCaseSet"]:
+            direct = case["Method"] == "FullDirect"
+            relay = case["Type"].endswith("Relay5")
+            rows.append(dict(case=case, status="Passed", count=1024, sum=523776,
+                             handlers=1, items=1024, disposals=1,
+                             producerRepresentation="Iterator" if "Iterator" in case["Type"] else "Named",
+                             tokenMode="Live" if "Live" in case["Type"] else "Default", relayDepth=5 if relay else 0,
+                             events=[1, 2, 3, 4, 5, 100] if relay and not direct else [100],
+                             enumerationTokenDefault=True, publicEnumerationTokenApplicable=not direct, sourceTokenMatchesApi=True, nativeDiHandlerObserved=not direct,
+                             identities=dict(requestReferenceObserved=not direct, requestIdentityApplicable=not direct, sourceProbeReferenceObserved=True,
+                                 nativeEntryReferenceObserved=not direct, nativeScopeReferenceObserved=not direct,
+                                 cachedHandlerType=None if direct else "Synthetic.CachedHandler", cachedHandlerCount=0 if direct else 1),
+                             consumerPreflight=dict(moveCalls=1025, consumptions=1025, incompleteAtReturn=0,
+                                 firstMoveIncomplete=False, repeatedItemIncomplete=0, eofIncomplete=False,
+                                 rawDecisionSitesObserved=False, timingPendingFractionKnown=False),
+                             normalParity=True, sharedEntryAndCachedHandler=True, sharedRequest=True,
+                             contractChecks=self.synthetic_contracts(relay) if case["Method"] == "FullDiagnostic" else None))
+        evidence = dict(schemaVersion=1, protocol=gate.PERF03_PROTOCOL,
+                        variant=request["perf03CauseVariant"], implementationSha256=request["perf03CauseGateImplementationSha256"],
+                        caseSet=request["perf03CauseCaseSet"], pendingFractionClaim=False,
+                        variantEnvelope=dict(sequential=True, oneEnumeratorPerOperation=True, awaitAndConsumeBeforeNextMove=True,
+                            savedUnconsumedValueTask=False, concurrentMoveOrDispose=False, failureAndCleanupChecked=True,
+                            productionGuaranteesClaimed=False, ambientContext="Consumer AsyncLocal preservation only; producer context unprobed",
+                            unsupportedProbes=["saved-unconsumed-value-task", "concurrent-move-dispose", "raw-pending-decision-site-counts"]),
+                        normalInputCases=[row for row in rows if row["case"]["Method"] != "FullDiagnostic"],
+                        isolatedControls=[row for row in rows if row["case"]["Method"] == "FullDiagnostic"])
+        evidence_path = proof_path.parent / "perf03-cause/perf03-cause.json"
+        gate.write(evidence_path, evidence)
+        proof.update({name: request[name] for name in gate.PERF03_FIELDS})
+        proof["perf03CauseGate"] = dict(schemaVersion=1, protocol=gate.PERF03_PROTOCOL,
+                                        variant=evidence["variant"], implementationSha256=evidence["implementationSha256"],
+                                        caseSet=evidence["caseSet"], evidencePath="perf03-cause/perf03-cause.json",
+                                        evidenceSha256=gate.sha(evidence_path))
+        gate.write(proof_path, proof)
+
+    def validate_perf03(self, row, attempt):
+        return gate.ensure_artifact_gate(row, attempt, self.session, self.project, self.mocked_perf03_gate, lambda: {})
+
+    def test_fixed_26_case_set_rejects_unmeasured_parameters_and_routes(self):
+        cases = gate.perf03_case_set()
+        self.assertEqual((len(cases), len({gate.canonical(case) for case in cases})), (26, 26))
+        self.assertEqual(sum(case["Method"] == "FullDirect" for case in cases), 8)
+        self.assertEqual(sum(case["Method"] == "FullDiagnostic" for case in cases), 2)
+        for mutation in (dict(Count=True), dict(Asynchronous=1), dict(Lifetime="Default"),
+                         dict(Type="ZendiatorPerf03NamedDefaultRelay1"), dict(Method="EarlyBreak"), dict(Project="short")):
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, "PERF03 case"):
+                gate.perf03_selected(dict(cases[0], **mutation))
+
+    def test_selected_case_cannot_accept_only_the_original_389_plus_96_proof(self):
+        row, attempt = self.perf03_case()
+        with self.assertRaisesRegex(ValueError, "PERF03 diagnostic implementation"):
+            self.validate(row, attempt)
+        self.assertFalse((attempt / "artifact-binding.json").exists())
+
+    def test_sources_are_archived_without_mutating_build_and_scope_remains_separate(self):
+        original = gate.tree_hashes(self.build)
+        row, attempt = self.perf03_case()
+        result = self.validate_perf03(row, attempt)
+        self.assertEqual(gate.tree_hashes(self.build), original)
+        request = gate.read(attempt / "artifact-gate-request.json")
+        sources = request["perf03CauseSourceFiles"]
+        self.assertIn("perf03-sources/src/Perf03CauseDiagnostics/" + self.original_control, sources)
+        self.assertEqual(request["perf03CauseGateImplementationSha256"], gate.digest(sources))
+        self.assertTrue(all(request["bundleFiles"][name] == value for name, value in sources.items()))
+        self.assertIn("389 existing benchmark gate plus separate 96", result["scope"])
+        self.assertIn("Separate 24 PERF03", result["perf03CauseScope"])
+        self.assertEqual(gate.check_artifact_binding(row, attempt, self.session, self.project), result)
+
+    def test_changed_source_or_variant_prevents_resume(self):
+        row, attempt = self.perf03_case()
+        self.validate_perf03(row, attempt)
+        for name in ("Perf03DiagnosticControl.cs", "Perf03CauseVariant.cs", "snapshot-provenance.json"):
+            with self.subTest(name=name):
+                path = self.diagnostics / name
+                original = path.read_text()
+                path.write_text(original + "\n// Changed source identity")
+                with self.assertRaisesRegex(ValueError, "implementation"):
+                    gate.check_artifact_binding(row, attempt, self.session, self.project)
+                path.write_text(original)
+
+    def test_cache_reuses_only_the_same_full_diagnostic_source_map(self):
+        first_row, first = self.perf03_case()
+        self.validate_perf03(first_row, first)
+        second_row, second = self.perf03_case(2, pid=222, case=gate.perf03_case_set()[1])
+        self.assertTrue(self.validate_perf03(second_row, second)["proofReused"])
+        (self.diagnostics / self.original_control).write_text("changed retained control")
+        third_row, third = self.perf03_case(3, pid=333, case=gate.perf03_case_set()[2])
+        self.assertFalse(self.validate_perf03(third_row, third)["proofReused"])
+        self.assertEqual(len(self.gate_calls), 2)
+
+    def test_missing_or_substituted_diagnostic_proof_is_rejected(self):
+        row, attempt = self.perf03_case()
+        self.validate_perf03(row, attempt)
+        request = attempt / "artifact-gate-request.json"
+        proof_path = Path(gate.read(request)["output"]) / "artifact-proof.json"
+        original = gate.read(proof_path)
+        for name in (*gate.PERF03_FIELDS, "perf03CauseGate"):
+            with self.subTest(name=name):
+                proof = copy.deepcopy(original)
+                proof.pop(name)
+                gate.write(proof_path, proof)
+                with self.assertRaisesRegex(ValueError, "PERF03"):
+                    gate.verify_gate(request, proof_path)
+        gate.write(proof_path, original)
+
+    def test_rehashed_diagnostic_evidence_requires_exact_cases_and_declared_limits(self):
+        row, attempt = self.perf03_case()
+        self.validate_perf03(row, attempt)
+        request = attempt / "artifact-gate-request.json"
+        proof_path = Path(gate.read(request)["output"]) / "artifact-proof.json"
+        evidence_path = proof_path.parent / "perf03-cause/perf03-cause.json"
+        original_proof, original = gate.read(proof_path), gate.read(evidence_path)
+        for mutation in ("missing-case", "duplicate-case", "failed-case", "wrong-sum", "boolean-count", "token", "cleanup", "order", "producer", "native-scope", "raw-pending-claim", "consumer-count", "pending-count", "control-parity", "shared-request", "enumeration-applicability", "ambient-scope", "pending-claim", "nonsequential", "variant"):
+            with self.subTest(mutation=mutation):
+                proof, evidence = copy.deepcopy(original_proof), copy.deepcopy(original)
+                if mutation == "missing-case":
+                    evidence["normalInputCases"].pop()
+                elif mutation == "duplicate-case":
+                    evidence["normalInputCases"][0] = copy.deepcopy(evidence["normalInputCases"][1])
+                elif mutation == "failed-case":
+                    evidence["isolatedControls"][0]["status"] = "Failed"
+                elif mutation == "wrong-sum":
+                    evidence["normalInputCases"][0]["sum"] = 0
+                elif mutation == "boolean-count":
+                    evidence["normalInputCases"][0]["count"] = True
+                elif mutation == "token":
+                    evidence["normalInputCases"][0]["sourceTokenMatchesApi"] = False
+                elif mutation == "cleanup":
+                    evidence["normalInputCases"][0]["disposals"] = 2
+                elif mutation == "order":
+                    evidence["isolatedControls"][0]["events"] = [100, 1, 2, 3, 4, 5]
+                elif mutation == "producer":
+                    evidence["normalInputCases"][0]["producerRepresentation"] = "SubstitutedProducer"
+                elif mutation == "native-scope":
+                    evidence["isolatedControls"][0]["identities"]["nativeScopeReferenceObserved"] = False
+                elif mutation == "raw-pending-claim":
+                    evidence["normalInputCases"][0]["consumerPreflight"]["rawDecisionSitesObserved"] = True
+                elif mutation == "consumer-count":
+                    evidence["normalInputCases"][0]["consumerPreflight"]["consumptions"] = 1024
+                elif mutation == "pending-count":
+                    evidence["normalInputCases"][0]["consumerPreflight"]["firstMoveIncomplete"] = True
+                elif mutation == "control-parity":
+                    evidence["isolatedControls"][0]["normalParity"] = False
+                elif mutation == "shared-request":
+                    evidence["isolatedControls"][0]["sharedRequest"] = False
+                elif mutation == "enumeration-applicability":
+                    evidence["normalInputCases"][0]["publicEnumerationTokenApplicable"] = False
+                elif mutation == "ambient-scope":
+                    evidence["variantEnvelope"]["ambientContext"] = "Producer context preservation proven"
+                elif mutation == "pending-claim":
+                    evidence["pendingFractionClaim"] = True
+                elif mutation == "nonsequential":
+                    evidence["variantEnvelope"]["sequential"] = False
+                else:
+                    evidence["variant"] = "VRoot"
+                gate.write(evidence_path, evidence)
+                proof["perf03CauseGate"]["evidenceSha256"] = gate.sha(evidence_path)
+                gate.write(proof_path, proof)
+                with self.assertRaisesRegex(ValueError, "PERF03"):
+                    gate.verify_gate(request, proof_path)
+        gate.write(evidence_path, original)
+        gate.write(proof_path, original_proof)
+
+    def test_rehashed_contract_checks_require_all_observed_contracts_and_expected_outcomes(self):
+        row, attempt = self.perf03_case()
+        self.validate_perf03(row, attempt)
+        request = attempt / "artifact-gate-request.json"
+        proof_path = Path(gate.read(request)["output"]) / "artifact-proof.json"
+        evidence_path = proof_path.parent / "perf03-cause/perf03-cause.json"
+        original_proof, original = gate.read(proof_path), gate.read(evidence_path)
+        self.assertEqual(sum(len(control["contractChecks"]) for control in original["isolatedControls"]), 17)
+        for mutation in ("missing-section", "missing-contract", "duplicate-contract", "wrong-name", "failed-contract",
+                         "mismatched-observations", "wrong-outcome", "wrong-items", "wrong-startup", "wrong-cleanup", "wrong-order"):
+            with self.subTest(mutation=mutation):
+                proof, evidence = copy.deepcopy(original_proof), copy.deepcopy(original)
+                control = evidence["isolatedControls"][0]
+                contracts = control["contractChecks"]
+                if mutation == "missing-section":
+                    control.pop("contractChecks")
+                elif mutation == "missing-contract":
+                    contracts.pop()
+                elif mutation == "duplicate-contract":
+                    contracts[0] = copy.deepcopy(contracts[1])
+                elif mutation == "wrong-name":
+                    contracts[0]["name"] = "unobserved-contract"
+                elif mutation == "failed-contract":
+                    contracts[0]["status"] = "Failed"
+                else:
+                    contract = next(item for item in contracts if item["name"] == "producer-failure")
+                    if mutation == "mismatched-observations":
+                        contract["isolated"]["items"] = 1
+                    else:
+                        key, value = {"wrong-outcome": ("outcome", "Completed"), "wrong-items": ("items", 1),
+                                      "wrong-startup": ("Handlers", 0), "wrong-cleanup": ("Disposals", 0),
+                                      "wrong-order": ("events", [100, 5, 4, 3, 2, 1])}[mutation]
+                        for lane in ("normal", "isolated"):
+                            contract[lane][key] = value
+                gate.write(evidence_path, evidence)
+                proof["perf03CauseGate"]["evidenceSha256"] = gate.sha(evidence_path)
+                gate.write(proof_path, proof)
+                with self.assertRaisesRegex(ValueError, "PERF03 V0 contract|declared contract"):
+                    gate.verify_gate(request, proof_path)
+        gate.write(evidence_path, original)
+        gate.write(proof_path, original_proof)
+
+    def test_changed_archived_snapshot_is_rejected(self):
+        row, attempt = self.perf03_case()
+        self.validate_perf03(row, attempt)
+        request = attempt / "artifact-gate-request.json"
+        proof_path = Path(gate.read(request)["output"]) / "artifact-proof.json"
+        path = attempt / "bundle/perf03-sources/src/Perf03CauseDiagnostics" / self.original_control
+        path.write_text("substituted snapshot")
+        with self.assertRaisesRegex(ValueError, "bundle"):
+            gate.verify_gate(request, proof_path)
+
+    def test_missing_original_provenance_is_rejected_before_gate_launch(self):
+        row, attempt = self.perf03_case()
+        (self.diagnostics / "snapshot-provenance.json").unlink()
+        with self.assertRaisesRegex(ValueError, "snapshot/provenance sources"):
+            self.validate_perf03(row, attempt)
+        self.assertFalse(self.gate_calls)
+
+    def test_unimplemented_diagnostic_variant_is_rejected_before_gate_launch(self):
+        row, attempt = self.perf03_case()
+        (self.diagnostics / "Perf03CauseVariant.cs").write_text('internal const string Id = "VRoot";')
+        with self.assertRaisesRegex(ValueError, "PERF03 diagnostic variant"):
+            self.validate_perf03(row, attempt)
+        self.assertFalse(self.gate_calls)
+
+
 if __name__ == "__main__":
     unittest.main()
