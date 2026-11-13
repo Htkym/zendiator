@@ -17,8 +17,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import run_interleaved as driver
+import run_ab as ab
 import owned_process
-from interleaved_plan import identity, library, make_plan, normalize_case, verify_log
+from interleaved_plan import identity, library, make_ab_plan, make_plan, normalize_case, verify_log
 
 
 class ProjectPlanContracts(unittest.TestCase):
@@ -110,6 +111,117 @@ class ProjectPlanContracts(unittest.TestCase):
                     verify_log(plan, path)
 
 
+class RevisionComparisonContracts(unittest.TestCase):
+    cases = [{"Type": "ZendiatorSend0", "Method": "Typed", "Lifetime": "Scoped"},
+             {"Type": "ImmediateSend0", "Method": "Typed", "Lifetime": "Scoped"},
+             {"Type": "ZendiatorSend5", "Method": "ScopeK1", "Lifetime": "Scoped"}]
+
+    def test_adjacent_revision_pairs_balance_the_first_side_and_reverse_exactly(self):
+        forward = make_ab_plan(self.cases)
+        self.assertEqual([row["Side"] for row in forward],
+                         ["baseline", "candidate", "candidate", "baseline", "candidate", "baseline"])
+        for first, second in zip(forward[::2], forward[1::2]):
+            self.assertEqual(first["Case"], second["Case"])
+            self.assertNotEqual(first["Side"], second["Side"])
+        reverse = make_ab_plan(self.cases, reverse=True)
+        self.assertEqual([(row["Side"], row["Case"]) for row in reverse],
+                         [(row["Side"], row["Case"]) for row in reversed(forward)])
+        worker, _ = make_plan(self.cases)
+        for row in reverse:
+            self.assertEqual(row["Case"], list(reversed(worker))[row["CaseIndex"] - 1]["Case"])
+        with self.assertRaisesRegex(ValueError, "empty"):
+            make_ab_plan([])
+
+    def result(self, mean=10.0, lower=9.5, upper=10.5):
+        return {"Statistics": {"Mean": mean, "N": 11,
+                "ConfidenceInterval": {"Level": 12, "Lower": lower, "Upper": upper, "Margin": (upper - lower) / 2}},
+                "Memory": {"BytesAllocatedPerOperation": 704}}
+
+    def test_comparison_keeps_effective_n_and_classifies_only_disjoint_intervals(self):
+        baseline = ab.statistics(self.result())
+        self.assertEqual((baseline["N"], baseline["ConfidenceLevel"]), (11, 12))
+        for mean, lower, upper, classification in ((8, 7.5, 8.5, "improvement"),
+                (12, 11.5, 12.5, "regression"), (10, 9.5, 10.5, "overlap"), (9, 8.5, 9.5, "overlap")):
+            candidate = ab.statistics(self.result(mean, lower, upper))
+            result = ab.compare(baseline, candidate)
+            self.assertEqual(result["classification"], classification)
+            self.assertEqual(result["meanRatioCandidateOverBaseline"], mean / 10)
+        candidate["ConfidenceLevel"] = 11
+        with self.assertRaisesRegex(ValueError, "levels differ"):
+            ab.compare(baseline, candidate)
+        for value in (None, float("nan"), float("inf"), True):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                ab.statistics(self.result(value))
+        missing = self.result()
+        del missing["Statistics"]["ConfidenceInterval"]["Level"]
+        with self.assertRaisesRegex(ValueError, "confidence level"):
+            ab.statistics(missing)
+
+    def test_changed_controls_and_source_identity_are_rejected(self):
+        revisions = {side: "a" * 40 for side in ab.SIDES}
+        snapshots = [{"revision": "a" * 40, "sourceDigest": "A", "controls": {"lock": "same"}},
+                     {"revision": "a" * 40, "sourceDigest": "B", "controls": {"lock": "changed"}}]
+        with patch.object(ab, "inspect_source", side_effect=snapshots):
+            with self.assertRaisesRegex(ValueError, "package locks differ"):
+                ab.check_sources({side: Path(side) for side in ab.SIDES}, revisions)
+        snapshots[1]["controls"]["lock"] = "same"
+        # Git blobs match across LF/CRLF checkouts; each side retains its own actual byte digest.
+        blob = "100644 blob " + "a" * 40 + "\tbenchmarks/example.cs\0"
+        with tempfile.TemporaryDirectory() as directory:
+            roots = {side: Path(directory) / side for side in ab.SIDES}
+            for side, content in zip(ab.SIDES, (b"line\n", b"line\r\n")):
+                path = roots[side] / "benchmarks/example.cs"
+                path.parent.mkdir(parents=True)
+                path.write_bytes(content)
+            def git(args, cwd):
+                return {("git", "rev-parse", "--show-toplevel"): str(cwd), ("git", "rev-parse", "HEAD"): "a" * 40,
+                        ("git", "status", "--porcelain=v1", "-uall"): "",
+                        ("git", "ls-tree", "-r", "--full-tree", "-z", "HEAD"): blob}[tuple(args)]
+            with patch.object(ab, "command", side_effect=git):
+                accepted = ab.check_sources(roots, revisions)
+            self.assertEqual(accepted["baseline"]["controls"], accepted["candidate"]["controls"])
+            self.assertNotEqual(accepted["baseline"]["sourceDigest"], accepted["candidate"]["sourceDigest"])
+        expected = {side: dict(snapshots[index]) for index, side in enumerate(ab.SIDES)}
+        expected["baseline"] = dict(expected["baseline"], sourceDigest="changed")
+        with patch.object(ab, "inspect_source", side_effect=snapshots):
+            with self.assertRaisesRegex(ValueError, "immutable source identity changed"):
+                ab.check_sources({side: Path(side) for side in ab.SIDES}, revisions, expected)
+
+    def test_matching_cases_must_still_use_the_fixed_runtime_and_peer_bindings(self):
+        runtime = dict.fromkeys(ab.RUNTIME_FIELDS)
+        runtime.update(frameworkVersion="10.0.14", architecture="X64", serverGC=False)
+        assemblies = [{"name": name, "sha256": "A"} for name in (
+            "Microsoft.Extensions.DependencyInjection", "Microsoft.Extensions.DependencyInjection.Abstractions", "System.Private.CoreLib")]
+        evidence = {"child": {"runtimeEvidence": runtime, "assemblies": assemblies}}
+        ab.check_pair(evidence, evidence, {"Library": "Zendiator"})
+        for field, value in (("serverGC", True), ("architecture", "Arm64"), ("frameworkVersion", "10.0.15")):
+            changed = {"child": {"runtimeEvidence": dict(runtime, **{field: value}), "assemblies": assemblies}}
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "workstation GC"):
+                ab.check_pair(changed, changed, {"Library": "Zendiator"})
+        changed = {"child": {"runtimeEvidence": runtime, "assemblies": [dict(item, sha256="B") for item in assemblies]}}
+        with self.assertRaisesRegex(ValueError, "different peer"):
+            ab.check_pair(evidence, changed, {"Library": "Zendiator"})
+    def test_trace_rejects_reordering_uncertain_steps_overlap_and_substitution(self):
+        plan = make_ab_plan(self.cases)
+        with tempfile.TemporaryDirectory() as directory, patch.object(ab, "check_owned_markers"):
+            workers = {side: {"sessionId": side + "-session"} for side in ab.SIDES}
+            records = []
+            for index, row in enumerate(plan):
+                marker = Path(directory) / row["Side"] / "runs/custom/cases" / f'{row["CaseIndex"]:04d}' / "complete.json"
+                marker.parent.mkdir(parents=True)
+                marker.write_text("{}", encoding="utf-8")
+                records.append({"row": row, "state": "complete", "workerSessionId": workers[row["Side"]]["sessionId"],
+                                "startUtc": "2026-11-13T00:00:00+00:00", "endUtc": "2026-11-13T00:00:01+00:00",
+                                "startMonotonicNs": 10 * index, "endMonotonicNs": 10 * index + 5,
+                                "completePath": str(marker), "completeSha256": ab.sha(marker)})
+            ab.verify_trace(Path(directory), plan, records, workers)
+            for modified in (dict(records[0], row=plan[1]), dict(records[0], state="running"),
+                             dict(records[0], endMonotonicNs=11), dict(records[0], completeSha256="changed"),
+                             dict(records[0], workerSessionId="other-session")):
+                with self.assertRaises(ValueError):
+                    ab.verify_trace(Path(directory), plan, [modified, *records[1:]], workers)
+
+
 class AggregateReportContracts(unittest.TestCase):
     def analyze(self, cases, reports):
         with tempfile.TemporaryDirectory() as directory:
@@ -132,7 +244,7 @@ class AggregateReportContracts(unittest.TestCase):
         return {"Type": case["Type"], "Method": case["Method"], "Project": "untrusted-project",
                 "Parameters": ", ".join(f"{name}={case[name]}" for name in ("Lifetime", "Count", "Asynchronous") if name in case),
                 "Statistics": {"Mean": 10.0, "Median": 9.9, "N": 12, "StandardDeviation": 0.1,
-                               "ConfidenceInterval": {"Lower": 9.5, "Upper": 10.5, "Margin": 0.5}},
+                               "ConfidenceInterval": {"Level": 12, "Lower": 9.5, "Upper": 10.5, "Margin": 0.5}},
                 "Memory": {"BytesAllocatedPerOperation": 0}}
 
     def test_projects_come_from_declared_cases_and_confidence_is_preserved(self):
@@ -147,6 +259,11 @@ class AggregateReportContracts(unittest.TestCase):
         for row in rows:
             self.assertEqual((row["MeanNs"], row["AllocatedBytes"], row["ConfidenceLowerNs"],
                               row["ConfidenceUpperNs"], row["ConfidenceMarginNs"]), ("10.0", "0", "9.5", "10.5", "0.5"))
+        source = self.report(cases[0])
+        source["Statistics"]["N"] = 11
+        result, single = self.analyze([cases[0]], [source])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((single[0]["N"], single[0]["ConfidenceLevel"]), ("11", "12"))
         old = self.report(cases[0])
         old["Statistics"].pop("ConfidenceInterval")
         result, rows = self.analyze([dict(cases[0], Project=None)], [old])
