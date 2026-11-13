@@ -1,0 +1,178 @@
+[
+  {
+    "Type": "ZendiatorSend0",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend0",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorNotification16",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorShortCircuit",
+    "Method": "WarmDispatch",
+    "Project": "short"
+  },
+  {
+    "Type": "HZendiatorBenchmarks",
+    "Method": "FirstSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HZendiatorBenchmarks",
+    "Method": "WarmSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HZendiatorBenchmarks",
+    "Method": "ColdOuterFailure",
+    "Project": "hooks"
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "FullTyped",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "EarlyBreakTyped",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "FullTyped",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream0",
+    "Method": "EarlyBreakTyped",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "FullTyped",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "EarlyBreakTyped",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "FullTyped",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "EarlyBreakTyped",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateStream0",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateStream5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ImmediateRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ImmediateRelay5",
+    "Method": "EarlyBreak",
+    "Count": 16,
+    "Asynchronous": true
+  }
+]
