@@ -200,6 +200,38 @@ class AggregateReportContracts(unittest.TestCase):
 
 
 class ArtifactContracts(unittest.TestCase):
+    def test_shared_dll_preflight_uses_bytes_and_rechecks_saved_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            projects = {suite: Path(directory) / suite for suite in ("usecase", "hooks")}
+            common = []
+            original = b"Shared, Version=1.0.0.0; payload=baseline"
+            changed = b"Shared, Version=1.0.0.0; payload=changed"
+            for suite, project in projects.items():
+                root = project / "bin/Release/net10.0"
+                root.mkdir(parents=True)
+                common.append(root / "Shared.dll")
+                common[-1].write_bytes(original)
+                (root / (suite + ".dll")).write_bytes(suite.encode())
+                nested = root / "generated/bin/Release/net10.0"
+                nested.mkdir(parents=True)
+                (nested / "Shared.dll").write_bytes(suite.encode())
+            session = {}
+            driver.check_shared_binary_identity(projects, session)
+            self.assertEqual(set(session["sharedDllPreflight"]), {"shared.dll"})
+            self.assertEqual(set(session["sharedDllPreflight"]["shared.dll"]), set(projects))
+            driver.check_shared_binary_identity(projects, session, resume=True)
+            common[1].write_bytes(changed)
+            with self.assertRaisesRegex(ValueError, "Shared DLL shared.dll differs") as error:
+                driver.check_shared_binary_identity(projects, {})
+            for path in common:
+                self.assertIn(str(path.resolve()), str(error.exception))
+                self.assertIn(driver.sha(path), str(error.exception))
+            common[0].write_bytes(changed)
+            with self.assertRaisesRegex(ValueError, "preflight identity changed; cannot resume"):
+                driver.check_shared_binary_identity(projects, session, resume=True)
+            with self.assertRaisesRegex(ValueError, "Missing shared DLL preflight identity"):
+                driver.check_shared_binary_identity(projects, {}, resume=True)
+
     def test_missing_process_evidence_blocks_resume_before_child_evidence_exists(self):
         with tempfile.TemporaryDirectory() as directory:
             case = Path(directory)
