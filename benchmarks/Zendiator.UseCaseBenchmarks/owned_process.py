@@ -48,9 +48,10 @@ def process_snapshot(pid):
         api.OpenProcess.argtypes, api.OpenProcess.restype = [w.DWORD, w.BOOL, w.DWORD], w.HANDLE
         api.GetProcessTimes.argtypes = [w.HANDLE] + [ctypes.POINTER(w.FILETIME)] * 4
         api.GetProcessTimes.restype = w.BOOL
-        api.WaitForSingleObject.argtypes, api.WaitForSingleObject.restype = [w.HANDLE, w.DWORD], w.DWORD
+        api.GetExitCodeProcess.argtypes = [w.HANDLE, ctypes.POINTER(w.DWORD)]
+        api.GetExitCodeProcess.restype = w.BOOL
         api.CloseHandle.argtypes, api.CloseHandle.restype = [w.HANDLE], w.BOOL
-        handle = api.OpenProcess(0x1000 | 0x100000, False, pid)  # QUERY_LIMITED_INFORMATION | SYNCHRONIZE
+        handle = api.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
         if not handle:
             error = ctypes.get_last_error()
             if error == 87:  # ERROR_INVALID_PARAMETER: PID no longer exists.
@@ -60,12 +61,12 @@ def process_snapshot(pid):
             creation, exit_time, kernel, user = (w.FILETIME() for _ in range(4))
             if not api.GetProcessTimes(handle, ctypes.byref(creation), ctypes.byref(exit_time), ctypes.byref(kernel), ctypes.byref(user)):
                 raise RuntimeError(f"Cannot read process creation time; WinError {ctypes.get_last_error()}")
-            wait = api.WaitForSingleObject(handle, 0)
-            if wait not in (0, 258):
-                raise RuntimeError("Cannot determine process execution state")
+            exit_code = w.DWORD()
+            if not api.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                raise RuntimeError(f"Cannot determine process execution state; WinError {ctypes.get_last_error()}")
             ticks = ((creation.dwHighDateTime << 32) | creation.dwLowDateTime) + 504911232000000000
             return {"pid": pid, "platform": "windows", "startToken": str(ticks),
-                    "state": "terminated" if wait == 0 else "running"}
+                    "state": "running" if exit_code.value == 259 else "terminated"}  # STILL_ACTIVE stays conservative.
         finally:
             api.CloseHandle(handle)
     if sys.platform.startswith("linux") and Path("/proc/self/stat").exists():
