@@ -8,7 +8,16 @@ internal static class ChildEvidence
 {
     private static int registered;
 
-    public static void Record(object benchmark, string scenario, string lifetime) => Record(scenario, "Default");
+    public static void Record(object benchmark, string scenario, string lifetime) => Record(benchmark);
+
+    public static void Record(object benchmark)
+    {
+        var type = benchmark.GetType();
+        // BDN runs a generated subclass; bind evidence to the declared workload type.
+        while (type.Assembly != typeof(ChildEvidence).Assembly)
+            type = type.BaseType ?? throw new InvalidOperationException("Benchmark workload type was not found.");
+        Record(type.Name, type.GetProperty("Lifetime")?.GetValue(benchmark) as string ?? "Default");
+    }
 
     public static void Record(string scenario, string lifetime)
     {
