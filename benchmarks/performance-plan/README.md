@@ -9,6 +9,10 @@ pins runtime 10.0.14 with roll-forward disabled for all four benchmark projects
 when `ZendiatorFormalMeasurement=true`. The driver sets this property on its
 restore/build commands and in the process environment inherited by BDN builds.
 Ordinary non-measurement builds retain their normal runtime selection.
+Formal builds also map BDN's physical artifact directory to
+`/_/zendiator-bdn/` in compiler paths before the compile-input cache is computed.
+This keeps generated source and PDB paths independent of the selected benchmark
+project. The driver still requires one identical product DLL across cases.
 Record the actual OS, CPU, loaded runtime and package-lock hashes with each run.
 
 The package survey on 2026-11-13 selected these exact stable versions:
