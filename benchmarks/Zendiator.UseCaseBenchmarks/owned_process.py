@@ -6,14 +6,54 @@ Other POSIX platforms are refused until their membership query is implemented.
 """
 
 import ctypes
+import json
 import os
 import re
 import signal
 import subprocess
 import sys
 import time
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
+
+
+_WINDOWS_EPOCH_TICKS = 504911232000000000
+_WINDOWS_MAX_TICKS = 3155378975999999999
+
+
+class _WindowsQueryError(RuntimeError):
+    def __init__(self, pid, operation, winerror):
+        super().__init__(f"{operation}; WinError {winerror}")
+        self.pid, self.winerror = pid, winerror
+
+
+def _windows_cim_creation(pid):
+    if os.name != "nt" or type(pid) is not int or not 0 < pid <= 0xffffffff:
+        raise RuntimeError("Invalid Windows CIM process PID")
+    executable = PureWindowsPath(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    if not executable.is_absolute():
+        raise RuntimeError("Windows PowerShell path is not absolute")
+    # The fixed local query receives only a validated DWORD PID, never caller-supplied script text.
+    script = r"""
+$ErrorActionPreference='Stop'
+$ProgressPreference='SilentlyContinue'
+[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+$rows=@(Get-CimInstance -Namespace root/cimv2 -ClassName Win32_Process -Filter 'ProcessId = __PID__' -Property ProcessId,CreationDate -OperationTimeoutSec 5 -ErrorAction Stop)
+if($rows.Count -ne 1){throw 'No single positive CIM process row'}
+$process=$rows[0]
+if($process.CreationDate -isnot [datetime] -or $process.CreationDate.Kind -eq [DateTimeKind]::Unspecified){throw 'Unknown CIM creation time'}
+[ordered]@{pid=[long]$process.ProcessId;creationTicks=$process.CreationDate.ToUniversalTime().Ticks.ToString([Globalization.CultureInfo]::InvariantCulture)}|ConvertTo-Json -Compress
+""".replace("__PID__", str(pid))
+    result = subprocess.run([str(executable), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
+                            capture_output=True, text=True, encoding="utf-8", check=True, timeout=10,
+                            shell=False, creationflags=0x08000000)  # CREATE_NO_WINDOW
+    value = json.loads(result.stdout)
+    if (type(value) is not dict or set(value) != {"pid", "creationTicks"} or
+        type(value["pid"]) is not int or value["pid"] != pid or
+        type(value["creationTicks"]) is not str or not re.fullmatch(r"[1-9][0-9]{0,18}", value["creationTicks"]) or
+        not _WINDOWS_EPOCH_TICKS <= int(value["creationTicks"]) <= _WINDOWS_MAX_TICKS):
+        raise RuntimeError("Invalid CIM process creation evidence")
+    return value
 
 
 def validate_process_identity(identity):
@@ -40,7 +80,7 @@ def linux_snapshot_from_stat(pid, stat, boot):
 
 def process_snapshot(pid):
     """Read a process through a handle or /proc; never signal a PID."""
-    if type(pid) is not int or pid <= 0:
+    if type(pid) is not int or pid <= 0 or (os.name == "nt" and pid > 0xffffffff):
         raise RuntimeError("Invalid process PID")
     if os.name == "nt":
         from ctypes import wintypes as w
@@ -56,15 +96,15 @@ def process_snapshot(pid):
             error = ctypes.get_last_error()
             if error == 87:  # ERROR_INVALID_PARAMETER: PID no longer exists.
                 return None
-            raise RuntimeError(f"Cannot identify process {pid}; WinError {error}")
+            raise _WindowsQueryError(pid, f"Cannot identify process {pid}", error)
         try:
             creation, exit_time, kernel, user = (w.FILETIME() for _ in range(4))
             if not api.GetProcessTimes(handle, ctypes.byref(creation), ctypes.byref(exit_time), ctypes.byref(kernel), ctypes.byref(user)):
-                raise RuntimeError(f"Cannot read process creation time; WinError {ctypes.get_last_error()}")
+                raise _WindowsQueryError(pid, "Cannot read process creation time", ctypes.get_last_error())
             exit_code = w.DWORD()
             if not api.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
-                raise RuntimeError(f"Cannot determine process execution state; WinError {ctypes.get_last_error()}")
-            ticks = ((creation.dwHighDateTime << 32) | creation.dwLowDateTime) + 504911232000000000
+                raise _WindowsQueryError(pid, "Cannot determine process execution state", ctypes.get_last_error())
+            ticks = ((creation.dwHighDateTime << 32) | creation.dwLowDateTime) + _WINDOWS_EPOCH_TICKS
             return {"pid": pid, "platform": "windows", "startToken": str(ticks),
                     "state": "running" if exit_code.value == 259 else "terminated"}  # STILL_ACTIVE stays conservative.
         finally:
@@ -96,7 +136,22 @@ def process_alive(identity):
     platform = "windows" if os.name == "nt" else "linux" if sys.platform.startswith("linux") else None
     if identity["platform"] != platform:
         raise RuntimeError("Cannot identify recorded process on this platform; do not resume")
-    snapshot = process_snapshot(identity["pid"])
+    try:
+        snapshot = process_snapshot(identity["pid"])
+    except _WindowsQueryError as error:
+        if os.name != "nt" or error.winerror != 5 or error.pid != identity["pid"]:
+            raise
+        try:
+            recorded = int(identity["startToken"])
+            if not _WINDOWS_EPOCH_TICKS <= recorded <= _WINDOWS_MAX_TICKS:
+                raise RuntimeError("Invalid recorded Windows creation time")
+            current = _windows_cim_creation(identity["pid"])
+            # CIM is only later-birth exclusion evidence, with a conservative 1 ms guard.
+            if int(current["creationTicks"]) > recorded + 10000:
+                return False
+        except Exception as failure:
+            raise error from failure
+        raise
     if snapshot is None or snapshot["state"] == "terminated":
         return False
     if snapshot["platform"] != identity["platform"]:
