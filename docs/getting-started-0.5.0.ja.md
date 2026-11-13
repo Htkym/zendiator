@@ -1,10 +1,12 @@
-# 0.6.0の使い方
+# 0.7.0開発版の使い方
 
-0.6.0のpackageで同期処理・非同期処理・Streamを使う例です。移行時は[リリースノート](release/0.6.0-release-notes.ja.md)を確認してください。
+0.7.0は未公開です。このガイドは[ルート単位の依存取得の変更](release/0.7.0-release-notes.md)を含む開発版の契約を説明します。公開済みの0.6.0パッケージでは従来の動作を保ちます。[0.6.0のリリースノート](release/0.6.0-release-notes.ja.md)も確認してください。
 
-## 準備と実行
+以下の例は公開済みの0.6.0パッケージで実行でき、新しい依存取得の動作は含みません。0.7.0を試す場合は、このソースからZendiator.AbstractionsとZendiatorの同じバージョンのパッケージを作り、ローカルNuGetフィードに置いてください。そのフィードとNuGet.orgからサンプルを復元し、復元と実行の両方に`-p:ZendiatorPackageVersion=0.7.0`を指定します。NuGet.orgに0.7.0が公開されていることを前提にはしません。
 
-.NET 10 SDKとC# 14を使います。NuGet.orgから0.6.0のpackageを取得します。
+## 公開済み0.6.0の例を実行する
+
+.NET 10 SDKとC# 14を使います。NuGet.orgから0.6.0のパッケージを取得します。
 
 新しいフォルダーに、次のプロジェクトファイルと`Program.cs`を保存します。[サンプルのファイル](../samples/Zendiator.Sample.GettingStarted/)をコピーしても実行できます。Zendiatorのソースプロジェクトへの`ProjectReference`は使いません。
 
@@ -220,17 +222,29 @@ Current、pending Dispose、取消し、session所有権、context、HTTPと移�
 
 ## DI scopeの所有
 
-標準DIが、この例のHandlerとHookの生成・破棄を受け持ちます。呼び出し側はscopeを作り、そのscopeから`IZendiator`を取得します。非同期処理の完了とStreamの列挙終了までscopeを保持し、その後に破棄します。HandlerやHookを呼び出し側で個別に破棄する必要はありません。
+標準DIがこの例のHandlerとHookの生成・破棄を受け持ちます。呼び出し側はscopeを作り、そのscopeから`IZendiator`を取得します。非同期処理の完了とStreamの列挙終了までscopeを保持し、その後に破棄します。HandlerやHookを呼び出し側で個別に破棄する必要はありません。
 
-生成登録の既定は、`IZendiator`がScoped、Handler・Hook・session factoryがTransientです。通常は各Mediatorが依存の型ごとに最初に公開された成功結果を捕捉し、その後の呼出しでも使います。
+生成登録の既定は `IZendiator` が Scoped、Handler・Hook・session factory が Transient です。Mediator は取得した依存を再利用します。条件を満たす閉じた `SendAsync` ルートでは、同期 Before Hook だけの経路も含め、ルート単位の依存セットを使います。対象は Handler と全 Hook が DI から借用する参照型で、異なる受け手の型が 2 種類以上あり、Zendiator の session/factory 契約や Wrapper を使わないルートです。open generic のルート定義、値型の受け手、Handler だけのルートなどは従来の取得方法を保ちます。通常の DI の実装ファクトリはこの除外条件の factory 契約には当たりません。
 
-非同期Hookの実行経路を使う閉じた`SendAsync` routeでは、借用するHandlerと全Hookが参照型で、Zendiatorのsession/factory契約やWrapperを使わず、異なるreceiver型が2個以上ある場合、route単位の依存セットを捕捉します。このセットは初回dispatchの取消確認後、既存の非同期実行内で最初のHookより前に取得します。外側Hookの失敗で未使用になるHandlerも含め、DIが全receiverを取得します。Transientのreceiverは、ほかのrouteやMediatorの明示的な`IServiceProvider`経由で取得するものと異なる場合があります。
+初回の Send では、引数と取消を最初に検査した後、最初の Hook が動く前に DI が全受け手を取得します。新しいインスタンスが必要な場合は、この時点で構築します。外側の Hook が失敗した場合も、内側の Hook と Handler は構築済みになることがあります。依存セットの構築に失敗した場合は Hook を呼び出さず、失敗した取得結果は保存しません。DI はコンストラクタの引数を解決する途中で取消を検査しません。必須の受け手が null ならセットを保存せず、後で取得を再試行できます。コンストラクタが null を検出する前に、後続の引数が取得済みになる場合があります。
+
+同期 Before だけの経路では、依存解決とコールバックが呼び出し中に動き、同期例外が発生することや、Handler の元の `ValueTask` をそのまま返すことは変わりません。ほかの非同期 Hook 経路の実行境界も変わりません。
+
+Mediator は取得したセットをそのルートで再利用します。同じ型でも、Transient の受け手はルートごとに別のインスタンスになる場合があります。ルート間で同じインスタンスを使う必要があれば、Scoped または Singleton として登録してください。未使用の受け手や、並行した初回取得で採用されなかったインスタンスも、DI が生成と破棄を担当します。配送と後始末が終わるまで、その DI scope を保持してください。
+
+依存セットだけで使う型を Mediator の明示的な `IServiceProvider` 経由で解決すると、元のプロバイダーへ委ねます。その結果は Mediator の型別キャッシュに保存せず、Transient なら解決のたびに新しいインスタンスになる場合があります。同じ型を直接使う別ルートがある場合は、その型別の捕捉を保ちます。Scoped と Singleton の同一性は DI の登録に従います。
+
+`EagerDependencies` を明示した場合の取得時期と同一性は保ちます。同期 Before だけのルートの受け手を指定すると、そのルート全体は従来の型別捕捉を使い、DI から注入されたインスタンスを再利用します。指定したサービスは Mediator の解決時に取得し、指定していない受け手には従来の取得規則を適用します。指定したサービスのコンストラクタが依存する型は、DI が先に取得する場合があります。関係しないルートは条件を満たせば依存セットを使います。従来対応していなかった非同期 Hook 経路で `EagerDependencies` が使えるようになる変更ではありません。
+
+生成された構成の登録を使ってください。独自のプロバイダーは受け手だけでなく、生成された依存セットも解決できる必要があります。生成される型名やメンバー、配置は内部実装であり、手動で構築するための公開 API ではありません。
+
+Microsoft.Extensions.DependencyInjection の `ValidateOnBuild` は登録された依存セットのコンストラクタが宣言する依存関係を検査できます。ただし、すべての配送経路、DI ファクトリ内部の処理、open generic を閉じた構成や、実行中の操作まで検証するものではありません。`ValidateScopes` も有効にし、実際に使うルートで構築、状態の共有、破棄を確認してください。Singleton の Mediator に Scoped のサービスを捕捉させないでください。
 
 同じ依存または依存セットを並行して解決した呼出しは、公開された同じ捕捉instanceを使います。ある解決の例外はほかの成功結果で隠しません。生成・破棄は標準DIの責任です。[詳細な条件と制約](getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)を参照してください。
 
 Streamの返り値をscopeの外へ持ち出し、scopeを破棄してから列挙を始めないでください。途中で`break`した場合も、`await foreach`による列挙子の後始末が終わるまでscopeを保持します。
 
-`SendAsync`が返す`ValueTask`は、例のように1回だけ`await`します。同じ`ValueTask`を保存して複数回消費しないでください。
+`SendAsync`が返す`ValueTask`は例のように1回だけ`await`します。同じ`ValueTask`を保存して複数回消費しないでください。
 
 ## 型付きqueryと状態更新commandを同じAppで使う
 
@@ -272,9 +286,9 @@ dotnet build $project -c Release --no-restore -p:ZendiatorPackageVersion=$versio
 
 0.5.0では、Handlerの属性と明示的な登録を使います。0.4.0のinterface実装やアセンブリ指定だけに依存した登録は、そのまま移せません。
 
-Behaviorの並びは`Pipeline`の順序付きリストで指定します。この例のHookは、要求の変換、応答の変換、Streamの項目処理という専用の契約を実装しています。既存Behaviorのretryやcacheなどの意味を、自動でHookへ置き換えるものではありません。継続の呼び出しを制御するBehaviorを移す際は、`Stage.Wrapper<T>()`の契約と対象経路を確認してください。
+Behaviorの並びは`Pipeline`の順序付きリストで指定します。この例のHookは要求の変換、応答の変換、Streamの項目処理という専用の契約を実装しています。既存Behaviorのretryやcacheなどの意味を、自動でHookへ置き換えるものではありません。継続の呼び出しを制御するBehaviorを移す際は、`Stage.Wrapper<T>()`の契約と対象経路を確認してください。
 
-この例は、型引数を持たないclassのrequest、`int`または`string`の応答、`int`のStream、DIが所有するHandlerとHookを使います。ほかの型や経路を網羅する例ではありません。更新前に[リリースノート](release/0.5.0-release-notes.ja.md)と既知の制限を確認してください。
+この例は型引数を持たないclassのrequest、`int`または`string`の応答、`int`のStream、DIが所有するHandlerとHookを使います。ほかの型や経路を網羅する例ではありません。更新前に[リリースノート](release/0.5.0-release-notes.ja.md)と既知の制限を確認してください。
 
 ### ジェネリック要求のWrapperと非ジェネリック要求を併用する
 
@@ -352,7 +366,7 @@ var closedResult = await mediator.SendAsync(new ClosedQuery(7), CancellationToke
 
 プロジェクト内で定義したHandlerを属性なしで明示登録すると、ZEN0035で登録箇所が示されます。ZEN0035はほかの生成条件の不備にも使います。診断文が属性不足を示している場合は、上の`AddNumbersHandler`のようにクラス宣言へ`[Handler]`を付けてください。
 
-`Zendiator.CodeFixes`は任意で追加するパッケージです。利用する場合は、`Zendiator`と同じ候補バージョンを用意し、プロジェクトの`ZendiatorPackageVersion`をそのバージョンに合わせてください。[導入例](../src/Zendiator.CodeFixes/README.md)のように`PrivateAssets="all"`を指定します。NuGet.orgで公開されるまでは、同じ版のローカルビルド済みpackageを使ってください。
+`Zendiator.CodeFixes`は任意で追加するパッケージです。利用する場合は、`Zendiator`と同じ候補バージョンを用意し、プロジェクトの`ZendiatorPackageVersion`をそのバージョンに合わせてください。[導入例](../src/Zendiator.CodeFixes/README.md)のように`PrivateAssets="all"`を指定します。NuGet.orgで公開されるまでは、同じバージョンのローカルビルド済みpackageを使ってください。
 
 CodeFixの対象は属性不足と判断できるZEN0035だけです。Fix Allの対象は現在の文書だけです。
 

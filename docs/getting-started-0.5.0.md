@@ -1,9 +1,18 @@
-# Getting started with 0.6.0
+# Getting started with 0.7.0 development
 
-Use matching 0.6.0 packages from NuGet.org. See the
-[release notes](release/0.6.0-release-notes.md) for migration.
+0.7.0 is unreleased. This guide describes its development contracts, including
+[route-local capture changes](release/0.7.0-release-notes.md). The published
+0.6.0 packages retain their existing behavior; see the
+[0.6.0 release notes](release/0.6.0-release-notes.md).
 
-## Run the sample
+The sample commands below use matching published 0.6.0 packages from NuGet.org
+and do not exercise the new capture behavior. To try 0.7.0, build matching
+Zendiator.Abstractions and Zendiator packages from this checkout into a local
+NuGet feed. Restore the sample from that feed and NuGet.org, and pass
+`-p:ZendiatorPackageVersion=0.7.0` to both restore and run. This does not assume
+that a 0.7.0 package is available from NuGet.org.
+
+## Run the published 0.6.0 sample
 
 The [GettingStarted project](../samples/Zendiator.Sample.GettingStarted/Zendiator.Sample.GettingStarted.csproj)
 requires .NET 10 and C# 14. Its [source](../samples/Zendiator.Sample.GettingStarted/Program.cs)
@@ -33,7 +42,7 @@ the operation or Stream enumeration, including cleanup, has finished. Let DI
 dispose its handler and hook services. Generated registration uses a Scoped
 `IZendiator` entry and Transient defaults for handlers, hooks and session
 factories. Each Mediator reuses captured services, either per dependency or as
-a route-local set for eligible asynchronous Hook routes described below.
+a route-local set for eligible SendAsync hook routes described below.
 Concurrent successful initializations share the published winner; a failed
 initialization still reports its own error. Await each returned `ValueTask` once.
 
@@ -45,34 +54,64 @@ returned. Synchronous changes to `AsyncLocal`, culture or `SynchronizationContex
 are visible to the caller. Other asynchronous failures arrive when awaiting the
 result. Put both the call and the await inside your `try` block.
 
-## Route-local capture for asynchronous Hooks
+<a id="route-local-capture-for-asynchronous-hooks"></a>
 
-Closed `SendAsync` routes using the asynchronous Hook execution path capture a
-route-local dependency set when the handler and all Hooks are borrowed reference
-types, use no session/factory contracts, and include at least two distinct receiver
-types. Open generic route definitions, value-type receivers, wrappers, handler-only
-routes and the synchronous-Before-only fast path retain their existing capture
-behavior. This does not exclude ordinary DI activation factories. Use generated
-composition registration so DI can construct the route-local set. A custom
-provider must also resolve that generated set.
+## Route-local capture for SendAsync hooks
 
-The set is acquired on the route's first dispatch, after the initial cancellation
-check and inside the existing asynchronous execution boundary. DI resolves all
-receivers before the first Hook runs, including a handler that an outer Hook
-failure leaves unused. Constructor side effects and failures therefore occur
-earlier than with per-node lazy acquisition, before the Hook's error and cleanup
-callbacks begin. If set construction fails, Hook callbacks are not entered.
-Native constructor injection does not check cancellation between
-arguments. A null required receiver prevents set publication; a failed
-initialization may be retried. Native DI may already have obtained later arguments
-before the constructor rejects a null receiver.
+Eligible closed `SendAsync` routes capture a route-local dependency set. This
+includes routes with only synchronous Before hooks when the handler and all hooks
+are borrowed reference types, use no Zendiator session/factory contracts or
+wrappers, and include at least two distinct receiver types. Open generic route
+definitions, value-type receivers, handler-only routes and other unsupported
+shapes retain their existing capture behavior. Ordinary DI implementation
+factories are not Zendiator session/factory contracts.
 
-The Mediator reuses the successful set for that route. A Transient receiver can
-differ between routes, and from the same type requested through the Mediator's
-explicit `IServiceProvider` interface. Register a receiver as Scoped or Singleton
-when native DI must share its identity. DI owns every activation and disposal,
-including unused receivers and concurrent losing initializations; the set does not
-dispose borrowed services. Keep the owning scope alive until dispatch completes.
+On the first Send, after the initial request and cancellation checks, DI resolves
+all receivers before the first hook runs. Any required construction takes place
+before callbacks begin. An outer hook failure can therefore leave already
+constructed downstream hooks and the handler unused. If set construction fails,
+hook callbacks are not entered. Native constructor injection does not check
+cancellation between arguments. A null required receiver prevents set publication;
+a failed initialization may be retried. Native DI may already have obtained later
+arguments before the constructor rejects a null receiver.
+
+The synchronous-Before-only path still runs dependency resolution and callbacks
+during the call, can throw synchronously, and returns the handler's original
+`ValueTask`. Other asynchronous hook routes keep their existing asynchronous
+execution boundary.
+
+The Mediator reuses the successful set for that route. Separate routes can capture
+different Transient instances of the same receiver type. Register a receiver as
+Scoped or Singleton when its identity must be shared across routes. DI owns
+construction and disposal, including unused receivers and concurrent losing
+initializations; the set does not dispose borrowed services. Keep the owning scope
+alive through dispatch and cleanup.
+
+A receiver used only through route-local sets has no separate per-type Mediator
+capture. Resolving it through the Mediator's explicit `IServiceProvider` interface
+delegates to the original provider; a Transient registration can produce a new
+instance on each resolution. If another direct route uses that type, its existing
+per-type capture remains. Scoped and Singleton identity continues to follow DI.
+
+Explicit `EagerDependencies` keeps its existing construction contract. If a
+selected receiver of a synchronous-Before-only route is listed, that entire route
+retains direct per-type capture and uses the injected instance. Listed services
+are obtained when DI resolves the Mediator. Unlisted receivers retain their
+existing per-use capture rules; native DI may obtain them earlier as constructor
+dependencies of listed services. Unrelated eligible routes still use route-local
+sets. This does not enable
+EagerDependencies for previously rejected asynchronous hook routes.
+
+Use generated composition registration so DI can construct the dependency set.
+A custom provider must resolve the generated set as well as its receivers. Its
+generated name, members and layout are implementation details, not an API for
+manual construction.
+
+With Microsoft.Extensions.DependencyInjection, `ValidateOnBuild` can inspect the
+declared constructor dependency graph of registered route sets. It does not
+validate every dispatch dependency, arbitrary DI factory body, open generic
+closure or later operation. Exercise the routes your application uses and enable
+`ValidateScopes`; a Singleton Mediator must not capture Scoped services.
 
 For asynchronous Hooks, error callbacks receive the current failure. An error
 callback can replace it, and a failing cleanup callback takes precedence. Entered

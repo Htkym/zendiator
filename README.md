@@ -90,17 +90,23 @@ Notification registration is separate from Send and Stream routes.
 
 ## Dependencies and errors
 
+The capture changes in this section describe unreleased
+[0.7.0 development](docs/release/0.7.0-release-notes.md). The installation example
+uses published 0.6.0, which retains its existing capture behavior.
+
 Generated registration uses a Scoped `IZendiator` and Transient defaults for
 handlers, hooks and session factories. Register overrides before `AddZendiator`.
-Each Mediator reuses captured dependencies. Eligible asynchronous Hook routes
-capture a route-local set, including receivers that an outer failure may leave
-unused. See [capture and lifetime](docs/getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)
+Each Mediator reuses captured dependencies. Eligible closed SendAsync hook routes,
+including synchronous Before hooks, resolve all receivers in a route-local set
+before the first hook. An outer failure may leave constructed receivers unused.
+See [capture and lifetime](docs/getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)
 before relying on Transient identity or constructor timing.
 
 DI owns activation and disposal. Keep the scope alive through dispatch,
 enumeration and cleanup; do not use an entry after its scope is disposed.
 Reused handlers and hooks must support concurrent invocation. `ValidateOnBuild`
-alone cannot validate dependencies reached only during dispatch.
+can inspect registered route-set constructor graphs, but does not validate every
+dependency reached during dispatch.
 
 Await each returned `ValueTask` once. Put both a `SendAsync` call and its await
 inside the application's `try` block: eligible direct routes can throw during the

@@ -90,15 +90,19 @@ Publish の並列実行、fire-and-forget、永続化や outbox は提供して�
 
 ## 依存のライフタイムと例外
 
+この節の依存取得の変更は未公開の[0.7.0開発版](docs/release/0.7.0-release-notes.md)を対象にします。
+インストール例で使う公開済みの0.6.0では、従来の取得方法を保ちます。
+
 生成登録の既定は `IZendiator` が Scoped、Handler・Hook・session factory が Transient です。
 上書きする登録は `AddZendiator` より先に追加してください。各 Mediator は取得した依存を再利用します。
-条件を満たす非同期 Hook の経路では、外側の失敗で未使用になる receiver も含め、経路ごとの依存セットを取得します。
+条件を満たす閉じた `SendAsync` の Hook 経路では、同期 Before も含め、最初の Hook が動く前にルート単位で全受け手を取得します。
+外側の失敗で未使用になる受け手も構築済みになる場合があります。
 Transient の同一性やコンストラクタの実行時期に依存する場合は、
 [依存の取得とライフタイム](docs/getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)を確認してください。
 
 生成と破棄は DI が担当します。配送・列挙・後始末が終わるまで scope を保持し、
 破棄後に入口を使わないでください。再利用する Handler と Hook は並行呼び出しに対応する必要があります。
-`ValidateOnBuild` だけでは配送時に初めて取得する依存を検証できません。
+`ValidateOnBuild` は登録された依存セットのコンストラクタが宣言する依存関係を検査できますが、配送時に使うすべての依存を検証するものではありません。
 
 返された `ValueTask` は一度だけ await します。直接呼び出す経路では、`ValueTask` を返す前に
 例外が発生することがあります。`SendAsync` の呼び出しと await の両方を `try` の中に置いてください。

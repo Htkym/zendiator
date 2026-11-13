@@ -1,17 +1,28 @@
-# Known limitations for 0.5.0
+# Known limitations for 0.7.0 development
 
-0.5.0 changes the handler, composition and Stream contracts.
-Start with [getting started](../getting-started-0.5.0.md) and the
-[Stream migration guide](../streaming-0.5.0.ja.md). Historical 0.4.0 APIs and results
-are described in the [0.4.0 release notes](0.4.0-release-notes.md); they are not
-compatibility promises for 0.5.0.
+0.7.0 is unreleased. This page describes the development contracts, including the
+[route-local capture changes](0.7.0-release-notes.md). Start with
+[getting started](../getting-started-0.5.0.md) and the
+[Stream migration guide](../streaming-0.5.0.ja.md). Published 0.6.0 behavior is
+described in its [release notes](0.6.0-release-notes.md). Historical 0.4.0 APIs and
+results remain in the [0.4.0 release notes](0.4.0-release-notes.md).
 
 ## Dependency capture and lifetime
 
-Each Mediator lazily captures the first published successful resolution of each
-dependency type, including Transient services and implementation factories. A new
-send, retry or route does not imply a new instance. Native DI still constructs and
-disposes these objects and controls Scoped or Singleton sharing.
+Each Mediator reuses captured dependencies, including Transient registrations.
+Eligible closed SendAsync hook routes, including synchronous Before hooks,
+capture a route-local set on first dispatch and resolve all receivers before the
+first hook. Unused downstream receivers may be constructed even when an outer hook
+fails. Separate routes can capture different Transients of the same type; use
+Scoped or Singleton registration when identity must be shared.
+
+Receivers used only through route-local sets have no separate per-type Mediator
+capture. Its explicit `IServiceProvider` interface forwards their resolution to
+the original provider. A type also used by a direct route retains that route's
+per-type capture. Explicit EagerDependencies keeps an affected synchronous-Before-only
+route on direct capture and preserves its injected instances and acquisition
+timing. See the [capture contract](../getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)
+for eligibility and custom-provider requirements.
 
 Concurrent first resolutions can activate several Transients. Successful callers
 use the publication winner; losing objects remain DI-owned. A resolution failure
@@ -23,9 +34,11 @@ cleanup finish. Using a Mediator after scope disposal is unsupported. Scope disp
 does not cancel or join pending operations. Independent Stream owners do not make
 shared handlers, hooks or sinks safe for concurrent use.
 
-Lazy resolution means `ValidateOnBuild` alone cannot validate every dispatch
-dependency. Exercise the routes your application uses, especially after changing
-lifetimes. Do not let a Singleton Mediator capture Scoped services.
+`ValidateOnBuild` can inspect the declared constructor dependency graph of
+registered route sets, but not every dispatch dependency, arbitrary DI factory
+body or open generic closure. Enable `ValidateScopes` and exercise the routes
+your application uses, especially after changing lifetimes. A Singleton Mediator
+must not capture Scoped services.
 
 Closed storage is inline by default. Explicit lazy blocks can reduce retained empty
 slots for some sparse compositions, but add block allocation and access costs for
