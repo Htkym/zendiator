@@ -482,6 +482,100 @@ class SendDiagnosticContracts(unittest.TestCase):
 
 
 class ProcessIdentityContracts(unittest.TestCase):
+    def test_windows_denied_identity_requires_a_strictly_later_cim_birth(self):
+        birth = 639301733877082028
+        identity = {"pid": 123, "platform": "windows", "startToken": str(birth)}
+        for delta in (-1, 0, 9999, 10000, 10001, 3396172212):
+            with self.subTest(delta=delta):
+                error = owned_process._WindowsQueryError(123, "native denied", 5)
+                response = SimpleNamespace(stdout=json.dumps({"pid": 123, "creationTicks": str(birth + delta)}))
+                with (patch.object(owned_process, "os", SimpleNamespace(name="nt", environ={"SystemRoot": r"C:\Windows"})),
+                      patch.object(owned_process, "process_snapshot", side_effect=error),
+                      patch.object(owned_process.subprocess, "run", return_value=response) as query):
+                    if delta > 10000:
+                        self.assertFalse(owned_process.process_alive(identity))
+                    else:
+                        with self.assertRaises(owned_process._WindowsQueryError) as raised:
+                            owned_process.process_alive(identity)
+                        self.assertIs(raised.exception, error)
+                args, options = query.call_args
+                self.assertEqual(args[0][0], r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
+                self.assertIn("-NoProfile", args[0])
+                self.assertIn("-NonInteractive", args[0])
+                self.assertIn("ProcessId = 123", args[0][-1])
+                self.assertIs(options["shell"], False)
+                self.assertEqual(options["creationflags"], 0x08000000)
+                self.assertEqual(options["timeout"], 10)
+                self.assertTrue(options["check"])
+
+    def test_windows_cim_unknown_or_invalid_evidence_preserves_native_error(self):
+        birth = 639301733877082028
+        identity = {"pid": 123, "platform": "windows", "startToken": str(birth)}
+        valid = {"pid": 123, "creationTicks": str(birth + 10001)}
+        invalid = [None, [], [valid, valid], {}, dict(valid, pid=124), dict(valid, pid="123"),
+                   dict(valid, pid=True), dict(valid, extra=1)]
+        invalid.extend(dict(valid, creationTicks=ticks) for ticks in
+                       (None, birth + 10001, float(birth), "", "0", "-1", "+639301733877092029",
+                        "0639301733877092029", "639301733877092029 ", "1e18", "9999999999999999999"))
+        outcomes = [SimpleNamespace(stdout=json.dumps(value)) for value in invalid]
+        outcomes.extend((SimpleNamespace(stdout="not JSON"), subprocess.TimeoutExpired("powershell", 10),
+                         subprocess.CalledProcessError(1, "powershell"), OSError("CIM unavailable")))
+        for outcome in outcomes:
+            with self.subTest(outcome=outcome):
+                error = owned_process._WindowsQueryError(123, "native denied", 5)
+                with (patch.object(owned_process, "os", SimpleNamespace(name="nt", environ={"SystemRoot": r"C:\Windows"})),
+                      patch.object(owned_process, "process_snapshot", side_effect=error),
+                      patch.object(owned_process.subprocess, "run", **(
+                          {"side_effect": outcome} if isinstance(outcome, Exception) else {"return_value": outcome}))):
+                    with self.assertRaises(owned_process._WindowsQueryError) as raised:
+                        owned_process.process_alive(identity)
+                    self.assertIs(raised.exception, error)
+
+    def test_cim_does_not_replace_native_identity_or_other_failure_paths(self):
+        identity = {"pid": 123, "platform": "windows", "startToken": "639301733877082028"}
+        for snapshot, expected in ((dict(identity, state="running"), True),
+                                   (dict(identity, state="terminated"), False), (None, False),
+                                   (dict(identity, state="running", startToken="639301733877082029"), False)):
+            with (patch.object(owned_process, "os", SimpleNamespace(name="nt")),
+                  patch.object(owned_process, "process_snapshot", return_value=snapshot),
+                  patch.object(owned_process, "_windows_cim_creation") as query):
+                self.assertIs(owned_process.process_alive(identity), expected)
+                query.assert_not_called()
+        for error in (owned_process._WindowsQueryError(123, "not denied", 87),
+                      owned_process._WindowsQueryError(124, "other PID", 5), RuntimeError("unstructured denial")):
+            with (patch.object(owned_process, "os", SimpleNamespace(name="nt")),
+                  patch.object(owned_process, "process_snapshot", side_effect=error),
+                  patch.object(owned_process, "_windows_cim_creation") as query):
+                with self.assertRaises(RuntimeError) as raised:
+                    owned_process.process_alive(identity)
+                self.assertIs(raised.exception, error)
+                query.assert_not_called()
+        error = owned_process._WindowsQueryError(123, "native denied", 5)
+        with (patch.object(owned_process, "os", SimpleNamespace(name="nt")),
+              patch.object(owned_process, "process_snapshot", side_effect=error),
+              patch.object(owned_process, "_windows_cim_creation") as query):
+            with self.assertRaises(owned_process._WindowsQueryError) as raised:
+                owned_process.process_identity(123)
+            self.assertIs(raised.exception, error)
+            query.assert_not_called()
+        linux = {"pid": 123, "platform": "linux", "startToken": "00000000-0000-0000-0000-000000000001:123"}
+        with (patch.object(owned_process, "os", SimpleNamespace(name="posix")),
+              patch.object(owned_process.sys, "platform", "linux"),
+              patch.object(owned_process, "process_snapshot", side_effect=error),
+              patch.object(owned_process, "_windows_cim_creation") as query):
+            with self.assertRaises(owned_process._WindowsQueryError) as raised:
+                owned_process.process_alive(linux)
+            self.assertIs(raised.exception, error)
+            query.assert_not_called()
+
+    def test_cim_rejects_invalid_pid_before_launch(self):
+        for pid in (True, 0, -1, "123", 0x100000000):
+            with self.subTest(pid=pid), patch.object(owned_process, "os", SimpleNamespace(name="nt")), \
+                 patch.object(owned_process.subprocess, "run") as query:
+                with self.assertRaisesRegex(RuntimeError, "PID"):
+                    owned_process._windows_cim_creation(pid)
+                query.assert_not_called()
+
     def windows_snapshot_api(self, creation_time, exit_code):
         from ctypes import wintypes as w
         api = Mock(spec=("OpenProcess", "GetProcessTimes", "GetExitCodeProcess", "CloseHandle"))
