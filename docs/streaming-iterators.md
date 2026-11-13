@@ -118,9 +118,11 @@ exception-precedence and context rules. This input choice does not promise a spe
 
 ## Named cursor example
 
-The [GettingStarted sample](../samples/Zendiator.Sample.GettingStarted/Program.cs)
-uses `IStreamSourceHandler` with a named `NumberCursor`, a pending first move and
-typed Filter/Map hooks. Use that form for a source that already owns cursor state.
+The [ComposedApp sample](../samples/Zendiator.Sample.ComposedApp/Program.cs)
+uses `IStreamSourceHandler` with a named `NumberCursor` and typed Filter/Map hooks.
+Use that form for a source that already owns cursor state. The
+[GettingStarted sample](../samples/Zendiator.Sample.GettingStarted/Program.cs)
+uses the standard iterator input and `await foreach` instead.
 The generated operation disposes the acquired cursor, while DI still owns the
 borrowed handler and hook services. Its guarded acquisition and cleanup rules
 apply even when its input completes synchronously.

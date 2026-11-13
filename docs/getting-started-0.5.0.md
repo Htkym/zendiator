@@ -1,5 +1,7 @@
 # Getting started with 0.6.0
 
+[日本語](getting-started-0.5.0.ja.md)
+
 Use matching 0.6.0 packages from NuGet.org. See the
 [release notes](release/0.6.0-release-notes.md) for migration.
 
@@ -131,11 +133,14 @@ one source contract for each route. This choice does not guarantee a performance
 result. See [input and lifetime choices](streaming-iterators.md#choose-an-input-contract)
 for both examples and the direct/guarded contract table.
 
-The sample opens a named NumberCursor through IStreamSourceHandler. Dedicated Filter/Map
-hooks use the typed pipeline. StreamAsync returns a class implementing standard
-IAsyncEnumerable. This example uses `StreamSource(...).ConsumeAsync(...)`, a readonly
-plan with a fresh private owner per consumption, and a readonly sink with a shared List
-result. The plan is not IAsyncEnumerable.
+The sample's `ReadNumbersHandler` returns a compiler async iterator through
+`IStreamHandler<ReadNumbers, int>`. It uses `await foreach` to enumerate the
+standard `IAsyncEnumerable<int>` returned by `StreamAsync`. Dedicated Filter/Map
+hooks process each item in pipeline order. The [ComposedApp sample](../samples/Zendiator.Sample.ComposedApp/)
+demonstrates a named cursor. For the optional `StreamSource(...).ConsumeAsync(...)`
+sink terminal, see the [typed-terminal reference](streaming-0.5.0.ja.md#標準列挙とtyped-terminal)
+in Japanese. That terminal's readonly plan is not `IAsyncEnumerable<T>`;
+value-type sinks retain results in shared reference state.
 
 The standard source object is allocated at the `StreamAsync` call. The guarded
 path defers DI/Open until the first move; a flat iterator route with two
@@ -147,10 +152,10 @@ your application, including HTTP `RequestAborted`, rather than dropping them to
 select the direct path. Custom enumerables must implement their cancellation and
 disposal contracts; they need not behave like compiler iterators.
 
-The typed terminal in this sample stays guarded. Await each move before another
-move or disposal. A sink's false is a normal stop; sink exceptions are not source
-middleware input. No Channel bridge or independent producer task is added. This
-example does not guarantee lower time or allocation.
+The sample's three-hook route stays guarded. Await each move before another move
+or disposal. `await foreach` awaits disposal after full enumeration, failure or
+early exit. No Channel bridge or independent producer task is added. This example
+does not guarantee lower time or allocation.
 
 For once-per-enumeration preprocessing with no cursor or paired cleanup, use the
 existing [Before example](streaming-iterators.md#choose-before-or-middleware).
@@ -186,17 +191,18 @@ operations and Stream enumeration, including cleanup, have finished.
 
 ## Repair a missing handler marker
 
-Add the optional CodeFix package at the same version as `Zendiator`. Before
-publication, restore matching locally built packages from your local feed:
+Add the optional CodeFix package at the same version as `Zendiator`. Set
+`ZendiatorPackageVersion` to `0.6.0` and restore from NuGet.org:
 
 ```xml
 <PackageReference Include="Zendiator.CodeFixes"
                   Version="$(ZendiatorPackageVersion)" PrivateAssets="all" />
 ```
 
-Restore the ComposedApp project from the selected feed:
+Restore the ComposedApp project:
 
 ```powershell
+$version = '0.6.0'
 $project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
 dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
 ```

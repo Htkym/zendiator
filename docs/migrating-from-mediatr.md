@@ -2,475 +2,178 @@
 
 [日本語](migrating-from-mediatr.ja.md)
 
-See also the [README](../README.md).
+This guide moves MediatR 12 applications using `IMediator`, `ISender` and
+`IPublisher` to Zendiator 0.6.0 on .NET 10 and C# 14. Later MediatR versions may
+have different registration APIs. Start with the [README](../README.md) and
+[current configuration guide](getting-started-0.5.0.md). The configuration guide
+keeps its existing filename so published links continue to work; its contents
+target 0.6.0.
 
-Procedures for moving MediatR 12 code to Zendiator. Covers API correspondences,
-required rewrites, and unsupported features.
-
-This guide targets published 0.4.0. For the unreleased 0.5.0 API, follow
-[getting started with 0.5.0](getting-started-0.5.0.md). Move 0.4.0
-`AddOpenBehavior`/`Order` registrations to each route's ordered `Pipeline` and
-explicit wrapper contract rather than copying the old configuration.
-
-The current preview uses standard DI construction and captures Handler/Behavior dependencies lazily per mediator instance, including Transient dependencies. Use a new scope for a new default Scoped mediator, or configure a Transient mediator when each resolution needs a fresh composition. Custom provider APIs were removed. The generated mediator does not implement `IDisposable`; DI owns dependency disposal. Keep the scope alive until sends and stream enumeration finish. See [construction and dispatch lifetime](optimized-dispatch.md).
-
-Replace explicit mediator disposal with disposal of its DI scope. Await the send before leaving that scope:
-
-```csharp
-await using var scope = provider.CreateAsyncScope();
-var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-var user = await mediator.SendAsync(new GetUserQuery(1), cancellationToken);
-```
-
-The analyzer bundled with the generator warns when it can prove explicit `IDisposable` treatment (ZEN0021), returning a mediator from a `using` scope (ZEN0022), or sending after explicit scope disposal in the same method (ZEN0023). It does not prove safety across complex asynchronous work or fields. No warning is not a guarantee of safe lifetime use. Sending after scope or root-provider disposal is unsupported, and the previous `ObjectDisposedException` guarantee is gone.
-
-Assumptions:
-
-- The migration source is MediatR 12 (the `IMediator`, `ISender`, `IPublisher` setup).
-- The target requires .NET 10 (C# 14, nullable enabled).
-- Performance depends on the call pattern and handler work; benchmark results do not
-  predict the performance of every application being migrated.
+Use an explicit composition for new Send and Stream routes: mark handlers with
+`[Handler]`, select them with `Handlers`, and order stages in `Pipeline`. The
+older assembly-discovery, `AddOpenBehavior` and `Order` APIs remain compatibility
+paths. For existing Zendiator code, also apply the
+[0.6.0 handler and Stream changes](release/0.6.0-release-notes.md).
 
 ## API correspondence
 
-| MediatR 12 | Zendiator | Notes |
+| MediatR 12 | Zendiator 0.6.0 | Migration |
 |---|---|---|
-| `IRequest<TResponse>` | `IRequest<TResponse>` | Direct replacement |
-| `IRequest` (returns `Unit`) | `IRequest` (void, `ValueTask`) | The standard shape drops `Unit`. The old `Unit` shape stays as a compatibility route |
-| `ICommand<T>`, `IQuery<T>` | `ICommand<T>`, `IQuery<T>` | Direct replacement |
-| `IRequestHandler<T, R>` (`Task<R> Handle`) | `IRequestHandler<T, R>` (`ValueTask<R> HandleAsync`) | Return type and method name change |
-| `IRequestHandler<T>` (`Task Handle`) | `IRequestHandler<T>` (`ValueTask HandleAsync`) | For void. No `Unit` |
-| `ICommandHandler`, `IQueryHandler` | Same names exist (with responses). Void commands use `IRequestHandler<T>` | The old `ICommandHandler<T>` (returns `Unit`) is a compatibility route |
-| `AddMediatR(cfg => cfg.RegisterServicesFromAssembly(...))` | `AddZendiator(configuration => ...)` | Generates through ordinary DI composition. No hand-written target class |
-| `IMediator` / `ISender` | `IZendiator` | Resolved and used the same way |
-| `Send(request)` (`Task<R>`) | `SendAsync(request)` (`ValueTask<R>`) | Requires `await` |
-| Void `Send` (`Task`) | `SendAsync` (`ValueTask`) | Requires `await` |
-| `IPipelineBehavior<T, R>` (`next()` delegate) | `IPipelineBehavior<T, R>` (struct continuation) | Rewrite required |
-| Void Behavior | `IPipelineBehavior<T>` (struct continuation) | One type argument |
-| Ordering | `Order` (smaller wraps outer) | MediatR depends on registration order; restate explicitly and verify with tests |
-| `INotification`, `Publish` | `INotification`, `PublishAsync` / `Publish` | Sequential dispatch. Zero subscribers complete normally |
-| Multiple handlers per request | `IMultiRequest<T>` / `IMultiRequest` + `SendAllAsync` | Only marked requests fan out |
-| Generic requests | Open generics in supported patterns | Closed/open overlap is diagnosed (ZEN0010) |
-| `ref struct` requests | Sync requests (`ISyncRequest`) + `SendSync` | Unavailable on async routes |
-| `Send(object)` | None (except the notification erasure route) | Send with concrete types instead |
-| `IStreamRequest<T>` / `CreateStream` | `IStreamRequest<TItem>` + `StreamAsync` | One handler per stream; lazy, cancelable, disposable. No `CreateStream` alias |
+| `IRequest<TResponse>` | `IRequest<TResponse>` | Replace the namespace |
+| `IRequest` | `IRequest` or `ICommand` | One-argument handler returning `ValueTask` |
+| `IRequestHandler<TRequest,TResponse>.Handle` | `IRequestHandler<TRequest,TResponse>.HandleAsync` | Return `ValueTask<TResponse>` and add `[Handler]` |
+| `IRequestHandler<TRequest>.Handle` | `IRequestHandler<TRequest>.HandleAsync` | Return `ValueTask` and add `[Handler]` |
+| Runtime assembly registration | `AddZendiator<App>` with `Handlers` / `Pipeline` | Select routes at compile time |
+| `IMediator` / `ISender` | Generated `IZendiator` | Import the composition's generated namespace |
+| `Send(request)` | `SendAsync(request)` | Await once |
+| `IPipelineBehavior<TRequest,TResponse>` | Send hooks or `IAsyncSendWrapper<TRequest,TResponse>` | Choose according to continuation control |
+| Behavior registration order | Ordered `Pipeline` stages | Earlier stages are outer stages |
+| `INotification` / `Publish` | `INotification` / `PublishAsync` or `Publish` | Separate notification registration; sequential dispatch |
+| `IStreamRequest<T>` / `CreateStream` | `IStreamRequest<T>` / `StreamAsync` | Select one source contract |
+| `Send(object)` | No equivalent | Keep a concrete static request type |
 
-Do not confuse notifications with commands. Commands treat a missing handler as a
-composition error, while notifications complete normally when a known type has no
-subscribers.
+`ICommand<T>` and `IQuery<T>` are Zendiator alternatives for application-specific
+command/query conventions, not MediatR interfaces. Runtime-object request dispatch
+and notification type erasure have different support boundaries.
 
 ## Packages and project layout
 
-Replace the MediatR package reference with `Zendiator` in the project containing
-generation configuration:
+Install in the project that declares the composition:
 
 ```shell
-dotnet add package Zendiator
+dotnet add package Zendiator --version 0.6.0
+dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
 ```
 
-`Zendiator` includes the Abstractions dependency and source generator. Projects
-that only define contracts can reference `Zendiator.Abstractions` alone. Pin the
-versions used by your application and keep both packages aligned.
+`Zendiator` includes the generator and depends on `Zendiator.Abstractions`.
+Contracts-only projects can reference `Zendiator.Abstractions` alone. Keep all
+Zendiator packages at the same version. The optional `Zendiator.CodeFixes` package
+is also 0.6.0 and uses `PrivateAssets="all"`.
 
-Responsibilities follow the README: message definitions and handlers reference
-only `Zendiator.Abstractions`, while the project holding the generation settings
-references `Zendiator`.
+Generation examines the composition's compilation and explicitly configured
+assemblies. It does not scan arbitrary assemblies at runtime. Keep contract,
+implementation and composition references explicit in multi-project applications.
+See the [ComposedApp sample](../samples/Zendiator.Sample.ComposedApp/) and
+[configuration diagnostics](diagnostics/configuration.md).
 
-For the current compilation with default settings, registration is one call:
+## Requests, handlers and registration
 
-```csharp
-using Zendiator.DependencyInjection;
-
-services.AddZendiator();
-```
-
-Build the provider or host using standard APIs. No custom provider or extra
-initialization is required. A configuration lambda is needed only for settings
-such as additional assemblies, behaviors, or an explicit generated namespace.
-An `AddApplication` wrapper is optional and helps organize multi-project applications:
+Change the MediatR handler's namespace, method name and return type. Mark and
+select the Zendiator handler. This complete example follows the
+[GettingStarted sample](../samples/Zendiator.Sample.GettingStarted/Program.cs):
 
 ```csharp
-// Composition root in a regular Application project.
+using Migration.Generated.App;
 using Microsoft.Extensions.DependencyInjection;
+using Zendiator;
 using Zendiator.DependencyInjection;
 
-namespace MyApp.Application;
+namespace Migration;
 
-public static class DependencyInjection
+public static class Program
 {
-    public static IServiceCollection AddApplication(this IServiceCollection services)
+    public static async Task Main()
     {
-        services.AddZendiator(static configuration =>
+        var services = new ServiceCollection();
+        services.AddZendiator<App>(configuration =>
         {
-            configuration.Namespace = "MyApp.Application.Generated";
-            configuration.RegisterServicesFromAssemblyContaining<GetUserQueryHandler>();
-            configuration.AddOpenBehavior(typeof(LoggingBehavior<,>), order: 0);
+            configuration.Handlers<GetUserQuery>(DispatchFamily.SendAsync, typeof(GetUserQueryHandler));
         });
 
-        return services;
+        await using var provider = services.BuildServiceProvider(
+            new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+        await using var scope = provider.CreateAsyncScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<IZendiator>();
+        var user = await mediator.SendAsync(new GetUserQuery(1));
+        Console.WriteLine(user.Id);
     }
 }
-```
 
-```csharp
-// On the host side, call the wrapper.
-services.AddApplication();
-```
+[ZendiatorComposition("migration")]
+public sealed class App;
 
-Notes:
-
-- `RegisterServicesFromAssemblyContaining` is optional when a single assembly is involved.
-- Omitting `Namespace` defaults to `{AssemblyName}.Generated`.
-- Partial-class and assembly-attribute configuration are also supported.
-  Mixing them with DI configuration lambdas in one
-  compilation is diagnosed (ZEN0015).
-- Only the target's compilation and explicitly listed assemblies are inspected.
-  Request types referenced by handler contracts are picked up automatically.
-- `AddZendiator()` registers with `TryAdd`. Pre-existing registrations are not replaced.
-- Resolve or inject `IZendiator`; `Zendiator` is its implementation type and is not
-  registered separately. Custom mediator factories must register `IZendiator`.
-  See the [registration example](../README.md#usage).
-- Mediator lifetimes differ: MediatR defaults to Transient, while Zendiator
-  defaults to Scoped. Generated Zendiator handlers and Behaviors default to
-  Transient for a Scoped mediator and are reused within that mediator.
-  Select other lifetimes through configuration.
-
-```csharp
-services.AddZendiator(static configuration =>
-{
-    configuration.RegisterServicesFromAssemblyContaining<GetUserQueryHandler>();
-    configuration.ServiceLifetime = ServiceLifetime.Singleton;
-});
-```
-- The specified lifetime is the default for the mediator, handlers, and Behaviors. Pre-registrations can override it; enable ValidateScopes to detect invalid scoped dependencies.
-- Stateful handlers are reused within a mediator even when registered as Transient. For fresh transient dependencies, resolve a new transient mediator; AddTransient on the handler alone is insufficient.
-- Enable `ValidateScopes` and `ValidateOnBuild` for post-migration verification.
-
-Lazy resolution means that `ValidateOnBuild` alone cannot check every captured
-dependency. Exercise the relevant dispatch routes and verify constructor counts,
-state across repeated sends, concurrent use where supported, and disposal.
-Keep each scope alive until its sends and stream enumeration have finished.
-
-## Rewriting requests and handlers
-
-Request declarations carry over almost unchanged. You can use `class`, `record`,
-`struct`, and `record struct`.
-
-```csharp
-// Before (MediatR)
-using MediatR;
-
+public sealed record UserDto(int Id);
 public sealed record GetUserQuery(int Id) : IRequest<UserDto>;
 
+[Handler]
 public sealed class GetUserQueryHandler : IRequestHandler<GetUserQuery, UserDto>
 {
-    public Task<UserDto> Handle(GetUserQuery request, CancellationToken cancellationToken)
-        => Task.FromResult(new UserDto(request.Id));
-}
-```
-
-```csharp
-// After (Zendiator)
-using Zendiator;
-
-public sealed record GetUserQuery(int Id) : IQuery<UserDto>;
-
-public sealed class GetUserQueryHandler : IQueryHandler<GetUserQuery, UserDto>
-{
-    public ValueTask<UserDto> HandleAsync(GetUserQuery request, CancellationToken cancellationToken)
-        => new(new UserDto(request.Id));
-}
-```
-
-Three changes:
-
-1. Change the namespace from `MediatR` to `Zendiator`.
-2. Rename the method from `Handle` to `HandleAsync`.
-3. Change the return type from `Task<T>` to `ValueTask<T>`. Wrap completed results
-   with `new(...)` or make the method `async ValueTask<T>`.
-   Do not use `Task.FromResult`.
-
-Constraints: requests are public types with exactly one response contract.
-More than one handler on a non-generic request is a generation error (ZEN0002).
-Non-conforming types are reported as ZEN0003.
-
-Generic requests are supported when handler type arguments are uniquely determined
-from request type arguments. Reordered arguments, some fixed types, substitution
-into the response type, and constraints such as `class` / `struct` / `new()` work.
-
-```csharp
-public sealed record GetById<T>(int Id) : IRequest<T> where T : class;
-
-public sealed class GetByIdHandler<T>(IRepository<T> repository) : IRequestHandler<GetById<T>, T>
-    where T : class
-{
-    public ValueTask<T> HandleAsync(GetById<T> request, CancellationToken cancellationToken)
-        => repository.GetAsync(request.Id, cancellationToken);
-}
-
-// Callers may keep their type arguments open.
-ValueTask<T> Load<T>(IZendiator sender, int id, CancellationToken cancellationToken)
-    where T : class
-    => sender.SendAsync(new GetById<T>(id), cancellationToken);
-```
-
-A closed handler overlapping an open handler on the same closed request is
-diagnosed as ambiguous (ZEN0010). Extra type arguments that cannot be inferred
-are diagnosed (ZEN0009), never filled with silent defaults.
-
-## Requests without responses
-
-The new standard shape drops `Unit`. MediatR's `Task Handle` corresponds to
-Zendiator's `ValueTask HandleAsync`.
-
-```csharp
-// Before
-using MediatR;
-
-public sealed record Ping : IRequest;
-public sealed class PingHandler : IRequestHandler<Ping>
-{
-    public Task Handle(Ping request, CancellationToken cancellationToken)
-        => Task.CompletedTask;
-}
-```
-
-```csharp
-// After
-using Zendiator;
-
-public sealed record DeleteUser(int UserId) : ICommand;
-
-public sealed class DeleteUserHandler : IRequestHandler<DeleteUser>
-{
-    public ValueTask HandleAsync(DeleteUser command, CancellationToken cancellationToken)
-        => default;
-}
-```
-
-```csharp
-// Call site
-await zendiator.SendAsync(new DeleteUser(userId), cancellationToken);
-```
-
-Notes:
-
-- Void handlers, Behaviors, and continuations use one type argument.
-  The old `IRequestHandler<T, Unit>` / `ValueTask<Unit>` shape keeps building
-  as a compatibility route. Old and new handlers on the same request are
-  diagnosed (ZEN0008).
-- Requests moved to the new shape send `ValueTask`, not `ValueTask<Unit>`.
-- Old two-argument Behaviors must move to the new one-argument Behaviors.
-
-## Rewriting registration
-
-Replace runtime assembly-scan registration with `AddZendiator`. For default
-configuration in the current compilation, use the parameterless call shown above.
-For explicit settings, use ordinary DI configuration code as below. No empty
-partial class or configuration attribute is required; attribute-based
-configuration is an alternative that cannot be combined with DI configuration
-lambdas in one compilation.
-
-```csharp
-// Before
-services.AddMediatR(static configuration =>
-{
-    configuration.RegisterServicesFromAssembly(typeof(GetUserQuery).Assembly);
-});
-```
-
-```csharp
-// After: composition root in the Application project
-using Microsoft.Extensions.DependencyInjection;
-using Zendiator.DependencyInjection;
-
-namespace MyApp.Application;
-
-public static class DependencyInjection
-{
-    public static IServiceCollection AddApplication(this IServiceCollection services)
+    public ValueTask<UserDto> HandleAsync(GetUserQuery request, CancellationToken token)
     {
-        services.AddZendiator(static configuration =>
-        {
-            configuration.Namespace = "MyApp.Application.Generated";
-            configuration.RegisterServicesFromAssemblyContaining<GetUserQueryHandler>();
-            configuration.AddOpenBehavior(typeof(LoggingBehavior<,>), order: 0);
-        });
-
-        return services;
+        token.ThrowIfCancellationRequested();
+        return new(new UserDto(request.Id));
     }
 }
 ```
 
-```csharp
-// After: on the host side, call the wrapper
-services.AddApplication();
-```
+Expected output is `1`. The generated namespace includes the application
+namespace and composition marker (`Migration.Generated.App` here). A handler-only
+Send route may omit an empty `Pipeline`. An `AddApplication` method can wrap this
+registration; no extra initialization is required.
+
+For requests without responses, implement `IRequestHandler<TRequest>` and return
+`ValueTask` from `HandleAsync`. Select the handler with `DispatchFamily.SendAsync`
+in the same way. The old `IRequestHandler<TRequest,Unit>` shape remains a
+compatibility path; do not mix the two handler contracts for one route.
+
+Open generic handlers are supported when their arguments can be determined from
+the request and their constraints are satisfied. Register open definitions with
+`Handlers(typeof(Lookup<>), DispatchFamily.SendAsync, typeof(LookupHandler<>))`.
+See [GenericLookup](../samples/Zendiator.Sample.GenericLookup/) for a runnable
+example. Ambiguous closed/open matches and unbound arguments are diagnosed.
+
+## Send sites, lifetime and errors
+
+Resolve or inject the generated `IZendiator`. Keep concrete request types at call
+sites: an `object` or `IRequest<T>` variable does not select a generated overload.
+Use `Send` for synchronous routes, `SendAsync` for asynchronous routes, and
+`SendAll` / `SendAllAsync` for explicitly configured multiple-handler routes.
+The older `SendSync` / `SendAllSync` names belong to the compatibility API.
+
+Generated registration defaults to a Scoped Mediator, with Transient handlers,
+hooks and session factories. MediatR 12 defaults to a Transient Mediator. Register
+service overrides before `AddZendiator`; its `TryAdd` registration preserves them.
+Reused services must support the application's concurrent use.
+
+Each Mediator reuses captured dependencies, including Transients. Eligible
+asynchronous Hook routes acquire a route-local dependency set before the first
+Hook; other routes retain their own capture rules. A send or retry does not imply
+a new dependency instance. See [current capture rules](getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)
+before relying on constructor timing or shared identity.
+
+DI owns activation and disposal. Dispose the scope after all sends, enumeration
+and cleanup finish. The generated Mediator is not an `IDisposable` owner. Using it
+after scope or provider disposal is unsupported. Enable `ValidateScopes` and
+`ValidateOnBuild`, and exercise lazily resolved routes your application uses.
+
+Await each `ValueTask` once. Eligible direct `SendAsync` routes can throw during
+dependency resolution, cancellation checks or synchronous callbacks before
+returning a `ValueTask`. Put both the call and await inside the `try` block.
+Exceptions propagate without an automatic recovery policy. The lifetime analyzer
+reports provable misuse (ZEN0021–ZEN0023); absence of a warning does not prove
+that complex asynchronous scope usage is safe.
+
+## Behaviors, hooks and wrappers
+
+Use dedicated hooks for request/response transformation and success, exception or
+cleanup observation. Select them with `Stage.Hook<T>()`. Use
+`IAsyncSendWrapper<TRequest,TResponse>` when the behavior controls whether or how
+often the continuation runs, such as retry, cache or short-circuit logic.
+
+This wrapper preserves logging around one invocation:
 
 ```csharp
-// After: resolving the generated mediator (import the generated namespace)
-using MyApp.Application.Generated;
-
-var zendiator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-```
-
-The wrapper organizes application registration; it is not an additional
-initialization step required by Zendiator.
-
-## Rewriting send sites
-
-Resolve `IZendiator` instead of `IMediator` / `ISender`, and pick the send API
-for each purpose.
-
-| Purpose | API | Return |
-|---|---|---|
-| Single response | `SendAsync` | `ValueTask<TResponse>` |
-| Void command | `SendAsync` | `ValueTask` |
-| Notification | `PublishAsync` / `Publish` | `ValueTask` |
-| Multiple responses | `SendAllAsync` | `ValueTask<IReadOnlyList<TResponse>>` |
-| Void fan-out | `SendAllAsync` | `ValueTask` |
-| Synchronous single response | `SendSync` | `TResponse` |
-| Synchronous void | `SendSync` | `void` |
-| Synchronous multiple | `SendAllSync` | `IReadOnlyList<TResponse>` / `void` |
-
-```csharp
-// Before
-var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
-var user = await mediator.Send(new GetUserQuery(1), cancellationToken);
-```
-
-```csharp
-// After
-var zendiator = scope.ServiceProvider.GetRequiredService<IZendiator>();
-var user = await zendiator.SendAsync(new GetUserQuery(1), cancellationToken);
-```
-
-Notes:
-
-- Async results are `ValueTask` based. Always `await` them.
-  Do not reuse the return value (no repeated awaits).
-- `SendAsync` generates overloads only for concrete request types.
-  Sending from variables of type `object` or `IRequest<T>` is unavailable.
-  Adjust call sites so the static type is concrete.
-- `CancellationToken` is optional. A passed token is checked before each node runs,
-  and cancellation surfaces as `OperationCanceledException`.
-- Null reference-type requests are rejected. Exceptions propagate untranslated.
-
-## Rewriting notifications
-
-MediatR notifications move to Zendiator notifications. No manual fan-out is needed.
-
-```csharp
-using Zendiator;
-
-public sealed record UserCreated(int UserId) : INotification;
-
-public sealed class WelcomeEmail : INotificationHandler<UserCreated>
+public sealed class Logging<TRequest, TResponse> : IAsyncSendWrapper<TRequest, TResponse>
+    where TRequest : class, IRequest<TResponse>
 {
-    public ValueTask HandleAsync(UserCreated notification, CancellationToken cancellationToken)
-        => default;
-}
-
-public sealed class AuditLog : INotificationHandler<UserCreated>
-{
-    public ValueTask HandleAsync(UserCreated notification, CancellationToken cancellationToken)
-        => default;
-}
-```
-
-```csharp
-await zendiator.PublishAsync(new UserCreated(1), cancellationToken);
-```
-
-Notes:
-
-- Dispatch is sequential. Each subscriber starts after the previous completes.
-- Ordering follows `[HandlerOrder(Order = ...)]` ascending. Unspecified means 0,
-  and ties resolve in a stable deterministic order.
-- The first failure stops dispatch; later subscribers are not constructed.
-- Known notification types with no subscribers complete normally. Types outside
-  the composition fail.
-- Sending from an `INotification`-typed variable works for registered closed types.
-  Typed routes key on the static notification type; erasure routes key on the exact
-  runtime type.
-- `Publish` is an alias with the same contract as `PublishAsync`.
-  It never becomes fire-and-forget.
-
-## Rewriting multiple handlers
-
-MediatR 12 has no multi-handler `Send`. In Zendiator, only marked requests fan out.
-
-```csharp
-using Zendiator;
-
-public sealed record GetQuotes(string ProductCode) : IMultiRequest<Quote>;
-
-// Call site
-IReadOnlyList<Quote> quotes = await zendiator.SendAllAsync(new GetQuotes("P1"), cancellationToken);
-```
-
-Notes:
-
-- Several handlers on a single request stay a generation error (ZEN0002).
-- Each handler runs its pipeline branch; responses are collected in run order.
-- Void fan-out returns only `ValueTask`, never a `Unit` list.
-- Ordering follows the notification rules (`HandlerOrder` ascending plus
-  deterministic ties).
-
-## Rewriting sync requests
-
-`ref struct` requests use the synchronous contract. They cannot use async routes.
-
-```csharp
-using Zendiator;
-
-public readonly ref struct ParseYear : ISyncRequest<int>
-{
-    public ParseYear(ReadOnlySpan<byte> data) => Data = data;
-    public ReadOnlySpan<byte> Data { get; }
-}
-
-public sealed class ParseYearHandler : ISyncRequestHandler<ParseYear, int>
-{
-    public int Handle(scoped ParseYear request, CancellationToken cancellationToken)
-        => request.Data[0] - (byte)'0';
-}
-```
-
-```csharp
-// Use inside a non-async calling scope.
-int year = zendiator.SendSync(new ParseYear(buffer), cancellationToken);
-```
-
-Notes:
-
-- Code converting the request to `object` or an interface type does not compile.
-- Code retaining the request (fields, lambda captures, crossing `await`) does not compile.
-- Generic `ref struct` requests use `allows ref struct` bounds.
-- Responses are limited to ordinary types. `ref struct` responses and `ref return`
-  are unsupported.
-
-## Rewriting Behaviors
-
-Change `next()` delegate calls to `InvokeAsync` on the struct continuation.
-Execution order follows `Order`, not registration. Smaller wraps outer.
-
-```csharp
-// Before (MediatR)
-using MediatR;
-
-public sealed class LoggingBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
-    where TRequest : IRequest<TResponse>
-{
-    public async Task<TResponse> Handle(
-        TRequest request,
-        RequestHandlerDelegate<TResponse> next,
-        CancellationToken cancellationToken)
+    public async ValueTask<TResponse> InvokeAsync<TNext>(
+        TRequest request, TNext next, CancellationToken token)
+        where TNext : IAsyncSendContinuation<TRequest, TResponse>
     {
         Console.WriteLine($"Handling {typeof(TRequest).Name}");
         try
         {
-            return await next();
+            return await next.InvokeAsync(request, token).ConfigureAwait(false);
         }
         finally
         {
@@ -480,118 +183,111 @@ public sealed class LoggingBehavior<TRequest, TResponse> : IPipelineBehavior<TRe
 }
 ```
 
-```csharp
-// After (Zendiator)
-using Zendiator;
-
-public sealed class LoggingBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
-    where TRequest : IRequest<TResponse>
-{
-    public async ValueTask<TResponse> HandleAsync<TNext>(
-        TRequest request,
-        TNext next,
-        CancellationToken cancellationToken)
-        where TNext : struct, IRequestContinuation<TRequest, TResponse>
-    {
-        Console.WriteLine($"Handling {typeof(TRequest).Name}");
-        try
-        {
-            return await next.InvokeAsync(request, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            Console.WriteLine($"Handled {typeof(TRequest).Name}");
-        }
-    }
-}
-```
+Add the stage to the example's existing `AddZendiator<App>` configuration:
 
 ```csharp
-// After: registration in DI configuration (inside AddApplication)
-services.AddZendiator(static configuration =>
-{
-    configuration.RegisterServicesFromAssemblyContaining<GetUserQueryHandler>();
-    configuration.AddOpenBehavior(typeof(LoggingBehavior<,>), order: 0);
-});
+configuration.Pipeline<GetUserQuery>(DispatchFamily.SendAsync,
+    Stage.Wrapper<Logging<GetUserQuery, UserDto>>());
 ```
 
-Continuation control flow maps as follows. Dependency lifetime is a separate
-contract: downstream handlers and behaviors already captured by a mediator are
-reused across retries and subsequent sends, including Transient registrations.
+Pipeline list order replaces MediatR registration order. Preserve and test the
+behavior's intent: a wrapper may invoke `next` zero times or repeatedly in
+sequence; each result is consumed once. Do not retain the continuation or invoke
+it concurrently after its operation completes. Captured downstream services
+remain reused across retries. Void routes use `IAsyncSendWrapper<TRequest>`;
+synchronous routes use `ISendWrapper`.
 
-- Short-circuit by simply not calling `next`. Downstream Behaviors and handlers are not resolved.
-- Retries use sequential repeated `next.InvokeAsync` calls. Parallel calls are out of scope.
-- Replace request or token by calling `InvokeAsync` with the replaced values.
-- Open Behaviors (two-argument generics) apply only to requests satisfying the constraints.
-  Closed Behaviors apply only to matching routes.
-- Duplicating a Behavior type or an `Order` is an error (ZEN0004).
-  Restate any ordering that relied on MediatR registration order with `Order`.
-- DI constructor injection keeps working.
-- Void requests use one-argument `IPipelineBehavior<T>`.
-  Sync requests use `ISyncPipelineBehavior`. Streams use `IStreamMiddleware`.
-- With multiple handlers, the pipeline applies to each handler branch.
+The [ComposedApp sample](../samples/Zendiator.Sample.ComposedApp/Program.cs) shows
+hooks and a cache/retry wrapper. Legacy `IPipelineBehavior`, `AddOpenBehavior` and
+numeric `Order` remain separate compatibility APIs. When moving an existing
+Zendiator discovery configuration to a composition, convert them to explicit
+wrapper contracts and ordered `Pipeline` stages.
 
-## Rewriting streams
+## Notifications and multiple handlers
 
-Keep standard IAsyncEnumerable consumers. A yield handler can implement marked
-`IStreamHandler<TRequest,TItem>` and return `IAsyncEnumerable<TItem>` from Handle.
-Handle and GetAsyncEnumerator run on the first move; see the
-[iterator example](streaming-iterators.md).
+Notifications implement `INotificationHandler<TNotification>.HandleAsync` returning
+`ValueTask`. Their registration is separate from composition Send/Stream
+selection. The existing assembly-discovery configuration supports notifications;
+see [Sample.Application registration](../samples/Zendiator.Sample.Application/DependencyInjection.cs)
+and [Sample.Host](../samples/Zendiator.Sample.Host/Program.cs) for the generated
+notification facade and its use.
 
-For a named class or struct cursor, implement
-`IStreamSourceHandler<TRequest,TItem,TCursor>` and open it through OpenAsync.
-A private compiler iterator type cannot serve as that named cursor declaration.
-Select one source contract for each route.
+`PublishAsync` and its `Publish` alias dispatch sequentially, awaiting each
+subscriber. Neither is fire-and-forget. `HandlerOrder` orders subscribers; ties
+have stable deterministic order. The first failure stops dispatch. Known
+notification types with no subscribers complete normally. Notification type
+erasure supports registered closed types and keys on the exact runtime type.
+A missing command handler is a composition error, not an empty subscription list.
 
-StreamAsync returns a generated class implementing standard IAsyncEnumerable. Move
-typed terminals to `StreamSource(request, apiToken).ConsumeAsync(sink, enumerationToken)`.
-StreamSource returns a readonly plan and is not IAsyncEnumerable.
-Use explicit Handlers/Pipeline declarations: IStreamMiddleware with Stage.Wrapper
-for opaque stages, dedicated Filter/Map contracts with Stage.Hook for typed stages.
-The old global Stream Behavior, Validator and OwnsStream APIs are not the new protocol.
+MediatR 12's ordinary `Send` has no multiple-handler response contract. A Zendiator
+composition explicitly selects handlers using `DispatchFamily.SendAllAsync` or
+`DispatchFamily.SendAllSync`; results follow selected handler order, and each
+branch runs the configured pipeline. Void fan-out returns no list of `Unit`.
+Legacy discovery uses `IMultiRequest` / `IMultiRequest<T>` and its `HandlerOrder`
+rules. See ComposedApp for the composition form.
 
-See [named-cursor migration and execution contracts](streaming-0.5.0.ja.md), including
-HTTP and consumer-failure boundaries. Standard enumeration, typed terminal and HTTP
-performance are separate measurements; no improvement is claimed here.
+## Streams and synchronous requests
 
-## Unsupported features
+Keep standard `IAsyncEnumerable<T>` consumers. For ordinary asynchronous input,
+mark an `IStreamHandler<TRequest,TItem>` implementation with `[Handler]` and return
+`IAsyncEnumerable<TItem>` from `Handle`, often using a compiler async iterator.
+For a named class or struct cursor, use
+`IStreamSourceHandler<TRequest,TItem,TCursor>.OpenAsync`. Select exactly one source
+contract with `Handlers`, and declare a Stream `Pipeline`, including an empty
+list for a zero-stage Stream.
 
-Zendiator has no equivalents below. Decide replacements before migrating.
+Use `IStreamMiddleware` with `Stage.Wrapper` for custom upstream control and
+Filter/Map contracts with `Stage.Hook` for typed item processing. A type-changing
+pipeline declares its final type with `StreamPipeline`; the request's
+`IStreamRequest<T>` still describes the source item type. The
+[iterator guide](streaming-iterators.md) covers both inputs, cancellation and
+direct/guarded paths. The [0.6.0 Stream migration](migrating-stream-upstream.md)
+explains typed `OpenAsync<TNext>` middleware.
 
-| MediatR feature | Handling |
+`StreamAsync` returns a standard enumerable. Prefer `await foreach`, forward API
+and enumeration cancellation tokens, and keep the scope alive through disposal,
+including early termination and failure. Acquisition timing and cleanup depend on
+the direct or guarded path; not every path starts at the first move.
+`StreamSource(...).ConsumeAsync(...)` is a separate typed terminal: its readonly
+plan is not an enumerable, and value-type sinks share results through reference
+state. Standard enumeration, typed terminal and HTTP performance need separate
+measurements.
+
+Ordinary synchronous requests use `ISyncRequest` and `ISyncRequestHandler`, with
+`DispatchFamily.SendSync` and generated `Send`. Ref-like requests have additional
+configuration restrictions; ordinary class-composition examples do not establish
+their support. See [known limitations](release/known-limitations.md).
+
+## Unsupported features and verification
+
+| Feature | Handling |
 |---|---|
-| Runtime dispatch via `Send(object)` | None (except the notification erasure route). Send with concrete types instead |
-| Pre/post processors, exception handlers | No dedicated mechanism. Implement as Behaviors |
-| Parallel publish, parallel SendAll, fire-and-forget | None (sequential dispatch only) |
-| `ref struct` responses, `ref return` | None |
-| AOT setups enumerating every unused closed type | None. Spell out the closed types you use |
+| Runtime `Send(object)` or runtime-object Stream dispatch | Keep concrete static request types |
+| Parallel Publish, parallel SendAll, fire-and-forget | Use the sequential contracts |
+| MediatR pre/post processors and exception handlers | Port the operation to hooks or wrappers |
+| `ref struct` responses or `ref return` | Unsupported |
+| Arbitrary runtime generic closure under Native AOT | Check the documented closed-type and RID limits |
+| Persistence, outbox or durable messaging | Supply application infrastructure separately |
 
-## Migration checklist
+Package-based Native AOT publish and execution are verified on win-x64 in the
+documented configurations; other RIDs remain unverified. Open-generic DI closed
+over value-type arguments has separate Native AOT restrictions. This does not
+exclude struct Stream cursors.
 
-1. Replace the MediatR reference with `Zendiator` in the generation project; use `Zendiator.Abstractions` alone for contracts-only projects. Pin matching package versions.
-2. Replace `using MediatR;` with `using Zendiator;`.
-3. Change `Handle` to `HandleAsync` and `Task<T>` to `ValueTask<T>`.
-4. Drop `Unit` for void requests: one-argument handlers with `ValueTask`
-   (the old `Unit` shape still builds, but mixing old and new is diagnosed).
-5. Move any explicit assemblies, behaviors, and orders into a DI configuration lambda. Use `AddZendiator()` alone when the defaults are sufficient.
-6. Replace `AddMediatR` with `AddZendiator`. An `AddApplication`-style wrapper is optional. Check the lifetime defaults and reuse within each mediator, including Transient dependencies.
-7. Change send sites to the purpose-built API
-   (`SendAsync` / `PublishAsync` / `SendAllAsync` / `SendSync` / `StreamAsync`).
-   Streams are lazy (start on first `MoveNextAsync`), cancel via the API token or
-   `WithCancellation`, dispose with `await using`, and re-enumerate with a fresh call.
-8. Search for variables typed as `object` or `IRequest<T>`.
-9. Rewrite Behaviors for continuation calls and add `Order`
-   (sync: `ISyncPipelineBehavior`; streams: `IStreamMiddleware` +
-   `Stage.Wrapper`).
-10. Move notification subscribers to `INotificationHandler`, adding `HandlerOrder`
-    where order matters.
-11. Mark fan-out requests with `IMultiRequest` and switch to `SendAllAsync`.
-12. Move `ref struct` requests to the sync contract (`ISyncRequest` + `SendSync`).
-13. Enable `ValidateScopes` and `ValidateOnBuild`, exercise lazy dispatch routes, and check dependency construction, retained state, and disposal. Keep scopes alive until sends and stream enumeration finish.
-14. For generation errors (`ZEN0001`–`ZEN0020`), review type visibility, duplication, constraints, and configuration expressions.
+Migration order:
 
-Reuse existing tests for response values, Behavior invocation counts, and
-invocation order. Review tests that assume a new Handler or Behavior instance per
-send or retry: Transient dependencies are reused within one mediator. Also check
-sharing and isolation across mediators and scopes according to their registrations,
-concurrent use where supported, and disposal ownership.
+1. Align Zendiator 0.6.0 package versions and select the composition project.
+2. Replace request/handler contracts, add `[Handler]`, and declare `Handlers`.
+3. Move behavior intent to hooks or wrappers and preserve order in `Pipeline`.
+4. Replace call sites with the facade's concrete overloads; handle notification
+   registration separately.
+5. Port Stream input and middleware contracts, forwarding cancellation and
+   preserving scope and disposal boundaries.
+6. Enable DI validation and exercise selected routes. Reuse response/order tests
+   and check constructor counts, repeated-send state and disposal against the
+   actual capture rules.
+
+Use [configuration diagnostics](diagnostics/configuration.md) and
+[limited CodeFix support](../src/Zendiator.CodeFixes/README.md) to locate errors.
+CodeFix can add an unambiguous missing handler marker. It does not migrate
+pipeline order, lifetime boundaries or wrapper behavior automatically.
