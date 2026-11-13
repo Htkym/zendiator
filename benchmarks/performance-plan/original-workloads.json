@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "archiveSha256": "C9A57E0A1A9041668E92BE5C3D303FB8D4469C2B4DADBC13023A602FB2A1E8C2",
+  "overlayManifestSha256": "B0B175F4092B6D05F51A6322DCDF7564A915188CC78BDBD44EE3F24553A69449",
+  "overlayMeasuredSourceHead": "927827653e229b01afdd8bb97c00b9093ad049ab",
+  "buildHookSha256": "55A23A09D4172EE81E4C16E45875CEA9D51C218E76E78B522706B30EEA253A13",
+  "acceptedSourceFiles": 58,
+  "workloads": [
+    {
+      "path": "benchmarks/HPeerComparison/FoundatioConfiguration.cs",
+      "originalSha256": "D8EDC632D100DFF80CF09D0FFC7B5CEE1DE04CC43D39766DAEBEB3B3B03623C0",
+      "currentSha256": "CC665E8E13CE0CD7CAABA898220A0AC3D44801E314F90DC4088CCAB62EE65349",
+      "change": "unchanged"
+    },
+    {
+      "path": "benchmarks/HPeerComparison/FoundatioHAdapters.cs",
+      "originalSha256": "012A137F9CBA759875B27E186706CC29E351DDCA769BE4107CF52F0D7EEEF5CF",
+      "currentSha256": "071188ABE76ADD53C557ABCF134B327881FDD3937E09320C13C08111DE437375",
+      "change": "format-only"
+    },
+    {
+      "path": "benchmarks/HPeerComparison/FoundatioHBenchmarks.cs",
+      "originalSha256": "D9E59149561C873BC82A54427E6D8A3DA9BC0C9BD6B0EFB2E1A6D9C471D68390",
+      "currentSha256": "B4BE09D2DB927C71348D1C2F6D48DB03AB1762A3313D115401B4CFD35006688E",
+      "change": "format-only"
+    },
+    {
+      "path": "benchmarks/HPeerComparison/HAdapters.cs",
+      "originalSha256": "055957B299F37AE28B3E79D89008AE2545B19007781AB1C400F94A36B959D9C7",
+      "currentSha256": "1BF6364FB7BF775F45753EEFB32EC8FEE68EB1EE48735E6CB661DFB28075FD61",
+      "change": "handler-attribute-rename; format-only"
+    },
+    {
+      "path": "benchmarks/HPeerComparison/HAllPeersPriorityAdmission.cs",
+      "originalSha256": "2E1DFD68BA54B43E10A336F34EA7908E70F33D9D4B092A1FA5A00F74B74C0717",
+      "currentSha256": "C7144D099DED409BA7B0ACE8366897AA708773584D27C44791BC63AD740BAB48",
+      "change": "format-only"
+    },
+    {
+      "path": "benchmarks/HPeerComparison/HAllPeersTimingAdmission.cs",
+      "originalSha256": "D1B3548DDAB317131E7636D1616D1C642CCCDD1B9669DD036DF51469F3F5B3FD",
+      "currentSha256": "32B7BED7BE79A2EF029658A73D8871E716CCF5FDA85F4CEAAC5EE90E49D77A20",
+      "change": "format-only"
+    },
+    {
+      "path": "benchmarks/HPeerComparison/HBenchmarks.cs",
+      "originalSha256": "D91A02E31232E5E5994206962BC4B37BC29E5A40E77909EA08F115E705E68013",
+      "currentSha256": "EA58951B03163530DC58602EDCD3728B8D7A13774BA6EDE3470CEBBF4B086334",
+      "change": "format-only"
+    },
+    {
+      "path": "benchmarks/HPeerComparison/HValidation.cs",
+      "originalSha256": "642B34CAD495934CCC1E39D6E7AA7B7BEA623F646E158D5DB2A8183321DE8571",
+      "currentSha256": "106F0CB39DAF74D75275C34D9A6D0A43F19429C6B896D901337498A239D07AAE",
+      "change": "format-only"
+    },
+    {
+      "path": "benchmarks/HPeerComparison/HWork.cs",
+      "originalSha256": "14AEA60B356988A11B714F0DF6D2DC84BF904FAA978BC5B710FC5D56CAB4100A",
+      "currentSha256": "FF0AAB185C71F1445361D4B2E86B32337AFBB1CD5D3B2BAD8E8A3ACCEF960D1A",
+      "change": "format-only"
+    },
+    {
+      "path": "benchmarks/ShortCircuitComparison/ShortAdapters.cs",
+      "originalSha256": "74A15403B48199817D93CC494532E9A73A49CA83CDB8DFE26ECC215116E28337",
+      "currentSha256": "50774F9124FC630E9DBCA6A9795BC1E2DE37E9BA9A7FFB00A91D6274E4E0A66E",
+      "change": "handler-attribute-rename; format-only"
+    },
+    {
+      "path": "benchmarks/ShortCircuitComparison/ShortBenchmarks.cs",
+      "originalSha256": "14AFC34353403D23983DE8687E7DA326BBAD1A3FEADBEE9870ABBC6D81F08A04",
+      "currentSha256": "C951BAA249D6E17938356E5131DB1BFCBFA2B1B0EA35FC9A963321C03E4F5C95",
+      "change": "format-only"
+    },
+    {
+      "path": "benchmarks/ShortCircuitComparison/ShortWork.cs",
+      "originalSha256": "CF7A9177B3A7DB7EEB8FBBC8A212030E1CBE3C5D4A5CA6EB11141C71FA1DEC80",
+      "currentSha256": "4A8D0A902EAE6A0EF3E48B5DAAC855763B624689F02775A65A4FA4BB31BF276C",
+      "change": "format-only"
+    },
+    {
+      "path": "benchmarks/FoundatioReleaseComparison/FoundatioAdapters.cs",
+      "originalSha256": "7846F86416A745F109356DF9FF52CC0EA4B1240420F683A7EDD47F4F1EB55F53",
+      "currentSha256": "77EB5A73C3C83D2C01C962949D981399EFE2E9E38EE8B3C4645858735B9608A6",
+      "change": "unchanged"
+    },
+    {
+      "path": "benchmarks/FoundatioReleaseComparison/FoundatioBenchmarkScaffold.cs",
+      "originalSha256": "FA45787C58BCE002B28141DA50546FF050CA1580501C0381499E968AEC079B81",
+      "currentSha256": "5A2042ACD94C96D4C3A11D39E73F7885757169291558C829A8D50FFFC00744C5",
+      "change": "format-only"
+    },
+    {
+      "path": "benchmarks/FoundatioReleaseComparison/FoundatioFeatures.cs",
+      "originalSha256": "A3CF0DD2D608B01EBECE8D03F933A0F284EF392160D0B25D4335AABF3A9DA1BD",
+      "currentSha256": "9D7A80E48C3E45A5C2E32BC154CBEFC889EA9945C4D17690262D2E5B3F39936E",
+      "change": "format-only"
+    },
+    {
+      "path": "benchmarks/FoundatioReleaseComparison/FoundatioFreshScopes.cs",
+      "originalSha256": "3A4956D7EBF6E2194252AE674C8FE531BB2DBFA81AF4CE7BA667C8072574FAF6",
+      "currentSha256": "19CA7DA8ABE820F042187D2CD3777CB6B158118E0E67B5B0523FE0EC2DD53EB3",
+      "change": "format-only"
+    },
+    {
+      "path": "benchmarks/FoundatioReleaseComparison/FoundatioSemanticSnapshot.cs",
+      "originalSha256": "C51961816493052AED9DFC14B3B117E29AEBC61BA75C37AA9C5653E6D679906B",
+      "currentSha256": "A795045EBB35952E5F173DC9437D66E9AE08654BD09E7CD5768121802D80C41B",
+      "change": "format-only"
+    },
+    {
+      "path": "benchmarks/FoundatioReleaseComparison/FoundatioSemanticValidation.cs",
+      "originalSha256": "8CF799F10F8237F48D3C96B91FD25665C79AA5E9BB41D58E056CE65659B4D751",
+      "currentSha256": "922CFF1416F1692457A4CB148F2A5421E8C7F37D8CF249A57A4AEA99C74EEA73",
+      "change": "format-only"
+    },
+    {
+      "path": "benchmarks/FoundatioReleaseComparison/FoundatioStreamAdapters.cs",
+      "originalSha256": "AB44AB575EA9378B6D00362500719F170E77CD9488BF788FB9EDA8FF1FFD79EF",
+      "currentSha256": "6809F8E815197A38BAB064A651B0E3419B07EFCC8680A683F347E9BCDC35220C",
+      "change": "format-only"
+    }
+  ],
+  "frozenEntries": [
+    {
+      "path": "benchmarks/HPeerComparison/Program.cs.frozen",
+      "originalPath": "benchmarks/HPeerComparison/Program.cs",
+      "sha256": "C7B86417371FCDA9BEF3DE482A1EA9DCFF32B607E3A24DCA55B20AE3396CE73F",
+      "compiled": false
+    },
+    {
+      "path": "benchmarks/ShortCircuitComparison/Program.cs.frozen",
+      "originalPath": "benchmarks/ShortCircuitComparison/Program.cs",
+      "sha256": "C04EF6D9A6F26AC052A3983B118E11BFBA0C1821830C415363CD8A01CEB1974D",
+      "compiled": false
+    },
+    {
+      "path": "benchmarks/FoundatioReleaseComparison/Program.cs.frozen",
+      "originalPath": "benchmarks/FoundatioReleaseComparison/Program.cs",
+      "sha256": "93695A503605972084006A0D940B038AEF6D2D3AA1DBD16ED77F73178AEC42CF",
+      "compiled": false
+    }
+  ],
+  "measurementEntry": {
+    "protocol": "zendiator-shared-measurement-v2",
+    "paths": [
+      "benchmarks/Measurement/MeasurementProgram.cs",
+      "benchmarks/Measurement/RuntimeEvidence.cs"
+    ],
+    "originalPrivateMeasurementToolsRecovered": false,
+    "missingOriginalPrivateTools": [
+      "MeasureRunner.cs",
+      "MeasureSemantics.Short.cs",
+      "MeasureSemantics.H.cs"
+    ],
+    "historicalExactPreparation": "scripts/prepare_performance_fixtures.py retains its original fixed-hash requirements",
+    "scope": "Original workload methods, registrations and semantic checks with a new tracked measurement entry; no historical-entry equivalence claim"
+  },
+  "excludedFromUnchangedSourceClaim": [
+    "project files and package locks",
+    "BenchmarkGate.cs adapters",
+    "shared measurement entry and artifact/process controls"
+  ],
+  "measurementPerformed": false,
+  "currentHashNormalization": "git-blob-lf"
+}

@@ -48,6 +48,11 @@ def table(cases):
     return "\n".join(lines)
 
 
+def gate_file(group, name):
+    current = OUTPUT / "runs" / group / "gates" / "usecase" / name
+    return current if filesystem_path(current).exists() else OUTPUT / "runs" / group / name
+
+
 metadata = read(OUTPUT / "runs" / "send" / "run-info.json")
 execution_order_note = (
     "ライブラリ横断の比較キー順に各ライブラリを単一ケースで起動し、先頭ライブラリを交代した。実行ログと計画の完全一致を確認した。"
@@ -58,7 +63,12 @@ revision = metadata.get("revision", metadata.get("commit"))
 if not revision:
     raise ValueError("The send run has no source revision")
 source_digest = metadata.get("sourceDigest")
-manifest = read(OUTPUT / "runs" / "send" / "manifest.json")
+manifest = read(gate_file("send", "manifest.json"))
+for prefix, package in (("Immediate", "Immediate.Handlers"), ("MediatRHistorical", "MediatR"),
+                        ("Mediator", "Mediator.SourceGenerator"), ("DispatchR", "DispatchR.Mediator")):
+    version = manifest.get("packageVersions", {}).get(package)
+    if version:
+        LIBS[prefix] = f"{package} {version}"
 generated = next((item["sha256"] for item in manifest.get("generated", []) if item["path"].endswith("Zendiator.g.cs")), None)
 product = (metadata.get("productHashes") or [None])[0]
 environment = "、".join(part for part in (
@@ -145,7 +155,7 @@ RELAY_STAGE = {
 
 
 def relay_timing():
-    path = OUTPUT / "runs" / "relay" / "correctness.json"
+    path = gate_file("relay", "correctness.json")
     if not filesystem_path(path).exists():
         return []
     rows = [row for row in read(path) if row.get("suite") == "RelayTiming"]

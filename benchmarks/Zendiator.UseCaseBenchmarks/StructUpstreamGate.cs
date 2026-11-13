@@ -71,6 +71,11 @@ internal static class StructUpstreamGate
                 Scope = "Discovery/order only; no benchmark executed"
             });
         }
+        var unknownCases = BenchmarkDotNet.Running.BenchmarkConverter.TypeToBenchmarks(
+            typeof(NativePoolingBenchmarks), BenchmarkDotNet.Configs.DefaultConfig.Instance).BenchmarksCases;
+        var unknownOrder = new InterleavedOrderer().GetExecutionOrder(unknownCases.ToImmutableArray()).ToArray();
+        if (unknownOrder.Length != unknownCases.Length || !unknownOrder.ToHashSet().SetEquals(unknownCases))
+            throw new InvalidOperationException("Unprefixed C# benchmark cases were lost or duplicated.");
         await File.WriteAllTextAsync(Path.Combine(output, "struct-upstream-driver-identification.json"), JsonSerializer.Serialize(driverRows, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"STRUCT_UPSTREAM_PARITY_OK: {rows.Count} cases; all three C# benchmark types classified as Zendiator");
         await File.WriteAllTextAsync(Path.Combine(output, "struct-upstream-correctness.json"),

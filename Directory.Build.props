@@ -24,4 +24,15 @@
   <ItemGroup Condition="'$(IsPackable)' == 'true'">
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.111" PrivateAssets="All" />
   </ItemGroup>
+  <!-- Keep formal child binaries stable across BDN artifact directories. -->
+  <Target Name="_NormalizeZendiatorFormalArtifactPaths"
+          BeforeTargets="_GenerateCompileDependencyCache;CoreCompile"
+          DependsOnTargets="_SetPathMapFromSourceRoots"
+          Condition="'$(ZendiatorFormalMeasurement)' == 'true' and '$(ArtifactsPath)' != ''">
+    <PropertyGroup>
+      <_ZendiatorFormalArtifactRoot>$([MSBuild]::NormalizeDirectory('$(ArtifactsPath)'))</_ZendiatorFormalArtifactRoot>
+      <PathMap Condition="'$(PathMap)' != ''">$(_ZendiatorFormalArtifactRoot)=/_/zendiator-bdn/,$(PathMap)</PathMap>
+      <PathMap Condition="'$(PathMap)' == ''">$(_ZendiatorFormalArtifactRoot)=/_/zendiator-bdn/</PathMap>
+    </PropertyGroup>
+  </Target>
 </Project>

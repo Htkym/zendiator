@@ -1,0 +1,77 @@
+[
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend5",
+    "Method": "ScopeK1",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend0",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend0",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "Typed",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "ResolveSend",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorNotification16",
+    "Method": "Dispatch"
+  },
+  {
+    "Type": "ZendiatorStream5",
+    "Method": "Full",
+    "Count": 1024,
+    "Asynchronous": false
+  },
+  {
+    "Type": "ZendiatorShortCircuit",
+    "Method": "WarmDispatch",
+    "Project": "short"
+  },
+  {
+    "Type": "HZendiatorBenchmarks",
+    "Method": "FirstSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HZendiatorBenchmarks",
+    "Method": "WarmSend",
+    "Project": "hooks"
+  },
+  {
+    "Type": "HZendiatorBenchmarks",
+    "Method": "ColdOuterFailure",
+    "Project": "hooks"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ImmediateSend5",
+    "Method": "ScopeK10",
+    "Lifetime": "Scoped"
+  },
+  {
+    "Type": "ZendiatorSend5",
+    "Method": "FirstSend",
+    "Lifetime": "Scoped"
+  }
+]

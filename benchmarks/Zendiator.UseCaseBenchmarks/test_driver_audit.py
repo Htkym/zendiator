@@ -18,10 +18,220 @@ from unittest.mock import patch
 
 import run_interleaved as driver
 import owned_process
-from interleaved_plan import make_plan
+from interleaved_plan import identity, library, make_plan, normalize_case, verify_log
+
+
+class ProjectPlanContracts(unittest.TestCase):
+    def baseline_cases(self):
+        peers = ("Zendiator", "MediatRHistorical", "Mediator", "DispatchR", "Immediate", "Foundatio")
+        families = [
+            ("Send0", "Typed", {"Lifetime": "Scoped"}),
+            ("Send5", "Typed", {"Lifetime": "Scoped"}),
+            ("Send0", "ResolveSend", {"Lifetime": "Scoped"}),
+            ("Send5", "ResolveSend", {"Lifetime": "Scoped"}),
+            ("Send5", "ScopeK1", {"Lifetime": "Scoped"}),
+            ("Notification16", "Dispatch", {}),
+            ("Stream5", "Full", {"Count": 1024, "Asynchronous": False}),
+            ("Stream5", "Full", {"Count": 1024, "Asynchronous": True}),
+            ("Stream5", "EarlyBreak", {"Count": 16, "Asynchronous": False}),
+            ("Stream5", "EarlyBreak", {"Count": 16, "Asynchronous": True}),
+            ("Stream0", "Full", {"Count": 1024, "Asynchronous": True}),
+            ("Stream0", "EarlyBreak", {"Count": 16, "Asynchronous": False}),
+            ("Relay5", "Full", {"Count": 1024, "Asynchronous": True}),
+            ("Relay5", "Full", {"Count": 1024, "Asynchronous": False}),
+            ("Relay5", "EarlyBreak", {"Count": 16, "Asynchronous": False}),
+            ("Relay5", "EarlyBreak", {"Count": 16, "Asynchronous": True}),
+        ]
+        cases = []
+        for family, method, parameters in families:
+            for peer in peers:
+                if family == "Notification16" and peer == "Immediate":
+                    continue
+                case = {"Type": peer + family, "Method": method, **parameters}
+                if peer == "Foundatio":
+                    case["Project"] = "foundatio"
+                cases.append(case)
+        for peer in peers:
+            prefix = "MediatR" if peer == "MediatRHistorical" else peer
+            cases.append({"Type": prefix + "ShortCircuit", "Method": "WarmDispatch", "Project": "short"})
+        for method in ("FirstSend", "WarmSend", "ColdOuterFailure"):
+            cases.extend({"Type": f"H{peer}Benchmarks", "Method": method, "Project": "hooks"} for peer in peers)
+        cases.extend({"Type": f"ZendiatorSend{depth}", "Method": "FirstSend", "Lifetime": "Scoped"} for depth in (0, 5))
+        cases.append({"Type": "ZendiatorSend5", "Method": "ScopeK10", "Lifetime": "Scoped"})
+        return cases
+
+    def test_all_122_cells_rotate_across_projects_with_original_type_aliases(self):
+        cases = self.baseline_cases()
+        plan, keys = make_plan(cases)
+        self.assertEqual((len(plan), keys), (122, 23))
+        self.assertEqual({identity(row["Case"]) for row in plan}, {identity(case) for case in cases})
+        groups = {}
+        for row in plan:
+            groups.setdefault(tuple(row["ComparisonKey"]), []).append(row["Library"])
+        self.assertEqual(groups[("Send0", "Typed", "Scoped", None, None)],
+                         ["Zendiator", "MediatRHistorical", "Mediator", "DispatchR", "Immediate", "Foundatio"])
+        self.assertEqual(groups[("Send5", "Typed", "Scoped", None, None)],
+                         ["MediatRHistorical", "Mediator", "DispatchR", "Immediate", "Foundatio", "Zendiator"])
+        self.assertEqual(groups[("ShortCircuit", "WarmDispatch", None, None, None)],
+                         ["Immediate", "Foundatio", "Zendiator", "MediatRHistorical", "Mediator", "DispatchR"])
+        self.assertEqual(groups[("Hooks", "FirstSend", None, None, None)],
+                         ["Foundatio", "Zendiator", "MediatRHistorical", "Mediator", "DispatchR", "Immediate"])
+
+    def test_project_canonicalization_rejects_wrong_projects_and_false_hook_prefixes(self):
+        case = {"Type": "ZendiatorSend0", "Method": "Typed", "Lifetime": "Scoped"}
+        self.assertEqual(identity(case), identity(dict(case, Project="usecase")))
+        self.assertEqual(normalize_case(case), normalize_case(dict(case, Project=None)))
+        with self.assertRaisesRegex(ValueError, "duplicate cases"):
+            make_plan([case, dict(case, Project="usecase")])
+        for invalid in (dict(case, Project="hooks"), dict(case, Project="unknown"),
+                        {"Type": "HZendiatorBenchmarks", "Method": "WarmSend"},
+                        {"Type": "FoundatioShortCircuit", "Method": "WarmDispatch", "Project": "foundatio"},
+                        {"Type": "HZendiatorUnknown", "Method": "WarmSend", "Project": "hooks"}):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                make_plan([invalid])
+        with self.assertRaisesRegex(ValueError, "Cannot identify one library"):
+            library({"Type": "HZendiatorUnknown", "Method": "WarmSend"})
+
+    def test_cross_project_log_keeps_exact_case_identity_and_order(self):
+        plan, _ = make_plan(self.baseline_cases())
+        lines = []
+        for row in plan:
+            case = row["Case"]
+            parameters = ", ".join(f"{name}={case[name]}" for name in ("Lifetime", "Count", "Asynchronous") if name in case)
+            suffix = f" [{parameters}]" if parameters else ""
+            lines.append(f"// Benchmark: {case['Type']}.{case['Method']}: Comparison(){suffix}\n")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run.log"
+            path.write_text("".join(lines), encoding="utf-8")
+            verify_log(plan, path)
+            for invalid in (lines[:-1], [lines[1], *lines[1:]], [lines[1], lines[0], *lines[2:]]):
+                path.write_text("".join(invalid), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    verify_log(plan, path)
+
+
+class AggregateReportContracts(unittest.TestCase):
+    def analyze(self, cases, reports):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            matrix = root / "matrix.json"
+            matrix.write_text(json.dumps(cases), encoding="utf-8")
+            results = root / "runs/custom/results"
+            results.mkdir(parents=True)
+            (results / "fixture-full.json").write_text(json.dumps({"Benchmarks": reports}), encoding="utf-8")
+            (results.parent / "outcome.json").write_text(json.dumps({"cases": len(cases), "failures": 0}), encoding="utf-8")
+            result = subprocess.run([sys.executable, str(Path(__file__).with_name("analyze.py")),
+                                     str(root), "--matrix", str(matrix)], capture_output=True, text=True)
+            path = root / "all-results.csv"
+            if not path.exists():
+                return result, []
+            with path.open(encoding="utf-8", newline="") as stream:
+                return result, list(csv.DictReader(stream))
+
+    def report(self, case):
+        return {"Type": case["Type"], "Method": case["Method"], "Project": "untrusted-project",
+                "Parameters": ", ".join(f"{name}={case[name]}" for name in ("Lifetime", "Count", "Asynchronous") if name in case),
+                "Statistics": {"Mean": 10.0, "Median": 9.9, "N": 12, "StandardDeviation": 0.1,
+                               "ConfidenceInterval": {"Lower": 9.5, "Upper": 10.5, "Margin": 0.5}},
+                "Memory": {"BytesAllocatedPerOperation": 0}}
+
+    def test_projects_come_from_declared_cases_and_confidence_is_preserved(self):
+        cases = [{"Type": "ZendiatorSend0", "Method": "Typed", "Lifetime": "Scoped", "Project": "usecase"},
+                 {"Type": "HZendiatorBenchmarks", "Method": "WarmSend", "Project": "hooks"},
+                 {"Type": "MediatRShortCircuit", "Method": "WarmDispatch", "Project": "short"},
+                 {"Type": "FoundatioStream5", "Method": "Full", "Count": 1024, "Asynchronous": False, "Project": "foundatio"}]
+        result, rows = self.analyze(cases, [self.report(case) for case in cases])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual({row["Type"]: row["Project"] for row in rows},
+                         {case["Type"]: case["Project"] if case["Project"] != "usecase" else "" for case in cases})
+        for row in rows:
+            self.assertEqual((row["MeanNs"], row["AllocatedBytes"], row["ConfidenceLowerNs"],
+                              row["ConfidenceUpperNs"], row["ConfidenceMarginNs"]), ("10.0", "0", "9.5", "10.5", "0.5"))
+        old = self.report(cases[0])
+        old["Statistics"].pop("ConfidenceInterval")
+        result, rows = self.analyze([dict(cases[0], Project=None)], [old])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((rows[0]["Project"], rows[0]["ConfidenceLowerNs"], rows[0]["ConfidenceUpperNs"]), ("", "", ""))
+
+    def test_ambiguous_unexpected_or_duplicate_results_cannot_be_aggregated(self):
+        case = {"Type": "ZendiatorSend0", "Method": "Typed", "Lifetime": "Scoped"}
+        report = self.report(case)
+        for cases, reports, error in (
+                ([case, dict(case, Project="usecase")], [report], "Duplicate predeclared case"),
+                ([case], [dict(report, Type="ZendiatorSend5")], "Unexpected BDN result"),
+                ([case], [report, report], "Duplicate BDN result"),
+                ([case], [dict(report, Parameters="Lifetime=Scoped, Project=hooks")], "Unexpected BDN parameters")):
+            with self.subTest(error=error):
+                result, _ = self.analyze(cases, reports)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(error, result.stderr)
+
+
+    def test_report_reads_new_and_legacy_gate_layouts_and_prefers_new(self):
+        for layout in ("legacy", "new", "mixed"):
+            with self.subTest(layout=layout), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                fields = ("Group", "Type", "Method", "Count", "Asynchronous", "MeanNs", "AllocatedBytes")
+                with (root / "all-results.csv").open("w", encoding="utf-8", newline="") as stream:
+                    writer = csv.DictWriter(stream, fieldnames=fields)
+                    writer.writeheader()
+                    writer.writerow(dict(zip(fields, ("relay", "ZendiatorRelay5", "Full", 16, False, 42, 0))))
+                driver.write_json(root / "runs/send/run-info.json", {"revision": "synthetic", "sdk": "10.0.404"})
+                for kind in (("legacy", "new") if layout == "mixed" else (layout,)):
+                    gate_root = "gates/usecase/" if kind == "new" else ""
+                    driver.write_json(root / ("runs/send/" + gate_root + "manifest.json"), {
+                        "runtime": ".NET 10.0.14",
+                        "packageVersions": {"MediatR": "15.0.0" if kind == "new" else "14.2.0"}})
+                    driver.write_json(root / ("runs/relay/" + gate_root + "correctness.json"), [{
+                        "suite": "RelayTiming", "library": "Zendiator", "behaviors": 5,
+                        "eventsAtCreation": kind == "legacy", "eventsAtEnumerator": False,
+                        "failureStage": "move-call" if kind == "new" else "creation"}])
+                result = subprocess.run([sys.executable, str(Path(__file__).with_name("make_report.py")), str(root)],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                report = (root / "RESULT.ja.md").read_text(encoding="utf-8")
+                self.assertIn("| Zendiator | 5 |", report)
+                if layout != "legacy":
+                    self.assertIn("MediatR 15.0.0", report)
+                    self.assertNotIn("MediatR 14.2.0", report)
+                    self.assertIn("MoveNextAsync", report)
+                else:
+                    self.assertIn("MediatR 14.2.0", report)
 
 
 class ArtifactContracts(unittest.TestCase):
+    def test_shared_dll_preflight_uses_bytes_and_rechecks_saved_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            projects = {suite: Path(directory) / suite for suite in ("usecase", "hooks")}
+            common = []
+            original = b"Shared, Version=1.0.0.0; payload=baseline"
+            changed = b"Shared, Version=1.0.0.0; payload=changed"
+            for suite, project in projects.items():
+                root = project / "bin/Release/net10.0"
+                root.mkdir(parents=True)
+                common.append(root / "Shared.dll")
+                common[-1].write_bytes(original)
+                (root / (suite + ".dll")).write_bytes(suite.encode())
+                nested = root / "generated/bin/Release/net10.0"
+                nested.mkdir(parents=True)
+                (nested / "Shared.dll").write_bytes(suite.encode())
+            session = {}
+            driver.check_shared_binary_identity(projects, session)
+            self.assertEqual(set(session["sharedDllPreflight"]), {"shared.dll"})
+            self.assertEqual(set(session["sharedDllPreflight"]["shared.dll"]), set(projects))
+            driver.check_shared_binary_identity(projects, session, resume=True)
+            common[1].write_bytes(changed)
+            with self.assertRaisesRegex(ValueError, "Shared DLL shared.dll differs") as error:
+                driver.check_shared_binary_identity(projects, {})
+            for path in common:
+                self.assertIn(str(path.resolve()), str(error.exception))
+                self.assertIn(driver.sha(path), str(error.exception))
+            common[0].write_bytes(changed)
+            with self.assertRaisesRegex(ValueError, "preflight identity changed; cannot resume"):
+                driver.check_shared_binary_identity(projects, session, resume=True)
+            with self.assertRaisesRegex(ValueError, "Missing shared DLL preflight identity"):
+                driver.check_shared_binary_identity(projects, {}, resume=True)
+
     def test_missing_process_evidence_blocks_resume_before_child_evidence_exists(self):
         with tempfile.TemporaryDirectory() as directory:
             case = Path(directory)
@@ -92,6 +302,20 @@ class ArtifactContracts(unittest.TestCase):
             info = json.loads((group / "run-info.json").read_text())
             self.assertEqual(info["firstSendActual"]["actualRows"], 12)
             self.assertEqual(info["firstSendActual"]["operationsPerActualRow"], 16384)
+
+    def test_cold_outer_failure_requires_twelve_complete_fixed_invocation_rows(self):
+        case = {"Type": "HZendiatorBenchmarks", "Method": "ColdOuterFailure", "Project": "hooks"}
+        header = "// Benchmark: HZendiatorBenchmarks.ColdOuterFailure: Comparison(InvocationCount=16384, UnrollFactor=1)\n"
+        rows = [f"WorkloadActual {index}: 16384 op, 1 ns\n" for index in range(1, 13)]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run.log"
+            path.write_text(header + "".join(rows), encoding="utf-8")
+            proof = driver.check_firstsend(path, [case])
+            self.assertEqual((proof["cases"], proof["actualRows"], proof["operationsPerActualRow"]), (1, 12, 16384))
+            for invalid in (rows[:-1], [rows[0].replace("16384", "1"), *rows[1:]]):
+                path.write_text(header + "".join(invalid), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "actual-operation evidence"):
+                    driver.check_firstsend(path, [case])
 
     def test_explicit_null_optional_parameters_match_omitted_plan_and_analysis(self):
         omitted = {"Type": "ZendiatorNotification1", "Method": "Dispatch"}

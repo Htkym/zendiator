@@ -13,11 +13,13 @@ import shutil
 import signal
 import statistics
 import subprocess
+import sys
 import uuid
 from pathlib import Path
 
 from interleaved_plan import identity, make_plan, normalize_case, verify_log
 from owned_process import OwnedCommand, process_alive, process_identity
+from measurement_suites import SUITES, suite_name, project_for, consumer_name, gate_count
 from artifact_gate import (PROTOCOL as ARTIFACT_GATE_PROTOCOL, ensure_artifact_gate, check_artifact_binding,
                            filesystem_path, ordinary_path, resolve_path, glob_paths, read, sha, write as write_json)
 
@@ -82,21 +84,62 @@ def source_digest():
     return digest.hexdigest().upper()
 
 
-def check_project_discovery():
-    expected = resolve_path(PROJECT / "Zendiator.UseCaseBenchmarks.csproj")
-    matches = sorted(resolve_path(path) for path in glob_paths(REPO, "**/" + expected.name))
-    if matches != [expected]:
-        found = ", ".join(str(path) for path in matches) or "none"
-        raise ValueError("BDN requires exactly one benchmark project below this worktree; "
-                         f"found: {found}. Use a clean sibling worktree and a new output root.")
+def check_project_discovery(projects=(PROJECT,)):
+    for project in projects:
+        expected = resolve_path(project / (consumer_name(project) + ".csproj"))
+        matches = sorted(resolve_path(path) for path in glob_paths(REPO, "**/" + expected.name))
+        if matches != [expected]:
+            found = ", ".join(str(path) for path in matches) or "none"
+            raise ValueError("BDN requires exactly one selected benchmark project below this worktree; "
+                             f"found: {found}. Use a clean sibling worktree and a new output root.")
 
 
 def check_binary_identity(session):
-    paths = (("runtimeSha256", REPO / "src/Zendiator/bin/Release/net10.0/Zendiator.dll"),
-             ("benchmarkSha256", PROJECT / "bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll"),
-             ("generatorSha256", REPO / "src/Zendiator.SourceGenerator/bin/Release/netstandard2.0/Zendiator.SourceGenerator.dll"))
-    if any(sha(path) != session[key] for key, path in paths):
-        raise ValueError("Built DLL identity changed")
+    builds = session.get("builds", {"usecase": session})
+    for suite, built in builds.items():
+        project = project_for({"Project": suite})
+        paths = (("runtimeSha256", REPO / "src/Zendiator/bin/Release/net10.0/Zendiator.dll"),
+                 ("benchmarkSha256", project / ("bin/Release/net10.0/" + consumer_name(project) + ".dll")),
+                 ("generatorSha256", REPO / "src/Zendiator.SourceGenerator/bin/Release/netstandard2.0/Zendiator.SourceGenerator.dll"))
+        if any((sha(path) if filesystem_path(path).exists() else None) != built[key] for key, path in paths):
+            raise ValueError("Built DLL identity changed")
+
+
+def check_shared_binary_identity(projects, session, resume=False):
+    copies = {}
+    for suite, project in projects.items():
+        root = resolve_path(project / "bin/Release/net10.0")
+        if not filesystem_path(root).is_dir():
+            raise ValueError(f"Missing selected project build output: {suite}: rootPath={root}")
+        for path in glob_paths(root, "*"):
+            if path.suffix.casefold() == ".dll" and filesystem_path(path).is_file():
+                copies.setdefault(path.name.casefold(), {})[suite] = resolve_path(path)
+    shared = {}
+    for name, paths in sorted(copies.items()):
+        if len(paths) < 2:
+            continue
+        shared[name] = {suite: {"rootPath": str(path), "sha256": sha(path)} for suite, path in paths.items()}
+        if len({assembly["sha256"] for assembly in shared[name].values()}) != 1:
+            details = "; ".join(f"{suite}: rootPath={assembly['rootPath']} sha256={assembly['sha256']}"
+                                for suite, assembly in shared[name].items())
+            raise ValueError(f"Shared DLL {name} differs across selected projects: {details}")
+    if resume:
+        previous = session.get("sharedDllPreflight")
+        if not isinstance(previous, dict):
+            raise ValueError("Missing shared DLL preflight identity; cannot resume")
+        if previous != shared:
+            changed = next(name for name in sorted(previous.keys() | shared.keys()) if previous.get(name) != shared.get(name))
+            raise ValueError(f"Shared DLL preflight identity changed; cannot resume: {changed}; "
+                             f"recorded={previous.get(changed)}; current={shared.get(changed)}")
+    session["sharedDllPreflight"] = shared
+
+
+def case_session(row, session, group):
+    if "builds" not in session:
+        return session
+    suite = suite_name(row["Case"])
+    return dict(session, **session["builds"][suite],
+                gateSha256={group: session["gateSha256"][group + ":" + suite]})
 
 
 def run_logged(args, path, env, cwd=PROJECT):
@@ -176,9 +219,17 @@ def check_abandoned(case_dir):
 
 def check_resume_ownership(output):
     # Include restore/build/gate and completed cases, not just an unfinished BDN case.
-    for name in ("restore.log.process.json", "build.log.process.json"):
-        if not filesystem_path(output / name).exists():
-            raise RuntimeError(f"Missing build containment evidence; do not resume: {output / name}")
+    if filesystem_path(output / "builds").exists():
+        suites = read(output / "session.json").get("builds", {})
+        if not suites or any(suite not in SUITES for suite in suites):
+            raise RuntimeError("Missing selected project build identities; do not resume")
+        roots = [output / "builds" / suite for suite in suites]
+    else:
+        roots = [output]
+    for root in roots:
+        for name in ("restore.log.process.json", "build.log.process.json"):
+            if not filesystem_path(root / name).exists():
+                raise RuntimeError(f"Missing build containment evidence; do not resume: {root / name}")
     check_owned_markers(output)
     for cases in glob_paths(output, "runs/*/cases"):
         for case_dir in filesystem_path(cases).iterdir():
@@ -197,23 +248,26 @@ def clean_env():
 
 def build_env():
     env = clean_env()
-    env.update(MSBUILDDISABLENODEREUSE="1", DOTNET_CLI_USE_MSBUILD_SERVER="0", UseSharedCompilation="false")
+    env.update(MSBUILDDISABLENODEREUSE="1", DOTNET_CLI_USE_MSBUILD_SERVER="0", UseSharedCompilation="false",
+               ZendiatorFormalMeasurement="true")
     return env
 
 
-def gate_valid(path):
+def gate_valid(path, expected=389):
     if not filesystem_path(path).exists():
         return False
     records = read(path)
-    return len(records) == 389 and all(row.get("status") == "Passed" for row in records)
+    return len(records) == expected and all(row.get("status") == "Passed" for row in records)
 
 
 def check_case(row, attempt, session, require_artifact_gate=True):
+    project = PROJECT if suite_name(row["Case"]) == "usecase" else project_for(row["Case"])
+    session = case_session(row, session, attempt.parents[2].name)
     outcome = read(attempt / "outcome.json")
     if any(outcome.get(key) != value for key, value in (("cases", 1), ("failures", 0), ("validationErrors", 0))):
         raise ValueError(f"Incomplete BDN result: {attempt}")
     verify_log([row], attempt / "run.log")
-    if row["Case"]["Method"] == "FirstSend":
+    if row["Case"]["Method"] in ("FirstSend", "ColdOuterFailure"):
         check_firstsend(attempt / "run.log", [row["Case"]])
     children = list(glob_paths(attempt, "child-*.json"))
     reports = list(glob_paths(attempt / "results", "*-full.json"))
@@ -224,6 +278,8 @@ def check_case(row, attempt, session, require_artifact_gate=True):
         raise ValueError(f"Expected one benchmark result: {reports[0]}")
     result = data["Benchmarks"][0]
     result_case = {"Type": result["Type"], "Method": result["Method"]}
+    if "Project" in row["Case"]:
+        result_case["Project"] = row["Case"]["Project"]
     for item in re.split(r"[,\&]\s*", result.get("Parameters") or ""):
         if "=" not in item:
             continue
@@ -258,7 +314,7 @@ def check_case(row, attempt, session, require_artifact_gate=True):
     if session.get("sendDiagnostic") is not None:
         record["sendDiagnostic"] = check_send_diagnostic(result, session["sendDiagnostic"])
     if require_artifact_gate:
-        record["artifactGate"] = check_artifact_binding(row, attempt, session, PROJECT)
+        record["artifactGate"] = check_artifact_binding(row, attempt, session, project)
     return record
 
 
@@ -280,8 +336,8 @@ def check_firstsend(log, expected):
     label = None
     for line in filesystem_path(log).read_text(encoding="utf-8").splitlines():
         if line.startswith("// Benchmark: "):
-            match = re.match(r"// Benchmark: (\S+\.FirstSend): .*\[Lifetime=([^]]+)\]$", line)
-            label = f"{match.group(1)}|{match.group(2)}" if match else None
+            match = re.match(r"// Benchmark: (\S+\.(?:FirstSend|ColdOuterFailure)): .*?(?:\[Lifetime=([^]]+)\])?$", line)
+            label = f"{match.group(1)}|{match.group(2) or ''}" if match else None
             if label:
                 if "InvocationCount=16384" not in line or "UnrollFactor=1" not in line:
                     raise ValueError(f"FirstSend job changed: {line}")
@@ -290,7 +346,7 @@ def check_firstsend(log, expected):
             match = re.match(r"WorkloadActual\s+\d+: (\d+) op,", line)
             if match:
                 seen[label].append(int(match.group(1)))
-    wanted = {f'{case["Type"]}.FirstSend|{case["Lifetime"]}' for case in expected if case["Method"] == "FirstSend"}
+    wanted = {f'{case["Type"]}.{case["Method"]}|{case.get("Lifetime", "")}' for case in expected if case["Method"] in ("FirstSend", "ColdOuterFailure")}
     if set(seen) != wanted or any(len(values) != 12 or set(values) != {16384} for values in seen.values()):
         raise ValueError("FirstSend actual-operation evidence is incomplete")
     return {"passed": True, "cases": len(seen), "actualRows": sum(map(len, seen.values())),
@@ -320,7 +376,7 @@ def finish_group(run, plan, cases, session):
         hashes.add(record["childSha256"])
         artifact_proofs.append(record["artifactGate"])
         for name, digest in record["childAssemblies"].items():
-            if name.startswith("Zendiator.UseCaseBenchmarks-"):
+            if any(name.startswith(directory + "-") for directory, _ in SUITES.values()):
                 continue  # BDN generates a distinct executable for each selected case.
             if name in assembly_hashes and assembly_hashes[name] != digest:
                 raise ValueError(f"Child assembly {name} changed within group")
@@ -330,7 +386,7 @@ def finish_group(run, plan, cases, session):
     log = run / "run.log"
     filesystem_path(log).write_text("\n".join(logs), encoding="utf-8")
     verify_log(plan, log)
-    firstsend = check_firstsend(log, cases) if any(case["Method"] == "FirstSend" for case in cases) else None
+    firstsend = check_firstsend(log, cases) if any(case["Method"] in ("FirstSend", "ColdOuterFailure") for case in cases) else None
     write_json(run / "run-info.json", {"group": run.name, "revision": session["revision"],
                "sdk": session["sdk"], "expectedCases": len(plan), "childCount": len(plan),
                "productHashes": sorted(hashes), "sourceDigest": session["sourceDigest"],
@@ -366,7 +422,10 @@ def main():
     profile = send_diagnostic_profile(args.send_diagnostic, args.group, plans[groups[0]][0], args.resume, args.max_cases)
     if args.dry_run:
         return
-    check_project_discovery()
+    selected_suites = sorted({suite_name(case) for cases, _ in plans.values() for case in cases},
+                            key=lambda name: list(SUITES).index(name))
+    selected_projects = {name: project_for({"Project": name}) for name in selected_suites}
+    check_project_discovery(selected_projects.values())
     if args.max_cases is not None and args.max_cases < 1:
         raise ValueError("--max-cases must be positive")
     if command(["git", "status", "--porcelain=v1", "-uall"]):
@@ -388,7 +447,8 @@ def main():
     current = {"revision": command(["git", "rev-parse", "HEAD"]), "sdk": sdk,
                "sourceDigest": source_digest(), "groups": list(groups),
                "matrixSha256": {group: sha(matrix_paths[group]) for group in groups},
-               "profile": profile, "artifactGateProtocol": ARTIFACT_GATE_PROTOCOL}
+               "profile": profile, "artifactGateProtocol": ARTIFACT_GATE_PROTOCOL,
+               "entryProtocol": "zendiator-shared-measurement-v2", "suites": selected_suites}
     if args.send_diagnostic is not None:
         current["sendDiagnostic"] = args.send_diagnostic
     if args.resume:
@@ -398,17 +458,25 @@ def main():
         if any(session.get(key) != value for key, value in current.items()):
             raise ValueError("Revision, SDK, source, group, or matrix changed; cannot resume")
     else:
-        run_logged(["dotnet", "restore", str(PROJECT / "Zendiator.UseCaseBenchmarks.csproj"), "--locked-mode",
-                    "--disable-build-servers", "-p:UseSharedCompilation=false", "-nodeReuse:false"], output / "restore.log", build_env())
-        run_logged(["dotnet", "build", str(PROJECT / "Zendiator.UseCaseBenchmarks.csproj"), "-c", "Release", "--no-restore",
-                    "--disable-build-servers", "-p:UseSharedCompilation=false", "-nodeReuse:false"], output / "build.log", build_env())
         session = dict(current)
         session["sessionId"] = uuid.uuid4().hex
-        session["runtimeSha256"] = sha(REPO / "src/Zendiator/bin/Release/net10.0/Zendiator.dll")
-        session["benchmarkSha256"] = sha(PROJECT / "bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll")
-        session["generatorSha256"] = sha(REPO / "src/Zendiator.SourceGenerator/bin/Release/netstandard2.0/Zendiator.SourceGenerator.dll")
+        session["builds"] = {}
+        for suite, project in selected_projects.items():
+            project_file = project / (consumer_name(project) + ".csproj")
+            build_output = output / "builds" / suite
+            run_logged(["dotnet", "restore", str(project_file), "--locked-mode",
+                        "--disable-build-servers", "-p:UseSharedCompilation=false", "-p:ZendiatorFormalMeasurement=true", "-nodeReuse:false"], build_output / "restore.log", build_env(), cwd=project)
+            run_logged(["dotnet", "build", str(project_file), "-c", "Release", "--no-restore",
+                        "--disable-build-servers", "-p:UseSharedCompilation=false", "-p:ZendiatorFormalMeasurement=true", "-nodeReuse:false"], build_output / "build.log", build_env(), cwd=project)
+            generator = REPO / "src/Zendiator.SourceGenerator/bin/Release/netstandard2.0/Zendiator.SourceGenerator.dll"
+            session["builds"][suite] = {
+                "runtimeSha256": sha(REPO / "src/Zendiator/bin/Release/net10.0/Zendiator.dll"),
+                "benchmarkSha256": sha(project / ("bin/Release/net10.0/" + consumer_name(project) + ".dll")),
+                "generatorSha256": sha(generator) if filesystem_path(generator).exists() else None}
         write_json(output / "session.json", session)
     check_binary_identity(session)
+    check_shared_binary_identity(selected_projects, session, args.resume)
+    write_json(output / "session.json", session)
 
     completed_count = 0
     product_hash = None
@@ -423,29 +491,39 @@ def main():
                 raise ValueError(f"Plan changed: {run}")
         else:
             write_json(plan_file, plan)
-        proof = run / "correctness.json"
-        if not gate_valid(proof):
-            if filesystem_path(proof).exists():
-                raise ValueError(f"Existing gate evidence is invalid: {proof}")
-            env = clean_env()
-            env.update(COLD_RUN=str(run), COLD_PINNED="1", COLD_EXPECT_CHILD_Z_SHA="SKIP")
-            run_logged(["dotnet", str(PROJECT / "bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll"), "--validate-only"], run / "gate.log", env)
-            if not gate_valid(proof):
-                raise ValueError(f"Correctness gate failed: {run}")
-        gate_manifest = read(run / "manifest.json")
-        if (gate_manifest["runtimeSha256"] != session["runtimeSha256"] or
-            gate_manifest["assemblySha256"] != session["benchmarkSha256"] or
-            gate_manifest["generatorSha256"] != session["generatorSha256"]):
-            raise ValueError(f"Gate DLL identity differs from built DLL: {run}")
-        for key, value in (("runtime", gate_manifest["runtime"]), ("diSha256", gate_manifest["diSha256"])):
-            if key in session and session[key] != value:
-                raise ValueError(f"Gate {key} changed during measurement")
-            session[key] = value
-        session.setdefault("gateSha256", {})
-        proof_sha = sha(proof)
-        if group in session["gateSha256"] and session["gateSha256"][group] != proof_sha:
-            raise ValueError(f"Gate evidence changed: {proof}")
-        session["gateSha256"][group] = proof_sha
+        proofs = {}
+        for suite in {suite_name(case) for case in cases}:
+            project = selected_projects[suite]
+            gate_output = run / "gates" / suite
+            proof = gate_output / "correctness.json"
+            expected = gate_count(project)
+            if not gate_valid(proof, expected):
+                if filesystem_path(proof).exists():
+                    raise ValueError(f"Existing gate evidence is invalid: {proof}")
+                env = clean_env()
+                env.update(COLD_RUN=str(gate_output), COLD_PINNED="1", COLD_EXPECT_CHILD_Z_SHA="SKIP")
+                run_logged(["dotnet", str(project / ("bin/Release/net10.0/" + consumer_name(project) + ".dll")), "--validate-only"], gate_output / "gate.log", env, cwd=project)
+                if not gate_valid(proof, expected):
+                    raise ValueError(f"Correctness gate failed: {gate_output}")
+            gate_manifest = read(gate_output / "manifest.json")
+            built = session["builds"][suite]
+            if (gate_manifest["runtimeSha256"] != built["runtimeSha256"] or
+                gate_manifest["assemblySha256"] != built["benchmarkSha256"] or
+                gate_manifest["generatorSha256"] != built["generatorSha256"]):
+                raise ValueError(f"Gate DLL identity differs from built DLL: {gate_output}")
+            if gate_manifest["runtime"] != ".NET 10.0.14":
+                raise ValueError("All selected suites require the pinned .NET 10.0.14 runtime")
+            for key, value in (("runtime", gate_manifest["runtime"]), ("diSha256", gate_manifest["diSha256"])):
+                if key in session and session[key] != value:
+                    raise ValueError(f"Gate {key} changed during measurement")
+                session[key] = value
+            session.setdefault("gateSha256", {})
+            gate_key = group + ":" + suite
+            proof_sha = sha(proof)
+            if gate_key in session["gateSha256"] and session["gateSha256"][gate_key] != proof_sha:
+                raise ValueError(f"Gate evidence changed: {proof}")
+            session["gateSha256"][gate_key] = proof_sha
+            proofs[suite] = proof
         write_json(output / "session.json", session)
         for ordinal, row in enumerate(plan, 1):
             case_dir = run / "cases" / f"{ordinal:04d}"
@@ -466,15 +544,18 @@ def main():
             filesystem_path(attempt).mkdir()
             one_case = attempt / "matrix.json"
             write_json(one_case, [row["Case"]])
+            suite = suite_name(row["Case"])
+            project = selected_projects[suite]
             env = clean_env()
             env.update(COLD_RUN=str(attempt), COLD_MATRIX_FILE=str(one_case), COLD_PINNED="1",
-                       COLD_SKIP_GATE="1", COLD_SINGLE_CASE="1", COLD_GATE_PROOF=str(proof), COLD_EXPECT_CHILD_Z_SHA="SKIP")
-            benchmark_args = ["dotnet", str(PROJECT / "bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll"), "--filter", "*"]
+                       COLD_SKIP_GATE="1", COLD_SINGLE_CASE="1", COLD_GATE_PROOF=str(proofs[suite]), COLD_EXPECT_CHILD_Z_SHA="SKIP",
+                       ZendiatorFormalMeasurement="true")
+            benchmark_args = ["dotnet", str(project / ("bin/Release/net10.0/" + consumer_name(project) + ".dll")), "--filter", "*"]
             if args.send_diagnostic == "fixed":
                 benchmark_args.extend(["--invocationCount", str(SEND_DIAGNOSTIC_INVOCATIONS)])
-            run_logged(benchmark_args, attempt / "run.log", env)
+            run_logged(benchmark_args, attempt / "run.log", env, cwd=project)
             check_case(row, attempt, session, require_artifact_gate=False)
-            ensure_artifact_gate(row, attempt, session, PROJECT, run_logged, clean_env)
+            ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env)
             write_json(case_dir / "complete.json", check_case(row, attempt, session))
             completed_count += 1
             print(f"{group} {ordinal}/{len(plan)}: {row['Library']} {row['Case']['Type']}.{row['Case']['Method']}", flush=True)
@@ -489,12 +570,12 @@ def main():
             known_assemblies[name] = digest
     if source_digest() != session["sourceDigest"] or command(["git", "rev-parse", "HEAD"]) != session["revision"]:
         raise ValueError("Source changed during measurement")
-    analysis = ["python", str(PROJECT / "analyze.py"), str(output)]
+    analysis = [sys.executable, str(PROJECT / "analyze.py"), str(output)]
     if args.group == "custom":
         analysis.extend(["--matrix", str(matrix_paths["custom"])])
     run_logged(analysis, output / "analyze.log", clean_env())
     if args.group == "all":
-        run_logged(["python", str(PROJECT / "make_report.py"), str(output)], output / "report.log", clean_env())
+        run_logged([sys.executable, str(PROJECT / "make_report.py"), str(output)], output / "report.log", clean_env())
     print(f"Verified interleaved run: {output}")
 
 
