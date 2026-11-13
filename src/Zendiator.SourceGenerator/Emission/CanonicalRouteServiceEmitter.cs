@@ -149,11 +149,24 @@ internal static class CanonicalRouteServiceEmitter
     internal static CanonicalCompositionFragment Fragment(CompilationUnitSyntax root, NamespaceDeclarationSyntax ns,
         ClassDeclarationSyntax mediator, ClassDeclarationSyntax registrar, EquatableArray<string> boxedDependencies, bool lazyClosedServiceCache, EquatableArray<string> eagerDependencies = default)
     {
-        var dependencies = Dependencies(ns).ToArray();
+        var eager = new HashSet<string>(eagerDependencies.Select(type => TypeKey(SyntaxFactory.ParseTypeName(type))), StringComparer.Ordinal);
+        var direct = new HashSet<string>(StringComparer.Ordinal);
         var boxed = new HashSet<string>(boxedDependencies.Select(type => TypeKey(SyntaxFactory.ParseTypeName(type))), StringComparer.Ordinal);
         foreach (var call in mediator.DescendantNodes().OfType<InvocationExpressionSyntax>())
-            if (call.Expression is MemberAccessExpressionSyntax { Name: IdentifierNameSyntax } && ServiceType(call, "_provider") is { } type)
-                boxed.Add(TypeKey(type));
+            if (ServiceType(call, "_provider") is { } type)
+            {
+                direct.Add(TypeKey(type));
+                if (call.Expression is MemberAccessExpressionSyntax { Name: IdentifierNameSyntax })
+                    boxed.Add(TypeKey(type));
+            }
+        var carried = new HashSet<string>(mediator.Members.OfType<ClassDeclarationSyntax>()
+            .Where(type => type.Identifier.ValueText.StartsWith("RouteDependencies_", StringComparison.Ordinal))
+            .SelectMany(type => type.Members.OfType<ConstructorDeclarationSyntax>())
+            .SelectMany(constructor => constructor.ParameterList.Parameters)
+            .Select(parameter => parameter.Type).OfType<TypeSyntax>().Select(TypeKey), StringComparer.Ordinal);
+        carried.ExceptWith(direct);
+        carried.ExceptWith(eager);
+        var dependencies = Dependencies(ns).Where(type => !carried.Contains(TypeKey(type))).ToArray();
         return new(ns.Name.ToString(), registrar.ToFullString(), new(root.Externs.Select(e => e.WithLeadingTrivia().WithTrailingTrivia().ToString())),
             new(dependencies.Select(type => new CanonicalServiceDependency(TypeKey(type), !Closed(type), boxed.Contains(TypeKey(type))))), lazyClosedServiceCache, eagerDependencies);
     }
@@ -180,7 +193,8 @@ internal static class CanonicalRouteServiceEmitter
         CanonicalClosedServiceCacheEmitter.AppendMembers(b, closed, lazyClosedServiceCache);
         if (eagerDependencies.Count != 0)
         {
-            var eager = closed.Where(type => eagerDependencies.Contains(type.TypeName)).ToArray();
+            var selected = new HashSet<string>(eagerDependencies.Select(type => TypeKey(SyntaxFactory.ParseTypeName(type))), StringComparer.Ordinal);
+            var eager = closed.Where(type => selected.Contains(type.TypeName)).ToArray();
             b.AppendLine("public Zendiator(global::System.IServiceProvider provider, " + string.Join(", ", eager.Select((type, i) => type.TypeName + " eager" + i)) + ") : this(provider) {");
             for (var i = 0; i < eager.Length; i++)
             {

@@ -238,21 +238,29 @@ public sealed partial class GeneratorTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Eager_dependency_selection_rejects_native_carrier_routes_but_keeps_direct_value_handler_routes(bool valueHandler)
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, true, true)]
+    [InlineData(false, false, true)]
+    public void Eager_dependency_selection_preserves_single_receiver_and_value_handler_boundaries(bool valueHandler, bool sameReceiver, bool beforeOnly)
     {
-        var source = """
+        var receiver = sameReceiver ? "H" : "Hook";
+        var contracts = "ISendRequestTransform<R>" + (beforeOnly ? "" : ",ISendResponseTransform<R,int>");
+        var callbacks = "public R Before(R r,CancellationToken t)=>r;" + (beforeOnly ? "" : "public int After(R r,int value,CancellationToken t)=>value;");
+        var source = $$"""
             using System.Threading;using System.Threading.Tasks;using Zendiator;using Zendiator.DependencyInjection;using Microsoft.Extensions.DependencyInjection;
             namespace EagerCarrier{
             public sealed record R:IRequest<int>;
-            [Handler]public HANDLER H:IRequestHandler<R,int>{public ValueTask<int> HandleAsync(R r,CancellationToken t)=>new(42);}
-            public sealed class Hook:ISendRequestTransform<R>,ISendResponseTransform<R,int>{public R Before(R r,CancellationToken t)=>r;public int After(R r,int value,CancellationToken t)=>value;}
-            [ZendiatorComposition("carrier",EagerDependencies=new[]{typeof(Hook)})]public sealed class App;
-            public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<App>(c=>{c.Handlers<R>(DispatchFamily.SendAsync,typeof(H));c.Pipeline<R>(DispatchFamily.SendAsync,Stage.Hook<Hook>());});}}
-            """.Replace("HANDLER", valueHandler ? "struct" : "sealed class");
+            [Handler]public {{(valueHandler ? "struct" : "sealed class")}} H:IRequestHandler<R,int>{{(sameReceiver ? "," + contracts : "")}}{
+                public ValueTask<int> HandleAsync(R r,CancellationToken t)=>new(42);{{(sameReceiver ? callbacks : "")}}}
+            public sealed class Hook:{{contracts}}{ {{callbacks}} }
+            [ZendiatorComposition("carrier",EagerDependencies=new[]{typeof({{receiver}})})]public sealed class App;
+            public static class Bridge{public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<App>(c=>{c.Handlers<R>(DispatchFamily.SendAsync,typeof(H));c.Pipeline<R>(DispatchFamily.SendAsync,Stage.Hook<{{receiver}}>());});}
+            }
+            """;
         SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "EagerCarrier_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
-        if (valueHandler)
+        if (valueHandler || beforeOnly)
         {
             Assert.Empty(diagnostics);
             Assert.Empty(output.GetDiagnostics().Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error));
