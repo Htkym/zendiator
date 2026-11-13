@@ -74,6 +74,70 @@ public sealed partial class GeneratorTests
     }
 
     [Fact]
+    public async Task Native_stream_probes_scope_once_per_root_across_inner_open_and_reopen()
+    {
+        var source = NativeStreamFixture("""
+            c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));
+            c.Pipeline<Items>(DispatchFamily.Stream,Stage.Wrapper<Repeat>(),Stage.Wrapper<Relay<A>>(),
+                Stage.Wrapper<Relay<B>>(),Stage.Wrapper<Relay<C>>(),Stage.Wrapper<Relay<D>>());
+            """, """
+            public sealed record Items:IStreamRequest<int>;
+            public sealed class A;public sealed class B;public sealed class C;public sealed class D;
+            public sealed class Probe{public int Opened,Closed,HandlerDisposed;}
+            public sealed class CountingProvider(IServiceProvider inner):IServiceProvider{
+                public int Probes;
+                public object? GetService(Type type){if(type==typeof(IServiceProvider))Probes++;return inner.GetService(type);}
+            }
+            [Handler]public sealed class Handler(Probe p):IStreamSourceHandler<Items,int,Cursor>,IDisposable{
+                public ValueTask<Cursor> OpenAsync(Items request,CancellationToken token){p.Opened++;return new(new Cursor(p));}
+                public void Dispose()=>p.HandlerDisposed++;
+            }
+            public sealed class Cursor(Probe p):IAsyncEnumerator<int>{
+                private int index=-1;public int Current=>index;
+                public ValueTask<bool> MoveNextAsync()=>new(++index<2);
+                public ValueTask DisposeAsync(){p.Closed++;return default;}
+            }
+            public sealed class Relay<T>:IStreamMiddleware<Items,int>{
+                public ValueTask<IAsyncEnumerator<int>> OpenAsync(Items request,IStreamUpstream<Items,int> next,CancellationToken token)
+                    =>next.OpenAsync(request,token);
+            }
+            public sealed class Repeat:IStreamMiddleware<Items,int>{
+                public ValueTask<IAsyncEnumerator<int>> OpenAsync(Items request,IStreamUpstream<Items,int> next,CancellationToken token)
+                    =>new(Produce(request,next,token).GetAsyncEnumerator(token));
+                private static async IAsyncEnumerable<int> Produce(Items request,IStreamUpstream<Items,int> next,
+                    [System.Runtime.CompilerServices.EnumeratorCancellation]CancellationToken token){
+                    for(var round=0;round<2;round++){
+                        await using var cursor=await next.OpenAsync(request,token).ConfigureAwait(false);
+                        while(await cursor.MoveNextAsync().ConfigureAwait(false))yield return cursor.Current;
+                    }
+                }
+            }
+            public readonly struct Sink(List<int> values):IStreamSink<int>{
+                public ValueTask<bool> OnNextAsync(int item,CancellationToken token){values.Add(item);return new(true);}
+            }
+            """, """
+            var p=new Probe();var services=new ServiceCollection();services.AddSingleton(p);Register(services);
+            await using var provider=services.BuildServiceProvider();await using var scope=provider.CreateAsyncScope();
+            var counted=new CountingProvider(scope.ServiceProvider);
+            var mediator=new global::NativeStream.Generated.Reads.Zendiator(counted);var request=new Items();
+            var feed=mediator.StreamAsync(request);var cold=feed.GetAsyncEnumerator();await cold.DisposeAsync();
+            Check.That(counted.Probes==0&&p.Opened==0,"cold disposal neither probes the scope nor opens the input");
+            var values=new List<int>();await foreach(var item in feed.ConfigureAwait(false))values.Add(item);
+            Check.That(values.SequenceEqual(new[]{0,1,0,1})&&p.Opened==2&&p.Closed==2&&counted.Probes==1,
+                "one public root probe covers deferred inner opening and normal reopen through five middleware stages");
+            values.Clear();await mediator.StreamSource(request).ConsumeAsync(new Sink(values));
+            Check.That(values.SequenceEqual(new[]{0,1,0,1})&&p.Opened==4&&p.Closed==4&&counted.Probes==2,
+                "typed consumption has its own root probe without repeating probes inside the chain");
+            await scope.DisposeAsync();var rejected=feed.GetAsyncEnumerator();Exception? failure=null;
+            try{await rejected.MoveNextAsync();}catch(Exception error){failure=error;}
+            Check.That(failure is ObjectDisposedException&&counted.Probes==3&&p.Opened==4&&p.HandlerDisposed==1,
+                "a new root rejects the disposed scope before calling cached receivers; native DI owns their disposal");
+            await rejected.DisposeAsync();
+            """);
+        await RunNativeStreamFixture("root-scope-probe", source);
+    }
+
+    [Fact]
     public async Task Native_stream_public_source_keeps_lazy_independent_value_cursors_and_one_consumption_pipeline()
     {
         var source = NativeStreamFixture("""
