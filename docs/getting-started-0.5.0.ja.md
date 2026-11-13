@@ -1,5 +1,7 @@
 # 0.6.0の使い方
 
+[English](getting-started-0.5.0.md)
+
 0.6.0のpackageで同期処理・非同期処理・Streamを使う例です。移行時は[リリースノート](release/0.6.0-release-notes.ja.md)を確認してください。
 
 ## 準備と実行
@@ -35,6 +37,7 @@
 ```csharp
 using GettingStarted.Generated.App;
 using Microsoft.Extensions.DependencyInjection;
+using System.Runtime.CompilerServices;
 using Zendiator;
 using Zendiator.DependencyInjection;
 
@@ -67,7 +70,8 @@ public static class Program
         var sum = mediator.Send(new AddNumbers(20, 22));
         var greeting = await mediator.SendAsync(new Greet(" Ada "));
         var numbers = new List<int>();
-        await mediator.StreamSource(new ReadNumbers(6)).ConsumeAsync(new NumberSink(numbers));
+        await foreach (var number in mediator.StreamAsync(new ReadNumbers(6)))
+            numbers.Add(number);
 
         Console.WriteLine($"Send: {sum}");
         Console.WriteLine($"SendAsync: {greeting}");
@@ -115,44 +119,17 @@ public sealed class AddExclamation : ISendResponseTransform<Greet, string>
 public sealed record ReadNumbers(int Count) : IStreamRequest<int>;
 
 [Handler]
-public sealed class ReadNumbersHandler : IStreamSourceHandler<ReadNumbers, int, NumberCursor>
+public sealed class ReadNumbersHandler : IStreamHandler<ReadNumbers, int>
 {
-    public ValueTask<NumberCursor> OpenAsync(ReadNumbers request, CancellationToken token) =>
-        new(new NumberCursor(request.Count, token));
-}
-
-public sealed class NumberCursor(int count, CancellationToken token) : IAsyncEnumerator<int>
-{
-    private int _index;
-    private bool _started;
-    public int Current { get; private set; }
-    public ValueTask<bool> MoveNextAsync() => _started ? new(Move()) : StartAsync();
-
-    private async ValueTask<bool> StartAsync()
+    public async IAsyncEnumerable<int> Handle(ReadNumbers request,
+        [EnumeratorCancellation] CancellationToken token)
     {
-        _started = true;
         await Task.Yield();
-        return Move();
-    }
-
-    private bool Move()
-    {
-        token.ThrowIfCancellationRequested();
-        if (_index >= count) return false;
-        Current = ++_index;
-        return true;
-    }
-
-    public ValueTask DisposeAsync() { _started = true; _index = count; return default; }
-}
-
-// Value-type sinks are copied; the list is the shared result owner.
-public readonly struct NumberSink(List<int> numbers) : IStreamSink<int>
-{
-    public ValueTask<bool> OnNextAsync(int item, CancellationToken token)
-    {
-        numbers.Add(item);
-        return new(true);
+        for (var index = 0; index < request.Count; index++)
+        {
+            token.ThrowIfCancellationRequested();
+            yield return index + 1;
+        }
     }
 }
 
@@ -196,7 +173,7 @@ StreamAsync: 20, 40
 |---|---|---|
 | `DispatchFamily.SendSync` | `Send` | 20と22を足す |
 | `DispatchFamily.SendAsync` | `SendAsync` | 名前の空白を除き、応答の末尾に`!`を付ける |
-| `DispatchFamily.Stream` | `StreamSource(...).ConsumeAsync(...)` | 偶数を選び、10倍し、40以下を残す |
+| `DispatchFamily.Stream` | `StreamAsync`を`await foreach`で列挙 | 偶数を選び、10倍し、40以下を残す |
 
 Send系の`Before`はリストの先頭から、`After`は末尾から呼びます。この例では`TrimName.Before`、Handler、`AddExclamation.After`の順に動きます。Streamの各項目は`KeepEven`、`TimesTen`、`KeepAtMostForty`の順に処理します。
 
@@ -204,23 +181,25 @@ Send系の`Before`はリストの先頭から、`After`は末尾から呼びま�
 
 ## 例外と取消
 
-`Send`の例外は呼出し元へ伝わります。Hookがないか同期Beforeだけを使い、factory・Wrapper・sessionを使わないplain `SendAsync`では、依存解決と同期callbackが呼出し中に動きます。その例外や取消は、`ValueTask`が返る前に同期throwとなることがあります。同期部分で行った`AsyncLocal`、`CultureInfo`、`SynchronizationContext`の変更も呼出し側に見えます。返された`ValueTask`の非同期の失敗は`await`で受け取ります。`try`には呼出しと待機を含めてください。
+`Send`の例外は呼出し元へ伝わります。Hookがないか同期Beforeだけを使い、factory・Wrapper・sessionを使わないplain `SendAsync`では、依存解決と同期callbackが呼出し中に動きます。その例外や取消は`ValueTask`が返る前に同期throwとなることがあります。同期部分で行った`AsyncLocal`、`CultureInfo`、`SynchronizationContext`の変更も呼出し側に見えます。返された`ValueTask`の非同期の失敗は`await`で受け取ります。`try`には呼出しと待機を含めてください。
 
-この例のStreamではConsumeAsyncによる消費時にHandlerやHookが動きます。`request`がnullの場合は入口の呼出し時に例外が出るため、これらの失敗を扱う`try`には呼出しと待機を含めてください。
+この例のStreamでは`await foreach`で最初の項目を要求するとHandlerやHookが動きます。`request`がnullの場合は入口の呼出し時に例外が出るため、これらの失敗を扱う`try`には`StreamAsync`の呼出しと列挙を含めてください。
 
 取消tokenは各入口の`CancellationToken`引数で渡します。この例で取消が検出されると、`OperationCanceledException`が伝わります。この例のStreamでは列挙時のtokenも受け取り、呼出し時・列挙時のどちらの取消も反映します。既に取消済みの場合も、取消の検出は最初の項目を要求したときです。
 
 ## Streamの開始と再列挙
 
-名前付きNumberCursorをOpenAsyncで開きます。標準列挙にはStreamAsyncが返すsource classを使います。この例はStreamSourceのreadonly計画値とConsumeAsync、readonly sinkと共有Listで結果を集めます。計画値はIAsyncEnumerableではなく、ConsumeAsyncごとに非公開の専用ownerを作ります。入口の呼出しやcursor取得だけではuser DIやI/Oを始めず、各ownerの最初のMoveで開始します。標準source objectはStreamAsyncの呼出し時に割り当てます。
+`ReadNumbersHandler`は`IStreamHandler<ReadNumbers, int>`を実装し、コンパイラが生成する非同期Iteratorを返します。`StreamAsync`が返す標準の`IAsyncEnumerable<int>`を`await foreach`で列挙し、Filter・MapのHookを順に適用して結果を集めます。この例はHookが3段あるため、ガード付きの経路を使います。`StreamAsync`の呼出しや列挙子の取得だけでは利用者の依存解決や入力処理を始めず、列挙子の最初のMoveで開始します。標準のsource objectは`StreamAsync`の呼出し時に割り当てます。
 
-pending Moveの完了前に別MoveやDisposeを始めると拒否します。Moveを一度awaitしてからDisposeし、scopeは後始末まで保持してください。false Filterは同じMove内で次itemへ進み、terminalのfalseは正常な全体停止です。sink/serializer例外はsource middlewareへ注入しません。
+pending Moveの完了前に別のMoveやDisposeを始めると拒否します。Moveを一度awaitしてからDisposeし、scopeは後始末まで保持してください。Filterがfalseを返すと、同じMove内で次の項目へ進みます。`await foreach`は全件の列挙、失敗、`break`による早期終了のいずれでも、列挙子の破棄を待ちます。
 
-Current、pending Dispose、取消し、session所有権、context、HTTPと移行条件は[Streamの移行・実行契約](streaming-0.5.0.ja.md)を参照してください。この例は時間や割当の優位を保証しません。標準列挙、typed terminal、HTTPは対象の版・条件・実測結果で別々に評価してください。
+名前付きcursorの例は[ComposedAppサンプル](../samples/Zendiator.Sample.ComposedApp/)を参照してください。任意のsink終端は[標準列挙とtyped terminal](streaming-0.5.0.ja.md#標準列挙とtyped-terminal)で説明しています。`StreamSource(...).ConsumeAsync(...)`のreadonly計画値は`IAsyncEnumerable<T>`ではありません。値型のsinkは値渡しになるため、結果は共有する参照先に保持します。
+
+Current、pending Dispose、取消し、session所有権、context、HTTPと移行条件は[Streamの移行・実行契約](streaming-0.5.0.ja.md)を参照してください。この例は時間や割当の優位を保証しません。標準列挙、typed terminal、HTTPは対象のバージョン・条件・実測結果で別々に評価してください。
 
 ## DI scopeの所有
 
-標準DIが、この例のHandlerとHookの生成・破棄を受け持ちます。呼び出し側はscopeを作り、そのscopeから`IZendiator`を取得します。非同期処理の完了とStreamの列挙終了までscopeを保持し、その後に破棄します。HandlerやHookを呼び出し側で個別に破棄する必要はありません。
+標準DIがこの例のHandlerとHookの生成・破棄を受け持ちます。呼び出し側はscopeを作り、そのscopeから`IZendiator`を取得します。非同期処理の完了とStreamの列挙終了までscopeを保持し、その後に破棄します。HandlerやHookを呼び出し側で個別に破棄する必要はありません。
 
 生成登録の既定は、`IZendiator`がScoped、Handler・Hook・session factoryがTransientです。通常は各Mediatorが依存の型ごとに最初に公開された成功結果を捕捉し、その後の呼出しでも使います。
 
@@ -230,7 +209,24 @@ Current、pending Dispose、取消し、session所有権、context、HTTPと移�
 
 Streamの返り値をscopeの外へ持ち出し、scopeを破棄してから列挙を始めないでください。途中で`break`した場合も、`await foreach`による列挙子の後始末が終わるまでscopeを保持します。
 
-`SendAsync`が返す`ValueTask`は、例のように1回だけ`await`します。同じ`ValueTask`を保存して複数回消費しないでください。
+`SendAsync`が返す`ValueTask`は例のように1回だけ`await`します。同じ`ValueTask`を保存して複数回消費しないでください。
+
+## 閉じた依存の保持領域
+
+閉じた依存の保持領域はcompositionの大きさによらず既定でインラインに置きます。この設定が変えるのは保持領域だけです。依存とroute単位の依存セットは最初の使用時に取得し、Mediatorは最初に公開された成功結果を再利用します。破棄はDIが担当します。条件を満たすrouteの依存セットでは、上で説明したとおりreceiverをまとめて取得します。
+
+短命のscopeで一部の依存だけを使うcompositionでは、markerにlazy blocksを指定できます。
+
+```csharp
+[ZendiatorComposition("reads", ClosedServiceCache = ClosedServiceCacheMode.LazyBlocks)]
+public sealed class Reads;
+```
+
+`ClosedServiceCacheMode.Inline`は既定のインライン保持を明示します。`LazyBlocks`は閉じた依存を最大16個ずつのblockに分け、block内の依存を標準DIから初めて取得できた後に、そのblockを割り当てます。小さなcompositionにも適用され、依存が1〜16個なら1個のblockを使い、依存がなければblockを作りません。保持方法は生成時に決まり、Sendに保持方法を選ぶ分岐は追加しません。定義されていない列挙値はZEN0035になります。
+
+以前は依存の数だけでblockを選んでいたcompositionも、現在はインライン保持になります。処理の条件に合う場合に`LazyBlocks`を明示してください。この設定を追加する前に、Windows x64で64個の依存を使い、lazy blocksとインライン保持を比較した測定があります。初回に1個のblockだけを使う疎なケースでは、操作ごとの割当量が336 B減りました。63回のSendで多くの依存を使うケースでは96 B増え、初期化後に少数の依存へ配送するケースでは平均時間が29.2%増えました（+0.258 ns）。使う依存が複数のblockに分散する場合や、初期化後の呼出しを繰り返す場合にも改善するという保証はありません。blockの大きさがあらゆる処理の条件に最適ということでもありません。
+
+open genericの依存はこの設定とは別のcacheに保持します。閉じた型を4種類まで保持し、それを超えるとdictionaryへ移します。以前のdictionary保持との比較では、1種類の型を使う初回scopeの割当量が488 B減りました。5種類目の型でdictionaryへ移す初回scopeでは160 B増え、平均時間は8.35%増えました。4種類という境界が常に最適なわけではなく、これらの結果はすべてのscopeでの改善を示しません。
 
 ## 型付きqueryと状態更新commandを同じAppで使う
 
@@ -256,6 +252,7 @@ CodeFixを使う場合は、`Zendiator`と同じバージョンの`Zendiator.Cod
 ```
 
 ```powershell
+$version = '0.6.0'
 $project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
 dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
 ```
@@ -270,11 +267,11 @@ dotnet build $project -c Release --no-restore -p:ZendiatorPackageVersion=$versio
 
 ## 0.4.0から移るとき
 
-0.5.0では、Handlerの属性と明示的な登録を使います。0.4.0のinterface実装やアセンブリ指定だけに依存した登録は、そのまま移せません。
+0.6.0ではHandlerの属性と明示的な登録を使います。0.4.0のinterface実装やアセンブリ指定だけに依存した登録は、そのまま移せません。
 
-Behaviorの並びは`Pipeline`の順序付きリストで指定します。この例のHookは、要求の変換、応答の変換、Streamの項目処理という専用の契約を実装しています。既存Behaviorのretryやcacheなどの意味を、自動でHookへ置き換えるものではありません。継続の呼び出しを制御するBehaviorを移す際は、`Stage.Wrapper<T>()`の契約と対象経路を確認してください。
+Behaviorの並びは`Pipeline`の順序付きリストで指定します。この例のHookは要求の変換、応答の変換、Streamの項目処理という専用の契約を実装しています。既存Behaviorのretryやcacheなどの意味を、自動でHookへ置き換えるものではありません。継続の呼び出しを制御するBehaviorを移す際は、`Stage.Wrapper<T>()`の契約と対象経路を確認してください。
 
-この例は、型引数を持たないclassのrequest、`int`または`string`の応答、`int`のStream、DIが所有するHandlerとHookを使います。ほかの型や経路を網羅する例ではありません。更新前に[リリースノート](release/0.5.0-release-notes.ja.md)と既知の制限を確認してください。
+この例は型引数を持たないclassのrequest、`int`または`string`の応答、`int`のStream、DIが所有するHandlerとHookを使います。ほかの型や経路を網羅する例ではありません。更新前に[リリースノート](release/0.6.0-release-notes.ja.md)と[既知の制限](release/known-limitations.md)を確認してください。
 
 ### ジェネリック要求のWrapperと非ジェネリック要求を併用する
 
@@ -352,7 +349,7 @@ var closedResult = await mediator.SendAsync(new ClosedQuery(7), CancellationToke
 
 プロジェクト内で定義したHandlerを属性なしで明示登録すると、ZEN0035で登録箇所が示されます。ZEN0035はほかの生成条件の不備にも使います。診断文が属性不足を示している場合は、上の`AddNumbersHandler`のようにクラス宣言へ`[Handler]`を付けてください。
 
-`Zendiator.CodeFixes`は任意で追加するパッケージです。利用する場合は、`Zendiator`と同じ候補バージョンを用意し、プロジェクトの`ZendiatorPackageVersion`をそのバージョンに合わせてください。[導入例](../src/Zendiator.CodeFixes/README.md)のように`PrivateAssets="all"`を指定します。NuGet.orgで公開されるまでは、同じ版のローカルビルド済みpackageを使ってください。
+`Zendiator.CodeFixes`は任意で追加するパッケージです。利用する場合は、`Zendiator`と同じ0.6.0をNuGet.orgから取得し、プロジェクトの`ZendiatorPackageVersion`を`0.6.0`に合わせてください。[導入例](../src/Zendiator.CodeFixes/README.md)のように`PrivateAssets="all"`を指定します。
 
 CodeFixの対象は属性不足と判断できるZEN0035だけです。Fix Allの対象は現在の文書だけです。
 
