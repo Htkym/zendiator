@@ -8,6 +8,26 @@ Start with [getting started](../getting-started-0.5.0.md) and the
 are described in the [0.4.0 release notes](0.4.0-release-notes.md); they are not
 compatibility promises for 0.6.0.
 
+## API and compatibility boundaries
+
+| Layer | What applications can depend on |
+|---|---|
+| Public API | Documented request, handler, Hook, middleware and configuration contracts; generated registration methods and the public `IZendiator` / `Zendiator` facade, including its typed dispatch entries. |
+| Execution contract | Dispatch order, dependency capture and scope lifetime, synchronous versus awaited failures, cancellation, single consumption of `ValueTask`, and Stream ownership and cleanup as described below. |
+| Generated implementation | Private and internal generated type names, field and cache layouts, slot numbers, call-site interceptors and helper boundaries are implementation details. Use the public facade rather than inspecting or extending those structures. |
+
+Public runtime helpers used by generated code are versioned together with the
+source generator. Keep Zendiator packages at matching versions and rebuild
+consumers when upgrading. A helper's visibility does not turn the generated
+Mediator's current base type or storage layout into an application extension point.
+See the [generated route contract](../design/0.5.0-route-and-stream-contract.md)
+for the current implementation and ownership rules.
+
+Changes to public APIs or observable execution contracts are recorded in release
+notes with their reason, impact and migration steps. Adopted breaking contract
+changes require a new minor release; a change to generated layout alone does not
+justify changing the documented execution contract.
+
 ## Dependency capture and lifetime
 
 Each Mediator reuses captured dependencies, including Transient services and
@@ -146,10 +166,46 @@ compiler does not apply code fixes; the IDE supplies Roslyn Workspaces assemblie
 
 ## Native AOT and dispatch boundaries
 
-The package verification target is win-x64; other RIDs are unverified. Tested open
-generic DI handlers closed over value types require runtime generic construction
-that is unavailable under Native AOT. Reference-type closures have package-consumer
-coverage, which is not an every-type or every-RID guarantee.
+### Verified deployment configurations
+
+The following coverage is for 0.6.0 packages built from source commit
+[`cf580cccd61e46a61f161971eb67916f15f967df`](https://github.com/Htkym/zendiator/commit/cf580cccd61e46a61f161971eb67916f15f967df)
+and the [successful CI run](https://github.com/Htkym/zendiator/actions/runs/43354564626/job/131653389381).
+Every row targets `net10.0` and uses Release on Windows x64. Package consumers use
+local packed packages and an isolated package cache, without `ProjectReference`
+to Zendiator repository projects.
+Native AOT rows publish self-contained `win-x64` executables and then run them;
+publish success alone is not the execution result.
+
+| Consumption and configuration | Managed build and run | Native AOT publish | Native run | Reproducible check |
+|---|---|---|---|---|
+| Multi-project package consumer and DI consumer | Passed | Not exercised | Not exercised | [Package smoke](../../scripts/package-smoke-test.ps1), [DI package smoke](../../scripts/di-package-smoke-test.ps1) |
+| DI-first and assembly-attribute package consumers, including registered reference-type generic closures | Build passed; managed run not exercised | Passed | Passed | [AOT matrix](../../scripts/aot-matrix-test.ps1) |
+| Package consumer with the opt-in pooled producer and C# 14 interceptors | Passed | Passed | Passed | [Pooled producer smoke](../../scripts/pooled-producer-package-smoke-test.ps1) |
+| Package consumer with standard typed Stream middleware, struct Cursor and struct upstream, adapter interoperability, typed consumption and explicit `EagerDependencies` | Passed | Passed | Passed | [Standard Stream smoke](../../scripts/struct-upstream-package-smoke-test.ps1) |
+| In-repository `Sample.Host` with `ProjectReference` | Passed | Not exercised | Not exercised | [CI sample step](../../.github/workflows/ci.yml) |
+
+The linked CI environment step records the SDK and installed runtimes. Its setup
+selects `10.0.x`; this table does not assert a fixed SDK or runtime patch. Coverage
+is limited to the listed fixtures and source revision, rather than every
+composition or every package with the same version number.
+
+Other RIDs and `ProjectReference`-based Native AOT have no execution coverage in
+this table. They are unverified, rather than confirmed unsupported. No validation
+of other target frameworks is claimed here. Route-local dependency sets for asynchronous Hook routes
+are also not exercised by these Native AOT fixtures. Explicit `EagerDependencies`
+is a separate configuration and does not establish that coverage. Native AOT
+functional checks do not establish the performance measured under JIT.
+
+### Generic closure and dispatch limits
+
+The AOT matrix executes the listed reference-type generic Send and Stream
+closures. Its value-type generic request probe expects the known open-generic DI
+closure failure; the Stream probe accepts either correct execution or the specific
+DI value-type/Native AOT limitation. A passing matrix therefore does not establish
+general support for open-generic DI handlers closed over value-type arguments.
+This limitation is separate from struct Cursors and struct upstream connections,
+which the standard Stream fixture publishes and runs.
 
 Parallel Publish and runtime-object request/Stream dispatch are unsupported.
 Notification type erasure is a separate supported path. User stages must follow
