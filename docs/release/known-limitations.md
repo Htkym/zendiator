@@ -79,6 +79,14 @@ do not remove cancellation to select the direct path. See the
 [input and lifetime guide](../streaming-iterators.md#choose-an-input-contract).
 An unconsumed guarded standalone source still allocates its first owner.
 
+The guarded consumer root performs its dedicated initial scope probe when its
+first move starts initialization. Inner upstream opening and reopening do not
+repeat that probe. StreamBefore still checks scope before later Before callbacks
+and before opening the route, including after a pending callback. Native service
+resolution can also fail after disposal, but cached receivers need not query DI
+again. These checks do not support disposing the scope while enumeration or
+awaited cleanup is active.
+
 Use each enumerator sequentially. Await a pending move before another move or
 disposal. On guarded paths, overlapping operations throw without canceling or
 joining the first operation; pending disposal rejects new moves and shares

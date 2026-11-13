@@ -150,6 +150,28 @@ Notification16, synchronous Stream5 Full, ShortCircuit, all three Hook cases and
 Send5 FirstSend. Use this same selection for the controlled PERF-01 comparison;
 the full baseline alone does not establish the change's improvement.
 
+[`perf-02a.json`](perf-02a.json) selects 31 cases for the initial Stream scope-probe
+change: the ten common non-regression cases, standard and typed Stream Full/EarlyBreak
+at depths zero and five in both input modes, two Immediate synchronous early-break
+controls, and Zendiator/Immediate Relay early termination in both input modes.
+The synchronous Stream5 Full case appears only once. Each A/B block has 31 pairs
+and 62 timed steps. Keep the existing named-Cursor input and workload definitions;
+Relay matches preprocessing work but does not yet match the input representation.
+
+For step a, assess startup improvement and the common, asynchronous and typed
+non-regression boundaries. Record the same-block gap to Immediate; the final
+PERF-02 early-break target is assessed after steps b/c. Semantic checks retain
+root startup, deferred inner opening/reopening, StreamBefore revalidation and
+DI ownership. One initial root probe does not mean one total probe for routes
+with StreamBefore callbacks. No PERF-02a measurements or adoption are recorded here.
+
+Commit this matrix and measurement documentation before the step-a code change.
+Use that infrastructure-only commit as the baseline and the later product commit
+as the candidate, with identical controls in the controller and both worktrees.
+This two-commit sequence can stay in one PERF-02a PR without changing its parent
+PR. Choose and freeze the product parent after PERF-01's adoption decision; this
+matrix does not adopt PERF-01.
+
 ### Controlled revision comparison
 
 `run_ab.py` prepares both clean, immutable short worktrees before timing, then
