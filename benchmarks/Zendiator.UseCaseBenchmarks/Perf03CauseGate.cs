@@ -332,7 +332,7 @@ internal static class Perf03CauseGate
 
     private static async Task<object> CheckSelectedVariantProtocols(Perf03CauseSession session)
     {
-        bool rootOwned = Perf03CauseVariant.Id is "VRoot" or "VWord";
+        bool rootOwned = Perf03CauseVariant.Id == "VRoot" || Perf03CauseVariant.Id == "VWord";
         await CheckInlineReentry();
         await CheckInlineDisposal();
         if (rootOwned)

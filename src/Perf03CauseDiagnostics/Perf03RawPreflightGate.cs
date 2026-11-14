@@ -124,7 +124,7 @@ internal static class Perf03RawPreflightGate
                     Require(followingIndex == 2 && following is not null && pump!.PendingCount == 1,
                         "Counted reentry did not hold the next raw operation.");
                     var observations = trace.Peek();
-                    bool rootOwned = Perf03.Diagnostics.Perf03CauseVariant.Id is "VRoot" or "VWord";
+                    bool rootOwned = Perf03.Diagnostics.Perf03CauseVariant.Id == "VRoot" || Perf03.Diagnostics.Perf03CauseVariant.Id == "VWord";
                     var retired = observations.Single(e => e.Operation == 1 && (rootOwned
                         ? e.Kind == "completion.retire" : e.Site == "CS.L0574.atomic"));
                     var published = observations.Single(e => e.Operation == 1 && e.Kind == "completion.publish.result" && e.Owner == retired.Owner);

@@ -24,7 +24,7 @@ internal static class Perf03CauseVariant
             oldUnconsumedValueTaskMayInvalidate,
             normalFidelityClaim = Id == "V0",
             countedEvidenceVariant = Id,
-            candidateCountedEvidenceAvailable = Id is "VEC" or "VEntry" or "VRoot",
+            candidateCountedEvidenceAvailable = Id == "VEC" || Id == "VEntry" || Id == "VRoot",
             timedPendingDenominatorKnown = false
         };
 
