@@ -409,16 +409,19 @@ internal static class ArtifactGate
             if (family == "Relay5")
             {
                 protocols.Add("relay-order-and-failure");
-                if (typed) protocols.Add("relay-deferred-start");
+                if (typed)
+                    protocols.Add("relay-deferred-start");
             }
-            if (typed) protocols.AddRange(["typed-count-order-disposal", "typed-stop-and-cancel", "typed-exception-disposal"]);
+            if (typed)
+                protocols.AddRange(["typed-count-order-disposal", "typed-stop-and-cancel", "typed-exception-disposal"]);
             if (!row.GetProperty("completedProtocols").EnumerateArray().Select(item => item.GetString()).SequenceEqual(protocols))
                 throw new InvalidOperationException("PERF-04 completed protocol assertions changed");
             var correctness = row.GetProperty("correctness");
             if (correctness.GetArrayLength() != (family == "Relay5" ? 9 : 8))
                 throw new InvalidOperationException("PERF-04 correctness observations are missing");
             var streamCases = (from count in new[] { 0, 1, 16, 1024 }
-                               from asynchronous in new[] { false, true } select (count, asynchronous)).ToHashSet();
+                               from asynchronous in new[] { false, true }
+                               select (count, asynchronous)).ToHashSet();
             var relayRows = 0;
             foreach (var item in correctness.EnumerateArray())
             {
@@ -442,7 +445,8 @@ internal static class ArtifactGate
                                    item.GetProperty("eventsAtEnumerator").GetInt32() != 0 || stage is not ("move-call" or "move-await"))))
                         throw new InvalidOperationException("PERF-04 relay timing observations changed");
                 }
-                else throw new InvalidOperationException("PERF-04 correctness suite is duplicate or substituted");
+                else
+                    throw new InvalidOperationException("PERF-04 correctness suite is duplicate or substituted");
             }
             if (streamCases.Count != 0 || relayRows != (family == "Relay5" ? 1 : 0))
                 throw new InvalidOperationException("PERF-04 correctness cases are incomplete");
@@ -465,12 +469,15 @@ internal static class ArtifactGate
         var pooled = evidence.GetProperty("generatedPooledProof");
         var strings = new Dictionary<string, string>
         {
-            ["producerType"] = "Competitive.Perf04GeneratedWorkStreamCursor", ["originalMethod"] = "MovePendingAsync",
-            ["interceptorMethod"] = "Intercept", ["callSite"] = "MoveNextAsync",
+            ["producerType"] = "Competitive.Perf04GeneratedWorkStreamCursor",
+            ["originalMethod"] = "MovePendingAsync",
+            ["interceptorMethod"] = "Intercept",
+            ["callSite"] = "MoveNextAsync",
             ["sourceAttribute"] = "Zendiator.GeneratePooledProducerAttribute",
             ["builderType"] = typeof(System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder<bool>).FullName!,
             ["originalBuilderType"] = typeof(System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder<bool>).FullName!,
-            ["consumerAssemblySha256"] = ArtifactEvidence.Hash(request.ConsumerPath), ["status"] = "Passed"
+            ["consumerAssemblySha256"] = ArtifactEvidence.Hash(request.ConsumerPath),
+            ["status"] = "Passed"
         };
         if (strings.Any(pair => pooled.GetProperty(pair.Key).GetString() != pair.Value) ||
             !pooled.GetProperty("generatedHelper").GetString()!.StartsWith("__ZendiatorPooled_", StringComparison.Ordinal) ||

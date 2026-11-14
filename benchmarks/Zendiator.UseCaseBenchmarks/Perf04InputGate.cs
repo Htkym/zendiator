@@ -85,7 +85,14 @@ internal static class Perf04InputGate
                     // These delegates invoke the actual benchmark method, not a replacement consumer.
                     var result = await measured(method).ConfigureAwait(false);
                     Require(result == (full ? 523776 : 0), $"{type}.{method}: measured consumer result.");
-                    measuredConsumers.Add(new { method, count, asynchronous, result, status = "Passed" });
+                    measuredConsumers.Add(new
+                    {
+                        method,
+                        count,
+                        asynchronous,
+                        result,
+                        status = "Passed"
+                    });
                 }
                 finally
                 {
