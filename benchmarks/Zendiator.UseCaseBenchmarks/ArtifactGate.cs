@@ -12,7 +12,8 @@ internal sealed record ArtifactGateRequest(string Protocol, string Session, stri
     string? StructUpstreamGateImplementationSha256 = null, string ConsumerName = "Zendiator.UseCaseBenchmarks",
     string BenchmarkSuite = "usecase", int BenchmarkGateCases = 389,
     string? Perf03CauseGateImplementationSha256 = null, string? Perf03CauseVariant = null,
-    JsonElement? Perf03CauseCaseSet = null, Dictionary<string, string>? Perf03CauseSourceFiles = null);
+    JsonElement? Perf03CauseCaseSet = null, Dictionary<string, string>? Perf03CauseSourceFiles = null,
+    JsonElement? Perf03CauseVariantMetadata = null);
 
 internal static class ArtifactGate
 {
@@ -31,7 +32,7 @@ internal static class ArtifactGate
             throw new InvalidOperationException("Invalid artifact gate identity");
 #if SUPPLEMENTAL_BENCHMARK
         if (request.Perf03CauseGateImplementationSha256 is not null || request.Perf03CauseVariant is not null ||
-            request.Perf03CauseCaseSet is not null || request.Perf03CauseSourceFiles is not null)
+            request.Perf03CauseCaseSet is not null || request.Perf03CauseSourceFiles is not null || request.Perf03CauseVariantMetadata is not null)
             throw new InvalidOperationException("PERF-03 diagnostics require the original use-case consumer");
         if (request.BenchmarkSuite != BenchmarkGate.Suite || request.BenchmarkGateCases != BenchmarkGate.ExpectedCases)
             throw new InvalidOperationException("Artifact gate suite differs from the preserved consumer");
@@ -169,6 +170,7 @@ internal static class ArtifactGate
                 request.Perf03CauseVariant,
                 request.Perf03CauseCaseSet,
                 request.Perf03CauseSourceFiles,
+                request.Perf03CauseVariantMetadata,
                 perf03CauseGate = !perf03Requested ? null : new
                 {
                     schemaVersion = 1,
@@ -314,7 +316,7 @@ internal static class ArtifactGate
         if (!type.StartsWith("ZendiatorPerf03", StringComparison.Ordinal))
         {
             if (request.Perf03CauseGateImplementationSha256 is not null || request.Perf03CauseVariant is not null ||
-                request.Perf03CauseCaseSet is not null || request.Perf03CauseSourceFiles is not null)
+                request.Perf03CauseCaseSet is not null || request.Perf03CauseSourceFiles is not null || request.Perf03CauseVariantMetadata is not null)
                 throw new InvalidOperationException("PERF-03 evidence is attached to an unrelated case");
             return false;
         }
@@ -326,12 +328,24 @@ internal static class ArtifactGate
             throw new InvalidOperationException("PERF-03 selected-case fields differ from the fixed input matrix");
         if (!Perf03Cases().Contains(Perf03Case(selected.RootElement)) ||
             request.Perf03CauseVariant != global::Competitive.Perf03.Diagnostics.Perf03CauseVariant.Id ||
-            request.Perf03CauseVariant != "V0" || request.Perf03CauseGateImplementationSha256 is not { Length: 64 } ||
+            request.Perf03CauseGateImplementationSha256 is not { Length: 64 } ||
             request.Perf03CauseGateImplementationSha256.Any(c => !(c is >= '0' and <= '9' or >= 'A' and <= 'F')) ||
             request.Perf03CauseCaseSet is not { } caseSet || request.Perf03CauseSourceFiles is null)
             throw new InvalidOperationException("Missing or substituted PERF-03 compiled diagnostic identity");
+        global::Competitive.Perf03.Diagnostics.Perf03CauseVariant.RequireBoundCountedEvidence();
+        CheckPerf03VariantMetadata(request.Perf03CauseVariantMetadata);
         CheckPerf03CaseSet(caseSet);
         return true;
+    }
+
+    private static void CheckPerf03VariantMetadata(JsonElement? actual)
+    {
+        var expected = JsonSerializer.SerializeToElement(global::Competitive.Perf03.Diagnostics.Perf03CauseVariant.Metadata);
+        if (actual is not { ValueKind: JsonValueKind.Object } metadata ||
+            metadata.EnumerateObject().Count() != expected.EnumerateObject().Count() ||
+            expected.EnumerateObject().Any(property => !metadata.TryGetProperty(property.Name, out var value) ||
+                value.ValueKind != property.Value.ValueKind || value.ToString() != property.Value.ToString()))
+            throw new InvalidOperationException("PERF03 variant metadata is missing/substituted");
     }
 
     private static void CheckPerf03CauseSources(ArtifactGateRequest request)
@@ -399,6 +413,7 @@ internal static class ArtifactGate
             evidence.GetProperty("implementationSha256").GetString() != request.Perf03CauseGateImplementationSha256 ||
             evidence.GetProperty("pendingFractionClaim").GetBoolean())
             throw new InvalidOperationException("PERF-03 semantic evidence identity or limitations changed");
+        CheckPerf03VariantMetadata(evidence.GetProperty("variantMetadata"));
         CheckPerf03CaseSet(evidence.GetProperty("caseSet"));
         foreach (var (name, method, count) in new[] { ("normalInputCases", false, 24), ("isolatedControls", true, 2) })
         {
@@ -407,12 +422,45 @@ internal static class ArtifactGate
             if (rows.ValueKind != JsonValueKind.Array || rows.GetArrayLength() != count)
                 throw new InvalidOperationException("PERF-03 semantic evidence is incomplete");
             foreach (var row in rows.EnumerateArray())
+            {
                 if (row.GetProperty("status").GetString() != "Passed" || !expected.Remove(Perf03Case(row.GetProperty("case"))))
                     throw new InvalidOperationException("PERF-03 semantic evidence is duplicate or failed");
+                if (method)
+                    CheckPerf03SelectedProtocols(row);
+            }
             if (expected.Count != 0)
                 throw new InvalidOperationException("PERF-03 semantic evidence coverage changed");
         }
         return Convert.ToHexString(SHA256.HashData(bytes));
+    }
+
+    private static void CheckPerf03SelectedProtocols(JsonElement row)
+    {
+        bool control = global::Competitive.Perf03.Diagnostics.Perf03CauseVariant.Id == "V0";
+        bool rootOwned = global::Competitive.Perf03.Diagnostics.Perf03CauseVariant.Id == "VRoot";
+        if (row.GetProperty("normalParity").GetBoolean() != control ||
+            !row.GetProperty("sequentialEnvelopeParity").GetBoolean())
+            throw new InvalidOperationException("PERF03 control fidelity and candidate envelope were conflated");
+        var expected = JsonSerializer.SerializeToElement(new
+        {
+            status = "Passed",
+            uninstrumentedSelectedCandidate = true,
+            producer = "WorkStreamCursor",
+            producerSubstitution = false,
+            controlledScheduling = true,
+            pendingDisposeRejected = true,
+            inlineConsumptionAndNextPendingMove = true,
+            disposalInsideContinuation = true,
+            oldUnconsumedValueTaskInvalidationChecked = rootOwned,
+            durablePrecreatedTaskChecked = rootOwned,
+            timedPendingFractionClaim = false
+        });
+        var actual = row.GetProperty("selectedVariantProtocols");
+        if (actual.ValueKind != JsonValueKind.Object ||
+            actual.EnumerateObject().Count() != expected.EnumerateObject().Count() ||
+            expected.EnumerateObject().Any(property => !actual.TryGetProperty(property.Name, out var value) ||
+                value.ValueKind != property.Value.ValueKind || value.ToString() != property.Value.ToString()))
+            throw new InvalidOperationException("PERF03 selected candidate protocol evidence is missing/substituted");
     }
 
     private static (string CorrectnessSha256, string DriverSha256) CheckStructUpstreamEvidence(string output)

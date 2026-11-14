@@ -47,7 +47,7 @@ def gate_count(project):
 def implementation_files(project):
     project = Path(project)
     shared = BENCHMARKS / "Zendiator.UseCaseBenchmarks"
-    names = ("ArtifactGate.cs", "ArtifactEvidence.cs", "ChildEvidence.cs")
+    names = ("ArtifactGate.cs", "ArtifactEvidence.cs", "ChildEvidence.cs", "perf03_counted_map.py")
     if project_suite(project) == "usecase":
         return {name: project / name for name in (*names, "Program.cs")}
     return {**{name: shared / name for name in names},

@@ -5,3 +5,11 @@ Counted.*.g.cs -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at
 CountedStreamCursorState.cs -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 counted-sites.json -text
 CountedSiteCatalog.cs -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+origin/** -text
+reference/** -text
+vroot-origins/** -text
+vroot-reference/** -text
+*.patch -text
+*.patch.txt -text
+binding.json -text
+Perf03CountTrace.cs -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

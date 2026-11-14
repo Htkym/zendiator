@@ -17,6 +17,7 @@ internal static class Perf03RawPreflightGate
     internal static async Task<Perf03RawPreflightIdentity> Run(string outputDirectory,
         string implementationSha256, string siteMapPath)
     {
+        Perf03.Diagnostics.Perf03CauseVariant.RequireBoundCountedEvidence();
         Perf03CountTrace.CheckMap(siteMapPath);
         var rejection = new Perf03CountTrace();
         bool unmappedSiteRejected = rejection.CheckRejection();
@@ -123,9 +124,12 @@ internal static class Perf03RawPreflightGate
                     Require(followingIndex == 2 && following is not null && pump!.PendingCount == 1,
                         "Counted reentry did not hold the next raw operation.");
                     var observations = trace.Peek();
-                    var retired = observations.Single(e => e.Operation == 1 && e.Site == "CS.L0574.atomic");
+                    bool rootOwned = Perf03.Diagnostics.Perf03CauseVariant.Id is "VRoot" or "VWord";
+                    var retired = observations.Single(e => e.Operation == 1 && (rootOwned
+                        ? e.Kind == "completion.retire" : e.Site == "CS.L0574.atomic"));
                     var published = observations.Single(e => e.Operation == 1 && e.Kind == "completion.publish.result" && e.Owner == retired.Owner);
-                    var consumed = observations.Single(e => e.Operation == 1 && e.Site == "CS.L0589.atomic" && e.Owner == retired.Owner);
+                    var consumed = observations.Single(e => e.Operation == 1 && e.Owner == retired.Owner && (rootOwned
+                        ? e.Kind == "completion.consume" : e.Site == "CS.L0589.atomic"));
                     var nextPull = observations.Single(e => e.Operation == 2 && e.Kind == "input.raw.pull");
                     Require(retired.Owner is not null && published.Sequence < consumed.Sequence &&
                         consumed.Sequence < nextPull.Sequence && nextPull.Sequence < retired.Sequence &&

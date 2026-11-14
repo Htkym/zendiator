@@ -35,7 +35,7 @@ class SyntheticArtifactGateFixture(unittest.TestCase):
         self.framework.mkdir(parents=True)
         self.host = self.root / "runtime/dotnet"
         self.host.write_text("synthetic host; never execute")
-        for name in ("ArtifactGate.cs", "ArtifactEvidence.cs", "Program.cs", "ChildEvidence.cs", "StructUpstreamGate.cs"):
+        for name in ("ArtifactGate.cs", "ArtifactEvidence.cs", "Program.cs", "ChildEvidence.cs", "StructUpstreamGate.cs", "perf03_counted_map.py"):
             (self.project / name).write_text("synthetic implementation fingerprint")
         self.generated_project = self.build / (self.consumer + "-1.csproj")
         self.generated_source = self.build / (self.consumer + "-1.notcs")
@@ -868,11 +868,17 @@ class Perf03ArtifactGateContracts(SyntheticArtifactGateFixture):
                              consumerPreflight=dict(moveCalls=1025, consumptions=1025, incompleteAtReturn=0,
                                  firstMoveIncomplete=False, repeatedItemIncomplete=0, eofIncomplete=False,
                                  rawDecisionSitesObserved=False, timingPendingFractionKnown=False),
-                             normalParity=True, sharedEntryAndCachedHandler=True, sharedRequest=True,
+                             normalParity=True, sequentialEnvelopeParity=True, sharedEntryAndCachedHandler=True, sharedRequest=True,
+                             selectedVariantProtocols=dict(status="Passed", uninstrumentedSelectedCandidate=True,
+                                 producer="WorkStreamCursor", producerSubstitution=False, controlledScheduling=True,
+                                 pendingDisposeRejected=True, inlineConsumptionAndNextPendingMove=True,
+                                 disposalInsideContinuation=True, oldUnconsumedValueTaskInvalidationChecked=False,
+                                 durablePrecreatedTaskChecked=False, timedPendingFractionClaim=False),
                              contractChecks=self.synthetic_contracts(relay) if case["Method"] == "FullDiagnostic" else None))
         evidence = dict(schemaVersion=1, protocol=gate.PERF03_PROTOCOL,
                         variant=request["perf03CauseVariant"], implementationSha256=request["perf03CauseGateImplementationSha256"],
                         caseSet=request["perf03CauseCaseSet"], pendingFractionClaim=False,
+                        variantMetadata=request["perf03CauseVariantMetadata"],
                         variantEnvelope=dict(sequential=True, oneEnumeratorPerOperation=True, awaitAndConsumeBeforeNextMove=True,
                             savedUnconsumedValueTask=False, concurrentMoveOrDispose=False, failureAndCleanupChecked=True,
                             productionGuaranteesClaimed=False, ambientContext="Consumer AsyncLocal preservation only; producer context unprobed",
@@ -1160,12 +1166,54 @@ class Perf03ArtifactGateContracts(SyntheticArtifactGateFixture):
             self.validate_perf03(row, attempt)
         self.assertFalse(self.gate_calls)
 
-    def test_unimplemented_diagnostic_variant_is_rejected_before_gate_launch(self):
+    def test_changed_candidates_cannot_relabel_v0_counted_evidence(self):
         row, attempt = self.perf03_case()
-        (self.diagnostics / "Perf03CauseVariant.cs").write_text('internal const string Id = "VRoot";')
-        with self.assertRaisesRegex(ValueError, "PERF03 diagnostic variant"):
+        for variant in ("VEC", "VEntry", "VRoot", "VWord"):
+            with self.subTest(variant=variant):
+                (self.diagnostics / "Perf03CauseVariant.cs").write_text(
+                    'internal const string Id = "' + variant + '";')
+                with self.assertRaisesRegex(ValueError, "candidate-specific counted|candidate counted binding"):
+                    self.validate_perf03(row, attempt)
+        self.assertFalse(self.gate_calls)
+
+    def test_unknown_variant_is_not_a_candidate(self):
+        row, attempt = self.perf03_case()
+        (self.diagnostics / "Perf03CauseVariant.cs").write_text('internal const string Id = "VNext";')
+        with self.assertRaisesRegex(ValueError, "Unknown or ambiguous"):
             self.validate_perf03(row, attempt)
         self.assertFalse(self.gate_calls)
+
+    def test_variant_metadata_is_bound_not_just_copied_between_proofs(self):
+        row, attempt = self.perf03_case()
+        self.validate_perf03(row, attempt)
+        request_path = attempt / "artifact-gate-request.json"
+        request = gate.read(request_path)
+        proof_path = Path(request["output"]) / "artifact-proof.json"
+        proof = gate.read(proof_path)
+        metadata = dict(request["perf03CauseVariantMetadata"], countedEvidenceVariant="VWord")
+        request["perf03CauseVariantMetadata"] = metadata
+        proof["perf03CauseVariantMetadata"] = metadata
+        gate.write(request_path, request)
+        proof["requestHash"] = gate.sha(request_path)
+        gate.write(proof_path, proof)
+        with self.assertRaisesRegex(ValueError, "variant metadata"):
+            gate.verify_gate(request_path, proof_path)
+
+
+class CandidateSourcePatchContractTests(unittest.TestCase):
+    def test_exact_final_newline_and_context_are_bound(self):
+        from perf03_counted_map import apply_source_patch
+        patch = "--- a/A.cs\n+++ b/B.cs\n@@ -1 +1 @@\n-old\n\\ No newline at end of file\n+new\n"
+        result, _ = apply_source_patch(patch, {"A.cs": "old"})
+        self.assertEqual(result, {"B.cs": "new\n"})
+        with self.assertRaisesRegex(ValueError, "context/source mismatch"):
+            apply_source_patch(patch, {"A.cs": "old\n"})
+
+    def test_patch_cannot_retarget_matching_basename_outside_diagnostic_sources(self):
+        from perf03_counted_map import apply_source_patch
+        patch = "--- a/elsewhere/A.cs\n+++ b/B.cs\n@@ -1 +1 @@\n-old\n+new\n"
+        with self.assertRaisesRegex(ValueError, "outside diagnostic sources"):
+            apply_source_patch(patch, {"A.cs": "old\n"})
 
 
 if __name__ == "__main__":

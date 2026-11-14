@@ -12,6 +12,7 @@ internal static class Perf03CauseGate
 
     internal static async Task Run(string outputDirectory, string implementationSha256)
     {
+        Perf03CauseVariant.RequireBoundCountedEvidence();
         var normal = new List<Dictionary<string, object?>>();
         var controls = new List<Dictionary<string, object?>>();
         var identities = new List<CaseIdentity>();
@@ -50,10 +51,12 @@ internal static class Perf03CauseGate
             Require(ordinary.SourceType == isolated.SourceType, "The isolated control changed the producer cursor.");
             foreach (string key in new[] { "count", "sum", "handlers", "items", "disposals" })
                 Require(Equals(ordinary.Row[key], isolated.Row[key]), "The isolated control changed " + key + ".");
-            isolated.Row["normalParity"] = true;
+            isolated.Row["normalParity"] = Perf03CauseVariant.Id == "V0";
+            isolated.Row["sequentialEnvelopeParity"] = true;
             isolated.Row["sharedEntryAndCachedHandler"] = true;
             isolated.Row["sharedRequest"] = true;
             isolated.Row["contractChecks"] = await CheckContracts(session).ConfigureAwait(false);
+            isolated.Row["selectedVariantProtocols"] = await CheckSelectedVariantProtocols(session).ConfigureAwait(false);
             controls.Add(isolated.Row);
             identities.Add(identity);
         }
@@ -67,6 +70,7 @@ internal static class Perf03CauseGate
             schemaVersion = 1,
             protocol = "zendiator-perf03-cause-gate-v1",
             variant = Perf03CauseVariant.Id,
+            variantMetadata = Perf03CauseVariant.Metadata,
             implementationSha256,
             caseSet = identities.OrderBy(x => x.Asynchronous ? "true" : "false", StringComparer.Ordinal)
                 .ThenBy(x => x.Method, StringComparer.Ordinal).ThenBy(x => x.Type, StringComparer.Ordinal),
@@ -88,7 +92,7 @@ internal static class Perf03CauseGate
         };
         await File.WriteAllTextAsync(Path.Combine(output, "perf03-cause.json"),
             JsonSerializer.Serialize(evidence, new JsonSerializerOptions { WriteIndented = true })).ConfigureAwait(false);
-        Console.WriteLine("PERF03_CAUSE_PARITY_OK: 24 normal/direct inputs and 2 isolated controls; raw pending fraction unclaimed");
+        Console.WriteLine("PERF03_CAUSE_PARITY_OK: 24 normal/direct inputs and 2 selected diagnostic routes; raw pending fraction unclaimed");
     }
 
     private static async Task<Observation> Observe(Perf03CauseSession session, CaseIdentity identity,
@@ -316,8 +320,198 @@ internal static class Perf03CauseGate
             _ => 0
         };
         Require(items == expectedItems && probe.Items == items, "Contract probe changed item count: " + name + ".");
-        return JsonSerializer.Serialize(new { outcome, items, probe.Handlers, probe.Disposals, events = probe.Events.ToArray() });
+        return JsonSerializer.Serialize(new
+        {
+            outcome,
+            items,
+            probe.Handlers,
+            probe.Disposals,
+            events = probe.Events.ToArray()
+        });
     }
+
+    private static async Task<object> CheckSelectedVariantProtocols(Perf03CauseSession session)
+    {
+        bool rootOwned = Perf03CauseVariant.Id is "VRoot" or "VWord";
+        await CheckInlineReentry();
+        await CheckInlineDisposal();
+        if (rootOwned)
+        {
+            await CheckInvalidatedValueTask();
+            await CheckDurableTask();
+        }
+        return new
+        {
+            status = "Passed",
+            uninstrumentedSelectedCandidate = true,
+            producer = "WorkStreamCursor",
+            producerSubstitution = false,
+            controlledScheduling = true,
+            pendingDisposeRejected = true,
+            inlineConsumptionAndNextPendingMove = true,
+            disposalInsideContinuation = true,
+            oldUnconsumedValueTaskInvalidationChecked = rootOwned,
+            durablePrecreatedTaskChecked = rootOwned,
+            timedPendingFractionClaim = false
+        };
+
+        IAsyncEnumerator<int> Open() => session.OpenDiagnostic().GetAsyncEnumerator();
+
+        static ValueTask<bool> Issue(IAsyncEnumerator<int> cursor, Competitive.Perf03.Counted.Perf03YieldPump pump)
+        {
+            ValueTask<bool> operation;
+            using (pump.Enter())
+                operation = cursor.MoveNextAsync();
+            Require(!operation.IsCompleted && pump.PendingCount == 1,
+                "The selected candidate did not hold one actual Work yield.");
+            return operation;
+        }
+
+        static async Task First(IAsyncEnumerator<int> cursor, Competitive.Perf03.Counted.Perf03YieldPump pump)
+        {
+            var first = Issue(cursor, pump);
+            pump.RunOne();
+            Require(await first.ConfigureAwait(false) && cursor.Current == 0,
+                "Selected candidate first Move changed the actual Work result.");
+        }
+
+        static async Task Close(IAsyncEnumerator<int> cursor, Competitive.Perf03.Counted.Perf03YieldPump pump)
+        {
+            while (pump.PendingCount != 0)
+                pump.RunOne();
+            await cursor.DisposeAsync().ConfigureAwait(false);
+        }
+
+        async Task CheckInlineReentry()
+        {
+            var cursor = Open();
+            var pump = new Competitive.Perf03.Counted.Perf03YieldPump();
+            try
+            {
+                await First(cursor, pump).ConfigureAwait(false);
+                var pending = Issue(cursor, pump);
+                Exception? disposeError = null;
+                ValueTask? disposeAttempt = null;
+                try
+                {
+                    disposeAttempt = cursor.DisposeAsync();
+                }
+                catch (Exception error) { disposeError = error; }
+                if (disposeAttempt is { } attempt)
+                {
+                    Require(attempt.IsCompleted, "Pending disposal did not reject immediately.");
+                    try
+                    {
+                        attempt.GetAwaiter().GetResult();
+                    }
+                    catch (Exception error) { disposeError = error; }
+                }
+                Require(disposeError is InvalidOperationException,
+                    "Selected candidate did not reject disposal during a pending Move.");
+                var awaiter = pending.ConfigureAwait(false).GetAwaiter();
+                ValueTask<bool> next = default;
+                bool entered = false;
+                Exception? callbackError = null;
+                awaiter.UnsafeOnCompleted(() =>
+                {
+                    try
+                    {
+                        entered = true;
+                        Require(awaiter.GetResult() && cursor.Current == 1, "Inline consumption lost the old item.");
+                        next = Issue(cursor, pump);
+                    }
+                    catch (Exception error) { callbackError = error; }
+                });
+                pump.RunOne();
+                if (callbackError is not null)
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(callbackError).Throw();
+                Require(entered && !next.IsCompleted && pump.PendingCount == 1,
+                    "Selected candidate did not reenter and hold the next pending Move inline.");
+                pump.RunOne();
+                Require(await next.ConfigureAwait(false) && cursor.Current == 2,
+                    "Old publication damaged the next Move generation.");
+            }
+            finally { await Close(cursor, pump).ConfigureAwait(false); }
+        }
+
+        async Task CheckInlineDisposal()
+        {
+            var cursor = Open();
+            var pump = new Competitive.Perf03.Counted.Perf03YieldPump();
+            try
+            {
+                await First(cursor, pump).ConfigureAwait(false);
+                var pending = Issue(cursor, pump);
+                var awaiter = pending.ConfigureAwait(false).GetAwaiter();
+                ValueTask disposal = default;
+                bool entered = false;
+                Exception? callbackError = null;
+                awaiter.UnsafeOnCompleted(() =>
+                {
+                    try
+                    {
+                        entered = true;
+                        Require(awaiter.GetResult() && cursor.Current == 1, "Inline disposal lost the old result.");
+                        disposal = cursor.DisposeAsync();
+                    }
+                    catch (Exception error) { callbackError = error; }
+                });
+                pump.RunOne();
+                if (callbackError is not null)
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(callbackError).Throw();
+                Require(entered, "Selected candidate disposal continuation was not inline.");
+                await disposal.ConfigureAwait(false);
+            }
+            finally { await Close(cursor, pump).ConfigureAwait(false); }
+        }
+
+        async Task CheckInvalidatedValueTask()
+        {
+            var cursor = Open();
+            var pump = new Competitive.Perf03.Counted.Perf03YieldPump();
+            try
+            {
+                await First(cursor, pump).ConfigureAwait(false);
+                var old = Issue(cursor, pump);
+                pump.RunOne();
+                Require(old.IsCompletedSuccessfully, "The saved old root operation did not complete.");
+                var next = Issue(cursor, pump);
+                bool rejected = false;
+                try
+                {
+                    old.GetAwaiter().GetResult();
+                }
+                catch (InvalidOperationException) { rejected = true; }
+                Require(rejected, "Selected single issuer did not invalidate the old unconsumed ValueTask.");
+                pump.RunOne();
+                Require(await next.ConfigureAwait(false) && cursor.Current == 2,
+                    "Rejected stale ValueTask damaged the next generation.");
+            }
+            finally { await Close(cursor, pump).ConfigureAwait(false); }
+        }
+
+        async Task CheckDurableTask()
+        {
+            var cursor = Open();
+            var pump = new Competitive.Perf03.Counted.Perf03YieldPump();
+            try
+            {
+                await First(cursor, pump).ConfigureAwait(false);
+                var pending = Issue(cursor, pump);
+                var savedTask = pending.AsTask();
+                pump.RunOne();
+                Require(savedTask.IsCompletedSuccessfully, "The precreated Task did not capture the old completion.");
+                var next = Issue(cursor, pump);
+                pump.RunOne();
+                Require(await next.ConfigureAwait(false) && cursor.Current == 2,
+                    "Selected root did not complete after the saved Task.");
+                Require(await savedTask.ConfigureAwait(false) && await savedTask.ConfigureAwait(false),
+                    "The already-created Task lost its durable result after source reuse.");
+            }
+            finally { await Close(cursor, pump).ConfigureAwait(false); }
+        }
+    }
+
 
     private static bool CurrentThrows(IAsyncEnumerator<int> cursor)
     {
