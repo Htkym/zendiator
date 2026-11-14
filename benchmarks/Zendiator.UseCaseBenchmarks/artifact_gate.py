@@ -798,10 +798,13 @@ def verify_perf03_raw_preflight(request, proof_extra, proof_path):
     perf03_raw_require(not filesystem_path(directory).is_symlink() and not (os.name == "nt" and filesystem_path(directory).is_junction()), "evidence root uses a reparse path")
     try:
         files = tree_hashes(directory)
-        perf03_raw_require(files == {"raw-preflight.json": metadata.get("evidenceSha256")}, "file is missing or its hash changed")
+    except (OSError, ValueError) as error:
+        raise ValueError(f"PERF03 raw preflight evidence files unavailable: {error}") from error
+    perf03_raw_require(files == {"raw-preflight.json": metadata.get("evidenceSha256")}, "file is missing or its hash changed")
+    try:
         data = read(directory / "raw-preflight.json")
     except OSError as error:
-        raise ValueError("PERF03 raw preflight evidence file is missing") from error
+        raise ValueError(f"PERF03 raw preflight evidence file is missing: {error}") from error
     perf03_raw_require(isinstance(data, dict) and type(data.get("schemaVersion")) is int and data["schemaVersion"] == 1 and
                        data.get("protocol") == metadata["protocol"] and data.get("implementationSha256") == request["perf03CauseGateImplementationSha256"] and
                        data.get("variant") == request["perf03CauseVariant"] and data.get("siteMapSha256") == metadata["siteMapSha256"] and
