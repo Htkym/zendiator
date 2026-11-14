@@ -258,3 +258,9 @@ and native DI entry; parity does not reproduce the original BenchmarkStreams
 whole-composition layout or JIT behavior. Consumer-observed incomplete results do
 not establish raw generated decision-site counts or the timed pending fraction;
 no ns-per-pending claim is supported.
+
+Run `dotnet <consumer.dll> --validate-perf03-cause <new-output> <implementation-sha256>`
+for semantic-only validation of the 24 inputs, two controls and 17 paired contract
+probes. Pass the 64-character uppercase diagnostic source-map SHA256 computed by
+the existing artifact driver. This entry performs no benchmark and does not
+validate the saved bundle, request or cache binding.

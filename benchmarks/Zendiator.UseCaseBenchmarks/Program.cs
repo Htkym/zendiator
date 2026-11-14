@@ -48,6 +48,16 @@ if (args.Length > 0 && args[0] == "--validate-same-producer")
     return;
 }
 
+if (args.Length > 0 && args[0] == "--validate-perf03-cause")
+{
+    if (args.Length != 3 || args[2].Length != 64 ||
+        args[2].Any(c => !(c is >= '0' and <= '9' or >= 'A' and <= 'F')))
+        throw new ArgumentException("--validate-perf03-cause requires an output directory and a 64-character uppercase SHA256 implementation identity");
+    await Perf03CauseGate.Run(Path.GetFullPath(args[1]), args[2]);
+    Console.WriteLine("PERF03_CAUSE_SEMANTIC_ONLY: 24 input cases, 2 controls and 17 paired contract probes; saved bundle/request/cache validation and benchmarking not performed");
+    return;
+}
+
 if (!File.Exists("Zendiator.UseCaseBenchmarks.csproj"))
     throw new InvalidOperationException("Run from the use-case benchmark directory.");
 if (args.Contains("--help"))
