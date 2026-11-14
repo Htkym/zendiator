@@ -283,3 +283,115 @@ fraction or ns-per-pending result.
 runs this preflight without benchmarking. The saved-consumer PERF-03 gate also
 runs it and binds its separate report hash plus compiled catalog/map identity
 through the existing source archive, proof and cache checks.
+
+### PERF-04 representative input preparation
+
+[`perf-04.json`](perf-04.json) is a 61-cell, single-revision selection. This is
+source preparation only: no PERF-04 timing, allocation, semantic pass or promotion
+is established here. Keep the rejected PERF-02b/c candidate out of this source
+line; its hoped-for allocation saving is not an accepted prerequisite or result.
+
+Freeze all three Zendiator input families and the iterator peer aliases in the **same commit**:
+
+| Family suffix after library prefix | Zendiator input | Peers selected for measurement |
+|---|---|---|
+| `Stream0`, `Stream5`, `Relay5` | Existing named `WorkStreamCursor`, unchanged | Not selected in this family |
+| `IteratorStream0`, `IteratorStream5`, `IteratorRelay5` | `IStreamHandler` returning the shared compiler iterator `Work.Stream` | Five peers, including Foundatio, using unchanged `Work.Stream` workloads |
+| `GeneratedPooledStream0`, `GeneratedPooledStream5`, `GeneratedPooledRelay5` | Named cursor using the real `[GeneratePooledProducer]` feature | Not selected in this family |
+
+The generated-pooled rows show Zendiator with the producer feature enabled.
+They are not same-producer competitor comparisons. Existing manual pooled
+cursor cases are not a substitute. The iterator family uses the same input in
+synchronous and asynchronous modes; publish the synchronous tradeoff alongside
+the old named input. Keep original case identities and historical results intact.
+Generate the new classes through `Generate.ps1`, not edits to `GeneratedCases.cs`.
+
+The suffixes deliberately give each family a distinct `interleaved_plan.py`
+comparison key while retaining one member per library. Use `run_interleaved.py`
+with its existing source, package, process-ownership and saved-consumer guards.
+Do not use revision A/B with changed benchmark sources: that violates the common
+benchmark-source requirement and does not compare these inputs in one frozen run.
+
+| Selection | Cells |
+|---|---:|
+| Zendiator, three inputs, Stream5 and Relay5, Full/1024 and EarlyBreak/16, both input modes | 24 |
+| Zendiator typed routes, three inputs, Stream5 and Relay5, FullTyped/1024 async and EarlyBreakTyped/16 sync | 12 |
+| Zendiator Stream0 input controls, three inputs, Full/1024 async and EarlyBreak/16 sync | 6 |
+| MediatRHistorical, Mediator, DispatchR, Immediate and Foundatio, IteratorStream5 and IteratorRelay5 Full/1024 async | 10 |
+| Common ten-case non-regression selection, excluding its one overlap with old Stream5 Full/1024 sync | 9 |
+| Total | 61 |
+
+The common selection is the first ten cells of `perf-02a.json`: Send0/5 Typed and
+ResolveSend (Scoped), Notification16, old Stream5 Full/1024 sync, ShortCircuit
+WarmDispatch and the three Hook methods. It is not replaced by new input checks.
+Competitor rankings are available only for Full/1024 async in the aligned
+IteratorStream5 and IteratorRelay5 families. Named and generated-pooled rows are
+Zendiator-only supplements: they cannot establish separate cross-library rankings
+or peer allocation minima. Sync, early-break, typed and Stream0 cells are also
+Zendiator controls. Foundatio uses `Project: foundatio`; DSoftStudio remains outside
+this bounded selection, so no universal all-framework ranking follows.
+Relay5 is mandatory because Stream5's per-stage processing still differs:
+Zendiator forwards the cursor while peers enumerate/yield again. Relay5 matches
+preprocessing-only stage work. Neither input alignment nor a good Stream5 result
+removes that distinction.
+
+At 20 warmups plus 12 measurements with requested 500 ms iterations, 61 cells
+represent about 16.3 minutes of nominal iteration time. Allow **60–120 minutes**
+for one complete serial run including pilot/overhead, four project builds and
+saved-consumer verification. This is a planning estimate, not an observed runtime or guaranteed
+upper bound. Even the five-UseCase-library, three-family core cross product plus these
+typed, Stream0 and common controls would be 147 cells (39.2 nominal minutes
+before overhead), so it is not a credible 30–60 minute commitment. Fixed-invocation
+Hook controls can finish iterations sooner. Do not silently add diagnostic
+cross-products or shorten the fixed measurement profile to meet a time budget.
+
+Before formal timing, commit and freeze the sources and locks, verify generated
+case reproducibility, and use the fixed conditions above. A planning-only command
+is:
+
+```powershell
+python -B benchmarks/Zendiator.UseCaseBenchmarks/run_interleaved.py --group custom --matrix benchmarks/performance-plan/perf-04.json --output D:/z3/o/perf-04-planning --expect-sdk 10.0.404 --dry-run
+```
+
+Dry-run planning does not compile, prove case discovery, run a semantic gate or
+measure performance. Formal execution is a separate step using a fresh output
+and an uninterrupted machine window. Retain the complete session, execution
+order, manifests, logs, full BDN JSON, loaded-assembly maps, measured consumer
+bundles and artifact proofs described above. Preserve the original 389-case gate
+and separate 96-case struct-upstream gate. Add the PERF-04 gate independently:
+14 new UseCase benchmark classes (six Zendiator input/route classes and eight
+iterator peer aliases) and 80 actual benchmark-method invocations. Run that new gate against the saved
+measured consumer and bind its implementation and report to the artifact proof;
+a workspace-only pass, copied source, old gate or manual-pooled pass cannot
+substitute for it. Foundatio retains its original 16 admitted rows and appends two real iterator-alias
+Full/1024 async method executions, producing 18 rows. These run in its preserved
+measured consumer; the helper/alias source identities and semantic outputs are
+bound to the supplemental proof. Old 16-row caches cannot satisfy this changed
+implementation and count. Short and Hook retain their separate proofs.
+
+Decide benchmark validity and performance success separately. Source review,
+reproducibility, complete semantic/artifact evidence and clear input labels make
+a result eligible for reporting; they do not establish a speed/allocation win.
+Publish old named, iterator and generated-pooled rows together at least once,
+including synchronous tradeoffs, before replacing a representative public row.
+The common controls must remain visible; because they have no alternate-revision
+member here, this selection alone does not prove a release-to-release absence of
+regression. Any required revision non-regression proof must keep benchmark inputs
+identical on both sides and remain separate from this same-run input comparison.
+
+For the primary `IteratorStream5.Full`, Count 1024, Asynchronous true:
+
+- Require the lowest mean among Zendiator and the five same-run measured peers,
+  with its confidence interval disjoint from the runner-up. Preserve BDN's
+  confidence level, effective N and bounds. Overlap is inconclusive for a fastest
+  claim; a favorable point estimate alone does not pass.
+- Require B/op no greater than the minimum of those five peers in that same run.
+  The historical 1,753 B is context, not a threshold or substitute for new peers.
+- Report mandatory Relay5 results and both time and allocation separately. Do not
+  generalize a scoped result to omitted libraries, methods, modes or producer APIs.
+
+If either primary target is missed, record that failure or uncertainty even if
+the input correction is semantically valid. Do not revive rejected PERF-02b/c,
+claim a performance adoption, replace historical numbers, or choose a favorable
+subset after seeing results. Any further optimization or repeat measurement needs
+its own stated reason and unchanged comparison conditions.

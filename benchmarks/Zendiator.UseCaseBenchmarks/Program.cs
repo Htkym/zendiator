@@ -48,6 +48,16 @@ if (args.Length > 0 && args[0] == "--validate-same-producer")
     return;
 }
 
+if (args.Length > 0 && args[0] == "--validate-perf04-input")
+{
+    if (args.Length != 3 || args[2].Length != 64 ||
+        args[2].Any(c => !(c is >= '0' and <= '9' or >= 'A' and <= 'F')))
+        throw new ArgumentException("--validate-perf04-input requires an output directory and uppercase SHA256 implementation identity");
+    await Perf04InputGate.Run(Path.GetFullPath(args[1]), args[2]);
+    Console.WriteLine("PERF04_INPUT_SEMANTIC_ONLY: saved bundle/request/cache validation and benchmarking not performed");
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--validate-perf03-cause")
 {
     if (args.Length != 3 || args[2].Length != 64 ||

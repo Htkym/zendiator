@@ -35,6 +35,10 @@ public static class FoundatioSemanticValidation
                 await CheckStreamAsync(name, depth, relay, asynchronous, create, records);
             }
         }
+        await CheckFull1024Async(nameof(FoundatioIteratorStream5), 5, true,
+            () => new FoundatioIteratorStream5(), records);
+        await CheckFull1024Async(nameof(FoundatioIteratorRelay5), 5, true,
+            () => new FoundatioIteratorRelay5(), records);
         object features = await FeaturesAdmission.ValidateTimingPathsAsync();
         return new
         {
@@ -330,6 +334,12 @@ public static class FoundatioSemanticValidation
             }
         }
         // Verify the same full benchmark method with the other inherited input size.
+        await CheckFull1024Async(name, depth, asynchronous, create, records);
+    }
+
+    private static async Task CheckFull1024Async(string name, int depth, bool asynchronous,
+        Func<FoundatioState> create, List<object> records)
+    {
         var longState = create();
         var longTarget = (IFoundatioStreamProbe)longState;
         var longProbe = new Probe();
@@ -339,7 +349,7 @@ public static class FoundatioSemanticValidation
         longState.Setup();
         try
         {
-            Require(await longTarget.Full() == 523776 && longProbe.Items == 1024 && longProbe.Disposals == 1,
+            Require(await longTarget.Full() == 523776 && longProbe.Items == 1024 && longProbe.Handlers == 1 && longProbe.Disposals == 1,
                 $"{name}.Full1024: work/lifecycle");
             RequireOrder(longProbe, depth, name);
             records.Add(new
