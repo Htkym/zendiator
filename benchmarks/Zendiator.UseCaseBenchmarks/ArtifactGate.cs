@@ -121,10 +121,13 @@ internal static class ArtifactGate
             await StructUpstreamGate.Run(structOutput);
             var structEvidence = CheckStructUpstreamEvidence(structOutput);
             string? perf03EvidenceSha256 = null;
+            Perf03RawPreflightIdentity? perf03RawEvidence = null;
             if (perf03Requested)
             {
                 await Perf03CauseGate.Run(request.Output, request.Perf03CauseGateImplementationSha256!);
                 perf03EvidenceSha256 = CheckPerf03CauseEvidence(request);
+                perf03RawEvidence = await Perf03RawPreflightGate.Run(request.Output,
+                    request.Perf03CauseGateImplementationSha256!, Perf03RawSiteMap(request));
             }
             if (Correctness.Results.Count != 389 || ArtifactEvidence.Hash(defaultCorrectness) != defaultCorrectnessSha256)
                 throw new InvalidOperationException("The additional gate changed the original 389-case evidence");
@@ -140,7 +143,9 @@ internal static class ArtifactGate
 #else
             if (CheckStructUpstreamEvidence(structOutput) != structEvidence)
                 throw new InvalidOperationException("Struct upstream evidence changed while validating");
-            if (perf03Requested && CheckPerf03CauseEvidence(request) != perf03EvidenceSha256)
+            if (perf03Requested && (CheckPerf03CauseEvidence(request) != perf03EvidenceSha256 ||
+                Perf03RawPreflightGate.Check(request.Output, request.Perf03CauseGateImplementationSha256!,
+                    Perf03RawSiteMap(request)) != perf03RawEvidence))
                 throw new InvalidOperationException("PERF-03 evidence changed while validating");
 #endif
             ArtifactEvidence.Write(System.IO.Path.Combine(request.Output, "artifact-proof.json"), new
@@ -172,7 +177,17 @@ internal static class ArtifactGate
                     caseSet = request.Perf03CauseCaseSet,
                     implementationSha256 = request.Perf03CauseGateImplementationSha256,
                     evidencePath = "perf03-cause/perf03-cause.json",
-                    evidenceSha256 = perf03EvidenceSha256
+                    evidenceSha256 = perf03EvidenceSha256,
+                    rawPreflight = new
+                    {
+                        schemaVersion = 1,
+                        protocol = Perf03RawPreflightGate.Protocol,
+                        evidencePath = Perf03RawPreflightGate.EvidencePath,
+                        evidenceSha256 = perf03RawEvidence!.EvidenceSha256,
+                        siteMapPath = "perf03-sources/src/Perf03CauseDiagnostics/counted-sites.json",
+                        siteMapSha256 = perf03RawEvidence.MapSha256,
+                        compiledSiteCount = perf03RawEvidence.SiteCount
+                    }
                 },
                 structUpstreamGate = new
                 {
@@ -199,14 +214,16 @@ internal static class ArtifactGate
                     "Original supplemental benchmark semantics validated in the preserved consumer; all semantic output files are bound to this proof"
 #else
                     perf03Requested
-                        ? "389 existing benchmark-gate checks plus separate 96 struct-upstream parity cases and three driver type classifications; separate PERF-03 input parity and isolated sequential controls; focused contracts and full-suite tests remain separate"
+                        ? "389 existing benchmark-gate checks plus separate 96 struct-upstream parity cases and three driver type classifications; separate PERF-03 input parity and isolated sequential controls, four counted Work observations and 24 substituted deterministic protocol cases; no timed pending denominator; focused contracts and full-suite tests remain separate"
                         : "389 existing benchmark-gate checks plus separate 96 struct-upstream parity cases and three driver type classifications; focused contracts and full-suite tests remain separate"
 #endif
             });
 #if SUPPLEMENTAL_BENCHMARK
             CheckSemanticFiles(request.Output, semanticFiles);
 #else
-            if (perf03Requested && CheckPerf03CauseEvidence(request) != perf03EvidenceSha256)
+            if (perf03Requested && (CheckPerf03CauseEvidence(request) != perf03EvidenceSha256 ||
+                Perf03RawPreflightGate.Check(request.Output, request.Perf03CauseGateImplementationSha256!,
+                    Perf03RawSiteMap(request)) != perf03RawEvidence))
                 throw new InvalidOperationException("PERF-03 evidence changed while writing the proof");
 #endif
         }
@@ -327,6 +344,11 @@ internal static class ArtifactGate
             prefix + "benchmarks/Zendiator.UseCaseBenchmarks/Perf03CauseStreams.cs",
             diagnostic + "Perf03CauseVariant.cs", diagnostic + "Perf03DiagnosticControl.cs",
             diagnostic + "StreamCursorState.cs", diagnostic + "snapshot-provenance.json",
+            diagnostic + "Perf03CountTrace.cs", diagnostic + "Perf03RawPreflightGate.cs", diagnostic + "Perf03YieldPump.cs",
+            diagnostic + "Perf03ProtocolFixtures.cs", diagnostic + "Perf03ProtocolGate.cs",
+            diagnostic + "Counted.Stream0.g.cs", diagnostic + "Counted.Relay5.g.cs",
+            diagnostic + "CountedStreamCursorState.cs", diagnostic + "CountedSiteCatalog.cs",
+            diagnostic + "counted-sites.json", diagnostic + ".gitattributes",
             diagnostic + "Zendiator.StreamCanonical.DF7872ACF770B8DDDA6D6A61054B21A2251A08597B558387231219CCDDFB0B4B.g.cs",
             diagnostic + "Zendiator.StreamCanonical.B80A3F15A7016AF93086943F607702393A9513056C3C751D172215C32167550B.g.cs",
             diagnostic + "originals/StreamCursorState.cs.txt",
@@ -355,6 +377,9 @@ internal static class ArtifactGate
         if (variants.Count != 1 || variants[0].Groups[1].Value != request.Perf03CauseVariant)
             throw new InvalidOperationException("PERF-03 source variant differs from the compiled diagnostic variant");
     }
+
+    private static string Perf03RawSiteMap(ArtifactGateRequest request) =>
+        System.IO.Path.Combine(request.BundleRoot, "perf03-sources/src/Perf03CauseDiagnostics/counted-sites.json");
 
     private static string CheckPerf03CauseEvidence(ArtifactGateRequest request)
     {

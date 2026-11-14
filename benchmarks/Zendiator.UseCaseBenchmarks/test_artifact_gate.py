@@ -619,16 +619,95 @@ class SupplementalArtifactGateContracts(SyntheticArtifactGateFixture):
         self.assertFalse((attempt / "artifact-binding.json").exists())
 
 
+def make_synthetic_perf03_protocol_evidence():
+    """Build validator-test data only; this is never runtime or measurement evidence."""
+    result = {
+        "schemaVersion": 1,
+        "protocol": "zendiator-perf03-raw-protocol-v1",
+        "producerSubstitution": True,
+        "actualWorkPendingFractionClaim": False,
+        "isolatedSnapshotExecuted": False,
+        "normalTypedNativeDi": True,
+        "apiCancellationContractClaim": False,
+        "scope": gate._PERF03_PROTOCOL_SCOPE,
+        "attribution": gate._PERF03_PROTOCOL_ATTRIBUTION,
+        "rows": [],
+    }
+    for route in ("Stream0", "Relay5"):
+        relay = route == "Relay5"
+        for name in gate._PERF03_PROTOCOL_NAMES:
+            cleanup, reentry, kind, tickets = gate._perf03_protocol_shape(route, name)
+            count, total, pulls = gate._PERF03_PROTOCOL_COUNTS[name]
+            raw_rows = []
+            for index, ticket in enumerate(tickets):
+                precompleted = kind.startswith("precompleted-")
+                registrations = 0 if precompleted or kind == "before-registration" else 1
+                registered = ticket["id"] if registrations else None
+                returned_status = {"precompleted-success": "Succeeded", "precompleted-fault": "Faulted", "precompleted-cancelled": "Canceled"}.get(kind)
+                raw_rows.append({
+                    "kind": kind,
+                    "statusChecks": 2,
+                    "returnedStatuses": [returned_status, returned_status] if precompleted else ["Pending", "Succeeded"] if kind == "before-registration" else ["Pending", "Pending"],
+                    "registrations": registrations,
+                    "consumptions": 1,
+                    "callbacks": registrations,
+                    "inlineCallbacks": 0 if kind == "async-once" or precompleted else registrations,
+                    "useSchedulingContext": False,
+                    "ticket": dict(ticket),
+                    "issuedParentTicket": tickets[0]["id"] if reentry and index == 1 else None,
+                    "registrationAmbientTicket": registered,
+                    "registeredTicket": registered,
+                    "resultAmbientTicket": ticket["id"],
+                    "resultTicket": ticket["id"],
+                    "callbackEntryTicket": registered,
+                    "callbackExitCapturedTicket": registered,
+                    "callbackExitAmbientTicket": registered,
+                })
+            row = {
+                "route": route,
+                "scenario": name,
+                "status": "Passed",
+                "expectedRepeatedMovePath": "GroupPending" if relay else "CompletionCell",
+                "inputCursorType": "Competitive.Perf03.Diagnostics.Perf03ProtocolCursor",
+                "typedEntryType": "Competitive.Generated.Perf03ProtocolStreams.Zendiator",
+                "nativeTypedEntryObserved": True,
+                "handlerRequestReferenceEquals": True,
+                "handlerApiTokenEquals": True,
+                "handlerNativeScopeReferenceEquals": True,
+                "cachedHandlerReferenceEquals": True,
+                "enumerationTokenDefault": True,
+                "tokenMode": "Live" if not relay or name == "completed-cancelled" else "Default",
+                "apiTokenCanBeCanceled": not relay or name == "completed-cancelled",
+                "apiTokenCancellationRequested": False,
+                "sourceCancellationIndependent": name == "completed-cancelled",
+                "apiCancellationContractClaim": False,
+                "outcome": "OperationCanceledException" if name == "completed-cancelled" else "ArithmeticException" if name in ("repeated-pending-failure", "pending-cleanup-failure", "completed-fault") else "Completed",
+                "values": list(range(count)),
+                "count": count,
+                "sum": total,
+                "pulls": pulls,
+                "currentReads": count,
+                "disposals": 1,
+                "events": [1, 2, 3, 4, 5, 100] if relay else [100],
+                "pendingAtReturn": [True, True] if reentry else [False] * len(tickets) if kind.startswith("precompleted-") else [False] if name in ("before-registration", "inside-registration") else [True],
+                "reenteredDuringCompletion": reentry,
+                "oldCallbackExitTicket": tickets[0]["id"] if reentry else None,
+                "newOperationIssuedParentTicket": tickets[0]["id"] if reentry else None,
+                "rawMoves": [] if cleanup else raw_rows,
+                "rawCleanup": raw_rows[0] if cleanup else None,
+            }
+            result["rows"].append(row)
+    return result
+
 class Perf03ArtifactGateContracts(SyntheticArtifactGateFixture):
     def setUp(self):
         super().setUp()
         for name in ("Perf03CauseGate.cs", "Perf03CauseStreams.cs"):
             (self.project / name).write_text("synthetic PERF03 gate fingerprint")
         self.diagnostics = self.project.parent.parent / "src/Perf03CauseDiagnostics"
-        (self.diagnostics / "originals").mkdir(parents=True)
-        for name in gate.PERF03_DIAGNOSTIC_FILES:
-            (self.diagnostics / name).write_text("synthetic diagnostic implementation or original source")
-        (self.diagnostics / "Perf03CauseVariant.cs").write_text('internal static class Perf03CauseVariant { internal const string Id = "V0"; }')
+        # Copy hash-bound source fixtures; the synthetic consumer is never executed.
+        source_diagnostics = Path(__file__).resolve().parents[2] / "src/Perf03CauseDiagnostics"
+        shutil.copytree(source_diagnostics, self.diagnostics)
         self.original_control = next(name for name in gate.PERF03_DIAGNOSTIC_FILES if name.endswith(".g.cs.txt"))
 
     def perf03_case(self, ordinal=1, pid=111, case=None):
@@ -652,6 +731,121 @@ class Perf03ArtifactGateContracts(SyntheticArtifactGateFixture):
                             events=([1, 2, 3, 4, 5, 100] if relay else [100]) if started else [])
             rows.append(dict(name=name, status="Passed", normal=observed, isolated=copy.deepcopy(observed)))
         return rows
+
+    @staticmethod
+    def synthetic_raw_work(relay, controlled, mapped):
+        """Construct test-only traces, including one old-ticket retirement after a new pull."""
+        filename = "Counted.Relay5.g.cs" if relay else "Counted.Stream0.g.cs"
+        cursor = 5 if relay else 0
+        def find(kind=None, method=None, line=None, file=None):
+            return next(site for site in mapped if (kind is None or site["kind"] == kind) and
+                (method is None or site["method"] == method) and (line is None or site["originLine"] == line) and
+                site["file"] == (file or filename) and (file is not None or site["declaringCursor"] == cursor or kind == "input.raw.pull"))
+        claim = find(line=88, file="CountedStreamCursorState.cs")
+        pull = find(kind="input.raw.pull")
+        implicit_begin = find(kind="input.raw.await.implicit.begin", method="StartMoveAsync")
+        implicit_consume = find(kind="input.raw.consume.implicit", method="StartMoveAsync")
+        initial = find(kind="input.raw.IsCompletedSuccessfully", method="AdvanceIdentityLease" if relay else "MoveNextAsync")
+        direct = find(kind="input.raw.consume.explicit", method="AdvanceIdentityLease" if relay else "MoveNextAsync")
+        recheck = find(kind="input.raw.awaiter.IsCompleted", method="Start")
+        resumed = find(kind="input.raw.consume.explicit", method="ResumeCore")
+        begin = find(kind="runner.BeginGroup" if relay else "runner.Begin")
+        register = find(kind="raw.register")
+        prepare = find(line=533, file="CountedStreamCursorState.cs")
+        published = find(line=568, file="CountedStreamCursorState.cs")
+        consumed = find(line=589, file="CountedStreamCursorState.cs")
+        retired = find(line=574, file="CountedStreamCursorState.cs")
+        completion_result = find(kind="completion.consume.explicit", file="CountedStreamCursorState.cs")
+        origin = next(site["originFile"] for site in mapped if site["file"] == filename)
+        root_type = "Competitive.Perf03.Counted.StreamSource_" + origin.split(".")[2] + "+Cursor" + str(cursor)
+        owners = {"1": root_type}
+        if controlled:
+            owners.update({"2": "Competitive.Perf03.Counted.CountedStreamCursorState+MoveCompletion",
+                           "3": "Competitive.Perf03.Counted.CountedStreamCursorState+MoveCompletion"})
+        events, held = [], []
+        reentry = dict(inline=True, oldOperation=1, newOperation=2, oldOwner=2,
+                       oldRetirementSite=retired["id"], oldRetirementPhase="repeated")
+        def emit(site, operation, observed=None, owner=None):
+            phase = "first" if operation == 0 else "repeated" if operation < 1024 else "eof"
+            events.append(dict(Sequence=len(events) + 1, Operation=operation, Phase=phase,
+                Site=site["id"], Kind=site["kind"], Observed=observed, Owner=owner))
+            return len(events)
+        for operation in range(1025):
+            emit(claim, operation, owner=1)
+            if operation == 0:
+                emit(implicit_begin, operation)
+            pull_sequence = emit(pull, operation)
+            if operation == 0:
+                emit(implicit_consume, operation)
+            elif controlled and operation < 1024:
+                owner = 3 if operation == 2 else 2
+                emit(initial, operation, False)
+                emit(recheck, operation, False)
+                emit(begin, operation)
+                emit(prepare, operation, owner=owner)
+                emit(register, operation)
+                if operation == 2:
+                    reentry["newRawPullSequence"] = pull_sequence
+                    reentry["oldRetirementSequence"] = emit(retired, 1, owner=2)
+                emit(resumed, operation, True)
+                publication_sequence = emit(published, operation, owner=owner)
+                emit(completion_result, operation, True)
+                consumption_sequence = emit(consumed, operation, owner=owner)
+                if operation == 1:
+                    reentry["oldPublicationSequence"] = publication_sequence
+                    reentry["oldConsumptionSequence"] = consumption_sequence
+                else:
+                    emit(retired, operation, owner=owner)
+            else:
+                emit(initial, operation, True)
+                emit(direct, operation, operation < 1024)
+            if controlled and operation < 1024:
+                held.append(dict(operation=operation, pendingAtReturn=True, queuedCallbacks=1, rawPulls=1,
+                    rawConsumptionsBeforePump=0, rawRegistrations=0 if operation == 0 else 1,
+                    implicitCompilerAwaitBegins=1 if operation == 0 else 0, incompleteAwaiterRechecks=0 if operation == 0 else 1))
+        phases = []
+        for phase in ("acquisition", "first", "repeated", "eof", "cleanup"):
+            current = [event for event in events if event["Phase"] == phase]
+            phases.append(dict(phase=phase, rawPulls=sum(e["Kind"] == "input.raw.pull" for e in current),
+                explicitRawConsumptions=sum(e["Kind"] == "input.raw.consume.explicit" for e in current),
+                implicitCompilerAwaitConsumptions=sum(e["Kind"] == "input.raw.consume.implicit" for e in current)))
+        grouped = {}
+        for event in events:
+            key = (event["Phase"], event["Site"], event["Kind"])
+            values = grouped.setdefault(key, [0, 0, 0]); values[0] += 1
+            values[1] += event["Observed"] is True; values[2] += event["Observed"] is False
+        site_counts = [dict(phase=key[0], site=key[1], kind=key[2], calls=value[0], trueObservations=value[1], falseObservations=value[2])
+                       for key, value in grouped.items()]
+        return dict(case=dict(Type="ZendiatorPerf03NamedDefaultRelay5" if relay else "ZendiatorPerf03NamedLiveStream0",
+                Method="FullDiagnostic", Count=1024, Asynchronous=True), status="Passed", controlledScheduling=controlled,
+            countedTraceAttributionValidated=controlled, controlledYield=dict(postedCallbacks=1024, executedCallbacks=1024,
+                heldItemOperations=held, synchronousEof=True, reentry=reentry) if controlled else None,
+            producer="WorkStreamCursor", producerSubstitution=False, typedNativeDi=True, items=1024, sum=523776,
+            handlers=1, disposals=1, callbackOrder=[1, 2, 3, 4, 5, 100] if relay else [100], rawPulls=1025,
+            rawConsumptions=1025, rawConsumptionPerOperationVerified=True, firstMoveCompilerAwaitInstrumentedAtSourceBoundary=True,
+            compilerGeneratedGetResultInstructionCountClaim=False, consumerObserved=dict(moveCalls=1025, consumptions=1025,
+                incompleteAtReturn=1024 if controlled else 0), phaseCounts=phases, completedBetweenChecks=[], siteCounts=site_counts,
+            ownerTypes=owners, trace=events, countedCopyPerturbsScheduling=True, timedPendingFractionKnown=False)
+
+    def synthetic_raw_preflight(self, request, proof):
+        prefix = "perf03-sources/src/Perf03CauseDiagnostics/"
+        site_map = Path(request["bundleRoot"]) / (prefix + "counted-sites.json")
+        mapped = gate.read(site_map)["sites"]
+        metadata = dict(schemaVersion=1, protocol="zendiator-perf03-raw-preflight-v1",
+            evidencePath="perf03-cause-raw/raw-preflight.json", siteMapPath=prefix + "counted-sites.json",
+            siteMapSha256=gate.sha(site_map), compiledSiteCount=len(mapped))
+        raw = dict(schemaVersion=1, protocol=metadata["protocol"], implementationSha256=request["perf03CauseGateImplementationSha256"],
+            variant="V0", siteMapSha256=metadata["siteMapSha256"], compiledSiteCount=len(mapped), unmappedSiteRejected=True,
+            mismatchedKindRejected=True, countedCopyPerturbsScheduling=True, timedPendingFractionKnown=False, nsPerPendingClaim=False,
+            counterSynchronizationExcludedFromAtomicCounts=True, deterministicProtocolsValidateCountedTraceAttribution=False,
+            controlledWorkValidatesCountedTraceAttribution=True, countedWorkFaultOrCancelConsumptionClaim=False,
+            countedWorkConsumptionScope="Successful Work results only; throwing GetResult attempts are not counted by the copied-route success markers",
+            actualWorkCases=[self.synthetic_raw_work(relay, controlled, mapped) for relay in (False, True) for controlled in (False, True)],
+            deterministicProtocols=make_synthetic_perf03_protocol_evidence())
+        path = Path(request["output"]) / metadata["evidencePath"]
+        gate.write(path, raw)
+        metadata["evidenceSha256"] = gate.sha(path)
+        proof["perf03CauseGate"]["rawPreflight"] = metadata
 
     def mocked_perf03_gate(self, args, log, env, cwd):
         self.mocked_gate(args, log, env, cwd)
@@ -692,6 +886,7 @@ class Perf03ArtifactGateContracts(SyntheticArtifactGateFixture):
                                         variant=evidence["variant"], implementationSha256=evidence["implementationSha256"],
                                         caseSet=evidence["caseSet"], evidencePath="perf03-cause/perf03-cause.json",
                                         evidenceSha256=gate.sha(evidence_path))
+        self.synthetic_raw_preflight(request, proof)
         gate.write(proof_path, proof)
 
     def validate_perf03(self, row, attempt):
@@ -725,6 +920,7 @@ class Perf03ArtifactGateContracts(SyntheticArtifactGateFixture):
         self.assertTrue(all(request["bundleFiles"][name] == value for name, value in sources.items()))
         self.assertIn("389 existing benchmark gate plus separate 96", result["scope"])
         self.assertIn("Separate 24 PERF03", result["perf03CauseScope"])
+        self.assertIn("four ordinary/controlled counted Work", result["perf03RawScope"])
         self.assertEqual(gate.check_artifact_binding(row, attempt, self.session, self.project), result)
 
     def test_changed_source_or_variant_prevents_resume(self):
@@ -862,6 +1058,89 @@ class Perf03ArtifactGateContracts(SyntheticArtifactGateFixture):
                 with self.assertRaisesRegex(ValueError, "PERF03 V0 contract|declared contract"):
                     gate.verify_gate(request, proof_path)
         gate.write(evidence_path, original)
+        gate.write(proof_path, original_proof)
+
+    def test_missing_or_rehashed_raw_proof_cannot_substitute_trace_or_protocol_claims(self):
+        row, attempt = self.perf03_case()
+        self.validate_perf03(row, attempt)
+        request = attempt / "artifact-gate-request.json"
+        proof_path = Path(gate.read(request)["output"]) / "artifact-proof.json"
+        raw_path = proof_path.parent / "perf03-cause-raw/raw-preflight.json"
+        original_proof, original_raw = gate.read(proof_path), gate.read(raw_path)
+        self.assertEqual((len(original_raw["actualWorkCases"]), len(original_raw["deterministicProtocols"]["rows"])), (4, 24))
+        for mutation in ("missing-proof", "missing-file", "stale-hash", "map-hash", "site-count", "escaped-path", "duplicate-work",
+                         "throwing-claim", "timed-claim", "protocol-attribution", "raw-count", "raw-operation", "unknown-site", "wrong-kind",
+                         "old-ticket", "phase-total", "site-total", "between-claim", "missing-held", "reentry-order",
+                         "missing-protocol", "protocol-status", "protocol-ticket", "producer-scope", "api-cancel"):
+            with self.subTest(mutation=mutation):
+                proof, raw = copy.deepcopy(original_proof), copy.deepcopy(original_raw)
+                metadata = proof["perf03CauseGate"]["rawPreflight"]
+                ordinary, controlled = raw["actualWorkCases"][:2]
+                if mutation == "missing-proof":
+                    proof["perf03CauseGate"].pop("rawPreflight")
+                elif mutation == "stale-hash":
+                    metadata["evidenceSha256"] = "A" * 64
+                elif mutation == "map-hash":
+                    metadata["siteMapSha256"] = "A" * 64
+                elif mutation == "site-count":
+                    metadata["compiledSiteCount"] += 1
+                elif mutation == "escaped-path":
+                    metadata["evidencePath"] = "../raw-preflight.json"
+                elif mutation == "duplicate-work":
+                    raw["actualWorkCases"][-1] = copy.deepcopy(ordinary)
+                elif mutation == "throwing-claim":
+                    raw["countedWorkFaultOrCancelConsumptionClaim"] = True
+                elif mutation == "timed-claim":
+                    raw["timedPendingFractionKnown"] = True
+                elif mutation == "protocol-attribution":
+                    raw["deterministicProtocolsValidateCountedTraceAttribution"] = True
+                elif mutation == "raw-count":
+                    ordinary["trace"].remove(next(e for e in ordinary["trace"] if e["Kind"] == "input.raw.pull"))
+                    for sequence, event in enumerate(ordinary["trace"], 1):
+                        event["Sequence"] = sequence
+                elif mutation == "raw-operation":
+                    event = next(e for e in ordinary["trace"] if e["Kind"] == "input.raw.pull")
+                    event.update(Operation=1, Phase="repeated")
+                elif mutation == "unknown-site":
+                    ordinary["trace"][0]["Site"] = "unmapped-source-site"
+                elif mutation == "wrong-kind":
+                    ordinary["trace"][0]["Kind"] = "input.raw.pull"
+                elif mutation == "old-ticket":
+                    event = next(e for e in controlled["trace"] if e["Site"] == "CS.L0574.atomic" and e["Operation"] == 1)
+                    event["Operation"] = 2
+                elif mutation == "phase-total":
+                    ordinary["phaseCounts"][2]["rawPulls"] += 1
+                elif mutation == "site-total":
+                    ordinary["siteCounts"][0]["calls"] += 1
+                elif mutation == "between-claim":
+                    ordinary["completedBetweenChecks"] = [dict(operation=1, initialSite="invented", recheckSite="invented", observation="unobserved")]
+                elif mutation == "missing-held":
+                    controlled["controlledYield"]["heldItemOperations"].pop()
+                elif mutation == "reentry-order":
+                    reentry = controlled["controlledYield"]["reentry"]
+                    reentry["oldRetirementSequence"] = reentry["newRawPullSequence"]
+                elif mutation == "missing-protocol":
+                    raw["deterministicProtocols"]["rows"].pop()
+                elif mutation == "protocol-status":
+                    protocol = next(r for r in raw["deterministicProtocols"]["rows"] if r["scenario"] == "synchronous-raw")
+                    protocol["rawMoves"][0]["returnedStatuses"] = ["Faulted"] * protocol["rawMoves"][0]["statusChecks"]
+                elif mutation == "protocol-ticket":
+                    protocol = next(r for r in raw["deterministicProtocols"]["rows"] if r["scenario"] == "consumption-reentry")
+                    protocol["rawMoves"][1]["issuedParentTicket"] = protocol["rawMoves"][1]["ticket"]["id"]
+                elif mutation == "producer-scope":
+                    raw["deterministicProtocols"]["isolatedSnapshotExecuted"] = True
+                elif mutation == "api-cancel":
+                    protocol = next(r for r in raw["deterministicProtocols"]["rows"] if r["scenario"] == "completed-cancelled")
+                    protocol["apiTokenCancellationRequested"] = True
+                gate.write(raw_path, raw)
+                if mutation == "missing-file":
+                    raw_path.unlink()
+                elif mutation != "stale-hash":
+                    metadata["evidenceSha256"] = gate.sha(raw_path)
+                gate.write(proof_path, proof)
+                with self.assertRaisesRegex(ValueError, "PERF03 raw preflight|PERF03 protocol proof"):
+                    gate.verify_gate(request, proof_path)
+        gate.write(raw_path, original_raw)
         gate.write(proof_path, original_proof)
 
     def test_changed_archived_snapshot_is_rejected(self):

@@ -264,3 +264,22 @@ for semantic-only validation of the 24 inputs, two controls and 17 paired contra
 probes. Pass the 64-character uppercase diagnostic source-map SHA256 computed by
 the existing artifact driver. This entry performs no benchmark and does not
 validate the saved bundle, request or cache binding.
+
+The separate raw preflight uses copied, instrumented V0 routes for the two Work
+identities under both ordinary and explicitly controlled Task.Yield scheduling,
+and 24 substituted named-gate protocol cases. Its compiled
+206-site catalog distinguishes exact status predicates, input consumption,
+registration, publication and original atomic call sites. First, repeated, EOF
+and cleanup operation tickets remain separate; counter synchronization is excluded
+from the original atomic counts. The deterministic protocol producer is separate
+from the counted Work copy and does not validate that recorder's attribution by
+itself. The controlled Work cases directly verify reentry before old completion
+retirement using the same counted routes. Copied-route consumption markers cover
+successful returns; throwing GetResult attempts are checked by separate protocol
+sources. Instrumentation and controlled scheduling establish no timed pending
+fraction or ns-per-pending result.
+
+`--validate-perf03-raw <new-output> <implementation-sha256> <counted-sites.json>`
+runs this preflight without benchmarking. The saved-consumer PERF-03 gate also
+runs it and binds its separate report hash plus compiled catalog/map identity
+through the existing source archive, proof and cache checks.
