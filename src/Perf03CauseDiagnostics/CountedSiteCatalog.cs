@@ -2,7 +2,7 @@ namespace Competitive.Perf03.Counted;
 
 internal static class Perf03CountSites
 {
-    internal const string MapSha256 = "AFB05014C652A61DD2E9370C2E7FE60DBD14660233435F0C508DE35179C84353";
+    internal const string MapSha256 = "79B3A7FF7D3F480A12D417340CB04120CE40D15E9241923697476ACE2764C59C";
     internal static readonly (string Id, string Kind)[] Sites =
     [
         ("S0.L0092.status.input", "input.raw.IsCompletedSuccessfully"),

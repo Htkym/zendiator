@@ -294,8 +294,11 @@ namespace Competitive.Perf03.Counted
                         ResumeCore();
                     else
                         {
-                            Perf03CountTrace.Hit("R5.L0289.context-run", "context.run");
-                            global::System.Threading.ExecutionContext.Run(context, static state => ((PendingTaskRunner)state!).ResumeCore(), this);
+                            global::System.Threading.ExecutionContext.Run(context, static state =>
+                            {
+                                Perf03CountTrace.Hit("R5.L0289.context-run", "context.run");
+                                ((PendingTaskRunner)state!).ResumeCore();
+                            }, this);
                         }
                 }
 
@@ -783,8 +786,11 @@ namespace Competitive.Perf03.Counted
                         ResumeCore();
                     else
                         {
-                            Perf03CountTrace.Hit("R5.L0752.context-run", "context.run");
-                            global::System.Threading.ExecutionContext.Run(context, static state => ((PendingTaskRunner)state!).ResumeCore(), this);
+                            global::System.Threading.ExecutionContext.Run(context, static state =>
+                            {
+                                Perf03CountTrace.Hit("R5.L0752.context-run", "context.run");
+                                ((PendingTaskRunner)state!).ResumeCore();
+                            }, this);
                         }
                 }
 
@@ -1315,8 +1321,11 @@ namespace Competitive.Perf03.Counted
                         ResumeCore();
                     else
                         {
-                            Perf03CountTrace.Hit("R5.L1258.context-run", "context.run");
-                            global::System.Threading.ExecutionContext.Run(context, static state => ((PendingTaskRunner)state!).ResumeCore(), this);
+                            global::System.Threading.ExecutionContext.Run(context, static state =>
+                            {
+                                Perf03CountTrace.Hit("R5.L1258.context-run", "context.run");
+                                ((PendingTaskRunner)state!).ResumeCore();
+                            }, this);
                         }
                 }
 
@@ -1847,8 +1856,11 @@ namespace Competitive.Perf03.Counted
                         ResumeCore();
                     else
                         {
-                            Perf03CountTrace.Hit("R5.L1764.context-run", "context.run");
-                            global::System.Threading.ExecutionContext.Run(context, static state => ((PendingTaskRunner)state!).ResumeCore(), this);
+                            global::System.Threading.ExecutionContext.Run(context, static state =>
+                            {
+                                Perf03CountTrace.Hit("R5.L1764.context-run", "context.run");
+                                ((PendingTaskRunner)state!).ResumeCore();
+                            }, this);
                         }
                 }
 
@@ -2379,8 +2391,11 @@ namespace Competitive.Perf03.Counted
                         ResumeCore();
                     else
                         {
-                            Perf03CountTrace.Hit("R5.L2270.context-run", "context.run");
-                            global::System.Threading.ExecutionContext.Run(context, static state => ((PendingTaskRunner)state!).ResumeCore(), this);
+                            global::System.Threading.ExecutionContext.Run(context, static state =>
+                            {
+                                Perf03CountTrace.Hit("R5.L2270.context-run", "context.run");
+                                ((PendingTaskRunner)state!).ResumeCore();
+                            }, this);
                         }
                 }
 
@@ -3043,8 +3058,11 @@ namespace Competitive.Perf03.Counted
                         ResumeCore();
                     else
                         {
-                            Perf03CountTrace.Hit("R5.L2904.context-run", "context.run");
-                            global::System.Threading.ExecutionContext.Run(context, static state => ((PendingTaskRunner)state!).ResumeCore(), this);
+                            global::System.Threading.ExecutionContext.Run(context, static state =>
+                            {
+                                Perf03CountTrace.Hit("R5.L2904.context-run", "context.run");
+                                ((PendingTaskRunner)state!).ResumeCore();
+                            }, this);
                         }
                 }
 

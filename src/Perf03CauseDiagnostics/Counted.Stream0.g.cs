@@ -312,8 +312,11 @@ namespace Competitive.Perf03.Counted
                         ResumeCore();
                     else
                         {
-                            Perf03CountTrace.Hit("S0.L0307.context-run", "context.run");
-                            global::System.Threading.ExecutionContext.Run(context, static state => ((PendingTaskRunner)state!).ResumeCore(), this);
+                            global::System.Threading.ExecutionContext.Run(context, static state =>
+                            {
+                                Perf03CountTrace.Hit("S0.L0307.context-run", "context.run");
+                                ((PendingTaskRunner)state!).ResumeCore();
+                            }, this);
                         }
                 }
 
