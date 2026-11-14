@@ -228,13 +228,19 @@ internal sealed class Perf03CountTrace
         {
             Hit("unmapped-preflight-probe", "unmapped-preflight-probe");
         }
-        catch (InvalidOperationException) { unknown = true; }
+        catch (InvalidOperationException)
+        {
+            unknown = true;
+        }
         var known = Sites.First();
         try
         {
             Hit(known.Key, "mismatched-preflight-kind");
         }
-        catch (InvalidOperationException) { mismatch = true; }
+        catch (InvalidOperationException)
+        {
+            mismatch = true;
+        }
         if (!unknown || !mismatch || Snapshot().Events.Length != 0)
             throw new InvalidOperationException("Counted map rejection was not enforced.");
         return true;

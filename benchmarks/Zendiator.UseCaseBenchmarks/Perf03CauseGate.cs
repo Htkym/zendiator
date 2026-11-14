@@ -396,7 +396,10 @@ internal static class Perf03CauseGate
                 {
                     disposeAttempt = cursor.DisposeAsync();
                 }
-                catch (Exception error) { disposeError = error; }
+                catch (Exception error)
+                {
+                    disposeError = error;
+                }
                 if (disposeAttempt is { } attempt)
                 {
                     Require(attempt.IsCompleted, "Pending disposal did not reject immediately.");
@@ -404,7 +407,10 @@ internal static class Perf03CauseGate
                     {
                         attempt.GetAwaiter().GetResult();
                     }
-                    catch (Exception error) { disposeError = error; }
+                    catch (Exception error)
+                    {
+                        disposeError = error;
+                    }
                 }
                 Require(disposeError is InvalidOperationException,
                     "Selected candidate did not reject disposal during a pending Move.");
@@ -420,7 +426,10 @@ internal static class Perf03CauseGate
                         Require(awaiter.GetResult() && cursor.Current == 1, "Inline consumption lost the old item.");
                         next = Issue(cursor, pump);
                     }
-                    catch (Exception error) { callbackError = error; }
+                    catch (Exception error)
+                    {
+                        callbackError = error;
+                    }
                 });
                 pump.RunOne();
                 if (callbackError is not null)
@@ -431,7 +440,10 @@ internal static class Perf03CauseGate
                 Require(await next.ConfigureAwait(false) && cursor.Current == 2,
                     "Old publication damaged the next Move generation.");
             }
-            finally { await Close(cursor, pump).ConfigureAwait(false); }
+            finally
+            {
+                await Close(cursor, pump).ConfigureAwait(false);
+            }
         }
 
         async Task CheckInlineDisposal()
@@ -454,7 +466,10 @@ internal static class Perf03CauseGate
                         Require(awaiter.GetResult() && cursor.Current == 1, "Inline disposal lost the old result.");
                         disposal = cursor.DisposeAsync();
                     }
-                    catch (Exception error) { callbackError = error; }
+                    catch (Exception error)
+                    {
+                        callbackError = error;
+                    }
                 });
                 pump.RunOne();
                 if (callbackError is not null)
@@ -462,7 +477,10 @@ internal static class Perf03CauseGate
                 Require(entered, "Selected candidate disposal continuation was not inline.");
                 await disposal.ConfigureAwait(false);
             }
-            finally { await Close(cursor, pump).ConfigureAwait(false); }
+            finally
+            {
+                await Close(cursor, pump).ConfigureAwait(false);
+            }
         }
 
         async Task CheckInvalidatedValueTask()
@@ -481,13 +499,19 @@ internal static class Perf03CauseGate
                 {
                     old.GetAwaiter().GetResult();
                 }
-                catch (InvalidOperationException) { rejected = true; }
+                catch (InvalidOperationException)
+                {
+                    rejected = true;
+                }
                 Require(rejected, "Selected single issuer did not invalidate the old unconsumed ValueTask.");
                 pump.RunOne();
                 Require(await next.ConfigureAwait(false) && cursor.Current == 2,
                     "Rejected stale ValueTask damaged the next generation.");
             }
-            finally { await Close(cursor, pump).ConfigureAwait(false); }
+            finally
+            {
+                await Close(cursor, pump).ConfigureAwait(false);
+            }
         }
 
         async Task CheckDurableTask()
@@ -508,7 +532,10 @@ internal static class Perf03CauseGate
                 Require(await savedTask.ConfigureAwait(false) && await savedTask.ConfigureAwait(false),
                     "The already-created Task lost its durable result after source reuse.");
             }
-            finally { await Close(cursor, pump).ConfigureAwait(false); }
+            finally
+            {
+                await Close(cursor, pump).ConfigureAwait(false);
+            }
         }
     }
 

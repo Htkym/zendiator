@@ -118,7 +118,10 @@ internal static class Perf03RawPreflightGate
                     {
                         pump!.RunOne();
                     }
-                    finally { pumping = false; }
+                    finally
+                    {
+                        pumping = false;
+                    }
                     Require(inline && reentered.Task.IsCompleted, "Counted publication did not reenter inline.");
                     await reentered.Task.ConfigureAwait(false);
                     Require(followingIndex == 2 && following is not null && pump!.PendingCount == 1,

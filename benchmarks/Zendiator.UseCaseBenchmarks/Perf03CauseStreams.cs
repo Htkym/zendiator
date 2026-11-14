@@ -89,11 +89,26 @@ internal sealed class Perf03CauseSession : IDisposable
         relayRequest = new(count, asynchronous);
     }
 
-    internal bool Iterator { get; }
-    internal bool Live { get; }
-    internal bool Relay { get; }
-    internal int Count { get; }
-    internal bool Asynchronous { get; }
+    internal bool Iterator
+    {
+        get;
+    }
+    internal bool Live
+    {
+        get;
+    }
+    internal bool Relay
+    {
+        get;
+    }
+    internal int Count
+    {
+        get;
+    }
+    internal bool Asynchronous
+    {
+        get;
+    }
     internal CancellationToken ApiToken => cancellation?.Token ?? default;
     internal object Entry => (object?)named ?? iteratorEntry!;
     internal object ScopeIdentity => scope.ServiceProvider;
@@ -156,10 +171,16 @@ public abstract class Perf03CauseBenchmark(bool iterator, bool live, bool relay)
     private protected Perf03CauseSession Session { get; private set; } = null!;
 
     [Params(1024)]
-    public int Count { get; set; }
+    public int Count
+    {
+        get; set;
+    }
 
     [Params(false, true)]
-    public bool Asynchronous { get; set; }
+    public bool Asynchronous
+    {
+        get; set;
+    }
 
     [GlobalSetup]
     public void Setup()
