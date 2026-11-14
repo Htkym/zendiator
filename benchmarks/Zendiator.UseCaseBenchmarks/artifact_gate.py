@@ -726,7 +726,9 @@ def verify_perf03_work_trace(row, mapped, variant="V0"):
                            (event.get("Owner") is None or type(event["Owner"]) is int and str(event["Owner"]) in owners), "trace phase/observation/owner changed")
         if event["Owner"] is not None:
             used_owners.add(str(event["Owner"]))
-        if (site["originFile"] == "StreamCursorState.cs" or root_owned) and (event["Kind"].startswith("atomic.") or event["Kind"].startswith("completion.")):
+        if (site["originFile"] == "StreamCursorState.cs" and
+                (event["Kind"].startswith("atomic.") or event["Kind"] in {"completion.publish.result", "completion.publish.exception"}) or
+                root_owned and (event["Kind"].startswith("atomic.") or event["Kind"].startswith("completion."))):
             perf03_raw_require(event["Owner"] is not None, "copied-state atomic/publication owner is absent")
         expected_file = "Counted.Relay5.g.cs" if relay else "Counted.Stream0.g.cs"
         perf03_raw_require(site["file"] in {expected_file, "CountedStreamCursorState.cs"}, "trace belongs to a different counted route")

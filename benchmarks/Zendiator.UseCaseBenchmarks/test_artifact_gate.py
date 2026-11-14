@@ -1166,15 +1166,25 @@ class Perf03ArtifactGateContracts(SyntheticArtifactGateFixture):
             self.validate_perf03(row, attempt)
         self.assertFalse(self.gate_calls)
 
-    def test_changed_candidates_cannot_relabel_v0_counted_evidence(self):
+    def assert_candidate_cannot_relabel_v0_counted_evidence(self, variant):
         row, attempt = self.perf03_case()
-        for variant in ("VEC", "VEntry", "VRoot", "VWord"):
-            with self.subTest(variant=variant):
-                (self.diagnostics / "Perf03CauseVariant.cs").write_text(
-                    'internal const string Id = "' + variant + '";')
-                with self.assertRaisesRegex(ValueError, "candidate-specific counted|candidate counted binding"):
-                    self.validate_perf03(row, attempt)
+        (self.diagnostics / "Perf03CauseVariant.cs").write_text(
+            'internal const string Id = "' + variant + '";')
+        with self.assertRaisesRegex(ValueError, "candidate-specific counted|candidate counted binding"):
+            self.validate_perf03(row, attempt)
         self.assertFalse(self.gate_calls)
+
+    def test_vec_cannot_relabel_v0_counted_evidence(self):
+        self.assert_candidate_cannot_relabel_v0_counted_evidence("VEC")
+
+    def test_ventry_cannot_relabel_v0_counted_evidence(self):
+        self.assert_candidate_cannot_relabel_v0_counted_evidence("VEntry")
+
+    def test_vroot_cannot_relabel_v0_counted_evidence(self):
+        self.assert_candidate_cannot_relabel_v0_counted_evidence("VRoot")
+
+    def test_vword_cannot_relabel_v0_counted_evidence(self):
+        self.assert_candidate_cannot_relabel_v0_counted_evidence("VWord")
 
     def test_unknown_variant_is_not_a_candidate(self):
         row, attempt = self.perf03_case()
