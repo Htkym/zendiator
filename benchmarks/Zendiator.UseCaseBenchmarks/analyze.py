@@ -86,6 +86,7 @@ for group in MATRICES:
                     "MedianNs": stats.get("Median", ""),
                     "N": stats.get("N", ""),
                     "StdDevNs": stats.get("StandardDeviation", ""),
+                    "ConfidenceLevel": confidence.get("Level", ""),
                     "ConfidenceLowerNs": confidence.get("Lower", ""),
                     "ConfidenceUpperNs": confidence.get("Upper", ""),
                     "ConfidenceMarginNs": confidence.get("Margin", ""),
@@ -96,7 +97,7 @@ for group in MATRICES:
 rows.sort(key=lambda row: (row["Group"], row["Project"], row["Type"], row["Method"], row["Lifetime"], str(row["Count"]), str(row["Asynchronous"])))
 with filesystem_path(OUTPUT / "all-results.csv").open("w", encoding="utf-8", newline="") as output:
     writer = csv.DictWriter(output, fieldnames=("Group", *FIELDS, "MeanNs", "MedianNs", "N", "StdDevNs",
-                                              "ConfidenceLowerNs", "ConfidenceUpperNs", "ConfidenceMarginNs", "AllocatedBytes"))
+                                              "ConfidenceLevel", "ConfidenceLowerNs", "ConfidenceUpperNs", "ConfidenceMarginNs", "AllocatedBytes"))
     writer.writeheader()
     writer.writerows(rows)
 

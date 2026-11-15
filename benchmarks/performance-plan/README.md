@@ -150,14 +150,49 @@ Notification16, synchronous Stream5 Full, ShortCircuit, all three Hook cases and
 Send5 FirstSend. Use this same selection for the controlled PERF-01 comparison;
 the full baseline alone does not establish the change's improvement.
 
-The current driver selects projects from one immutable source revision. It
-does not yet alternate baseline and candidate revisions in one controlled run.
-Prepare that comparison protocol before implementing PERF-01; two independent
-baseline/candidate runs must not be described as a controlled gain.
+### Controlled revision comparison
+
+`run_ab.py` prepares both clean, immutable short worktrees before timing, then
+calls each worktree's own `run_interleaved.py` worker for one case at a time.
+Benchmark sources, matrices, package locks, project/build files and SDK inputs
+must have identical Git blobs; LF/CRLF checkout differences are allowed, while
+each side retains its immutable working-byte digest. Product source revisions
+may differ. Commit the common
+measurement infrastructure before branching the performance candidate. Keep
+both worktrees fixed until the block and its retained-artifact checks finish.
+The A/B controller currently requires Windows nested Job containment; the
+single-revision driver retains its existing platform support.
 
 ```powershell
-python benchmarks/Zendiator.UseCaseBenchmarks/run_interleaved.py --group custom --matrix benchmarks/performance-plan/perf-01.json --output D:/z3/o/perf-01-baseline --expect-sdk 10.0.404
+$baselineCommit = git -C D:/z3/r0 rev-parse HEAD
+$candidateCommit = git -C D:/z3/r1 rev-parse HEAD
+python benchmarks/Zendiator.UseCaseBenchmarks/run_ab.py --baseline D:/z3/r0 --candidate D:/z3/r1 --baseline-sha $baselineCommit --candidate-sha $candidateCommit --matrix benchmarks/performance-plan/perf-01.json --output D:/z3/o/perf-01-forward --expect-sdk 10.0.404
 ```
+
+Use `worker-smoke.json` with two worktrees at the same revision to validate the
+worker phases and actual A/B artifact bindings before comparing a candidate.
+This single-cell matrix is a harness check; use the task matrix for adoption.
+Cases stay grouped by the existing comparison key. Baseline/candidate results
+are adjacent, and the first side alternates by key and member. The retained
+parent plan and UTC/monotonic step records prove the actual serial order. Each
+side keeps its own session, strict per-case DLL identities, complete measured
+consumer bundles and saved-consumer gates. `comparison.json` preserves BDN's
+confidence level, effective N, bounds and allocation values. Disjoint intervals
+are classified as improvement or regression; overlapping intervals are labelled
+`overlap`. Ratios are point estimates. No task-specific adoption is automated.
+
+Declare reverse-run conditions before timing: use a reverse block if an unchanged
+peer control has disjoint A/B intervals, an adoption boundary remains unresolved,
+or the apparent outcome depends on which side runs first. Add `--reverse` with
+a new `--output`; it completely reverses the forward schedule, including side
+order. Keep both blocks separate, report disagreement as unresolved, and do not
+pool them or select whichever block is favorable. Two independent whole-revision
+runs do not establish a controlled gain.
+
+Resume with the same command plus `--resume` only when completed step records form
+an unchanged prefix and all owned processes are verified terminated. A running
+or uncertain step, an unrecorded result, or incomplete preparation blocks resume;
+retain the evidence and use a new output after resolving the cause.
 
 At the requested 500 ms, 20 warmups plus 12 measurements amount to about 33
 minutes of nominal iteration time for 122 cells and four minutes for 15 cells.
@@ -173,7 +208,7 @@ current 10.0.x SDK supplies that runtime; the repository still selects SDK
 10.0.404. Build the supplemental projects with
 `-p:ZendiatorFormalMeasurement=true`, then set `COLD_RUN` to an unused runner-temp
 directory for each `dotnet <project>/bin/Release/net10.0/<project>.dll --validate-only`.
-The new CI steps still need to be exercised after local compilation succeeds.
+
 
 Judge time and allocation separately. A fastest claim requires the lowest mean
 and a confidence interval that does not overlap the runner-up; overlap is
