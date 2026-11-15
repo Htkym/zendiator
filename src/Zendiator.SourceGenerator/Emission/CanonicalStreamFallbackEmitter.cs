@@ -368,7 +368,8 @@ internal static class CanonicalStreamFallbackEmitter
         CanonicalStreamFallbackSegment segment, BoundAsyncFactoryEmission? factory, string receiver, bool referenceSource)
     {
         var h = model.Handler;
-        b.AppendLine("_services.GetService(typeof(global::System.IServiceProvider));");
+        if (segment.Id == model.ConsumerSegment)
+            b.AppendLine("_services.GetService(typeof(global::System.IServiceProvider));");
         if (segment.Id == model.ConsumerSegment && model.StreamBefore.Count != 0)
         {
             for (var i = 0; i < model.StreamBefore.Count; i++)
