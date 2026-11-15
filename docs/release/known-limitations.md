@@ -1,17 +1,23 @@
-# Known limitations for 0.5.0
+# Known limitations for 0.6.0
 
-0.5.0 changes the handler, composition and Stream contracts.
+This page describes Zendiator 0.6.0. The handler marker and standard typed Stream
+middleware changed in this release; see the
+[0.6.0 release notes](0.6.0-release-notes.md).
 Start with [getting started](../getting-started-0.5.0.md) and the
-[Stream migration guide](../streaming-0.5.0.ja.md). Historical 0.4.0 APIs and results
+[Stream migration guide](../migrating-stream-upstream.md). Historical 0.4.0 APIs and results
 are described in the [0.4.0 release notes](0.4.0-release-notes.md); they are not
-compatibility promises for 0.5.0.
+compatibility promises for 0.6.0.
 
 ## Dependency capture and lifetime
 
-Each Mediator lazily captures the first published successful resolution of each
-dependency type, including Transient services and implementation factories. A new
-send, retry or route does not imply a new instance. Native DI still constructs and
-disposes these objects and controls Scoped or Singleton sharing.
+Each Mediator reuses captured dependencies, including Transient services and
+implementation factories. Eligible closed asynchronous Hook routes capture a
+route-local set; the synchronous-Before-only fast path and other excluded routes
+retain per-dependency capture. A new send or retry does not imply a new instance,
+while the same Transient type can differ between route sets. See the
+[capture rules](../getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)
+before relying on shared identity or constructor timing. Native DI still
+constructs and disposes these objects and controls Scoped or Singleton sharing.
 
 Concurrent first resolutions can activate several Transients. Successful callers
 use the publication winner; losing objects remain DI-owned. A resolution failure
@@ -124,8 +130,8 @@ showed lower time and allocation in that workload. Synchronous-completion and Ea
 intervals still included no improvement; Early accepted its first input. These results
 do not establish gains for a pending source, five middleware stages, real I/O or HTTP.
 
-The [README comparison](../../README.md#performance) reports selected workloads
-from the measured 0.5.0 candidate, including unfavorable time and allocation
+The [README comparison](../../README.md#performance) identifies its measured
+0.6.0-preparation source and raw results, including unfavorable time and allocation
 results. Historical 0.4.0 tables and other limited comparisons are separate evidence. Results from different source versions or
 protocols must not be combined into a single-version ranking. The native Zendiator
 cursor and competitors' compiler iterators are part of their complete product
