@@ -1,5 +1,45 @@
 # Post-0.6.0 measurements
 
+## Disposition as of 2026-11-15
+
+The development stack is merged. [0.7.0 remains unreleased](../../docs/release/0.7.0-release-notes.md);
+[0.6.0](https://github.com/Htkym/zendiator/releases/tag/v0.6.0) is the latest
+published release. The setup sections below preserve their original preparation
+scope, including statements that results or adoption had not yet been recorded.
+The later dispositions are:
+
+- **PERF-01:** adopted route-local synchronous Before capture. The
+  [complete forward/reverse results and decision](../results/20261113-ca465fc-perf-01.md)
+  and [PR #23](https://github.com/Htkym/zendiator/pull/23) retain the accepted
+  non-regression exception.
+- **PERF-02a:** adopted the dedicated initial root scope probe with the observable
+  lifetime tradeoff described in the [release notes](../../docs/release/0.7.0-release-notes.md#guarded-stream-scope-initialization).
+  [PR #24](https://github.com/Htkym/zendiator/pull/24) preserves the separate
+  experiments, earlier regressions and allocation increases. This is not a
+  strict non-regression or allocation-gate pass.
+- **PERF-02b/c and the PERF-03 product VRoot candidate:** not adopted.
+  [PR #26](https://github.com/Htkym/zendiator/pull/26) retains diagnostic
+  infrastructure and regression gates, not those product optimizations.
+  Instrumented diagnostics do not establish a timed pending fraction or
+  ns-per-pending result.
+- **PERF-04:** completed as an input-series comparison at measured revision
+  `3675e5894355a63b63dd4d8ca14a405749ba4000`, with 61 cases in each of the
+  separate forward/reverse orders and 122 saved-child validations.
+  [PR #27](https://github.com/Htkym/zendiator/pull/27) summarizes the results and
+  their limits. Public `IteratorStream5.Full`, Count 1024, async, improved time
+  against the named input in both orders but allocated 1,849 B/op against the
+  same-run peer minimum of 1,754 B/op: the allocation target missed by 95 B/op.
+  Synchronous Iterator Stream5/Relay5 Full cases regressed and allocated 96 B/op
+  more; the processing-matched async Iterator Relay5 ranked fifth in both orders.
+  Generated-pooled rows remain explicit named-cursor helper comparisons, not
+  pooled compiler iterators. No Runtime optimization, uniform input replacement,
+  default pooling or Flat contract change was adopted by this comparison.
+
+The original strict performance goals remain unmet. Ordinary CI and local
+semantic checks on later heads do not replace these historical measurements or
+saved-consumer validations. PR links above index summaries and decisions; their
+referenced local raw artifacts are not included in this repository.
+
 ## Fixed conditions
 
 The new baseline uses SDK 10.0.404, .NET runtime 10.0.14 x64, workstation GC,
