@@ -111,7 +111,7 @@ and an independent `Zendiator` registration does not override `IZendiator`.
 Replace concrete-type resolution or injection with `IZendiator`. For a custom
 factory, change `AddScoped<Zendiator>(...)` to `AddScoped<IZendiator>(...)` before
 `AddZendiator()`; the generated `TryAdd` registration preserves it. See the
-[registration example](../README.md#usage). Apply the same change for Singleton or
+[registration example](../README.md#quick-start). Apply the same change for Singleton or
 Transient factories. Direct `new Zendiator(provider)` remains supported; DI owns
 the dependencies it creates.
 

@@ -2,7 +2,7 @@
 
 ## Disposition as of 2026-11-15
 
-The development stack is merged. [0.7.0 remains unreleased](../../docs/release/0.7.0-release-notes.md);
+[0.7.0 remains unreleased](../../docs/release/0.7.0-release-notes.md);
 [0.6.0](https://github.com/Htkym/zendiator/releases/tag/v0.6.0) is the latest
 published release. The setup sections below preserve their original preparation
 scope, including statements that results or adoption had not yet been recorded.
@@ -205,12 +205,11 @@ root startup, deferred inner opening/reopening, StreamBefore revalidation and
 DI ownership. One initial root probe does not mean one total probe for routes
 with StreamBefore callbacks. No PERF-02a measurements or adoption are recorded here.
 
-Commit this matrix and measurement documentation before the step-a code change.
-Use that infrastructure-only commit as the baseline and the later product commit
-as the candidate, with identical controls in the controller and both worktrees.
-This two-commit sequence can stay in one PERF-02a PR without changing its parent
-PR. Choose and freeze the product parent after PERF-01's adoption decision; this
-matrix does not adopt PERF-01.
+Commit the matrix and measurement documentation before the step-a code change,
+then freeze that infrastructure-only revision as the baseline and the later
+product revision as the candidate. Keep identical controls in the controller and
+both worktrees. Select the product baseline after PERF-01's separate adoption
+decision; the matrix alone does not adopt PERF-01.
 
 ### Controlled revision comparison
 
