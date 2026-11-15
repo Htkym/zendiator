@@ -1226,5 +1226,305 @@ class CandidateSourcePatchContractTests(unittest.TestCase):
             apply_source_patch(patch, {"A.cs": "old\n"})
 
 
+class FoundatioPerf04ArtifactGateContracts(SyntheticArtifactGateFixture):
+    consumer = "FoundatioReleaseComparison"
+
+    def setUp(self):
+        super().setUp()
+        names = ("ArtifactGate.cs", "ArtifactEvidence.cs", "ChildEvidence.cs", "BenchmarkGate.cs",
+                 "MeasurementProgram.cs", "RuntimeEvidence.cs", "FoundatioPerf04Cases.cs",
+                 "FoundatioSemanticValidation.cs", "FoundatioSemanticSnapshot.cs")
+        for name in names:
+            (self.project / name).write_text("synthetic Foundatio implementation: " + name)
+        self.enterContext(patch.object(gate, "implementation_files",
+                                      return_value={name: self.project / name for name in names}))
+        name = "Foundatio.Mediator.Abstractions"
+        path = self.binaries / (name + ".dll")
+        path.write_text("synthetic Foundatio binding")
+        self.loads.append(dict(name=name, fullName=name + ", Version=1.0.0.0", path=str(path),
+                               mvid=str(uuid.uuid4()), sha256=gate.sha(path)))
+
+    def mocked_foundatio_gate(self, args, log, env, cwd):
+        self.mocked_gate(args, log, env, cwd)
+        request = gate.read(Path(args[-1]))
+        proof_path = Path(request["output"]) / "artifact-proof.json"
+        proof = gate.read(proof_path)
+        rows = [dict(status="Passed", suite="foundatio", type="Competitive.FoundatioRelease." + name,
+                     method=method, parameters=dict(Lifetime="Scoped")) for name, method in (
+                         ("FoundatioSend0", "Typed"), ("FoundatioSend5", "Typed"), ("FoundatioSend0", "ResolveSend"),
+                         ("FoundatioSend5", "ResolveSend"), ("FoundatioSend5", "ScopeK1"))]
+        rows.append(dict(status="Passed", suite="foundatio", type="Competitive.FoundatioRelease.FoundatioNotification16",
+                         method="Dispatch", parameters={}))
+        for asynchronous in (False, True):
+            for name in ("FoundatioStream5", "FoundatioRelay5"):
+                for method, count in (("Full", 1024), ("EarlyBreak", 16)):
+                    rows.append(dict(status="Passed", suite="foundatio", type="Competitive.FoundatioRelease." + name,
+                                     method=method, parameters=dict(Count=count, Asynchronous=asynchronous)))
+        rows.extend(dict(status="Passed", suite="foundatio", type="Competitive.FoundatioRelease." + name, method=method,
+                         parameters=dict(Count=count, Asynchronous=asynchronous)) for name, method, count, asynchronous in (
+                             ("FoundatioStream0", "Full", 1024, True), ("FoundatioStream0", "EarlyBreak", 16, False),
+                             ("FoundatioIteratorStream5", "Full", 1024, True), ("FoundatioIteratorRelay5", "Full", 1024, True)))
+        gate.write(proof_path.parent / "correctness.json", rows)
+        proof.update(benchmarkGateCases=18, correctnessSha256=gate.sha(proof_path.parent / "correctness.json"))
+        files = gate.tree_hashes(proof_path.parent)
+        files.pop("artifact-proof.json")
+        proof["semanticFiles"] = files
+        gate.write(proof_path, proof)
+
+    def test_foundatio_cached_proof_requires_complete_set_in_both_alias_directions(self):
+        aliases = ("FoundatioIteratorStream5", "FoundatioIteratorRelay5")
+        for direction, order in enumerate((aliases, aliases[::-1])):
+            with self.subTest(order=order):
+                for ordinal, name in enumerate(order, 1):
+                    row, attempt = self.case(ordinal, type=name, method="Full", project="foundatio",
+                                             results=self.root / ("cache-direction-" + str(direction)))
+                    row["Library"] = "Foundatio"
+                    row["Case"].update(Count=1024, Asynchronous=True)
+                    result = gate.ensure_artifact_gate(row, attempt, self.session, self.project, self.mocked_foundatio_gate, lambda: {})
+                    self.assertEqual(result["proofReused"], ordinal == 2)
+                    self.assertEqual(gate.check_artifact_binding(row, attempt, self.session, self.project), result)
+                binding_path = attempt / "artifact-binding.json"
+                binding = gate.read(binding_path)
+                proof_path = Path(binding["proofPath"])
+                proof = gate.read(proof_path)
+                outcomes = proof_path.parent / "correctness.json"
+                original_rows = gate.read(outcomes)
+                for missing in aliases:
+                    rows = copy.deepcopy(original_rows)
+                    next(item for item in rows if item["type"].endswith("." + missing))["type"] = "Competitive.FoundatioRelease.UnmeasuredAlias"
+                    gate.write(outcomes, rows)
+                    proof["correctnessSha256"] = gate.sha(outcomes)
+                    proof["semanticFiles"]["correctness.json"] = gate.sha(outcomes)
+                    gate.write(proof_path, proof)
+                    binding["proofSha256"] = gate.sha(proof_path)
+                    gate.write(binding_path, binding)
+                    # Both the cached original request and current request require the whole set.
+                    with self.assertRaisesRegex(ValueError, "exact unique 18-case"):
+                        gate.verify_gate(Path(binding["gateRequestPath"]), proof_path)
+                    with self.assertRaisesRegex(ValueError, "exact unique 18-case"):
+                        gate.check_artifact_binding(row, attempt, self.session, self.project)
+
+    def test_foundatio_aliases_require_eighteen_rows_and_exact_measured_identity(self):
+        for ordinal, name in enumerate(("FoundatioIteratorStream5", "FoundatioIteratorRelay5"), 1):
+            row, attempt = self.case(ordinal, type=name, method="Full", project="foundatio",
+                                     results=self.root / ("foundatio-" + str(ordinal)))
+            row["Library"] = "Foundatio"
+            row["Case"].update(Count=1024, Asynchronous=True)
+            result = gate.ensure_artifact_gate(row, attempt, self.session, self.project, self.mocked_foundatio_gate, lambda: {})
+            self.assertEqual(gate.check_artifact_binding(row, attempt, self.session, self.project), result)
+            binding = gate.read(attempt / "artifact-binding.json")
+            request_path = Path(binding["gateRequestPath"])
+            proof_path = Path(binding["proofPath"])
+            outcomes_path = proof_path.parent / "correctness.json"
+            original_proof, original_rows = gate.read(proof_path), gate.read(outcomes_path)
+            index = 15 + ordinal
+            for mutation in ("old16", "wrong-type", "wrong-method", "wrong-count", "wrong-async", "wrong-namespace",
+                             "unknown-legacy", "duplicate-legacy", "missing-legacy", "wrong-legacy-parameter", "boolean-as-int", "usecase-metadata"):
+                with self.subTest(alias=name, mutation=mutation):
+                    proof, rows = copy.deepcopy(original_proof), copy.deepcopy(original_rows)
+                    if mutation == "old16":
+                        rows = rows[:16]
+                        proof["benchmarkGateCases"] = 16
+                    elif mutation == "wrong-type":
+                        rows[index]["type"] = "Competitive.FoundatioRelease.FoundatioStream5"
+                    elif mutation == "wrong-method":
+                        rows[index]["method"] = "EarlyBreak"
+                    elif mutation == "wrong-count":
+                        rows[index]["parameters"]["Count"] = 16
+                    elif mutation == "wrong-async":
+                        rows[index]["parameters"]["Asynchronous"] = False
+                    elif mutation == "wrong-namespace":
+                        rows[0]["type"] = rows[0]["type"].replace("Competitive.FoundatioRelease", "Untrusted.Namespace")
+                    elif mutation == "unknown-legacy":
+                        rows[0]["type"] = "Competitive.FoundatioRelease.UnmeasuredLegacy"
+                    elif mutation == "duplicate-legacy":
+                        rows[0] = copy.deepcopy(rows[1])
+                    elif mutation == "missing-legacy":
+                        rows.pop(0)
+                    elif mutation == "wrong-legacy-parameter":
+                        rows[0]["parameters"]["Lifetime"] = "Transient"
+                    elif mutation == "boolean-as-int":
+                        rows[index]["parameters"]["Asynchronous"] = 1
+                    else:
+                        proof["perf04InputGate"] = {}
+                    gate.write(outcomes_path, rows)
+                    proof["correctnessSha256"] = gate.sha(outcomes_path)
+                    proof["semanticFiles"]["correctness.json"] = gate.sha(outcomes_path)
+                    gate.write(proof_path, proof)
+                    with self.assertRaisesRegex(ValueError, "incomplete|semantic gate|does not cover|PERF04"):
+                        gate.verify_gate(request_path, proof_path)
+            gate.write(outcomes_path, original_rows)
+            gate.write(proof_path, original_proof)
+
+
+class Perf04ArtifactGateContracts(SyntheticArtifactGateFixture):
+    def setUp(self):
+        super().setUp()
+        for name in gate.PERF04_SOURCES:
+            (self.project / name).write_text("synthetic PERF04 source " + name)
+
+    def perf04_case(self, ordinal=1, pid=111, name="ZendiatorGeneratedPooledStream0", method="Full"):
+        row, attempt = self.case(ordinal, type=name, pid=pid, method=method)
+        row["Case"].update(Count=16 if method.startswith("EarlyBreak") else 1024, Asynchronous=True)
+        return row, attempt
+
+    def mocked_perf04_gate(self, args, log, env, cwd):
+        self.mocked_gate(args, log, env, cwd)
+        request = gate.read(Path(args[-1]))
+        proof_path = Path(request["output"]) / "artifact-proof.json"
+        proof = gate.read(proof_path)
+        rows = []
+        for name in gate.perf04_case_set():
+            typed = name.startswith("Zendiator")
+            input_name = "GeneratedPooled" if "GeneratedPooled" in name else "Iterator"
+            family = next(route for route in ("Stream0", "Stream5", "Relay5") if name.endswith(route))
+            behaviors = 0 if family == "Stream0" else 5
+            correctness = [dict(library=name, suite="Stream", behaviors=behaviors, count=count, asynchronous=asynchronous,
+                                streamProtocol="native-typed-pull-v1" if typed else "historical-enumerable", status="Passed")
+                           for count, asynchronous in itertools.product((0, 1, 16, 1024), (False, True))]
+            if family == "Relay5":
+                correctness.append(dict(library="Zendiator" if typed else name, suite="RelayTiming", behaviors=5,
+                                        eventsAtCreation=0, eventsAtEnumerator=0, eventsAtFirstMove=5,
+                                        failureStage="move-await", status="Passed"))
+            methods = ("Full", "EarlyBreak", "FullTyped", "EarlyBreakTyped") if typed else ("Full", "EarlyBreak")
+            measured = [dict(method=method, count=16 if method.startswith("EarlyBreak") else 1024,
+                             asynchronous=asynchronous, result=0 if method.startswith("EarlyBreak") else 523776, status="Passed")
+                        for method, asynchronous in itertools.product(methods, (False, True))]
+            rows.append(dict(type=name, input=input_name, family=family, behaviors=behaviors,
+                             producerRepresentation="generated-pooled-named-cursor" if typed and input_name == "GeneratedPooled"
+                             else "compiler-async-iterator", correctness=correctness, typedTerminal=typed,
+                             completedProtocols=gate.perf04_completed_protocols(name), measuredConsumers=measured, status="Passed"))
+        core = next(item["fullName"] for item in request["expectedAssemblies"] if item["name"] == "System.Private.CoreLib")
+        pooled = dict(producerType="Competitive.Perf04GeneratedWorkStreamCursor", originalMethod="MovePendingAsync",
+                      generatedHelper="__ZendiatorPooled_synthetic", interceptorType="Zendiator.Generated.Interceptors.PooledProducer_synthetic",
+                      interceptorMethod="Intercept", callSite="MoveNextAsync", sourceAttribute="Zendiator.GeneratePooledProducerAttribute",
+                      builderType="System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder`1[[System.Boolean, " + core + "]]",
+                      originalBuilderType="System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder`1[[System.Boolean, " + core + "]]",
+                      callSiteIntercepted=True, helperIsPooled=True, manualBuilderAttribute=False, forcedPending=True,
+                      singleConsumption=True, sequentialMoves=2, moveResultsConsumed=2, items=2, disposals=1,
+                      consumerAssemblySha256=gate.sha(request["consumerPath"]), status="Passed")
+        evidence = dict(schemaVersion=1, protocol=gate.PERF04_PROTOCOL,
+                        implementationSha256=request["perf04InputGateImplementationSha256"],
+                        caseSet=gate.perf04_case_set(), cases=rows, generatedPooledProof=pooled, status="Passed")
+        evidence_path = proof_path.parent / "perf04-input/perf04-input.json"
+        gate.write(evidence_path, evidence)
+        proof.update({name: request[name] for name in gate.PERF04_FIELDS})
+        proof["perf04InputGate"] = dict(schemaVersion=1, protocol=gate.PERF04_PROTOCOL,
+                                        implementationSha256=evidence["implementationSha256"], caseSet=evidence["caseSet"],
+                                        evidencePath="perf04-input/perf04-input.json", evidenceSha256=gate.sha(evidence_path))
+        gate.write(proof_path, proof)
+
+    def validate_perf04(self, row, attempt):
+        return gate.ensure_artifact_gate(row, attempt, self.session, self.project, self.mocked_perf04_gate, lambda: {})
+
+    def test_saved_consumer_binding_replay_cache_and_competitor_alias(self):
+        row, attempt = self.perf04_case()
+        result = self.validate_perf04(row, attempt)
+        self.assertFalse(result["proofReused"])
+        self.assertEqual(gate.check_artifact_binding(row, attempt, self.session, self.project), result)
+        request = gate.read(attempt / "artifact-gate-request.json")
+        self.assertEqual(len(request["perf04InputCaseSet"]), 14)
+        self.assertEqual(gate.digest(request["perf04InputSourceFiles"]), request["perf04InputGateImplementationSha256"])
+        row2, attempt2 = self.perf04_case(2, 222, "MediatRHistoricalIteratorRelay5", "EarlyBreak")
+        self.assertTrue(self.validate_perf04(row2, attempt2)["proofReused"])
+        self.assertEqual(len(self.gate_calls), 1)
+        gate.check_artifact_binding(row2, attempt2, self.session, self.project)
+        (self.project / "Perf04GeneratedProducer.cs").write_text("changed source")
+        with self.assertRaisesRegex(ValueError, "PERF04 saved source"):
+            gate.check_artifact_binding(row, attempt, self.session, self.project)
+        row3, attempt3 = self.perf04_case(3, 333)
+        self.assertFalse(self.validate_perf04(row3, attempt3)["proofReused"])
+
+    def test_selected_identity_rejects_wrong_method_parameters_and_project(self):
+        case = dict(Type="ZendiatorIteratorStream0", Method="Full", Count=1024, Asynchronous=True)
+        self.assertTrue(gate.perf04_selected(case))
+        self.assertFalse(gate.perf04_selected(dict(Type="ZendiatorStream0")))
+        for mutation in (dict(Type="ZendiatorIteratorStream1"), dict(Type="MediatRHistoricalIteratorStream0"),
+                         dict(Type="MediatorGeneratedPooledStream5"), dict(Method="Dispatch"), dict(Count=True),
+                         dict(Count=16), dict(Asynchronous=1), dict(Project="short"), dict(Lifetime="Scoped")):
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, "PERF04 case"):
+                gate.perf04_selected(dict(case, **mutation))
+
+    def test_old_only_proof_or_absent_metadata_is_rejected(self):
+        row, attempt = self.perf04_case()
+        with self.assertRaisesRegex(ValueError, "PERF04"):
+            gate.ensure_artifact_gate(row, attempt, self.session, self.project, self.mocked_gate, lambda: {})
+
+    def test_replay_rejects_removed_new_gate_even_with_updated_outer_hashes(self):
+        row, attempt = self.perf04_case()
+        self.validate_perf04(row, attempt)
+        proof_path = attempt / "artifact-gate/artifact-proof.json"
+        proof = gate.read(proof_path)
+        binding_path = attempt / "artifact-binding.json"
+        binding = gate.read(binding_path)
+        for field in (*gate.PERF04_FIELDS, "perf04InputGate"):
+            with self.subTest(field=field):
+                altered = copy.deepcopy(proof)
+                altered.pop(field)
+                gate.write(proof_path, altered)
+                gate.write(binding_path, dict(binding, proofSha256=gate.sha(proof_path)))
+                with self.assertRaisesRegex(ValueError, "PERF04"):
+                    gate.check_artifact_binding(row, attempt, self.session, self.project)
+
+    def test_unrelated_case_rejects_attached_perf04_fields(self):
+        row, attempt = self.case()
+        self.validate(row, attempt)
+        request_path = attempt / "artifact-gate-request.json"
+        proof_path = attempt / "artifact-gate/artifact-proof.json"
+        proof = gate.read(proof_path)
+        for field in (*gate.PERF04_FIELDS, "perf04InputGate"):
+            with self.subTest(field=field):
+                gate.write(proof_path, dict(proof, **{field: {}}))
+                with self.assertRaisesRegex(ValueError, "PERF04.*unrelated"):
+                    gate.verify_gate(request_path, proof_path)
+
+    def test_missing_malformed_stale_and_tampered_semantic_proofs_are_rejected(self):
+        row, attempt = self.perf04_case()
+        self.validate_perf04(row, attempt)
+        request_path = attempt / "artifact-gate-request.json"
+        proof_path = attempt / "artifact-gate/artifact-proof.json"
+        evidence_path = proof_path.parent / "perf04-input/perf04-input.json"
+        proof, evidence = gate.read(proof_path), gate.read(evidence_path)
+        mutations = (
+            lambda x: x.update(protocol="old"),
+            lambda x: x.update(implementationSha256="A" * 64),
+            lambda x: x["caseSet"].pop(),
+            lambda x: x["cases"].pop(),
+            lambda x: x["cases"].__setitem__(0, x["cases"][1]),
+            lambda x: x["cases"][0]["completedProtocols"].pop(),
+            lambda x: x["cases"][0]["correctness"][0].update(count=999),
+            lambda x: x["cases"][0]["measuredConsumers"][0].update(result=7),
+            lambda x: x["cases"][0]["measuredConsumers"].pop(),
+            lambda x: x.pop("generatedPooledProof"),
+            lambda x: x["generatedPooledProof"].update(callSiteIntercepted=False),
+            lambda x: x["generatedPooledProof"].update(manualBuilderAttribute=True),
+            lambda x: x["generatedPooledProof"].update(consumerAssemblySha256="A" * 64),
+            lambda x: x["generatedPooledProof"].update(builderType="AsyncTaskMethodBuilder"),
+            lambda x: x["generatedPooledProof"].update(singleConsumption=1),
+        )
+        for index, mutate in enumerate(mutations):
+            with self.subTest(index=index):
+                altered = copy.deepcopy(evidence)
+                mutate(altered)
+                gate.write(evidence_path, altered)
+                changed = copy.deepcopy(proof)
+                changed["perf04InputGate"]["evidenceSha256"] = gate.sha(evidence_path)
+                gate.write(proof_path, changed)
+                with self.assertRaisesRegex(ValueError, "PERF04"):
+                    gate.verify_gate(request_path, proof_path)
+        gate.write(proof_path, proof)
+        for contents in ("{}", "not JSON"):
+            with self.subTest(contents=contents):
+                evidence_path.write_text(contents)
+                changed = copy.deepcopy(proof)
+                changed["perf04InputGate"]["evidenceSha256"] = gate.sha(evidence_path)
+                gate.write(proof_path, changed)
+                with self.assertRaisesRegex(ValueError, "PERF04"):
+                    gate.verify_gate(request_path, proof_path)
+        evidence_path.unlink()
+        with self.assertRaisesRegex(ValueError, "PERF04"):
+            gate.verify_gate(request_path, proof_path)
+
+
 if __name__ == "__main__":
     unittest.main()

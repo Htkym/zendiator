@@ -6,7 +6,7 @@ namespace Competitive;
 internal static class BenchmarkGate
 {
     internal const string Suite = "foundatio";
-    internal const int ExpectedCases = 16;
+    internal const int ExpectedCases = 18;
 
     internal static async Task Run(string output, string? runtimeConfig = null, string? deps = null)
     {
@@ -43,8 +43,12 @@ internal static class BenchmarkGate
         }
         Add(nameof(FoundatioStream0), "Full", StreamParameters(1024, true));
         Add(nameof(FoundatioStream0), "EarlyBreak", StreamParameters(16, false));
-        if (rows.Count != ExpectedCases)
+        if (rows.Count != 16)
             throw new InvalidOperationException("Foundatio baseline gate case selection changed.");
+        Add(nameof(FoundatioIteratorStream5), "Full", StreamParameters(1024, true));
+        Add(nameof(FoundatioIteratorRelay5), "Full", StreamParameters(1024, true));
+        if (rows.Count != ExpectedCases)
+            throw new InvalidOperationException("Foundatio PERF-04 gate case selection changed.");
 
         Directory.CreateDirectory(output);
         ArtifactEvidence.Write(Path.Combine(output, "semantic-details.json"), details);

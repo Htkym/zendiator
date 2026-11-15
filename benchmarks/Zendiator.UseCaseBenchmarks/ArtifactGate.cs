@@ -13,7 +13,9 @@ internal sealed record ArtifactGateRequest(string Protocol, string Session, stri
     string BenchmarkSuite = "usecase", int BenchmarkGateCases = 389,
     string? Perf03CauseGateImplementationSha256 = null, string? Perf03CauseVariant = null,
     JsonElement? Perf03CauseCaseSet = null, Dictionary<string, string>? Perf03CauseSourceFiles = null,
-    JsonElement? Perf03CauseVariantMetadata = null);
+    JsonElement? Perf03CauseVariantMetadata = null,
+    string? Perf04InputGateImplementationSha256 = null, string[]? Perf04InputCaseSet = null,
+    Dictionary<string, string>? Perf04InputSourceFiles = null);
 
 internal static class ArtifactGate
 {
@@ -31,6 +33,9 @@ internal static class ArtifactGate
             request.ExpectedAssemblies.Select(a => a.Name).Distinct(StringComparer.Ordinal).Count() != request.ExpectedAssemblies.Length)
             throw new InvalidOperationException("Invalid artifact gate identity");
 #if SUPPLEMENTAL_BENCHMARK
+        if (request.Perf04InputGateImplementationSha256 is not null || request.Perf04InputCaseSet is not null ||
+            request.Perf04InputSourceFiles is not null)
+            throw new InvalidOperationException("PERF-04 input gate requires the original use-case consumer");
         if (request.Perf03CauseGateImplementationSha256 is not null || request.Perf03CauseVariant is not null ||
             request.Perf03CauseCaseSet is not null || request.Perf03CauseSourceFiles is not null || request.Perf03CauseVariantMetadata is not null)
             throw new InvalidOperationException("PERF-03 diagnostics require the original use-case consumer");
@@ -42,6 +47,7 @@ internal static class ArtifactGate
             request.StructUpstreamGateImplementationSha256.Any(c => !(c is >= '0' and <= '9' or >= 'A' and <= 'F')))
             throw new InvalidOperationException("Invalid use-case artifact gate identity");
         var perf03Requested = CheckPerf03CauseIdentity(request);
+        var perf04Requested = CheckPerf04InputIdentity(request);
 #endif
         var attempt = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(requestPath))!;
         if (!ArtifactEvidence.SamePath(request.BundleRoot, System.IO.Path.Combine(attempt, "bundle")) ||
@@ -62,6 +68,8 @@ internal static class ArtifactGate
 #if !SUPPLEMENTAL_BENCHMARK
         if (perf03Requested)
             CheckPerf03CauseSources(request);
+        if (perf04Requested)
+            CheckPerf04InputSources(request);
 #endif
         CheckRuntime(request);
         var expected = request.ExpectedAssemblies.ToDictionary(a => a.Name, StringComparer.Ordinal);
@@ -130,6 +138,12 @@ internal static class ArtifactGate
                 perf03RawEvidence = await Perf03RawPreflightGate.Run(request.Output,
                     request.Perf03CauseGateImplementationSha256!, Perf03RawSiteMap(request));
             }
+            string? perf04EvidenceSha256 = null;
+            if (perf04Requested)
+            {
+                await Perf04InputGate.Run(request.Output, request.Perf04InputGateImplementationSha256!);
+                perf04EvidenceSha256 = CheckPerf04InputEvidence(request);
+            }
             if (Correctness.Results.Count != 389 || ArtifactEvidence.Hash(defaultCorrectness) != defaultCorrectnessSha256)
                 throw new InvalidOperationException("The additional gate changed the original 389-case evidence");
 #endif
@@ -142,6 +156,8 @@ internal static class ArtifactGate
 #if SUPPLEMENTAL_BENCHMARK
             CheckSemanticFiles(request.Output, semanticFiles);
 #else
+            if (perf04Requested && CheckPerf04InputEvidence(request) != perf04EvidenceSha256)
+                throw new InvalidOperationException("PERF-04 evidence changed while validating");
             if (CheckStructUpstreamEvidence(structOutput) != structEvidence)
                 throw new InvalidOperationException("Struct upstream evidence changed while validating");
             if (perf03Requested && (CheckPerf03CauseEvidence(request) != perf03EvidenceSha256 ||
@@ -165,6 +181,18 @@ internal static class ArtifactGate
 #if SUPPLEMENTAL_BENCHMARK
                 semanticFiles,
 #else
+                request.Perf04InputGateImplementationSha256,
+                request.Perf04InputCaseSet,
+                request.Perf04InputSourceFiles,
+                perf04InputGate = !perf04Requested ? null : new
+                {
+                    schemaVersion = 1,
+                    protocol = Perf04InputGate.Protocol,
+                    implementationSha256 = request.Perf04InputGateImplementationSha256,
+                    caseSet = request.Perf04InputCaseSet,
+                    evidencePath = Perf04InputGate.EvidencePath,
+                    evidenceSha256 = perf04EvidenceSha256
+                },
                 request.StructUpstreamGateImplementationSha256,
                 request.Perf03CauseGateImplementationSha256,
                 request.Perf03CauseVariant,
@@ -215,7 +243,9 @@ internal static class ArtifactGate
 #if SUPPLEMENTAL_BENCHMARK
                     "Original supplemental benchmark semantics validated in the preserved consumer; all semantic output files are bound to this proof"
 #else
-                    perf03Requested
+                    perf04Requested
+                        ? "389 existing benchmark-gate checks plus separate 96 struct-upstream parity cases; separate 14 PERF-04 input variants, 80 actual benchmark-method checks and generated pooled interceptor/helper single-consumption proof; focused contracts and full-suite tests remain separate"
+                        : perf03Requested
                         ? "389 existing benchmark-gate checks plus separate 96 struct-upstream parity cases and three driver type classifications; separate PERF-03 input parity and isolated sequential controls, four counted Work observations and 24 substituted deterministic protocol cases; no timed pending denominator; focused contracts and full-suite tests remain separate"
                         : "389 existing benchmark-gate checks plus separate 96 struct-upstream parity cases and three driver type classifications; focused contracts and full-suite tests remain separate"
 #endif
@@ -227,6 +257,10 @@ internal static class ArtifactGate
                 Perf03RawPreflightGate.Check(request.Output, request.Perf03CauseGateImplementationSha256!,
                     Perf03RawSiteMap(request)) != perf03RawEvidence))
                 throw new InvalidOperationException("PERF-03 evidence changed while writing the proof");
+            if (perf04Requested && (CheckPerf04InputEvidence(request) != perf04EvidenceSha256 ||
+                CheckStructUpstreamEvidence(structOutput) != structEvidence || Correctness.Results.Count != 389 ||
+                ArtifactEvidence.Hash(defaultCorrectness) != defaultCorrectnessSha256))
+                throw new InvalidOperationException("PERF-04 or existing evidence changed while writing the proof");
 #endif
         }
         finally
@@ -271,6 +305,191 @@ internal static class ArtifactGate
             throw new InvalidOperationException("Supplemental semantic evidence changed while validating");
     }
 #else
+    private static readonly string[] Perf04Sources =
+    ["Perf04InputGate.cs", "Perf04GeneratedProducer.cs", "Generate.ps1", "Generate.Additional.ps1",
+     "GeneratedCases.cs", "Work.cs", "Zendiator.UseCaseBenchmarks.csproj"];
+
+    private static string[] Perf04Cases() =>
+        (from input in new[] { "Iterator", "GeneratedPooled" }
+         from route in new[] { "Stream0", "Stream5", "Relay5" }
+         select "Zendiator" + input + route).Concat(
+            from library in new[] { "MediatRHistorical", "Mediator", "DispatchR", "Immediate" }
+            from route in new[] { "Stream5", "Relay5" }
+            select library + "Iterator" + route).Order(StringComparer.Ordinal).ToArray();
+
+    private static bool CheckPerf04InputIdentity(ArtifactGateRequest request)
+    {
+        using var selected = JsonDocument.Parse(request.Case);
+        var row = selected.RootElement;
+        var type = row.GetProperty("Type").GetString()!;
+        var selectedInput = (from library in new[] { "Zendiator", "MediatRHistorical", "Mediator", "DispatchR", "Immediate" }
+                             from input in new[] { "Iterator", "GeneratedPooled" }
+                             select library + input).Any(prefix => type.StartsWith(prefix, StringComparison.Ordinal));
+        if (!selectedInput)
+        {
+            if (request.Perf04InputGateImplementationSha256 is not null || request.Perf04InputCaseSet is not null ||
+                request.Perf04InputSourceFiles is not null)
+                throw new InvalidOperationException("PERF-04 proof is attached to an unrelated case");
+            return false;
+        }
+        var fields = row.EnumerateObject().Select(property => property.Name).ToArray();
+        var method = row.GetProperty("Method").GetString();
+        var methods = type.StartsWith("Zendiator", StringComparison.Ordinal)
+            ? new[] { "Full", "EarlyBreak", "FullTyped", "EarlyBreakTyped" } : new[] { "Full", "EarlyBreak" };
+        if (fields.Distinct(StringComparer.Ordinal).Count() != fields.Length ||
+            fields.Except(new[] { "Type", "Method", "Count", "Asynchronous", "Project" }).Any() ||
+            (row.TryGetProperty("Project", out var project) && project.GetString() != "usecase") ||
+            !Perf04Cases().Contains(type) || !methods.Contains(method) ||
+            row.GetProperty("Count").GetInt32() != (method!.StartsWith("EarlyBreak", StringComparison.Ordinal) ? 16 : 1024) ||
+            row.GetProperty("Asynchronous").ValueKind is not (JsonValueKind.True or JsonValueKind.False) ||
+            request.Perf04InputGateImplementationSha256 is not { Length: 64 } ||
+            request.Perf04InputGateImplementationSha256.Any(c => !(c is >= '0' and <= '9' or >= 'A' and <= 'F')) ||
+            request.Perf04InputCaseSet is null || !request.Perf04InputCaseSet.SequenceEqual(Perf04Cases()) ||
+            request.Perf04InputSourceFiles is null || Perf04InputGate.ExpectedCases != 14)
+            throw new InvalidOperationException("Missing or substituted PERF-04 input identity");
+        return true;
+    }
+
+    private static void CheckPerf04InputSources(ArtifactGateRequest request)
+    {
+        var files = request.Perf04InputSourceFiles!;
+        var names = Perf04Sources.Select(name => "perf04-sources/" + name).ToHashSet(StringComparer.Ordinal);
+        if (!names.SetEquals(files.Keys) ||
+            request.BundleFiles.Keys.Count(name => name.StartsWith("perf04-sources/", StringComparison.Ordinal)) != files.Count)
+            throw new InvalidOperationException("PERF-04 source archive is incomplete or substituted");
+        foreach (var (name, digest) in files)
+        {
+            var path = System.IO.Path.Combine(request.BundleRoot, name);
+            if (!request.BundleFiles.TryGetValue(name, out var saved) || saved != digest || ArtifactEvidence.Hash(path) != digest)
+                throw new InvalidOperationException("PERF-04 source archive identity changed");
+        }
+        var canonical = JsonSerializer.SerializeToUtf8Bytes(new SortedDictionary<string, string>(files, StringComparer.Ordinal));
+        if (Convert.ToHexString(SHA256.HashData(canonical)) != request.Perf04InputGateImplementationSha256)
+            throw new InvalidOperationException("PERF-04 source archive digest differs from requested implementation");
+    }
+
+    private static string CheckPerf04InputEvidence(ArtifactGateRequest request)
+    {
+        CheckPerf04InputSources(request);
+        var path = System.IO.Path.Combine(request.Output, Perf04InputGate.EvidencePath);
+        var directory = System.IO.Path.GetDirectoryName(path)!;
+        if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0 ||
+            Directory.EnumerateFileSystemEntries(directory).Count() != 1 ||
+            (File.GetAttributes(path) & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0)
+            throw new InvalidOperationException("PERF-04 input evidence is missing or substituted");
+        var bytes = File.ReadAllBytes(path);
+        using var document = JsonDocument.Parse(bytes);
+        var evidence = document.RootElement;
+        if (evidence.GetProperty("schemaVersion").GetInt32() != 1 ||
+            evidence.GetProperty("protocol").GetString() != Perf04InputGate.Protocol ||
+            evidence.GetProperty("implementationSha256").GetString() != request.Perf04InputGateImplementationSha256 ||
+            evidence.GetProperty("status").GetString() != "Passed" ||
+            !evidence.GetProperty("caseSet").EnumerateArray().Select(item => item.GetString()).SequenceEqual(Perf04Cases()))
+            throw new InvalidOperationException("PERF-04 input evidence identity changed");
+        var cases = evidence.GetProperty("cases");
+        var expected = Perf04Cases().ToHashSet(StringComparer.Ordinal);
+        if (cases.GetArrayLength() != Perf04InputGate.ExpectedCases)
+            throw new InvalidOperationException("PERF-04 input evidence is incomplete");
+        foreach (var row in cases.EnumerateArray())
+        {
+            var type = row.GetProperty("type").GetString()!;
+            if (row.GetProperty("status").GetString() != "Passed" || !expected.Remove(type))
+                throw new InvalidOperationException("PERF-04 input evidence is duplicate, substituted or failed");
+            var typed = type.StartsWith("Zendiator", StringComparison.Ordinal);
+            var input = type.Contains("GeneratedPooled", StringComparison.Ordinal) ? "GeneratedPooled" : "Iterator";
+            var family = new[] { "Stream0", "Stream5", "Relay5" }.Single(name => type.EndsWith(name, StringComparison.Ordinal));
+            if (row.GetProperty("input").GetString() != input || row.GetProperty("family").GetString() != family ||
+                row.GetProperty("behaviors").GetInt32() != (family == "Stream0" ? 0 : 5) ||
+                row.GetProperty("typedTerminal").GetBoolean() != typed ||
+                row.GetProperty("producerRepresentation").GetString() !=
+                    (typed && input == "GeneratedPooled" ? "generated-pooled-named-cursor" : "compiler-async-iterator"))
+                throw new InvalidOperationException("PERF-04 input representation changed");
+            var protocols = new List<string> { "full-count-order-disposal", "early-break-disposal", "partial-cancellation-disposal",
+                "request-precancel", "enumeration-precancel", "producer-exception" };
+            if (family == "Relay5")
+            {
+                protocols.Add("relay-order-and-failure");
+                if (typed)
+                    protocols.Add("relay-deferred-start");
+            }
+            if (typed)
+                protocols.AddRange(["typed-count-order-disposal", "typed-stop-and-cancel", "typed-exception-disposal"]);
+            if (!row.GetProperty("completedProtocols").EnumerateArray().Select(item => item.GetString()).SequenceEqual(protocols))
+                throw new InvalidOperationException("PERF-04 completed protocol assertions changed");
+            var correctness = row.GetProperty("correctness");
+            if (correctness.GetArrayLength() != (family == "Relay5" ? 9 : 8))
+                throw new InvalidOperationException("PERF-04 correctness observations are missing");
+            var streamCases = (from count in new[] { 0, 1, 16, 1024 }
+                               from asynchronous in new[] { false, true }
+                               select (count, asynchronous)).ToHashSet();
+            var relayRows = 0;
+            foreach (var item in correctness.EnumerateArray())
+            {
+                var suite = item.GetProperty("suite").GetString();
+                if (item.GetProperty("status").GetString() != "Passed" ||
+                    item.GetProperty("behaviors").GetInt32() != (family == "Stream0" ? 0 : 5) ||
+                    item.GetProperty("library").GetString() != (typed && suite == "RelayTiming" ? "Zendiator" : type))
+                    throw new InvalidOperationException("PERF-04 correctness identity or status changed");
+                if (suite == "Stream")
+                {
+                    if (!streamCases.Remove((item.GetProperty("count").GetInt32(), item.GetProperty("asynchronous").GetBoolean())) ||
+                        item.GetProperty("streamProtocol").GetString() != (typed ? Correctness.StreamProtocol : "historical-enumerable"))
+                        throw new InvalidOperationException("PERF-04 stream correctness identity changed");
+                }
+                else if (suite == "RelayTiming" && family == "Relay5" && relayRows++ == 0)
+                {
+                    var stage = item.GetProperty("failureStage").GetString();
+                    if (stage is not ("creation" or "enumerator" or "move-call" or "move-await") ||
+                        new[] { "eventsAtCreation", "eventsAtEnumerator", "eventsAtFirstMove" }.Any(key => item.GetProperty(key).GetInt32() < 0) ||
+                        (typed && (item.GetProperty("eventsAtCreation").GetInt32() != 0 ||
+                                   item.GetProperty("eventsAtEnumerator").GetInt32() != 0 || stage is not ("move-call" or "move-await"))))
+                        throw new InvalidOperationException("PERF-04 relay timing observations changed");
+                }
+                else
+                    throw new InvalidOperationException("PERF-04 correctness suite is duplicate or substituted");
+            }
+            if (streamCases.Count != 0 || relayRows != (family == "Relay5" ? 1 : 0))
+                throw new InvalidOperationException("PERF-04 correctness cases are incomplete");
+            var methods = typed ? new[] { "Full", "EarlyBreak", "FullTyped", "EarlyBreakTyped" } : new[] { "Full", "EarlyBreak" };
+            var wanted = (from method in methods from asynchronous in new[] { false, true } select (method, asynchronous)).ToHashSet();
+            var consumers = row.GetProperty("measuredConsumers");
+            if (consumers.GetArrayLength() != wanted.Count)
+                throw new InvalidOperationException("PERF-04 measured consumer observations are missing");
+            foreach (var consumer in consumers.EnumerateArray())
+            {
+                var method = consumer.GetProperty("method").GetString()!;
+                var early = method.StartsWith("EarlyBreak", StringComparison.Ordinal);
+                if (!wanted.Remove((method, consumer.GetProperty("asynchronous").GetBoolean())) ||
+                    consumer.GetProperty("count").GetInt32() != (early ? 16 : 1024) ||
+                    consumer.GetProperty("result").GetInt32() != (early ? 0 : 523776) ||
+                    consumer.GetProperty("status").GetString() != "Passed")
+                    throw new InvalidOperationException("PERF-04 measured consumer outcome changed");
+            }
+        }
+        var pooled = evidence.GetProperty("generatedPooledProof");
+        var strings = new Dictionary<string, string>
+        {
+            ["producerType"] = "Competitive.Perf04GeneratedWorkStreamCursor",
+            ["originalMethod"] = "MovePendingAsync",
+            ["interceptorMethod"] = "Intercept",
+            ["callSite"] = "MoveNextAsync",
+            ["sourceAttribute"] = "Zendiator.GeneratePooledProducerAttribute",
+            ["builderType"] = typeof(System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder<bool>).FullName!,
+            ["originalBuilderType"] = typeof(System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder<bool>).FullName!,
+            ["consumerAssemblySha256"] = ArtifactEvidence.Hash(request.ConsumerPath),
+            ["status"] = "Passed"
+        };
+        if (strings.Any(pair => pooled.GetProperty(pair.Key).GetString() != pair.Value) ||
+            !pooled.GetProperty("generatedHelper").GetString()!.StartsWith("__ZendiatorPooled_", StringComparison.Ordinal) ||
+            !pooled.GetProperty("interceptorType").GetString()!.StartsWith("Zendiator.Generated.Interceptors.PooledProducer_", StringComparison.Ordinal) ||
+            new[] { "callSiteIntercepted", "helperIsPooled", "forcedPending", "singleConsumption" }.Any(name => !pooled.GetProperty(name).GetBoolean()) ||
+            pooled.GetProperty("manualBuilderAttribute").GetBoolean() ||
+            new[] { "sequentialMoves", "moveResultsConsumed", "items" }.Any(name => pooled.GetProperty(name).GetInt32() != 2) ||
+            pooled.GetProperty("disposals").GetInt32() != 1)
+            throw new InvalidOperationException("PERF-04 generated pooled proof identity or observations changed");
+        return Convert.ToHexString(SHA256.HashData(bytes));
+    }
+
     private static HashSet<(string Type, string Method, int Count, bool Asynchronous)> Perf03Cases()
     {
         var cases = new HashSet<(string, string, int, bool)>();

@@ -21,6 +21,64 @@ PROTOCOL = "zendiator-child-artifact-gate-v1"
 HASH = re.compile(r"^[0-9A-F]{64}$")
 PERF03_PROTOCOL = "zendiator-perf03-cause-gate-v1"
 PERF03_FIELDS = ("perf03CauseGateImplementationSha256", "perf03CauseVariant", "perf03CauseCaseSet", "perf03CauseSourceFiles", "perf03CauseVariantMetadata")
+PERF04_PROTOCOL = "zendiator-perf04-input-gate-v1"
+PERF04_FIELDS = ("perf04InputGateImplementationSha256", "perf04InputCaseSet", "perf04InputSourceFiles")
+PERF04_SOURCES = ("Perf04InputGate.cs", "Perf04GeneratedProducer.cs", "Generate.ps1",
+                  "Generate.Additional.ps1", "GeneratedCases.cs", "Work.cs", "Zendiator.UseCaseBenchmarks.csproj")
+
+
+def perf04_case_set():
+    native = ["Zendiator" + producer + route for producer, route in itertools.product(
+        ("Iterator", "GeneratedPooled"), ("Stream0", "Stream5", "Relay5"))]
+    peers = [library + "Iterator" + route for library, route in itertools.product(
+        ("MediatRHistorical", "Mediator", "DispatchR", "Immediate"), ("Stream5", "Relay5"))]
+    return sorted(native + peers)
+
+
+def perf04_completed_protocols(name):
+    protocols = ["full-count-order-disposal", "early-break-disposal", "partial-cancellation-disposal",
+                 "request-precancel", "enumeration-precancel", "producer-exception"]
+    if name.endswith("Relay5"):
+        protocols.append("relay-order-and-failure")
+        if name.startswith("Zendiator"):
+            protocols.append("relay-deferred-start")
+    if name.startswith("Zendiator"):
+        protocols.extend(("typed-count-order-disposal", "typed-stop-and-cancel", "typed-exception-disposal"))
+    return protocols
+
+
+def perf04_selected(case):
+    if not isinstance(case, dict):
+        return False
+    name = str(case.get("Type", ""))
+    if not any(name.startswith(library + producer) for library, producer in itertools.product(
+            ("Zendiator", "MediatRHistorical", "Mediator", "DispatchR", "Immediate"), ("Iterator", "GeneratedPooled"))):
+        return False
+    methods = {"Full", "EarlyBreak", "FullTyped", "EarlyBreakTyped"} if name.startswith("Zendiator") else {"Full", "EarlyBreak"}
+    if (name not in perf04_case_set() or case.get("Project", "usecase") != "usecase" or
+            set(case) - {"Type", "Method", "Count", "Asynchronous", "Project"} or
+            case.get("Method") not in methods or type(case.get("Count")) is not int or
+            case["Count"] != (16 if case["Method"].startswith("EarlyBreak") else 1024) or
+            type(case.get("Asynchronous")) is not bool):
+        raise ValueError("Unknown or substituted PERF04 case identity")
+    return True
+
+
+def perf04_identity(project, case):
+    if not perf04_selected(case):
+        return {}
+    if project_suite(project) != "usecase":
+        raise ValueError("PERF04 input gate requires the original usecase consumer")
+    sources = {}
+    for name in PERF04_SOURCES:
+        path = filesystem_path(Path(project) / name)
+        if not path.is_file() or path.is_symlink() or (os.name == "nt" and path.is_junction()) or not within(path, project):
+            raise ValueError("PERF04 input implementation source is missing or uses a reparse path")
+        sources["perf04-sources/" + name] = sha(path)
+    return dict(perf04InputGateImplementationSha256=digest(sources),
+                perf04InputCaseSet=perf04_case_set(), perf04InputSourceFiles=sources)
+
+
 PERF03_VARIANTS = {"V0", "VEC", "VEntry", "VRoot", "VWord"}
 
 
@@ -255,9 +313,11 @@ def perf03_identity(project, case):
 
 
 def semantic_identity(final, session, project, runtime, bundle_files, case=None):
-    diagnostic = perf03_identity(project, case)
+    diagnostic = {**perf03_identity(project, case), **perf04_identity(project, case)}
     if any(bundle_files.get(name) != value for name, value in diagnostic.get("perf03CauseSourceFiles", {}).items()):
         raise ValueError("PERF03 saved source archive differs from the current implementation")
+    if any(bundle_files.get(name) != value for name, value in diagnostic.get("perf04InputSourceFiles", {}).items()):
+        raise ValueError("PERF04 saved source archive differs from the current implementation")
     config = runtime["runtimeConfig"]
     deps = runtime["deps"]
     for item in (config, deps, *runtime["appDeps"], *runtime["nativeRuntime"]):
@@ -329,6 +389,18 @@ def prepare_bundle(row, attempt, final, project):
         if (tree_hashes(bundle) != source_files or tree_hashes(build_root) != build_files or
                 perf03_identity(project, row["Case"]) != diagnostic):
             raise ValueError("PERF03 sources changed while archiving")
+    inputs = perf04_identity(project, row["Case"])
+    if inputs:
+        for name in PERF04_SOURCES:
+            target = bundle / "perf04-sources" / name
+            if filesystem_path(target).exists():
+                raise ValueError("Generated artifacts overlap the PERF04 source archive")
+            filesystem_path(target.parent).mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(filesystem_path(project / name), filesystem_path(target))
+        source_files = {**source_files, **inputs["perf04InputSourceFiles"]}
+        if (tree_hashes(bundle) != source_files or tree_hashes(build_root) != build_files or
+                perf04_identity(project, row["Case"]) != inputs):
+            raise ValueError("PERF04 sources changed while archiving")
     runtime = json.loads(json.dumps(final["runtimeEvidence"]))
     framework = resolve_path(runtime["frameworkDirectory"])
     expected = []
@@ -1028,6 +1100,158 @@ def verify_perf03_cause_gate(request, proof, proof_path):
         raise ValueError("PERF03 diagnostic evidence/source bundle changed during verification")
 
 
+def perf04_require(condition, message):
+    if not condition:
+        raise ValueError("PERF04 input proof: " + message)
+
+
+def verify_perf04_input_gate(request, proof, proof_path):
+    selected = perf04_selected(json.loads(request["case"]))
+    if not selected:
+        perf04_require(not any(request.get(name) is not None or proof.get(name) is not None for name in PERF04_FIELDS)
+                       and proof.get("perf04InputGate") is None, "attached to an unrelated case")
+        return
+    require = perf04_require
+    sources = request.get("perf04InputSourceFiles")
+    implementation = request.get("perf04InputGateImplementationSha256")
+    require(request.get("benchmarkSuite", "usecase") == "usecase" and
+            isinstance(implementation, str) and HASH.fullmatch(implementation) and
+            request.get("perf04InputCaseSet") == perf04_case_set() and
+            all(proof.get(name) == request.get(name) for name in PERF04_FIELDS), "missing or substituted identity")
+    require(isinstance(sources, dict) and set(sources) == {"perf04-sources/" + name for name in PERF04_SOURCES} and
+            all(isinstance(value, str) and HASH.fullmatch(value) and request["bundleFiles"].get(name) == value
+                for name, value in sources.items()) and digest(sources) == implementation,
+            "missing or substituted source identity")
+    archive = Path(request["bundleRoot"]) / "perf04-sources"
+    require(not filesystem_path(archive).is_symlink() and not (os.name == "nt" and filesystem_path(archive).is_junction()),
+            "source archive uses a reparse root")
+    require({"perf04-sources/" + name: value for name, value in tree_hashes(archive).items()} == sources,
+            "source archive changed")
+    extra = proof.get("perf04InputGate")
+    require(isinstance(extra, dict) and type(extra.get("schemaVersion")) is int and extra["schemaVersion"] == 1 and
+            extra.get("protocol") == PERF04_PROTOCOL and extra.get("implementationSha256") == implementation and
+            extra.get("caseSet") == perf04_case_set() and extra.get("evidencePath") == "perf04-input/perf04-input.json",
+            "missing or malformed metadata")
+    directory = proof_path.parent / "perf04-input"
+    require(not filesystem_path(directory).is_symlink() and not (os.name == "nt" and filesystem_path(directory).is_junction()),
+            "evidence uses a reparse root")
+    try:
+        files = tree_hashes(directory)
+        require(files == {"perf04-input.json": extra.get("evidenceSha256")}, "evidence hash changed")
+        data = read(directory / "perf04-input.json")
+    except (OSError, ValueError) as error:
+        raise ValueError("PERF04 input proof: evidence missing, malformed or tampered") from error
+    require(isinstance(data, dict) and type(data.get("schemaVersion")) is int and data["schemaVersion"] == 1 and
+            data.get("protocol") == PERF04_PROTOCOL and data.get("implementationSha256") == implementation and
+            data.get("caseSet") == perf04_case_set() and data.get("status") == "Passed", "evidence identity changed")
+    rows = data.get("cases")
+    expected = set(perf04_case_set())
+    require(isinstance(rows, list) and len(rows) == len(expected), "missing case observations")
+    for row in rows:
+        require(isinstance(row, dict) and isinstance(row.get("type"), str) and row["type"] in expected,
+                "duplicate or substituted case")
+        name = row["type"]
+        expected.remove(name)
+        typed = name.startswith("Zendiator")
+        input_name = "GeneratedPooled" if "GeneratedPooled" in name else "Iterator"
+        family = next(route for route in ("Stream0", "Stream5", "Relay5") if name.endswith(route))
+        behaviors = 0 if family == "Stream0" else 5
+        require(row.get("input") == input_name and row.get("family") == family and
+                type(row.get("behaviors")) is int and row["behaviors"] == behaviors and
+                row.get("producerRepresentation") == ("generated-pooled-named-cursor" if typed and input_name == "GeneratedPooled"
+                                                       else "compiler-async-iterator") and
+                row.get("typedTerminal") is typed and row.get("status") == "Passed", "case input/route/terminal changed")
+        require(row.get("completedProtocols") == perf04_completed_protocols(name), "completed protocol assertions changed")
+        correctness = row.get("correctness")
+        require(isinstance(correctness, list) and len(correctness) == (9 if family == "Relay5" else 8) and
+                all(isinstance(item, dict) and item.get("status") == "Passed" and item.get("library") == ("Zendiator" if typed and item.get("suite") == "RelayTiming" else name) and
+                    type(item.get("behaviors")) is int and item["behaviors"] == behaviors for item in correctness),
+                "correctness details missing or failed")
+        streams = [item for item in correctness if item.get("suite") == "Stream"]
+        require(len(streams) == 8 and all(type(item.get("count")) is int and type(item.get("asynchronous")) is bool and
+                item.get("streamProtocol") == ("native-typed-pull-v1" if typed else "historical-enumerable") for item in streams) and
+                {(item["count"], item["asynchronous"]) for item in streams} == set(itertools.product((0, 1, 16, 1024), (False, True))),
+                "stream correctness identities changed")
+        timing = [item for item in correctness if item.get("suite") == "RelayTiming"]
+        require(len(timing) == (1 if family == "Relay5" else 0), "relay timing missing or substituted")
+        if timing:
+            t = timing[0]
+            require(all(type(t.get(key)) is int and t[key] >= 0 for key in
+                        ("eventsAtCreation", "eventsAtEnumerator", "eventsAtFirstMove")) and
+                    t.get("failureStage") in {"creation", "enumerator", "move-call", "move-await"}, "relay timing observations malformed")
+            if typed:
+                require(t["eventsAtCreation"] == 0 and t["eventsAtEnumerator"] == 0 and
+                        t["failureStage"] in {"move-call", "move-await"}, "native relay timing changed")
+        methods = ("Full", "EarlyBreak", "FullTyped", "EarlyBreakTyped") if typed else ("Full", "EarlyBreak")
+        consumers = row.get("measuredConsumers")
+        wanted = {(method, asynchronous) for method, asynchronous in itertools.product(methods, (False, True))}
+        require(isinstance(consumers, list) and len(consumers) == len(wanted), "measured consumers incomplete")
+        for consumer in consumers:
+            require(isinstance(consumer, dict) and isinstance(consumer.get("method"), str) and
+                    type(consumer.get("asynchronous")) is bool and
+                    (consumer["method"], consumer["asynchronous"]) in wanted, "measured consumer duplicate or substituted")
+            method = consumer["method"]
+            wanted.remove((method, consumer["asynchronous"]))
+            early = method.startswith("EarlyBreak")
+            require(type(consumer.get("count")) is int and consumer["count"] == (16 if early else 1024) and
+                    type(consumer.get("result")) is int and consumer["result"] == (0 if early else 523776) and
+                    consumer.get("status") == "Passed", "measured consumer outcome changed")
+    pooled = data.get("generatedPooledProof")
+    require(isinstance(pooled, dict), "generated pooled proof missing")
+    values = dict(producerType="Competitive.Perf04GeneratedWorkStreamCursor", originalMethod="MovePendingAsync",
+                  interceptorMethod="Intercept", callSite="MoveNextAsync", sourceAttribute="Zendiator.GeneratePooledProducerAttribute",
+                  callSiteIntercepted=True, helperIsPooled=True, manualBuilderAttribute=False, forcedPending=True,
+                  singleConsumption=True, sequentialMoves=2, moveResultsConsumed=2, items=2, disposals=1,
+                  consumerAssemblySha256=sha(request["consumerPath"]), status="Passed")
+    require(all(type(pooled.get(key)) is type(value) and pooled[key] == value for key, value in values.items()),
+            "generated pooled proof identity/outcome changed")
+    core = next(item["fullName"] for item in request["expectedAssemblies"] if item["name"] == "System.Private.CoreLib")
+    for key, builder in (("builderType", "PoolingAsyncValueTaskMethodBuilder"), ("originalBuilderType", "AsyncValueTaskMethodBuilder")):
+        require(pooled.get(key) == "System.Runtime.CompilerServices." + builder + "`1[[System.Boolean, " + core + "]]",
+                "generated pooled builder runtime identity changed")
+    for key, prefix in (("generatedHelper", "__ZendiatorPooled_"),
+                        ("interceptorType", "Zendiator.Generated.Interceptors.PooledProducer_")):
+        require(isinstance(pooled.get(key), str) and pooled[key].startswith(prefix) and len(pooled[key]) > len(prefix),
+                "generated pooled helper/builder identity changed")
+    require(tree_hashes(directory) == files and tree_hashes(request["bundleRoot"]) == request["bundleFiles"],
+            "evidence or source bundle changed during verification")
+
+
+def foundatio_case_identities():
+    cases = [(name, method, {"Lifetime": "Scoped"}) for name, method in (
+        ("FoundatioSend0", "Typed"), ("FoundatioSend5", "Typed"),
+        ("FoundatioSend0", "ResolveSend"), ("FoundatioSend5", "ResolveSend"), ("FoundatioSend5", "ScopeK1"))]
+    cases.append(("FoundatioNotification16", "Dispatch", {}))
+    cases.extend((name, method, dict(Count=count, Asynchronous=asynchronous))
+                 for name, (method, count), asynchronous in itertools.product(
+                     ("FoundatioStream5", "FoundatioRelay5"), (("Full", 1024), ("EarlyBreak", 16)), (False, True)))
+    cases.extend((name, method, dict(Count=count, Asynchronous=asynchronous)) for name, method, count, asynchronous in (
+        ("FoundatioStream0", "Full", 1024, True), ("FoundatioStream0", "EarlyBreak", 16, False),
+        ("FoundatioIteratorStream5", "Full", 1024, True), ("FoundatioIteratorRelay5", "Full", 1024, True)))
+    return {canonical(dict(type="Competitive.FoundatioRelease." + name, method=method, parameters=parameters))
+            for name, method, parameters in cases}
+
+
+def verify_supplemental_case(request, proof_path):
+    if request.get("benchmarkSuite", "usecase") == "usecase":
+        return
+    case = json.loads(request["case"])
+    parameters = {name: case[name] for name in ("Lifetime", "Count", "Asynchronous") if name in case}
+    outcomes = read(proof_path.parent / "correctness.json")
+    foundatio = request.get("benchmarkSuite") == "foundatio"
+    if foundatio:
+        expected = foundatio_case_identities()
+        if (not isinstance(outcomes, list) or len(outcomes) != len(expected) or
+                any(not isinstance(row, dict) or row.get("status") != "Passed" or row.get("suite") != "foundatio"
+                    for row in outcomes) or
+                {canonical({key: row.get(key) for key in ("type", "method", "parameters")}) for row in outcomes} != expected):
+            raise ValueError("Foundatio semantic gate requires the exact unique 18-case identity set")
+    if not any((row.get("type") == "Competitive.FoundatioRelease." + case["Type"] if foundatio
+                else row.get("type", "").endswith("." + case["Type"])) and row.get("method") == case["Method"]
+               and canonical(row.get("parameters", {})) == canonical(parameters) for row in outcomes):
+        raise ValueError("Supplemental gate does not cover the measured method")
+
+
 def verify_gate(request_path, proof_path):
     request, proof = read(request_path), read(proof_path)
     for key in ("protocol", "session", "case", "childPid", "childProofSha256",
@@ -1070,12 +1294,9 @@ def verify_gate(request_path, proof_path):
         files.pop(proof_path.name)
         if not files or files != proof.get("semanticFiles"):
             raise ValueError("Supplemental semantic details changed or are missing")
-        case = json.loads(request["case"])
-        parameters = {name: case[name] for name in ("Lifetime", "Count", "Asynchronous") if name in case}
-        if not any(row.get("type", "").endswith("." + case["Type"]) and row.get("method") == case["Method"]
-                   and row.get("parameters", {}) == parameters for row in outcomes):
-            raise ValueError("Supplemental gate does not cover the measured method")
+        verify_supplemental_case(request, proof_path)
     verify_perf03_cause_gate(request, proof, proof_path)
+    verify_perf04_input_gate(request, proof, proof_path)
     return proof
 
 
@@ -1098,7 +1319,7 @@ def ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env):
                "gateDriverSha256": semantic["gateDriverSha256"],
                "structUpstreamGateImplementationSha256": semantic["structUpstreamGateImplementationSha256"],
                "consumerName": consumer_name(project), "benchmarkSuite": project_suite(project), "benchmarkGateCases": gate_count(project)}
-    request.update({name: semantic[name] for name in PERF03_FIELDS if name in semantic})
+    request.update({name: semantic[name] for name in (*PERF03_FIELDS, *PERF04_FIELDS) if name in semantic})
     request_path = attempt / "artifact-gate-request.json"
     write(request_path, request)
     reused = filesystem_path(cache).exists()
@@ -1113,6 +1334,7 @@ def ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env):
         if read(saved_request).get("bundleFiles") != files:
             raise ValueError("Cached gate proof covers a different full saved bundle")
         verify_gate(saved_request, proof_path)
+        verify_supplemental_case(request, proof_path)
     else:
         env = clean_env()
         for name, value in runtime["controls"].items():
@@ -1209,7 +1431,11 @@ def check_artifact_binding(row, attempt, session, project):
     if any(request.get(name) != semantic.get(name) or proven_request.get(name) != semantic.get(name)
            for name in PERF03_FIELDS):
         raise ValueError("Cached proof covers a different PERF03 diagnostic source/variant/case set")
+    if any(request.get(name) != semantic.get(name) or proven_request.get(name) != semantic.get(name)
+           for name in PERF04_FIELDS):
+        raise ValueError("Cached proof covers a different PERF04 input source/case set")
     verify_gate(gate_request, proof_path)
+    verify_supplemental_case(request, proof_path)
     return binding_result(path, binding)
 
 
@@ -1219,6 +1445,9 @@ def binding_result(path, binding):
             "proofSha256": binding["proofSha256"], "proofReused": binding["proofReused"],
             "scope": ("389 existing benchmark gate plus separate 96 struct-upstream parity cases and three driver type classifications; focused/full-suite evidence remains separate"
                       if suite == "usecase" else f"Original {suite} semantic gate in the saved consumer; all semantic files and loaded bindings verified")}
+    if "perf04InputGateImplementationSha256" in binding["semantic"]:
+        result["perf04InputScope"] = ("Separate 14 input variants and 80 actual benchmark-method checks in the saved consumer; "
+                                     "generated pooled interceptor/helper and sequential single-consumption proof; original 389 and separate 96 unchanged")
     if "perf03CauseVariant" in binding["semantic"]:
         result["perf03CauseScope"] = ("Separate 24 PERF03 input parity cases and two selected diagnostic routes; "
                                       "V0 fidelity or explicitly limited candidate sequential envelope; no timed pending-fraction claim")

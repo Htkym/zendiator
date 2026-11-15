@@ -7,7 +7,7 @@ SUITES = {
     "usecase": ("Zendiator.UseCaseBenchmarks", 389),
     "hooks": ("HPeerComparison", 18),
     "short": ("ShortCircuitComparison", 6),
-    "foundatio": ("FoundatioReleaseComparison", 16),
+    "foundatio": ("FoundatioReleaseComparison", 18),
 }
 BENCHMARKS = Path(__file__).resolve().parent.parent
 
@@ -50,10 +50,14 @@ def implementation_files(project):
     names = ("ArtifactGate.cs", "ArtifactEvidence.cs", "ChildEvidence.cs", "perf03_counted_map.py")
     if project_suite(project) == "usecase":
         return {name: project / name for name in (*names, "Program.cs")}
-    return {**{name: shared / name for name in names},
-            "BenchmarkGate.cs": project / "BenchmarkGate.cs",
-            "MeasurementProgram.cs": BENCHMARKS / "Measurement/MeasurementProgram.cs",
-            "RuntimeEvidence.cs": BENCHMARKS / "Measurement/RuntimeEvidence.cs"}
+    files = {**{name: shared / name for name in names},
+             "BenchmarkGate.cs": project / "BenchmarkGate.cs",
+             "MeasurementProgram.cs": BENCHMARKS / "Measurement/MeasurementProgram.cs",
+             "RuntimeEvidence.cs": BENCHMARKS / "Measurement/RuntimeEvidence.cs"}
+    if project_suite(project) == "foundatio":
+        files.update({name: project / name for name in
+                      ("FoundatioPerf04Cases.cs", "FoundatioSemanticValidation.cs", "FoundatioSemanticSnapshot.cs")})
+    return files
 
 
 def perf03_implementation_files(project):
