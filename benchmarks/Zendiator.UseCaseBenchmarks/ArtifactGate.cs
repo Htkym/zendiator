@@ -9,7 +9,8 @@ internal sealed record ArtifactGateRequest(string Protocol, string Session, stri
     int ChildPid, string BundleRoot, string Output, string ConsumerPath, string RuntimeConfigPath, string DepsPath,
     RuntimeEvidence ExpectedRuntime, LoadedAssemblyEvidence[] ExpectedAssemblies,
     Dictionary<string, string> BundleFiles, string GateImplementationSha256, string GateDriverSha256,
-    string StructUpstreamGateImplementationSha256);
+    string? StructUpstreamGateImplementationSha256 = null, string ConsumerName = "Zendiator.UseCaseBenchmarks",
+    string BenchmarkSuite = "usecase", int BenchmarkGateCases = 389);
 
 internal static class ArtifactGate
 {
@@ -23,10 +24,18 @@ internal static class ArtifactGate
         var request = JsonSerializer.Deserialize<ArtifactGateRequest>(File.ReadAllText(requestPath), ArtifactEvidence.JsonOptions)
             ?? throw new InvalidOperationException("Artifact gate request is empty");
         if (request.Protocol != Protocol || request.ExpectedAssemblies.Length == 0 ||
-            request.StructUpstreamGateImplementationSha256 is not { Length: 64 } ||
-            request.StructUpstreamGateImplementationSha256.Any(c => !(c is >= '0' and <= '9' or >= 'A' and <= 'F')) ||
+            request.ConsumerName != typeof(ArtifactGate).Assembly.GetName().Name ||
             request.ExpectedAssemblies.Select(a => a.Name).Distinct(StringComparer.Ordinal).Count() != request.ExpectedAssemblies.Length)
             throw new InvalidOperationException("Invalid artifact gate identity");
+#if SUPPLEMENTAL_BENCHMARK
+        if (request.BenchmarkSuite != BenchmarkGate.Suite || request.BenchmarkGateCases != BenchmarkGate.ExpectedCases)
+            throw new InvalidOperationException("Artifact gate suite differs from the preserved consumer");
+#else
+        if (request.BenchmarkSuite != "usecase" || request.BenchmarkGateCases != 389 ||
+            request.StructUpstreamGateImplementationSha256 is not { Length: 64 } ||
+            request.StructUpstreamGateImplementationSha256.Any(c => !(c is >= '0' and <= '9' or >= 'A' and <= 'F')))
+            throw new InvalidOperationException("Invalid use-case artifact gate identity");
+#endif
         var attempt = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(requestPath))!;
         if (!ArtifactEvidence.SamePath(request.BundleRoot, System.IO.Path.Combine(attempt, "bundle")) ||
             !ArtifactEvidence.SamePath(request.Output, System.IO.Path.Combine(attempt, "artifact-gate")))
@@ -45,7 +54,7 @@ internal static class ArtifactGate
         CheckBundle(request);
         CheckRuntime(request);
         var expected = request.ExpectedAssemblies.ToDictionary(a => a.Name, StringComparer.Ordinal);
-        foreach (var name in new[] { "Zendiator.UseCaseBenchmarks", "Zendiator", "Zendiator.Abstractions",
+        foreach (var name in new[] { request.ConsumerName, "Zendiator", "Zendiator.Abstractions",
                                     "Microsoft.Extensions.DependencyInjection", "Microsoft.Extensions.DependencyInjection.Abstractions",
                                     "System.Private.CoreLib" })
             if (!expected.ContainsKey(name))
@@ -78,6 +87,18 @@ internal static class ArtifactGate
                          current.FullName != item.FullName || ArtifactEvidence.Hash(current.Location) != item.Sha256)
                     throw new InvalidOperationException($"Entry startup substituted a binding: {item.Name}");
             }
+#if SUPPLEMENTAL_BENCHMARK
+            await BenchmarkGate.Run(request.Output, request.RuntimeConfigPath, request.DepsPath);
+            var defaultCorrectness = System.IO.Path.Combine(request.Output, "correctness.json");
+            var defaultCorrectnessSha256 = ArtifactEvidence.Hash(defaultCorrectness);
+            using (var correctness = JsonDocument.Parse(File.ReadAllBytes(defaultCorrectness)))
+                if (correctness.RootElement.ValueKind != JsonValueKind.Array ||
+                    correctness.RootElement.GetArrayLength() != request.BenchmarkGateCases ||
+                    correctness.RootElement.EnumerateArray().Any(row =>
+                        !row.TryGetProperty("status", out var status) || status.GetString() != "Passed"))
+                    throw new InvalidOperationException("Supplemental benchmark gate evidence is incomplete or failed");
+            var semanticFiles = SemanticFiles(request.Output);
+#else
             await GeneratedGate.Run();
             if (Correctness.Results.Count != 389)
                 throw new InvalidOperationException($"Expected 389 benchmark-gate results, got {Correctness.Results.Count}");
@@ -91,14 +112,19 @@ internal static class ArtifactGate
             var structEvidence = CheckStructUpstreamEvidence(structOutput);
             if (Correctness.Results.Count != 389 || ArtifactEvidence.Hash(defaultCorrectness) != defaultCorrectnessSha256)
                 throw new InvalidOperationException("The additional gate changed the original 389-case evidence");
+#endif
             var loaded = ArtifactEvidence.Assemblies();
             CheckBindings(request, loaded);
             CheckRuntime(request);
             CheckBundle(request);
             if (ArtifactEvidence.Hash(requestPath) != requestHash)
                 throw new InvalidOperationException("Artifact gate request changed while validating");
+#if SUPPLEMENTAL_BENCHMARK
+            CheckSemanticFiles(request.Output, semanticFiles);
+#else
             if (CheckStructUpstreamEvidence(structOutput) != structEvidence)
                 throw new InvalidOperationException("Struct upstream evidence changed while validating");
+#endif
             ArtifactEvidence.Write(System.IO.Path.Combine(request.Output, "artifact-proof.json"), new
             {
                 schemaVersion = 1,
@@ -110,6 +136,11 @@ internal static class ArtifactGate
                 requestHash,
                 request.GateImplementationSha256,
                 request.GateDriverSha256,
+                request.ConsumerName,
+                request.BenchmarkSuite,
+#if SUPPLEMENTAL_BENCHMARK
+                semanticFiles,
+#else
                 request.StructUpstreamGateImplementationSha256,
                 structUpstreamGate = new
                 {
@@ -122,16 +153,25 @@ internal static class ArtifactGate
                     driverIdentificationSha256 = structEvidence.DriverSha256,
                     implementationSha256 = request.StructUpstreamGateImplementationSha256
                 },
+#endif
                 processId = Environment.ProcessId,
                 startedFrom = "preserved consumer entry, separate process",
-                benchmarkGateCases = Correctness.Results.Count,
+                benchmarkGateCases = request.BenchmarkGateCases,
                 correctnessSha256 = defaultCorrectnessSha256,
                 bundleBeforeAndAfterVerified = true,
                 request.BundleFiles,
                 runtimeEvidence = ArtifactEvidence.Runtime(request.RuntimeConfigPath, request.DepsPath),
                 assemblies = loaded,
-                scope = "389 existing benchmark-gate checks plus separate 96 struct-upstream parity cases and three driver type classifications; focused contracts and full-suite tests remain separate"
+                scope =
+#if SUPPLEMENTAL_BENCHMARK
+                    "Original supplemental benchmark semantics validated in the preserved consumer; all semantic output files are bound to this proof"
+#else
+                    "389 existing benchmark-gate checks plus separate 96 struct-upstream parity cases and three driver type classifications; focused contracts and full-suite tests remain separate"
+#endif
             });
+#if SUPPLEMENTAL_BENCHMARK
+            CheckSemanticFiles(request.Output, semanticFiles);
+#endif
         }
         finally
         {
@@ -139,6 +179,42 @@ internal static class ArtifactGate
         }
     }
 
+#if SUPPLEMENTAL_BENCHMARK
+    private static Dictionary<string, string> SemanticFiles(string output)
+    {
+        var files = new Dictionary<string, string>(StringComparer.Ordinal);
+        var directories = new Stack<string>();
+        directories.Push(output);
+        while (directories.TryPop(out var directory))
+        {
+            if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException("Reparse directories are not valid semantic evidence");
+            foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
+            {
+                var attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidOperationException("Reparse artifacts are not valid semantic evidence");
+                if ((attributes & FileAttributes.Directory) != 0)
+                    directories.Push(entry);
+                else
+                {
+                    var name = System.IO.Path.GetRelativePath(output, entry).Replace('\\', '/');
+                    if (name != "artifact-proof.json")
+                        files.Add(name, ArtifactEvidence.Hash(entry));
+                }
+            }
+        }
+        return files;
+    }
+
+    private static void CheckSemanticFiles(string output, Dictionary<string, string> expected)
+    {
+        var actual = SemanticFiles(output);
+        if (actual.Count != expected.Count || expected.Any(pair =>
+            !actual.TryGetValue(pair.Key, out var digest) || digest != pair.Value))
+            throw new InvalidOperationException("Supplemental semantic evidence changed while validating");
+    }
+#else
     private static (string CorrectnessSha256, string DriverSha256) CheckStructUpstreamEvidence(string output)
     {
         var correctness = File.ReadAllBytes(System.IO.Path.Combine(output, "struct-upstream-correctness.json"));
@@ -174,6 +250,7 @@ internal static class ArtifactGate
                 throw new InvalidOperationException("Struct upstream driver classification failed");
         return (Convert.ToHexString(SHA256.HashData(correctness)), Convert.ToHexString(SHA256.HashData(driver)));
     }
+#endif
 
     private static void CheckBundle(ArtifactGateRequest request)
     {

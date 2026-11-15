@@ -14,7 +14,7 @@ internal sealed class InterleavedOrderer : DefaultOrderer
             group.OrderBy(benchmark => (Array.IndexOf(Libraries, Library(benchmark)) + index) % Libraries.Length));
 
     private static string Library(BenchmarkCase benchmark) =>
-        Libraries.First(library => benchmark.Descriptor.Type.Name.StartsWith(library, StringComparison.Ordinal));
+        Libraries.FirstOrDefault(library => benchmark.Descriptor.Type.Name.StartsWith(library, StringComparison.Ordinal)) ?? string.Empty;
 
     private static string CaseKey(BenchmarkCase benchmark) =>
         benchmark.Descriptor.Type.Name[Library(benchmark).Length..] + "." + benchmark.Descriptor.WorkloadMethod.Name + "." + benchmark.Parameters.FolderInfo;

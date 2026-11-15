@@ -13,6 +13,7 @@ import shutil
 from pathlib import Path
 
 from owned_process import validate_process_identity
+from measurement_suites import SUITES, project_for, project_suite, consumer_name, gate_count, implementation_files
 
 
 PROTOCOL = "zendiator-child-artifact-gate-v1"
@@ -22,7 +23,7 @@ REQUIRED = {"Zendiator.UseCaseBenchmarks", "Zendiator", "Zendiator.Abstractions"
             "System.Private.CoreLib"}
 COMPETITORS = {"MediatRHistorical": {"MediatR", "MediatR.Contracts"}, "Mediator": {"Mediator"},
                "DispatchR": {"DispatchR", "DispatchR.Abstractions"}, "Immediate": {"Immediate.Handlers.Shared"},
-               "Zendiator": set()}
+               "Zendiator": set(), "Foundatio": {"Foundatio.Mediator.Abstractions"}}
 CONTROLS = {"DOTNET_gcServer", "COMPlus_gcServer", "DOTNET_gcConcurrent", "COMPlus_gcConcurrent",
             "DOTNET_GCHeapCount", "COMPlus_GCHeapCount", "DOTNET_ReadyToRun", "COMPlus_ReadyToRun",
             "DOTNET_TieredCompilation", "COMPlus_TieredCompilation", "DOTNET_TieredPGO", "COMPlus_TieredPGO",
@@ -119,15 +120,16 @@ def tree_hashes(root):
     return files
 
 
-def assembly_map(items):
+def assembly_map(items, consumer="Zendiator.UseCaseBenchmarks"):
     result = {}
     for item in items:
         name = item["name"]
         if name in result or not HASH.fullmatch(item["sha256"]) or not item.get("mvid") or not item.get("fullName"):
             raise ValueError("Ambiguous or incomplete actual loaded-assembly evidence")
         result[name] = item
-    if not REQUIRED <= result.keys():
-        raise ValueError(f"Missing mandatory child bindings: {REQUIRED - result.keys()}")
+    required = (REQUIRED - {"Zendiator.UseCaseBenchmarks"}) | {consumer}
+    if not required <= result.keys():
+        raise ValueError(f"Missing mandatory child bindings: {required - result.keys()}")
     return result
 
 
@@ -150,8 +152,9 @@ def child_snapshot(row, attempt):
         validate_process_identity(identity)
     except RuntimeError as error:
         raise ValueError("Post-workload evidence has unidentifiable process identity") from error
-    loaded = assembly_map(final["assemblies"])
-    initial_map = assembly_map(initial["assemblies"])
+    consumer = consumer_name(project_for(row["Case"]))
+    loaded = assembly_map(final["assemblies"], consumer)
+    initial_map = assembly_map(initial["assemblies"], consumer)
     if any(name not in loaded or loaded[name] != item for name, item in initial_map.items()):
         raise ValueError("A loaded binding changed after setup")
     if not COMPETITORS[row["Library"]] <= loaded.keys():
@@ -163,8 +166,7 @@ def child_snapshot(row, attempt):
 
 
 def implementation_identity(project):
-    names = ("ArtifactGate.cs", "ArtifactEvidence.cs", "Program.cs", "ChildEvidence.cs")
-    return digest({name: sha(project / name) for name in names})
+    return digest({name: sha(path) for name, path in implementation_files(project).items()})
 
 
 def semantic_identity(final, session, project, runtime, bundle_files):
@@ -181,7 +183,8 @@ def semantic_identity(final, session, project, runtime, bundle_files):
         "session": session["sessionId"], "revision": session["revision"], "sourceDigest": session["sourceDigest"],
         "sdk": session["sdk"], "protocol": PROTOCOL, "gateImplementationSha256": implementation_identity(project),
         "gateDriverSha256": sha(Path(__file__)),
-        "structUpstreamGateImplementationSha256": sha(project / "StructUpstreamGate.cs"),
+        "structUpstreamGateImplementationSha256": sha(project / "StructUpstreamGate.cs") if project_suite(project) == "usecase" else None,
+        "consumerName": consumer_name(project), "benchmarkSuite": project_suite(project), "benchmarkGateCases": gate_count(project),
         "bundleFiles": dict(bundle_files),
         "assemblies": sorted([item["name"], item["fullName"], item["mvid"], item["sha256"]]
                              for item in final["assemblies"]),
@@ -315,16 +318,20 @@ def verify_gate(request_path, proof_path):
                 "gateImplementationSha256", "gateDriverSha256", "bundleFiles"):
         if proof.get(key) != request[key]:
             raise ValueError(f"Gate proof identity differs: {key}")
-    if (proof.get("schemaVersion") != 1 or proof.get("benchmarkGateCases") != 389 or
+    suite = request.get("benchmarkSuite", "usecase")
+    if suite not in SUITES or (request.get("consumerName", "Zendiator.UseCaseBenchmarks"), request.get("benchmarkGateCases", 389)) != SUITES[suite]:
+        raise ValueError("Unknown or substituted semantic suite identity")
+    expected_count = SUITES[suite][1]
+    if (proof.get("schemaVersion") != 1 or proof.get("benchmarkGateCases") != expected_count or
         proof.get("bundleBeforeAndAfterVerified") is not True or proof.get("requestHash") != sha(request_path)):
         raise ValueError("Gate proof is incomplete")
     outcomes = read(proof_path.parent / "correctness.json")
-    if (len(outcomes) != 389 or any(item.get("status") != "Passed" for item in outcomes) or
+    if (len(outcomes) != expected_count or any(item.get("status") != "Passed" for item in outcomes) or
         proof["correctnessSha256"] != sha(proof_path.parent / "correctness.json")):
-        raise ValueError("389-case benchmark gate evidence changed/failed")
+        raise ValueError("Benchmark semantic gate evidence changed/failed")
     if tree_hashes(request["bundleRoot"]) != request["bundleFiles"]:
         raise ValueError("Saved gate bundle is missing or substituted")
-    actual = assembly_map(proof["assemblies"])
+    actual = assembly_map(proof["assemblies"], request.get("consumerName", "Zendiator.UseCaseBenchmarks"))
     for expected in request["expectedAssemblies"]:
         if expected["name"] not in actual or actual[expected["name"]] != expected:
             raise ValueError("Actual gate loaded a different consumer/product/dependency binding")
@@ -338,7 +345,20 @@ def verify_gate(request_path, proof_path):
             raise ValueError("Measured dependency context/native runtime changed after the gate")
     if sha(runtime["hostPath"]) != runtime["hostSha256"]:
         raise ValueError("Measured executable changed after the gate")
-    verify_struct_upstream_gate(request, proof, proof_path)
+    if suite == "usecase":
+        verify_struct_upstream_gate(request, proof, proof_path)
+    else:
+        if proof.get("benchmarkSuite") != suite or proof.get("consumerName") != request["consumerName"]:
+            raise ValueError("Supplemental proof identifies a different suite/consumer")
+        files = tree_hashes(proof_path.parent)
+        files.pop(proof_path.name)
+        if not files or files != proof.get("semanticFiles"):
+            raise ValueError("Supplemental semantic details changed or are missing")
+        case = json.loads(request["case"])
+        parameters = {name: case[name] for name in ("Lifetime", "Count", "Asynchronous") if name in case}
+        if not any(row.get("type", "").endswith("." + case["Type"]) and row.get("method") == case["Method"]
+                   and row.get("parameters", {}) == parameters for row in outcomes):
+            raise ValueError("Supplemental gate does not cover the measured method")
     return proof
 
 
@@ -350,7 +370,7 @@ def ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env):
     key = digest(semantic)
     cache_root = attempt.parents[4] / "artifact-gate-cache"
     cache = cache_root / (key + ".json")
-    consumer = next(item["path"] for item in expected if item["name"] == "Zendiator.UseCaseBenchmarks")
+    consumer = next(item["path"] for item in expected if item["name"] == consumer_name(project))
     request = {"protocol": PROTOCOL, "session": session["sessionId"], "case": canonical(row["Case"]),
                "childProofSha256": sha(final_path), "childPid": final["pid"], "bundleRoot": str(bundle),
                "output": str(attempt / "artifact-gate"), "consumerPath": consumer,
@@ -359,7 +379,8 @@ def ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env):
                "originalBuildRoot": str(build_root), "buildEvidenceSha256": sha(attempt / "build-artifacts.json"),
                "gateImplementationSha256": semantic["gateImplementationSha256"],
                "gateDriverSha256": semantic["gateDriverSha256"],
-               "structUpstreamGateImplementationSha256": semantic["structUpstreamGateImplementationSha256"]}
+               "structUpstreamGateImplementationSha256": semantic["structUpstreamGateImplementationSha256"],
+               "consumerName": consumer_name(project), "benchmarkSuite": project_suite(project), "benchmarkGateCases": gate_count(project)}
     request_path = attempt / "artifact-gate-request.json"
     write(request_path, request)
     reused = filesystem_path(cache).exists()
@@ -452,7 +473,7 @@ def check_artifact_binding(row, attempt, session, project):
                         Path(request["bundleRoot"]), Path(runtime["frameworkDirectory"]))
         if not same_path(expected["path"], target) or sha(target) != expected["sha256"]:
             raise ValueError("Current-case saved assembly path/content was substituted")
-    consumer = next(item["path"] for item in request["expectedAssemblies"] if item["name"] == "Zendiator.UseCaseBenchmarks")
+    consumer = next(item["path"] for item in request["expectedAssemblies"] if item["name"] == consumer_name(project))
     if (not same_path(request["consumerPath"], consumer) or not within(consumer, request["bundleRoot"]) or
         not same_path(request["runtimeConfigPath"], runtime["runtimeConfig"]["path"]) or
         not same_path(request["depsPath"], runtime["deps"]["path"])):
@@ -472,6 +493,8 @@ def check_artifact_binding(row, attempt, session, project):
 
 
 def binding_result(path, binding):
+    suite = binding["semantic"].get("benchmarkSuite", "usecase")
     return {"bindingSha256": sha(path), "childFinalSha256": binding["childProofSha256"], "key": binding["key"],
             "proofSha256": binding["proofSha256"], "proofReused": binding["proofReused"],
-            "scope": "389 existing benchmark gate plus separate 96 struct-upstream parity cases and three driver type classifications; focused/full-suite evidence remains separate"}
+            "scope": ("389 existing benchmark gate plus separate 96 struct-upstream parity cases and three driver type classifications; focused/full-suite evidence remains separate"
+                      if suite == "usecase" else f"Original {suite} semantic gate in the saved consumer; all semantic files and loaded bindings verified")}

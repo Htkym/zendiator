@@ -14,13 +14,14 @@
     <Compile Remove="AllocationBreakdown.cs" />
     <ProjectReference Include="../../src/Zendiator/Zendiator.csproj" />
     <ProjectReference Include="../../src/Zendiator.SourceGenerator/Zendiator.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-    <PackageReference Include="MediatR" Version="[14.2.0]" />
+    <PackageReference Include="MediatR" Version="[15.0.0]" />
     <PackageReference Include="Mediator.SourceGenerator" Version="[3.0.2]" PrivateAssets="all" />
     <PackageReference Include="Mediator.Abstractions" Version="[3.0.2]" />
     <PackageReference Include="DispatchR.Mediator" Version="[2.3.1]" />
     <PackageReference Include="DispatchR.Mediator.Abstractions" Version="[2.3.1]" />
-    <PackageReference Include="Immediate.Handlers" Version="[4.2.0]" />
+    <PackageReference Include="Immediate.Handlers" Version="[4.3.0]" />
     <PackageReference Include="BenchmarkDotNet" Version="[0.15.8]" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.0.12]" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="[10.0.9]" />
   </ItemGroup>
 </Project>

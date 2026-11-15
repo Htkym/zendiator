@@ -101,6 +101,10 @@ var generated = Directory.Exists(Path.Combine("obj", "Release", "net10.0", "gene
         .Select(p => new { path = p, sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(p))) })
     : [];
 var generatorPath = Path.GetFullPath(Path.Combine("..", "..", "src", "Zendiator.SourceGenerator", "bin", "Release", "netstandard2.0", "Zendiator.SourceGenerator.dll"));
+using var packageLock = JsonDocument.Parse(File.ReadAllText("packages.lock.json"));
+var packageVersions = packageLock.RootElement.GetProperty("dependencies").GetProperty("net10.0")
+    .EnumerateObject().Where(package => package.Value.GetProperty("type").GetString() == "Direct")
+    .ToDictionary(package => package.Name, package => package.Value.GetProperty("resolved").GetString());
 File.WriteAllText(Path.Combine(output, "manifest.json"), JsonSerializer.Serialize(new
 {
     startedUtc = DateTimeOffset.UtcNow,
@@ -110,6 +114,7 @@ File.WriteAllText(Path.Combine(output, "manifest.json"), JsonSerializer.Serializ
     source = "current checked-out Zendiator workspace; see source and runtime hashes",
     processId = Environment.ProcessId,
     runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+    packageVersions,
     runtimeSha256 = runtimeHash,
     expectedChildRuntimeSha256 = expectedChildRuntimeHash,
     gateProofSha256 = skipGate ? Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(gateProof!))) : null,

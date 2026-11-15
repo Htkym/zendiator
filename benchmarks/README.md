@@ -2,13 +2,17 @@
 
 [日本語版](README.ja.md)
 
-The checked-in fixture compares Zendiator with Immediate.Handlers 4.2.0, DispatchR.Mediator 2.3.1, Mediator 3.0.2 and MediatR 14.2.0. It uses each library's documented entry and registration. The full matrix contains Send 125, features 55, streams 120 and relay 60 cases, across 74 comparison keys. Unsupported combinations remain unmeasured.
+The checked-in fixture pins Immediate.Handlers 4.3.0, DispatchR.Mediator 2.3.1, Mediator 3.0.2 and MediatR 15.0.0. These pins apply to new runs; the historical tables below retain their original versions. It uses each library's documented entry and registration. The full matrix contains Send 125, features 55, streams 120 and relay 60 cases, across 74 comparison keys. Unsupported combinations remain unmeasured.
+
+The [post-0.6.0 measurement plan](performance-plan/README.md) records the package sources, exact case-to-row mapping, Stream processing differences and focused baseline command. New pins alone establish no new performance result.
 
 ## Current README comparison
 
 The [root performance tables](../README.md#performance) contain a fresh 2026-11-11 comparison of 101 selected cells at implementation `88483069db6409e092efa0d5ef63452777f577c9`, including Foundatio.Mediator 1.3.3. [Unrounded data and uncertainty](results/20261111-8848306-summary.csv) and [all numeric observations, conditions and report hashes](results/20261111-8848306-readme.json) are included. These are selected README workloads, not the full matrix described above.
 
 The five-library UseCase commands below do not alone reproduce those tables: Foundatio, ShortCircuit and H additionally use preserved workload definitions with a measurement entry. Keep the implementation, workload definitions, package versions and job controls together when reproducing a comparison. The historical 0.4.0 results below remain a separate measurement.
+
+For new runs, the [122-cell baseline command](performance-plan/README.md#run-retain-and-decide) selects all 101 historical workload cells plus the planned Relay and Send diagnostics across the tracked UseCase, Foundatio, ShortCircuit and Hook projects. It uses a new shared measurement entry and the current package pins, so it does not reproduce the historical numbers or the missing private historical entry.
 
 ## Read the comparison
 
@@ -34,7 +38,7 @@ FirstSend uses 16384 pre-created scopes per measured iteration, unroll factor 1.
 
 Commands run the fixtures at the source revision you have checked out. To reproduce
 the historical table, use its pinned `1c41d2b` source and matching dependencies;
-running the current 0.5.0 checkout does not reproduce that historical implementation.
+running the current checkout does not reproduce that historical implementation.
 For Zendiator, Send and non-notification feature cases use a canonical composition;
 Stream and Relay use native cursor sources. Notification retains a separate legacy
 registration. The current README tables use the separate 101-cell measurement and additional definitions described above.
@@ -68,7 +72,7 @@ change or a lower allocation count alone does not establish a speedup; typed
 consumption does not guarantee lower time or allocation.
 ## Historical 0.4.0 results
 
-These results belong to the historical source below, not the current 0.5.0 candidate.
+These results belong to the historical source below, not the current implementation.
 
 These selected observations help distinguish steady-state dispatch from first use and stream consumption. Lower mean time and lower managed allocation are separate benefits.
 
