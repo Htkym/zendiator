@@ -2,7 +2,7 @@
 
 [English](migrating-from-mediatr.md)
 
-このガイドは`IMediator`、`ISender`、`IPublisher`を使うMediatR 12のアプリケーションを、.NET 10・C# 14上のZendiator 0.6.0へ移行する手順です。後のMediatRでは登録APIが異なる場合があります。[README](../README.ja.md)と[現行の構成ガイド](getting-started-0.5.0.ja.md)も参照してください。構成ガイドは既存リンクを保つためファイル名を維持していますが、内容は0.6.0向けです。
+このガイドは`IMediator`、`ISender`、`IPublisher`を使うMediatR 12のアプリケーションを、.NET 10・C# 14上のZendiator 0.6.0へ移行する手順です。後のMediatRでは登録APIが異なる場合があります。[README](../README.ja.md)と[現行の構成ガイド](getting-started-0.5.0.ja.md)も参照してください。構成ガイドは既存リンクを保つためファイル名を維持しています。現在は未公開の0.7.0の契約と、0.6.0向けと明記したサンプルを説明しています。この移行ガイドの対象は引き続き公開済みの0.6.0です。
 
 新しいSend・Streamルートでは、`[Handler]`を付けたHandlerを`Handlers`で選び、`Pipeline`に段を順番に並べる明示的な構成を使います。以前のアセンブリ探索、`AddOpenBehavior`、`Order`のAPIは互換経路として残っています。既存のZendiatorコードから移行するときは、[0.6.0のHandler・Stream変更](release/0.6.0-release-notes.ja.md)も適用してください。
 
@@ -98,7 +98,7 @@ public sealed class GetUserQueryHandler : IRequestHandler<GetUserQuery, UserDto>
 
 生成された登録ではMediatorがScoped、Handler・Hook・Session FactoryがTransientになります。MediatR 12のMediatorの既定値はTransientです。登録を上書きするときは`AddZendiator`より前にサービスを登録してください。`TryAdd`による生成登録は先行する登録を保ちます。再利用するサービスはアプリケーションの並行利用に対応する必要があります。
 
-各MediatorはTransientを含む取得済みの依存を再利用します。条件を満たす非同期Hookルートは最初のHookより前にルート単位の依存セットを取得します。それ以外のルートにはそれぞれの捕捉規則が適用されます。送信や再試行のたびに新しい依存が作られるとは限りません。構築時期やインスタンスの共有に依存する前に、[現行の捕捉規則](getting-started-0.5.0.ja.md#di-scopeの所有)を確認してください。
+各MediatorはTransientを含む取得済みの依存を再利用します。条件を満たす非同期Hookルートは最初のHookより前にルート単位の依存セットを取得します。それ以外のルートにはそれぞれの捕捉規則が適用されます。送信や再試行のたびに新しい依存が作られるとは限りません。[開発版の捕捉規則](getting-started-0.5.0.ja.md#di-scopeの所有)では同期Beforeルートの依存取得を含む未公開の0.7.0での追加変更を説明しています。この節で説明した公開済みの0.6.0の動作を変えるものではありません。更新するときや構築時期・インスタンスの共有に依存するときは、その違いを確認してください。
 
 構築と破棄はDIが所有します。送信、列挙、後始末がすべて終わってからScopeを破棄してください。生成されたMediatorは`IDisposable`の所有者ではありません。ScopeやProviderの破棄後の利用は未対応です。`ValidateScopes`と`ValidateOnBuild`を有効にし、遅延解決されるルートも実際に呼び出して確認します。
 

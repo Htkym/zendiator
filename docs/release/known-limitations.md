@@ -1,12 +1,11 @@
-# Known limitations for 0.6.0
+# Known limitations for 0.7.0 development
 
-This page describes Zendiator 0.6.0. The handler marker and standard typed Stream
-middleware changed in this release; see the
-[0.6.0 release notes](0.6.0-release-notes.md).
-Start with [getting started](../getting-started-0.5.0.md) and the
-[Stream migration guide](../migrating-stream-upstream.md). Historical 0.4.0 APIs and results
-are described in the [0.4.0 release notes](0.4.0-release-notes.md); they are not
-compatibility promises for 0.6.0.
+0.7.0 is unreleased. This page describes the development contracts, including the
+[route-local capture changes](0.7.0-release-notes.md). Start with
+[getting started](../getting-started-0.5.0.md) and the
+[Stream migration guide](../migrating-stream-upstream.md). Published 0.6.0 behavior is
+described in its [release notes](0.6.0-release-notes.md). Historical 0.4.0 APIs and
+results remain in the [0.4.0 release notes](0.4.0-release-notes.md).
 
 ## API and compatibility boundaries
 
@@ -31,13 +30,20 @@ justify changing the documented execution contract.
 ## Dependency capture and lifetime
 
 Each Mediator reuses captured dependencies, including Transient services and
-implementation factories. Eligible closed asynchronous Hook routes capture a
-route-local set; the synchronous-Before-only fast path and other excluded routes
-retain per-dependency capture. A new send or retry does not imply a new instance,
-while the same Transient type can differ between route sets. See the
-[capture rules](../getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)
-before relying on shared identity or constructor timing. Native DI still
-constructs and disposes these objects and controls Scoped or Singleton sharing.
+implementation factories. A new send or retry does not imply a new instance.
+Eligible closed SendAsync hook routes, including synchronous Before hooks,
+capture a route-local set on first dispatch and resolve all receivers before the
+first hook. Unused downstream receivers may be constructed even when an outer hook
+fails. Separate routes can capture different Transients of the same type; use
+Scoped or Singleton registration when identity must be shared.
+
+Receivers used only through route-local sets have no separate per-type Mediator
+capture. Its explicit `IServiceProvider` interface forwards their resolution to
+the original provider. A type also used by a direct route retains that route's
+per-type capture. Explicit EagerDependencies keeps an affected synchronous-Before-only
+route on direct capture and preserves its injected instances and acquisition
+timing. See the [capture contract](../getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)
+for eligibility and custom-provider requirements.
 
 Concurrent first resolutions can activate several Transients. Successful callers
 use the publication winner; losing objects remain DI-owned. A resolution failure
@@ -49,9 +55,11 @@ cleanup finish. Using a Mediator after scope disposal is unsupported. Scope disp
 does not cancel or join pending operations. Independent Stream owners do not make
 shared handlers, hooks or sinks safe for concurrent use.
 
-Lazy resolution means `ValidateOnBuild` alone cannot validate every dispatch
-dependency. Exercise the routes your application uses, especially after changing
-lifetimes. Do not let a Singleton Mediator capture Scoped services.
+`ValidateOnBuild` can inspect the declared constructor dependency graph of
+registered route sets, but not every dispatch dependency, arbitrary DI factory
+body or open generic closure. Enable `ValidateScopes` and exercise the routes
+your application uses, especially after changing lifetimes. A Singleton Mediator
+must not capture Scoped services.
 
 Closed storage is inline by default. Explicit lazy blocks can reduce retained empty
 slots for some sparse compositions, but add block allocation and access costs for
@@ -196,6 +204,23 @@ of other target frameworks is claimed here. Route-local dependency sets for asyn
 are also not exercised by these Native AOT fixtures. Explicit `EagerDependencies`
 is a separate configuration and does not establish that coverage. Native AOT
 functional checks do not establish the performance measured under JIT.
+
+### Later synchronous-Before carrier coverage
+
+Separately, 0.7.0 development packages from source
+[`0a25f24ff68c43dbbc9dd6d1a12c9eca289c5d98`](https://github.com/Htkym/zendiator/commit/0a25f24ff68c43dbbc9dd6d1a12c9eca289c5d98)
+passed the [PERF-01 CI run](https://github.com/Htkym/zendiator/actions/runs/43423479131/job/131878954485).
+Its [standard Stream package smoke](https://github.com/Htkym/zendiator/blob/0a25f24ff68c43dbbc9dd6d1a12c9eca289c5d98/scripts/struct-upstream-package-smoke-test.ps1)
+adds a closed SendAsync route with two synchronous Before hooks and a borrowed
+reference-type handler. Managed execution and the `win-x64` Native AOT executable
+both require `CARRIER_DEPENDENCY_PACKAGE_OK`, alongside the existing Stream and
+eager-dependency markers. The carrier fixture checks construction before the first
+callback, route-set reuse, native DI disposal and `ValidateOnBuild`.
+
+This is historical coverage of that synchronous-Before fixture, not a new result
+for the current integrated head. It does not change the earlier matrix's source
+revision or establish asynchronous-Hook carrier coverage, other RIDs, all route
+shapes or an AOT speed improvement.
 
 ### Generic closure and dispatch limits
 

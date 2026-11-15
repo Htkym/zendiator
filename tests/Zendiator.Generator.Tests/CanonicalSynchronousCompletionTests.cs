@@ -235,7 +235,7 @@ public sealed partial class GeneratorTests
                         Assert.Same(probe.Failure, thrown.InnerException);
                     Assert.Equal(new[] { "h0.before" }, probe.Trace);
                     Assert.All(probe.Calls, c => Assert.Equal(token, c.Token));
-                    Assert.Equal(new[] { "Hook0" }, probe.ResolvedRoles);
+                    Assert.Equal(new[] { "Hook0", "Hook1", "Handler" }, probe.ResolvedRoles);
                     Assert.Equal(mode == "before-error" ? "caller" : "before", SynchronousCompletionProbe.Ambient.Value);
                     Assert.Equal(0, probe.Consumptions);
                     continue;
@@ -286,6 +286,7 @@ public sealed partial class GeneratorTests
                         var canceled = Assert.IsAssignableFrom<OperationCanceledException>(thrown.InnerException);
                         Assert.Equal(probe.Cancellation.Token, canceled.CancellationToken);
                         Assert.Empty(probe.Trace);
+                        Assert.Empty(probe.ResolvedRoles);
                         Assert.Equal("caller", SynchronousCompletionProbe.Ambient.Value);
                     }
                     else

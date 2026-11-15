@@ -6,8 +6,9 @@ This guide moves MediatR 12 applications using `IMediator`, `ISender` and
 `IPublisher` to Zendiator 0.6.0 on .NET 10 and C# 14. Later MediatR versions may
 have different registration APIs. Start with the [README](../README.md) and
 [current configuration guide](getting-started-0.5.0.md). The configuration guide
-keeps its existing filename so published links continue to work; its contents
-target 0.6.0.
+keeps its existing filename so published links continue to work. It now describes
+unreleased 0.7.0 contracts alongside explicitly labeled 0.6.0 samples; this
+migration guide remains for published 0.6.0.
 
 Use an explicit composition for new Send and Stream routes: mark handlers with
 `[Handler]`, select them with `Handlers`, and order stages in `Pipeline`. The
@@ -138,8 +139,11 @@ Reused services must support the application's concurrent use.
 Each Mediator reuses captured dependencies, including Transients. Eligible
 asynchronous Hook routes acquire a route-local dependency set before the first
 Hook; other routes retain their own capture rules. A send or retry does not imply
-a new dependency instance. See [current capture rules](getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)
-before relying on constructor timing or shared identity.
+a new dependency instance. The [development capture rules](getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)
+describe additional changes for unreleased 0.7.0, including synchronous-Before
+route capture. They do not change the published 0.6.0 behavior described here.
+Review those differences before upgrading or relying on constructor timing or
+shared identity.
 
 DI owns activation and disposal. Dispose the scope after all sends, enumeration
 and cleanup finish. The generated Mediator is not an `IDisposable` owner. Using it

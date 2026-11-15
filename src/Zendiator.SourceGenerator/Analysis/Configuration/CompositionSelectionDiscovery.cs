@@ -199,7 +199,7 @@ internal static class CompositionSelectionDiscovery
                 }
             var pipelines = lists.Bind(selected.Keys);
             var eagerEligible = new HashSet<string>(pipelines.Where(p => (p.Family is BoundDispatchFamily.SendSync or BoundDispatchFamily.SendAsync) &&
-                !p.RequestIsGeneric && !CanonicalCapabilityEmissionNormalizer.UsesDependencyCarrier(p) && p.Handlers.All(h => h.Sessions.Count == 0) &&
+                !p.RequestIsGeneric && !CanonicalCapabilityEmissionNormalizer.ExcludesEagerDependencies(p) && p.Handlers.All(h => h.Sessions.Count == 0) &&
                 p.Stages.All(s => s.Sessions.Count == 0 && s.Callbacks.All(callback => callback.Completion == BoundCompletionKind.Synchronous)))
                 .SelectMany(p => p.Handlers.Select(h => h.Name).Concat(p.Stages.Select(s => s.Name))), StringComparer.Ordinal);
             foreach (var dependency in eagerDependencies)
