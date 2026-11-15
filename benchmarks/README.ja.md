@@ -2,13 +2,17 @@
 
 [English](README.md)
 
-チェックインしたfixtureで、ZendiatorとImmediate.Handlers 4.2.0、DispatchR.Mediator 2.3.1、Mediator 3.0.2、MediatR 14.2.0を比べます。入口と登録方法は各ライブラリの公開仕様に沿っています。全体はSend 125件、features 55件、streams 120件、relay 60件、74比較キーです。対応しない組合せは未測定として扱います。
+チェックインしたfixtureは、Immediate.Handlers 4.3.0、DispatchR.Mediator 2.3.1、Mediator 3.0.2、MediatR 15.0.0を固定してZendiatorと比べます。この固定版は新しい実行に適用し、以下の過去の表では当時の版を維持します。入口と登録方法は各ライブラリの公開仕様に沿っています。全体はSend 125件、features 55件、streams 120件、relay 60件、74比較キーです。対応しない組合せは未測定として扱います。
+
+[0.6.0以降の測定計画](performance-plan/README.md)には、パッケージの出典、各ケースと表の行の対応、Streamの処理の違い、baselineの実行コマンドを記載しています。固定版を更新しただけでは、新しい性能結果は得られません。
 
 ## 現在のREADMEの比較
 
 [ルートの性能表](../README.ja.md#性能比較)には、実装 `88483069db6409e092efa0d5ef63452777f577c9` を2026-11-11に測定した101セルを掲載しています。Foundatio.Mediator 1.3.3も含みます。[丸め前の値とばらつき](results/20261111-8848306-summary.csv)、[全数値観測・条件・report hash](results/20261111-8848306-readme.json)を保存しています。これはREADMEで選んだ利用場面の比較で、上記の全matrixではありません。
 
 以下の5ライブラリのUseCaseコマンドだけでは、この表全体を再現できません。Foundatio、ShortCircuit、Hは、保存した処理定義に測定用の入口を組み合わせています。比較を再現するときは、実装・処理定義・package版・job条件を揃えてください。以下の0.4.0の過去の表は、別の測定として維持しています。
+
+新しい実行には、[122セルのbaselineコマンド](performance-plan/README.md#run-retain-and-decide)を使えます。過去の101セルすべてに、計画したRelayとSendの診断ケースを加え、リポジトリ内のUseCase、Foundatio、ShortCircuit、Hookの各プロジェクトで実行します。新しい共通の測定入口と現在の固定版を使うため、過去の数値や、未収録の非公開の測定入口を再現するものではありません。
 
 ## 比較の読み方
 
@@ -34,7 +38,7 @@ FirstSendは測定iterationごとに事前作成したScopeを16384個使い、u
 
 コマンドは、checkoutしたソース版のfixtureを実行します。過去の表を再現する場合は、
 表で固定した`1c41d2b`のソースと、それに対応する依存関係を使います。
-現在の0.5.0を実行しても、当時の実装を再現したことにはなりません。
+現在のcheckoutを実行しても、当時の実装を再現したことにはなりません。
 ZendiatorのSendと、Notification以外のfeatureはcanonical compositionを使い、
 StreamとRelayはnative cursorを使います。Notificationは分離したlegacy登録を維持します。
 現在のREADMEの表は、上記の追加定義を含む別の101セルの測定です。
@@ -70,7 +74,7 @@ dispatcherだけを分離した時間測定ではありません。protocolの�
 
 ## 0.4.0の過去の測定結果
 
-ここに載せるのは、以下に記載した過去のソース版の結果です。現在の0.5.0候補の結果ではありません。
+ここに載せるのは、以下に記載した過去のソース版の結果です。現在の実装の結果ではありません。
 
 取得済みの入口、初回取得、Scopeの作成、Streamの消費を分けて比べた観測値です。時間と管理ヒープの割り当ては別の指標として選定に使ってください。
 

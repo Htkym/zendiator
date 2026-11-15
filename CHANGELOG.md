@@ -1,6 +1,13 @@
 # Changelog
 
-## 0.6.0 (unreleased)
+## 0.7.0 (unreleased)
+
+- Capture eligible closed `SendAsync` routes' synchronous Before receivers together before the first Hook callback, with route-local Transient identity and native DI ownership.
+- Perform the guarded Stream's dedicated initial scope probe at consumer-root initialization. Preserve StreamBefore checks, deferred opening and native DI ownership; keep the owning scope alive through enumeration and cleanup.
+
+These adopted changes retain recorded performance tradeoffs; the original strict non-regression gates did not pass. See the [0.7.0 migration and release notes](docs/release/0.7.0-release-notes.md) and [dated measurement disposition](benchmarks/performance-plan/README.md#disposition-as-of-2026-11-15).
+
+## 0.6.0 (2026-11-12)
 
 - Rename the public handler marker to `HandlerAttribute`, used as `[Handler]`. Remove the old attribute name; rebuild consumers with matching packages.
 - Expose typed `OpenAsync<TNext>` on standard Stream middleware and automatically select struct upstream ports for eligible sealed implementations.

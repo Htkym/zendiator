@@ -102,7 +102,7 @@ public sealed class GetUserQueryHandler : IRequestHandler<GetUserQuery, UserDto>
 
 構築と破棄はDIが所有します。送信、列挙、後始末がすべて終わってからScopeを破棄してください。生成されたMediatorは`IDisposable`の所有者ではありません。ScopeやProviderの破棄後の利用は未対応です。`ValidateScopes`と`ValidateOnBuild`を有効にし、遅延解決されるルートも実際に呼び出して確認します。
 
-返された`ValueTask`は1回だけawaitしてください。条件を満たす直接の`SendAsync`経路では、依存の解決、キャンセル検査、同期コールバックが`ValueTask`を返す前に例外を投げる場合があります。呼び出しとawaitの両方を`try`の中へ置いてください。例外を自動で回復する方針はありません。Lifetime Analyzerは証明できる誤用をZEN0021〜ZEN0023で報告しますが、警告がないことは複雑な非同期処理でのScopeの安全性を保証しません。
+返された`ValueTask`は1回だけawaitしてください。条件を満たす直接の`SendAsync`経路では、依存の解決、キャンセル検査、同期コールバックが`ValueTask`を返す前に例外を投げる場合があります。呼び出しとawaitの両方を`try`の中へ置いてください。例外から自動で回復する方針はありません。Lifetime Analyzerは証明できる誤用をZEN0021〜ZEN0023で報告しますが、警告がないことは複雑な非同期処理でのScopeの安全性を保証しません。
 
 ## Behavior・Hook・Wrapper
 
@@ -156,7 +156,7 @@ MediatR 12の通常の`Send`には、複数Handlerから応答を受ける契約
 
 上流を独自に制御するときは`IStreamMiddleware`と`Stage.Wrapper`、型付きの項目処理にはFilter・Map契約と`Stage.Hook`を使います。出力型が変わるPipelineは`StreamPipeline`で最終型を宣言します。要求の`IStreamRequest<T>`は引き続き入力の項目型を表します。[Iteratorガイド](streaming-iterators.md)は両方の入力、キャンセル、直接経路とガード付き経路を説明しています。[0.6.0のStream移行](migrating-stream-upstream.md)では型付き`OpenAsync<TNext>`のMiddlewareを説明しています。
 
-`StreamAsync`は標準のEnumerableを返します。通常は`await foreach`を使い、APIと列挙のキャンセルトークンを渡してください。早期終了や失敗も含め、破棄までScopeを維持します。取得時期と後始末は直接経路かガード付き経路かで異なり、すべての経路が最初のMoveで始まるわけではありません。`StreamSource(...).ConsumeAsync(...)`は別の型付き終端です。readonlyの計画値はEnumerableではなく、値型Sinkの結果は参照状態で共有します。標準列挙、型付き終端、HTTPの性能は別々に測定する必要があります。
+`StreamAsync`は標準のEnumerableを返します。通常は`await foreach`を使い、APIと列挙のキャンセルトークンを渡してください。早期終了や失敗も含め、破棄までScopeを維持します。取得時期と後始末は直接経路かガード付き経路かで異なり、すべての経路が最初のMoveで始まるわけではありません。`StreamSource(...).ConsumeAsync(...)`は別の型付き終端です。readonlyの計画値はEnumerableではありません。値型Sinkは参照状態を通じて結果を共有します。標準列挙、型付き終端、HTTPの性能は別々に測定する必要があります。
 
 通常の同期要求は`ISyncRequest`と`ISyncRequestHandler`を使い、`DispatchFamily.SendSync`で構成して生成された`Send`を呼びます。ref-like要求には追加の構成制限があり、通常のclassを使ったCompositionの例だけでは対応を判断できません。[既知の制限](release/known-limitations.md)も確認してください。
 
