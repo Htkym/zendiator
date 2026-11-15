@@ -238,9 +238,67 @@ open genericの依存はこの設定とは別のcacheに保持します。閉じ
 
 [ComposedAppサンプル](../samples/Zendiator.Sample.ComposedApp/)では型付きquery、更新command、同期Send、SendAllとStreamの7つのrouteを同じAppとDI scopeで使います。`Pipeline`はrouteごとに指定し、Hookの順序とWrapper自身のcache・retry処理を保ちます。
 
+最初の`CachedCount<Product>("current")`は在庫を読み、Handlerが意図的に1回だけ投げる`TransientCountException`を受けて、Wrapperの1回のretryで成功します。2回目はHandlerを呼ばずにcacheの値を返します。在庫の読み取り回数はどちらの時点でも`2`です。この回数は、後続のSendAllが同じ在庫を読む前に記録します。意図的な失敗はこのHandlerだけで発生します。取消済みの場合はWrapperがretryしません。
+
+Streamの入力は名前付きcursorが返す`int`です。`KeepEven`で絞り、`TimesTen`で10倍し、`KeepAtMostForty`で絞り、最後に`AsText`で`int`から`string`へ変換します。`StreamPipeline<ReadNumbers, string>`は最終型を宣言します。Handlerが整数を返すため、`ReadNumbers`は`IStreamRequest<int>`のままです。生成される`StreamAsync`の戻り値は`IAsyncEnumerable<string>`になります。
+
+リポジトリのルートから、packageを使う例を実行します。
+
+```powershell
+$version = '0.6.0'
+$project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
+
+dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
+dotnet run --project $project -c Release --no-restore -p:ZendiatorPackageVersion=$version
+```
+
+期待する出力は次のとおりです。
+
+```text
+Product: Keyboard
+Sum: 42
+Cached count: 3
+Read attempts after retry: 2
+Cache hit: 3
+Read attempts after cache hit: 2
+SendAll: 15, 16
+SendAllAsync: 25, 26
+StreamAsync: number=20, number=40
+```
+
 各routeはその配送方法で対応している構成に従います。構成が不適合なrouteが一つでもあれば、App全体の生成を止めます。scoped ref-like requestを含む複数routeの合成は今回の対応範囲外です。
 
 この例はclassのrequestと、DIが所有するclassのHandler・Hook・Wrapperを使います。返された`ValueTask`はそれぞれ1回だけ`await`し、非同期処理とStreamの列挙・後始末が終わるまでscopeを保持してください。
+
+### 目的から既存の例を選ぶ
+
+| 目的 | 例と契約 |
+|---|---|
+| 要求を変換し、結果を観測・変換する | [GettingStarted](../samples/Zendiator.Sample.GettingStarted/Program.cs)の`TrimName`と`AddExclamation`は専用のSend Hookを使う |
+| retry・cache・short-circuitを行う | [ComposedApp](../samples/Zendiator.Sample.ComposedApp/Program.cs)の`CountCache`が継続を呼ばずに終了したり、複数回呼んだりする。`CachedCountHandler`が意図的な1回の失敗を起こす |
+| Streamを絞り、出力型を変える | ComposedAppの順序付きFilter・Map Hookと`StreamPipeline<ReadNumbers, string>`を使う |
+| moduleで公開するrouteを限定する | [Sample.Application](../samples/Zendiator.Sample.Application/DependencyInjection.cs)の`ApplicationStreams`は宣言したStream HandlerとPipelineだけを選ぶ |
+| 入力契約を選ぶ | GettingStartedはコンパイラ生成のIterator、ComposedAppは名前付きcursorを使う。[入力とLifetimeの選び方](streaming-iterators.md#choose-an-input-contract)も参照する |
+
+いずれの例も生成された`IZendiator`を呼び出します。Hookは専用の処理を表し、継続を独自に制御する処理はWrapperに残します。借用するHandlerと段はDIが所有し、各例では完了と破棄までscopeを維持します。サンプルの性能は保証していません。
+
+### 生成された構成を調べる
+
+上の`$project`と`$version`を使い、コンパイラの生成ファイルをプロジェクトの`obj`内へ出力します。
+
+```powershell
+dotnet build $project -c Release --no-restore -p:ZendiatorPackageVersion=$version -p:EmitCompilerGeneratedFiles=true -p:CompilerGeneratedFilesOutputPath=obj/generated
+```
+
+プロジェクトの`obj/generated`以下を再帰的に調べ、今回のbuildで生成したファイルを確認します。固定のhashではなく、`ComposedApp.Generated.App`やHandler・段の型名を検索してください。`obj`には古いbuildの出力が残る場合があるため、今実行したbuildのファイルであることを確かめます。
+
+| 生成ファイル名の規則 | 確認する内容 |
+|---|---|
+| `Zendiator.Composition.*.g.cs` | 選んだ`Handlers`、`Pipeline`／`StreamPipeline`の順序、DI登録と捕捉するサービスの保持領域 |
+| `Zendiator.Route.*.g.cs` | 生成された呼び出し側の要求別overloadと、Streamの最終的な項目型 |
+| `Zendiator.StreamCanonical.*.g.cs` | cursorの所有と、順序付きのStream項目変換 |
+
+生成された`Service_`、`GenericService`、`RouteDependencies`のmemberがあれば、そこから捕捉するreceiverを調べ、DI登録と[捕捉規則](#di-scopeの所有)を照らします。コンストラクターの依存と破棄は引き続き標準DIが所有します。これらのファイル名と生成memberは、調べるための内部実装であり、呼び出したり保持したりするためのAPIではありません。
 
 ### Handler属性を補って再buildする
 

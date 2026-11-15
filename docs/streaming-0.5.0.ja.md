@@ -120,6 +120,6 @@ ASP.NET Coreの標準System.Text.Json formatterを使う場合、JSON配列のfr
 
 ## sampleと測定資料
 
-[GettingStarted](../samples/Zendiator.Sample.GettingStarted/Program.cs)はreadonly sink、[ComposedApp](../samples/Zendiator.Sample.ComposedApp/Program.cs)は標準列挙を示します。Application/Hostは既存Sendの登録を変えず、Stream専用named compositionを追加します。入口はいずれもMediatorです。
+[GettingStarted](../samples/Zendiator.Sample.GettingStarted/Program.cs)は標準Iteratorの入力を`await foreach`で列挙します。[ComposedApp](../samples/Zendiator.Sample.ComposedApp/Program.cs)も標準列挙を使い、名前付きcursorの`int`入力をFilter・Mapで`string`へ変換します。readonly sinkの使い方は上の「標準列挙とtyped terminal」で説明しています。Application/Hostは既存Sendの登録を変えず、Stream専用named compositionを追加します。入口はいずれもMediatorです。
 
 ベンチマークのFull/EarlyBreakは標準列挙、FullTyped/EarlyBreakTypedはtyped terminalを測定します。後者は結果を保持するclassのsinkを使います。HTTPを含む測定ではありません。DI登録や入力producerの違いを含む製品経路全体の比較であり、dispatcher単独の時間ではありません。標準列挙とtyped terminalの結果を区別し、測定していないstage・実I/O・HTTPの性能へ一般化しないでください。測定条件と過去の結果は[ベンチマークの説明](../benchmarks/README.ja.md)を参照してください。
