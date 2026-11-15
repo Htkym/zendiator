@@ -13,11 +13,40 @@ import shutil
 from pathlib import Path
 
 from owned_process import validate_process_identity
-from measurement_suites import SUITES, project_for, project_suite, consumer_name, gate_count, implementation_files
+from perf03_counted_map import verify_variant_counted_sources
+from measurement_suites import SUITES, project_for, project_suite, consumer_name, gate_count, implementation_files, perf03_implementation_files, PERF03_DIAGNOSTIC_FILES
 
 
 PROTOCOL = "zendiator-child-artifact-gate-v1"
 HASH = re.compile(r"^[0-9A-F]{64}$")
+PERF03_PROTOCOL = "zendiator-perf03-cause-gate-v1"
+PERF03_FIELDS = ("perf03CauseGateImplementationSha256", "perf03CauseVariant", "perf03CauseCaseSet", "perf03CauseSourceFiles", "perf03CauseVariantMetadata")
+PERF03_VARIANTS = {"V0", "VEC", "VEntry", "VRoot", "VWord"}
+
+
+def perf03_variant_metadata(variant):
+    declarations = {
+        "V0": ("V0", "faithful-control", "consumer-only-probed", False),
+        "VEC": ("V0", "remove-explicit-context-capture-run", "explicit-flow-unsupported", False),
+        "VEntry": ("V0", "remove-builder-start", "entry-isolation-unsupported", False),
+        "VRoot": ("V0", "root-owned-result-source", "consumer-only-probed", True),
+        "VWord": ("VRoot", "reduce-root-state-atomics", "consumer-only-probed", True),
+    }
+    if not isinstance(variant, str) or variant not in declarations:
+        raise ValueError("Unknown PERF03 diagnostic variant")
+    reference, factor, ambient, invalidation = declarations[variant]
+    return dict(id=variant, referenceVariant=reference, factor=factor, ambientContext=ambient,
+                oldUnconsumedValueTaskMayInvalidate=invalidation, normalFidelityClaim=variant == "V0",
+                countedEvidenceVariant=variant, candidateCountedEvidenceAvailable=variant in {"VEC", "VEntry", "VRoot"},
+                timedPendingDenominatorKnown=False)
+
+
+def perf03_require_bound_counted_evidence(variant):
+    perf03_variant_metadata(variant)
+    if variant == "VWord":
+        raise ValueError("PERF03 diagnostic variant " + variant + " is unranked: candidate-specific counted "
+                         "source/map/catalog and operation trace binding are missing; V0 counts cannot describe a changed candidate")
+
 REQUIRED = {"Zendiator.UseCaseBenchmarks", "Zendiator", "Zendiator.Abstractions",
             "Microsoft.Extensions.DependencyInjection", "Microsoft.Extensions.DependencyInjection.Abstractions",
             "System.Private.CoreLib"}
@@ -169,7 +198,66 @@ def implementation_identity(project):
     return digest({name: sha(path) for name, path in implementation_files(project).items()})
 
 
-def semantic_identity(final, session, project, runtime, bundle_files):
+def perf03_case_set():
+    rows = [dict(Type=f"ZendiatorPerf03{producer}{token}{route}", Method=method, Count=1024, Asynchronous=asynchronous)
+            for producer, token, route, asynchronous in itertools.product(
+                ("Iterator", "Named"), ("Default", "Live"), ("Stream0", "Relay5"), (False, True))
+            for method in (("Full", "FullDirect") if route == "Stream0" else ("Full",))]
+    rows.extend(dict(Type=name, Method="FullDiagnostic", Count=1024, Asynchronous=True) for name in (
+        "ZendiatorPerf03NamedLiveStream0", "ZendiatorPerf03NamedDefaultRelay5"))
+    return sorted(rows, key=canonical)
+
+
+
+def perf03_case_set_matches(cases):
+    return (isinstance(cases, list) and len(cases) == 26 and
+            all(isinstance(case, dict) and set(case) == {"Type", "Method", "Count", "Asynchronous"} and
+                type(case["Count"]) is int and type(case["Asynchronous"]) is bool for case in cases) and
+            {canonical(case) for case in cases} == {canonical(case) for case in perf03_case_set()})
+
+def perf03_selected(case):
+    if not isinstance(case, dict) or not str(case.get("Type", "")).startswith("ZendiatorPerf03"):
+        return False
+    normalized = {name: value for name, value in case.items() if name != "Project"}
+    if (case.get("Project", "usecase") != "usecase" or type(case.get("Count")) is not int or
+            type(case.get("Asynchronous")) is not bool or normalized not in perf03_case_set()):
+        raise ValueError("Unknown or substituted PERF03 case identity")
+    return True
+
+
+def perf03_identity(project, case):
+    if not perf03_selected(case):
+        return {}
+    if project_suite(project) != "usecase":
+        raise ValueError("PERF03 diagnostics require the original usecase consumer")
+    sources = perf03_implementation_files(project)
+    diagnostics = Path(project).parent.parent / "src/Perf03CauseDiagnostics"
+    if filesystem_path(diagnostics).is_symlink() or (os.name == "nt" and filesystem_path(diagnostics).is_junction()):
+        raise ValueError("PERF03 diagnostic sources cannot use a reparse root")
+    tree_hashes(diagnostics)
+    for path in sources.values():
+        if (not within(path, Path(project).parent.parent) or not filesystem_path(path).is_file() or filesystem_path(path).is_symlink() or
+                (os.name == "nt" and filesystem_path(path).is_junction())):
+            raise ValueError("PERF03 source is missing or uses a reparse path")
+    source_files = {"perf03-sources/" + name: sha(path) for name, path in sources.items()}
+    variant_path = sources["src/Perf03CauseDiagnostics/Perf03CauseVariant.cs"]
+    variants = re.findall(r'\binternal\s+const\s+string\s+Id\s*=\s*"([^"]+)"\s*;',
+                          filesystem_path(variant_path).read_text(encoding="utf-8-sig"))
+    if len(variants) != 1 or variants[0] not in PERF03_VARIANTS:
+        raise ValueError("Unknown or ambiguous PERF03 diagnostic variant")
+    perf03_require_bound_counted_evidence(variants[0])
+    if variants[0] != "V0":
+        verify_variant_counted_sources(Path(project).parent.parent, source_files, variants[0],
+            perf03_counted_binding(source_files), archived=False)
+    return {"perf03CauseGateImplementationSha256": digest(source_files), "perf03CauseVariant": variants[0],
+            "perf03CauseCaseSet": perf03_case_set(), "perf03CauseSourceFiles": source_files,
+            "perf03CauseVariantMetadata": perf03_variant_metadata(variants[0])}
+
+
+def semantic_identity(final, session, project, runtime, bundle_files, case=None):
+    diagnostic = perf03_identity(project, case)
+    if any(bundle_files.get(name) != value for name, value in diagnostic.get("perf03CauseSourceFiles", {}).items()):
+        raise ValueError("PERF03 saved source archive differs from the current implementation")
     config = runtime["runtimeConfig"]
     deps = runtime["deps"]
     for item in (config, deps, *runtime["appDeps"], *runtime["nativeRuntime"]):
@@ -191,6 +279,7 @@ def semantic_identity(final, session, project, runtime, bundle_files):
         "runtime": {key: value for key, value in runtime.items() if key not in ("runtimeConfig", "deps", "appDeps")},
         "runtimeConfig": read(config["path"]), "deps": read(deps["path"]),
         "appDeps": sorted(item["sha256"] for item in runtime["appDeps"]),
+        **diagnostic,
     }
 
 
@@ -224,9 +313,22 @@ def prepare_bundle(row, attempt, final, project):
     if filesystem_path(bundle).exists():
         raise ValueError("Existing artifact bundle must be checked through its binding; never overwrite")
     source_files = tree_hashes(build_root)
+    build_files = dict(source_files)
     shutil.copytree(filesystem_path(build_root), filesystem_path(bundle))
     if tree_hashes(build_root) != source_files or tree_hashes(bundle) != source_files:
         raise ValueError("Generated artifacts changed while archiving")
+    diagnostic = perf03_identity(project, row["Case"])
+    if diagnostic:
+        for name, path in perf03_implementation_files(project).items():
+            target = bundle / "perf03-sources" / name
+            if filesystem_path(target).exists():
+                raise ValueError("Generated artifacts overlap the PERF03 source archive")
+            filesystem_path(target.parent).mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(filesystem_path(path), filesystem_path(target))
+        source_files = {**source_files, **diagnostic["perf03CauseSourceFiles"]}
+        if (tree_hashes(bundle) != source_files or tree_hashes(build_root) != build_files or
+                perf03_identity(project, row["Case"]) != diagnostic):
+            raise ValueError("PERF03 sources changed while archiving")
     runtime = json.loads(json.dumps(final["runtimeEvidence"]))
     framework = resolve_path(runtime["frameworkDirectory"])
     expected = []
@@ -312,6 +414,620 @@ def verify_struct_upstream_gate(request, proof, proof_path):
         raise ValueError("Struct upstream additional proof changed during verification")
 
 
+
+
+_PERF03_PROTOCOL_NAMES = (
+    "first-pending-success",
+    "repeated-pending-success",
+    "repeated-pending-failure",
+    "pending-eof",
+    "pending-cleanup-success",
+    "pending-cleanup-failure",
+    "before-registration",
+    "inside-registration",
+    "consumption-reentry",
+    "synchronous-raw",
+    "completed-fault",
+    "completed-cancelled",
+)
+_PERF03_PROTOCOL_COUNTS = {
+    "first-pending-success": (1, 0, 2),
+    "repeated-pending-success": (2, 1, 3),
+    "repeated-pending-failure": (1, 0, 2),
+    "pending-eof": (1, 0, 2),
+    "pending-cleanup-success": (1, 0, 2),
+    "pending-cleanup-failure": (1, 0, 2),
+    "before-registration": (2, 1, 3),
+    "inside-registration": (2, 1, 3),
+    "consumption-reentry": (3, 3, 4),
+    "synchronous-raw": (1, 0, 2),
+    "completed-fault": (1, 0, 2),
+    "completed-cancelled": (1, 0, 2),
+}
+_PERF03_PROTOCOL_SCOPE = (
+    "Normal generated routes with a named gate producer; separate from Work and the isolated control."
+)
+_PERF03_PROTOCOL_ATTRIBUTION = (
+    "Immutable operation tickets in AsyncLocal scopes and captured callback entry/exit tickets."
+)
+
+
+def _perf03_protocol_require(condition, message):
+    if not condition:
+        raise ValueError("PERF03 protocol proof: " + message)
+
+
+def _perf03_protocol_int(value):
+    return type(value) is int
+
+
+def _perf03_protocol_shape(route, name):
+    cleanup = name.startswith("pending-cleanup-")
+    reentry = name == "consumption-reentry"
+    phase = (
+        "cleanup" if cleanup else
+        "first-move" if name == "first-pending-success" else
+        "eof" if name == "pending-eof" else
+        "repeated-item"
+    )
+    kind = (
+        "precompleted-success" if name == "synchronous-raw" else
+        "precompleted-fault" if name == "completed-fault" else
+        "precompleted-cancelled" if name == "completed-cancelled" else
+        "manual" if reentry else
+        name if name in ("before-registration", "inside-registration") else
+        "async-once"
+    )
+    tickets = [
+        {"id": f"{route}/{name}/{phase}/{generation}", "phase": phase, "generation": generation}
+        for generation in range(1, 3 if reentry else 2)
+    ]
+    if name == "synchronous-raw":
+        tickets = [
+            {"id": f"{route}/{name}/first-move/1", "phase": "first-move", "generation": 1},
+            {"id": f"{route}/{name}/eof/2", "phase": "eof", "generation": 2},
+        ]
+    return cleanup, reentry, kind, tickets
+
+
+def verify_perf03_protocol_evidence(protocols):
+    """Reject missing, substituted, or internally inconsistent named protocol proofs."""
+    require = _perf03_protocol_require
+    is_int = _perf03_protocol_int
+    require(isinstance(protocols, dict), "object required")
+    require(type(protocols.get("schemaVersion")) is int and protocols["schemaVersion"] == 1, "schema version")
+    require(protocols.get("protocol") == "zendiator-perf03-raw-protocol-v1", "protocol identifier")
+    for key, expected in {
+        "producerSubstitution": True,
+        "actualWorkPendingFractionClaim": False,
+        "isolatedSnapshotExecuted": False,
+        "normalTypedNativeDi": True,
+        "apiCancellationContractClaim": False,
+    }.items():
+        require(protocols.get(key) is expected, key)
+    require(protocols.get("scope") == _PERF03_PROTOCOL_SCOPE, "producer and execution scope")
+    require(protocols.get("attribution") == _PERF03_PROTOCOL_ATTRIBUTION, "attribution scope")
+    rows = protocols.get("rows")
+    require(isinstance(rows, list) and len(rows) == 24, "24 rows required")
+    expected_set = {(route, name) for route in ("Stream0", "Relay5") for name in _PERF03_PROTOCOL_NAMES}
+    seen = set()
+    for row in rows:
+        require(isinstance(row, dict), "row object required")
+        route, name = row.get("route"), row.get("scenario")
+        require(isinstance(route, str) and isinstance(name, str), "route/scenario types")
+        identity = (route, name)
+        require(identity in expected_set and identity not in seen, "unknown or duplicate row identity")
+        seen.add(identity)
+        require(row.get("status") == "Passed", "row status")
+        require({"oldCallbackExitTicket", "newOperationIssuedParentTicket", "rawCleanup"} <= set(row), "nullable row proof fields")
+        relay = route == "Relay5"
+        require(row.get("expectedRepeatedMovePath") == ("GroupPending" if relay else "CompletionCell"), "declared route path")
+        require(row.get("inputCursorType") == "Competitive.Perf03.Diagnostics.Perf03ProtocolCursor", "named substituted input")
+        require(row.get("typedEntryType") == "Competitive.Generated.Perf03ProtocolStreams.Zendiator", "typed native entry")
+        for flag in (
+            "nativeTypedEntryObserved", "handlerRequestReferenceEquals", "handlerApiTokenEquals",
+            "handlerNativeScopeReferenceEquals", "cachedHandlerReferenceEquals", "enumerationTokenDefault",
+        ):
+            require(row.get(flag) is True, flag)
+        live = not relay or name == "completed-cancelled"
+        require(row.get("tokenMode") == ("Live" if live else "Default"), "token mode")
+        require(row.get("apiTokenCanBeCanceled") is live, "API token liveness")
+        require(row.get("apiTokenCancellationRequested") is False, "API token must remain uncanceled")
+        require(row.get("sourceCancellationIndependent") is (name == "completed-cancelled"), "independent source cancellation")
+        require(row.get("apiCancellationContractClaim") is False, "API cancellation contract scope")
+        count, total, pulls = _PERF03_PROTOCOL_COUNTS[name]
+        for key, expected in {"count": count, "sum": total, "pulls": pulls, "currentReads": count, "disposals": 1}.items():
+            require(is_int(row.get(key)) and row[key] == expected, key)
+        values = row.get("values")
+        require(isinstance(values, list) and all(is_int(x) for x in values) and values == list(range(count)), "sequence")
+        events = row.get("events")
+        require(isinstance(events, list) and all(is_int(x) for x in events), "event types")
+        require(events == ([1, 2, 3, 4, 5, 100] if relay else [100]), "callback order")
+        failure = name in ("repeated-pending-failure", "pending-cleanup-failure", "completed-fault")
+        expected_outcome = "OperationCanceledException" if name == "completed-cancelled" else "ArithmeticException" if failure else "Completed"
+        require(row.get("outcome") == expected_outcome, "failure outcome")
+        cleanup, reentry, kind, tickets = _perf03_protocol_shape(route, name)
+        pending = row.get("pendingAtReturn")
+        precompleted = kind.startswith("precompleted-")
+        require(isinstance(pending, list) and len(pending) == (2 if reentry or name == "synchronous-raw" else 1), "pending observation count")
+        require(all(type(value) is bool for value in pending), "pending observation types")
+        if precompleted:
+            require(not any(pending), "already-completed source was treated as pending")
+        elif name not in ("before-registration", "inside-registration"):
+            require(all(pending), "manual operation was not observed pending")
+        require(row.get("reenteredDuringCompletion") is reentry, "inline reentry observation")
+        old = tickets[0]["id"] if reentry else None
+        require(row.get("oldCallbackExitTicket") == old, "old callback exit attribution")
+        require(row.get("newOperationIssuedParentTicket") == old, "new operation parent attribution")
+        moves = row.get("rawMoves")
+        require(isinstance(moves, list) and len(moves) == (0 if cleanup else len(tickets)), "raw Move set")
+        if cleanup:
+            require(isinstance(row.get("rawCleanup"), dict), "raw cleanup proof required")
+            raw_rows = [row["rawCleanup"]]
+        else:
+            require(row.get("rawCleanup") is None, "unexpected cleanup raw operation")
+            raw_rows = moves
+        for index, (raw, ticket) in enumerate(zip(raw_rows, tickets, strict=True)):
+            require(isinstance(raw, dict), "raw observation object required")
+            require({
+                "issuedParentTicket", "registrationAmbientTicket", "registeredTicket", "resultAmbientTicket", "resultTicket",
+                "callbackEntryTicket", "callbackExitCapturedTicket", "callbackExitAmbientTicket",
+            } <= set(raw), "raw ticket observation fields")
+            require(raw.get("kind") == kind, "raw source kind")
+            actual_ticket = raw.get("ticket")
+            require(isinstance(actual_ticket, dict) and set(actual_ticket) == {"id", "phase", "generation"}, "ticket fields")
+            require(type(actual_ticket.get("generation")) is int and actual_ticket == ticket, "immutable generation ticket")
+            require(is_int(raw.get("statusChecks")) and raw["statusChecks"] > 0, "raw status observations")
+            statuses = raw.get("returnedStatuses")
+            require(isinstance(statuses, list) and len(statuses) == raw["statusChecks"], "actual returned-status trace")
+            require(all(isinstance(value, str) and value in ("Pending", "Succeeded", "Faulted", "Canceled") for value in statuses), "raw returned-status values")
+            if precompleted:
+                expected_status = {"precompleted-success": "Succeeded", "precompleted-fault": "Faulted", "precompleted-cancelled": "Canceled"}[kind]
+                require(all(value == expected_status for value in statuses), "completed source status classification")
+            elif kind != "before-registration":
+                require("Pending" in statuses, "registered gate had no observed pending status")
+            require(is_int(raw.get("consumptions")) and raw["consumptions"] == 1, "exactly one raw GetResult")
+            registrations = raw.get("registrations")
+            allowed_registrations = (0,) if precompleted else (0, 1) if kind == "before-registration" else (1,)
+            require(is_int(registrations) and registrations in allowed_registrations, "raw registrations")
+            require(is_int(raw.get("callbacks")) and raw["callbacks"] == registrations, "raw callbacks")
+            expected_inline = 0 if kind == "async-once" or precompleted else registrations
+            require(is_int(raw.get("inlineCallbacks")) and raw["inlineCallbacks"] == expected_inline, "inline callback count")
+            require(raw.get("useSchedulingContext") is False, "scheduling-context claim")
+            for key in ("resultAmbientTicket", "resultTicket"):
+                require(raw.get(key) == ticket["id"], key)
+            for key in (
+                "registrationAmbientTicket", "registeredTicket", "callbackEntryTicket",
+                "callbackExitCapturedTicket", "callbackExitAmbientTicket",
+            ):
+                require(raw.get(key) == (ticket["id"] if registrations else None), key)
+            parent = raw.get("issuedParentTicket")
+            require(parent is None or isinstance(parent, str), "issued-parent ticket type")
+            if reentry and index == 1:
+                require(parent == tickets[0]["id"] and ticket["id"] != parent, "new generation attribution")
+    require(seen == expected_set, "complete fixed protocol set")
+
+def perf03_raw_require(condition, message):
+    if not condition:
+        raise ValueError("PERF03 raw preflight " + message)
+
+
+def perf03_counted_binding(sources):
+    prefix = "perf03-sources/src/Perf03CauseDiagnostics/"
+    return dict(mapPath=prefix + "counted-sites.json", mapSha256=sources[prefix + "counted-sites.json"],
+                catalogPath=prefix + "CountedSiteCatalog.cs", catalogSha256=sources[prefix + "CountedSiteCatalog.cs"])
+
+
+def verify_perf03_counted_map(request, metadata):
+    if request["perf03CauseVariant"] != "V0":
+        binding = perf03_counted_binding(request["perf03CauseSourceFiles"])
+        perf03_raw_require(metadata.get("siteMapPath") == binding["mapPath"] and
+                           metadata.get("siteMapSha256") == binding["mapSha256"], "candidate map identity changed")
+        validated = verify_variant_counted_sources(request["bundleRoot"], request["perf03CauseSourceFiles"],
+            request["perf03CauseVariant"], binding)
+        perf03_raw_require(type(metadata.get("compiledSiteCount")) is int and
+                           metadata["compiledSiteCount"] == len(validated["sites"]), "candidate catalog count changed")
+        return validated["sites"]
+    prefix = "perf03-sources/src/Perf03CauseDiagnostics/"
+    required = {"Perf03CountTrace.cs", "Perf03RawPreflightGate.cs", "Perf03ProtocolFixtures.cs", "Perf03ProtocolGate.cs",
+                "Counted.Stream0.g.cs", "Counted.Relay5.g.cs", "CountedStreamCursorState.cs", "CountedSiteCatalog.cs",
+                "counted-sites.json", ".gitattributes", "Perf03YieldPump.cs"}
+    sources = request["perf03CauseSourceFiles"]
+    perf03_raw_require(all(prefix + name in sources for name in required), "counted/protocol sources are missing")
+    path = Path(request["bundleRoot"]) / (prefix + "counted-sites.json")
+    perf03_raw_require(metadata.get("siteMapPath") == prefix + "counted-sites.json" and
+                       metadata.get("siteMapSha256") == sources[prefix + "counted-sites.json"] == sha(path), "site map identity changed")
+    data = read(path)
+    perf03_raw_require(isinstance(data, dict) and type(data.get("schemaVersion")) is int and data["schemaVersion"] == 1 and
+                       data.get("protocol") == "zendiator-perf03-counted-sites-v1" and data.get("variant") == "V0" and
+                       isinstance(data.get("baseRevision"), str) and re.fullmatch(r"[0-9a-f]{40}", data["baseRevision"]), "site map protocol/base changed")
+    expected_files = {"Counted.Stream0.g.cs": "Zendiator.StreamCanonical.DF7872ACF770B8DDDA6D6A61054B21A2251A08597B558387231219CCDDFB0B4B.g.cs",
+                      "Counted.Relay5.g.cs": "Zendiator.StreamCanonical.B80A3F15A7016AF93086943F607702393A9513056C3C751D172215C32167550B.g.cs",
+                      "CountedStreamCursorState.cs": "StreamCursorState.cs"}
+    rows = data.get("files")
+    perf03_raw_require(isinstance(rows, list) and len(rows) == 3, "requires exactly three counted copies")
+    origins = {}
+    for row in rows:
+        perf03_raw_require(isinstance(row, dict) and row.get("file") in expected_files, "contains an unknown/duplicate counted copy")
+        name = row["file"]
+        perf03_raw_require(row.get("originFile") == expected_files.pop(name) and
+                           row.get("originSha256") == sources.get(prefix + row["originFile"]) and
+                           row.get("sha256") == sources.get(prefix + name), "counted/original source hashes changed")
+        origins[name] = row["originFile"]
+    sites, mapped, source_lines = data.get("sites"), {}, {}
+    perf03_raw_require(isinstance(sites, list) and sites and type(metadata.get("compiledSiteCount")) is int and
+                       metadata["compiledSiteCount"] == len(sites), "compiled site coverage changed")
+    for row in sites:
+        perf03_raw_require(isinstance(row, dict) and isinstance(row.get("id"), str) and row["id"] not in mapped and
+                           isinstance(row.get("kind"), str) and row["kind"] and row.get("file") in origins and
+                           row.get("originFile") == origins[row["file"]] and type(row.get("line")) is int and row["line"] > 0 and
+                           type(row.get("originLine")) is int and row["originLine"] > 0 and
+                           isinstance(row.get("expression"), str) and row["expression"], "has an invalid/duplicate site")
+        for name in (row["file"], row["originFile"]):
+            if name not in source_lines:
+                source_lines[name] = filesystem_path(Path(request["bundleRoot"]) / (prefix + name)).read_text(encoding="utf-8-sig").splitlines()
+        clone_lines, origin_lines = source_lines[row["file"]], source_lines[row["originFile"]]
+        perf03_raw_require(row["line"] <= len(clone_lines) and row["originLine"] <= len(origin_lines) and
+                           canonical(row["id"]) in clone_lines[row["line"] - 1] and
+                           row["expression"] in origin_lines[row["originLine"] - 1], "site expression/source location changed")
+        api = re.search(r"Perf03CountTrace\.(Status|Result|Hit)\(", clone_lines[row["line"] - 1])
+        perf03_raw_require(api is not None, "site does not reference an actual trace call")
+        mapped[row["id"]] = dict(row, api=api.group(1))
+    catalog = filesystem_path(Path(request["bundleRoot"]) / (prefix + "CountedSiteCatalog.cs")).read_text(encoding="utf-8-sig")
+    hashes = re.findall(r'\bMapSha256\s*=\s*"([0-9A-F]{64})"', catalog)
+    pairs = re.findall(r'\("([^"]+)",\s*"([^"]+)"\)', catalog)
+    perf03_raw_require(hashes == [metadata["siteMapSha256"]] and len(pairs) == len(mapped) and
+                       len({name for name, _ in pairs}) == len(pairs) and
+                       dict(pairs) == {name: row["kind"] for name, row in mapped.items()}, "map/catalog identity changed")
+    return mapped
+
+
+def verify_perf03_work_trace(row, mapped, variant="V0"):
+    root_owned = variant == "VRoot"
+    perf03_raw_require(isinstance(row, dict) and isinstance(row.get("case"), dict), "actual Work case is invalid")
+    case = row["case"]
+    perf03_raw_require(set(case) == {"Type", "Method", "Count", "Asynchronous"} and perf03_selected(case) and
+                       case["Method"] == "FullDiagnostic", "actual Work case identity changed")
+    relay = case["Type"].endswith("Relay5")
+    controlled = row.get("controlledScheduling")
+    perf03_raw_require(type(controlled) is bool and row.get("countedTraceAttributionValidated") is controlled,
+                       "controlled scheduling/attribution scope changed")
+    perf03_raw_require(row.get("status") == "Passed" and row.get("producer") == "WorkStreamCursor" and
+                       all(row.get(name) is True for name in ("typedNativeDi", "rawConsumptionPerOperationVerified",
+                           "firstMoveCompilerAwaitInstrumentedAtSourceBoundary", "countedCopyPerturbsScheduling")) and
+                       all(row.get(name) is False for name in ("producerSubstitution", "compilerGeneratedGetResultInstructionCountClaim", "timedPendingFractionKnown")) and
+                       all(type(row.get(name)) is int for name in ("items", "sum", "handlers", "disposals", "rawPulls", "rawConsumptions")) and
+                       (row["items"], row["sum"], row["handlers"], row["disposals"], row["rawPulls"], row["rawConsumptions"]) == (1024, 523776, 1, 1, 1025, 1025) and
+                       canonical(row.get("callbackOrder")) == canonical([1, 2, 3, 4, 5, 100] if relay else [100]), "actual Work semantics/limitations changed")
+    consumer = row.get("consumerObserved")
+    perf03_raw_require(isinstance(consumer, dict) and all(type(consumer.get(key)) is int and consumer[key] == 1025 for key in ("moveCalls", "consumptions")) and
+                       type(consumer.get("incompleteAtReturn")) is int and 0 <= consumer["incompleteAtReturn"] <= 1025, "consumer observations changed")
+    owners, events = row.get("ownerTypes"), row.get("trace")
+    perf03_raw_require(isinstance(owners, dict) and all(re.fullmatch(r"[1-9][0-9]*", str(key)) and isinstance(value, str) and
+                       value.startswith("Competitive.Perf03.Counted.") for key, value in owners.items()) and
+                       isinstance(events, list) and events, "owner/trace evidence is missing")
+    operations, grouped, used_owners = {}, {}, set()
+    root_suffix = "+Cursor5" if relay else "+Cursor0"
+    root_owners = {str(key) for key, value in owners.items() if value.endswith(root_suffix)}
+    perf03_raw_require(len(root_owners) == 1, "requires one counted public cursor owner")
+    claim_sites = {name for name, site in mapped.items() if site["originFile"] == "StreamCursorState.cs" and
+                   "CompareExchange(ref _busy, 1, 0)" in site["expression"]}
+    completion_groups = {}
+    for sequence, event in enumerate(events, 1):
+        perf03_raw_require(isinstance(event, dict) and set(event) == {"Sequence", "Operation", "Phase", "Site", "Kind", "Observed", "Owner"} and
+                           type(event.get("Sequence")) is int and event["Sequence"] == sequence and
+                           type(event.get("Operation")) is int and -1 <= event["Operation"] <= 1025 and
+                           isinstance(event.get("Site"), str) and event["Site"] in mapped and
+                           event.get("Kind") == mapped[event["Site"]]["kind"], "trace site/kind/order changed")
+        operation, site = event["Operation"], mapped[event["Site"]]
+        phase = "acquisition" if operation == -1 else "first" if operation == 0 else "repeated" if operation < 1024 else "eof" if operation == 1024 else "cleanup"
+        perf03_raw_require(event.get("Phase") == phase and
+                           (type(event.get("Observed")) is bool if site["api"] in {"Status", "Result"} else event.get("Observed") is None) and
+                           (event.get("Owner") is None or type(event["Owner"]) is int and str(event["Owner"]) in owners), "trace phase/observation/owner changed")
+        if event["Owner"] is not None:
+            used_owners.add(str(event["Owner"]))
+        if (site["originFile"] == "StreamCursorState.cs" and
+                (event["Kind"].startswith("atomic.") or event["Kind"] in {"completion.publish.result", "completion.publish.exception"}) or
+                root_owned and (event["Kind"].startswith("atomic.") or event["Kind"] in {"completion.publish.result", "completion.publish.exception", "completion.consume", "completion.retire"})):
+            perf03_raw_require(event["Owner"] is not None, "copied-state atomic/publication owner is absent")
+        expected_file = "Counted.Relay5.g.cs" if relay else "Counted.Stream0.g.cs"
+        perf03_raw_require(site["file"] in {expected_file, "CountedStreamCursorState.cs"}, "trace belongs to a different counted route")
+        if event["Owner"] is not None and (event["Kind"] in {"completion.publish.result", "completion.publish.exception"} or
+                event["Kind"] == "atomic.Interlocked.Or" or root_owned and event["Kind"] in {"completion.consume", "completion.retire"}):
+            completion_groups.setdefault((event["Owner"], operation), []).append(event)
+        operations.setdefault(operation, []).append(event)
+        key = (phase, event["Site"], event["Kind"])
+        counts = grouped.setdefault(key, [0, 0, 0]); counts[0] += 1
+        counts[1] += event["Observed"] is True; counts[2] += event["Observed"] is False
+    perf03_raw_require(used_owners == set(owners), "trace owner catalog contains missing/extra owners")
+    for operation in range(1025):
+        current = operations.get(operation, [])
+        root_claims = [event for event in current if event["Site"] in claim_sites and str(event["Owner"]) in root_owners]
+        perf03_raw_require(len(root_claims) == 1, "public Move claim lost its owner/operation identity")
+        pulls = [event for event in current if event["Kind"] == "input.raw.pull"]
+        consumed = [event for event in current if event["Kind"] in {"input.raw.consume.explicit", "input.raw.consume.implicit"}]
+        initial = [event for event in current if event["Kind"] == "input.raw.IsCompletedSuccessfully"]
+        rechecks = [event for event in current if event["Kind"] == "input.raw.awaiter.IsCompleted"]
+        perf03_raw_require((not initial and not rechecks) if operation == 0 else
+                           len(initial) == 1 and (len(rechecks) == 1 if initial[0]["Observed"] is False else not rechecks),
+                           "raw initial/recheck predicate observations are missing or duplicated")
+        if rechecks:
+            perf03_raw_require(initial[0]["Sequence"] < rechecks[0]["Sequence"], "raw recheck precedes its initial predicate")
+            if rechecks[0]["Observed"] is False:
+                perf03_raw_require(sum(event["Kind"] == "raw.register" for event in current) == 1 and
+                                   sum(event["Kind"] == ("root.pending.begin" if root_owned else "runner.BeginGroup" if relay else "runner.Begin") for event in current) == 1 and
+                                   sum(event["Kind"] == "completion.publish.result" for event in current) == 1,
+                                   "incomplete raw recheck lost its actual runner/registration/publication")
+        perf03_raw_require(len(pulls) == len(consumed) == 1 and pulls[0]["Sequence"] < consumed[0]["Sequence"] and
+                           (consumed[0]["Kind"] == "input.raw.consume.implicit" if operation == 0 else
+                            consumed[0]["Kind"] == "input.raw.consume.explicit" and consumed[0]["Observed"] is (operation < 1024)), "raw result was lost, duplicated or assigned to the wrong operation")
+    for current in completion_groups.values():
+        published = [event for event in current if event["Kind"] in {"completion.publish.result", "completion.publish.exception"}]
+        retired = [event for event in current if (event["Kind"] == "completion.retire" if root_owned else "_lifecycle, Retired" in mapped[event["Site"]]["expression"])]
+        consumed = [event for event in current if (event["Kind"] == "completion.consume" if root_owned else "_lifecycle, Consumed" in mapped[event["Site"]]["expression"])]
+        perf03_raw_require(len(published) == len(retired) == len(consumed) == 1 and
+                           published[0]["Sequence"] < min(retired[0]["Sequence"], consumed[0]["Sequence"]),
+                           "completion publication/consumption/retirement lost its captured owner-ticket identity")
+    for operation in (-1, 1025):
+        perf03_raw_require(not any(event["Kind"].startswith("input.raw.consume.") or event["Kind"] == "input.raw.pull" for event in operations.get(operation, [])), "raw operations escaped first/repeated/EOF phases")
+    expected_phases = []
+    for phase in ("acquisition", "first", "repeated", "eof", "cleanup"):
+        current = [event for event in events if event["Phase"] == phase]
+        expected_phases.append(dict(phase=phase, rawPulls=sum(e["Kind"] == "input.raw.pull" for e in current),
+            explicitRawConsumptions=sum(e["Kind"] == "input.raw.consume.explicit" for e in current),
+            implicitCompilerAwaitConsumptions=sum(e["Kind"] == "input.raw.consume.implicit" for e in current)))
+    perf03_raw_require(canonical(row.get("phaseCounts")) == canonical(expected_phases), "phase aggregate differs from actual trace")
+    supplied = row.get("siteCounts")
+    perf03_raw_require(isinstance(supplied, list) and len(supplied) == len(grouped), "site aggregate coverage changed")
+    for entry in supplied:
+        perf03_raw_require(isinstance(entry, dict), "invalid site aggregate")
+        key = (entry.get("phase"), entry.get("site"), entry.get("kind"))
+        values = [entry.get(name) for name in ("calls", "trueObservations", "falseObservations")]
+        perf03_raw_require(all(type(value) is int for value in values) and key in grouped and grouped.pop(key) == values, "site aggregate differs from actual trace")
+    between = []
+    for operation in range(1025):
+        current = operations.get(operation, [])
+        initial = next((e for e in current if e["Kind"] == "input.raw.IsCompletedSuccessfully" and e["Observed"] is False), None)
+        recheck = None if initial is None else next((e for e in current if e["Sequence"] > initial["Sequence"] and e["Kind"] == "input.raw.awaiter.IsCompleted" and e["Observed"] is True), None)
+        if initial is not None and recheck is not None:
+            between.append(dict(operation=operation, initialSite=initial["Site"], recheckSite=recheck["Site"],
+                observation="success-fast-check false, subsequent awaiter completed; successful Work result consumed once"))
+    perf03_raw_require(canonical(row.get("completedBetweenChecks")) == canonical(between), "between-check observations differ from actual trace")
+
+    controlled_yield = row.get("controlledYield")
+    if not controlled:
+        perf03_raw_require(controlled_yield is None, "ordinary Work contains controlled-yield claims")
+        return
+    perf03_raw_require(isinstance(controlled_yield, dict) and
+                       type(controlled_yield.get("postedCallbacks")) is int and controlled_yield["postedCallbacks"] == 1024 and
+                       type(controlled_yield.get("executedCallbacks")) is int and controlled_yield["executedCallbacks"] == 1024 and
+                       controlled_yield.get("synchronousEof") is True and consumer["incompleteAtReturn"] == 1024,
+                       "controlled Work scheduling totals changed")
+    held = controlled_yield.get("heldItemOperations")
+    perf03_raw_require(isinstance(held, list) and len(held) == 1024, "requires all held Work item boundaries")
+    for operation, boundary in enumerate(held):
+        perf03_raw_require(isinstance(boundary, dict), "invalid held Work boundary")
+        expected_boundary = dict(operation=operation, pendingAtReturn=True, queuedCallbacks=1, rawPulls=1,
+            rawConsumptionsBeforePump=0, rawRegistrations=0 if operation == 0 else 1,
+            implicitCompilerAwaitBegins=1 if operation == 0 else 0, incompleteAwaiterRechecks=0 if operation == 0 else 1)
+        perf03_raw_require(canonical(boundary) == canonical(expected_boundary), "held Work boundary changed")
+        current = operations[operation]
+        perf03_raw_require(sum(e["Kind"] == "raw.register" for e in current) == boundary["rawRegistrations"] and
+                           sum(e["Kind"] == "input.raw.await.implicit.begin" for e in current) == boundary["implicitCompilerAwaitBegins"] and
+                           sum(e["Kind"] == "input.raw.awaiter.IsCompleted" and e["Observed"] is False for e in current) == boundary["incompleteAwaiterRechecks"],
+                           "held Work observations differ from counted source trace")
+    eof_checks = [e for e in operations[1024] if e["Kind"] == "input.raw.IsCompletedSuccessfully"]
+    perf03_raw_require(len(eof_checks) == 1 and eof_checks[0]["Observed"] is True, "controlled EOF did not retain its synchronous raw result")
+    reentry = controlled_yield.get("reentry")
+    sequence_keys = ("oldPublicationSequence", "oldConsumptionSequence", "newRawPullSequence", "oldRetirementSequence")
+    perf03_raw_require(isinstance(reentry, dict) and reentry.get("inline") is True and
+                       type(reentry.get("oldOperation")) is int and reentry["oldOperation"] == 1 and
+                       type(reentry.get("newOperation")) is int and reentry["newOperation"] == 2 and
+                       type(reentry.get("oldOwner")) is int and str(reentry["oldOwner"]) in owners and
+                       all(type(reentry.get(key)) is int and 1 <= reentry[key] <= len(events) for key in sequence_keys) and
+                       (mapped.get(reentry.get("oldRetirementSite"), {}).get("kind") == "completion.retire" if root_owned else reentry.get("oldRetirementSite") == "CS.L0574.atomic") and reentry.get("oldRetirementPhase") == "repeated",
+                       "controlled reentry identity is missing")
+    sequences = [reentry[key] for key in sequence_keys]
+    perf03_raw_require(sequences == sorted(set(sequences)), "controlled publication/consumption/new-pull/retirement order changed")
+    published, consumed, next_pull, retired = [events[index - 1] for index in sequences]
+    perf03_raw_require(all(e["Operation"] == 1 and e["Owner"] == reentry["oldOwner"] for e in (published, consumed, retired)) and
+                       published["Kind"] == "completion.publish.result" and (consumed["Kind"] == "completion.consume" if root_owned else consumed["Site"] == "CS.L0589.atomic") and
+                       next_pull["Operation"] == 2 and next_pull["Kind"] == "input.raw.pull" and
+                       retired["Site"] == reentry["oldRetirementSite"] and retired["Phase"] == "repeated",
+                       "controlled old callback did not retain its captured owner-ticket after new Move")
+
+
+def verify_perf03_raw_preflight(request, proof_extra, proof_path):
+    metadata = proof_extra.get("rawPreflight")
+    perf03_raw_require(isinstance(metadata, dict) and type(metadata.get("schemaVersion")) is int and metadata["schemaVersion"] == 1 and
+                       metadata.get("protocol") == "zendiator-perf03-raw-preflight-v1" and
+                       metadata.get("evidencePath") == "perf03-cause-raw/raw-preflight.json", "proof is missing/incomplete")
+    mapped = verify_perf03_counted_map(request, metadata)
+    directory = proof_path.parent / "perf03-cause-raw"
+    perf03_raw_require(not filesystem_path(directory).is_symlink() and not (os.name == "nt" and filesystem_path(directory).is_junction()), "evidence root uses a reparse path")
+    try:
+        files = tree_hashes(directory)
+    except (OSError, ValueError) as error:
+        raise ValueError(f"PERF03 raw preflight evidence files unavailable: {error}") from error
+    perf03_raw_require(files == {"raw-preflight.json": metadata.get("evidenceSha256")}, "file is missing or its hash changed")
+    try:
+        data = read(directory / "raw-preflight.json")
+    except OSError as error:
+        raise ValueError(f"PERF03 raw preflight evidence file is missing: {error}") from error
+    perf03_raw_require(isinstance(data, dict) and type(data.get("schemaVersion")) is int and data["schemaVersion"] == 1 and
+                       data.get("protocol") == metadata["protocol"] and data.get("implementationSha256") == request["perf03CauseGateImplementationSha256"] and
+                       data.get("variant") == request["perf03CauseVariant"] and data.get("siteMapSha256") == metadata["siteMapSha256"] and
+                       type(data.get("compiledSiteCount")) is int and data["compiledSiteCount"] == len(mapped) and
+                       all(data.get(name) is True for name in ("unmappedSiteRejected", "mismatchedKindRejected", "countedCopyPerturbsScheduling", "counterSynchronizationExcludedFromAtomicCounts", "controlledWorkValidatesCountedTraceAttribution")) and
+                       all(data.get(name) is False for name in ("timedPendingFractionKnown", "nsPerPendingClaim", "deterministicProtocolsValidateCountedTraceAttribution", "countedWorkFaultOrCancelConsumptionClaim")) and
+                       data.get("countedWorkConsumptionScope") == "Successful Work results only; throwing GetResult attempts are not counted by the copied-route success markers", "identity or limitations changed")
+    rows = data.get("actualWorkCases")
+    expected = {(name, controlled) for name in ("ZendiatorPerf03NamedLiveStream0", "ZendiatorPerf03NamedDefaultRelay5") for controlled in (False, True)}
+    perf03_raw_require(isinstance(rows, list) and len(rows) == 4, "requires the four ordinary/controlled actual Work cases")
+    for row in rows:
+        perf03_raw_require(isinstance(row, dict) and isinstance(row.get("case"), dict) and type(row.get("controlledScheduling")) is bool and
+                           (row["case"].get("Type"), row["controlledScheduling"]) in expected, "actual Work coverage is duplicate/substituted")
+        expected.remove((row["case"]["Type"], row["controlledScheduling"]))
+        verify_perf03_work_trace(row, mapped, request["perf03CauseVariant"])
+    verify_perf03_protocol_evidence(data.get("deterministicProtocols"))
+    perf03_raw_require(tree_hashes(directory) == files, "evidence changed during verification")
+
+def verify_perf03_contract_checks(row, relay):
+    expected = {"cold-disposal", "early-disposal", "producer-failure", "pre-cancelled-api", "cancel-after-first",
+                "distinct-enumeration-token", "current-lifecycle", "ambient-context"}
+    if relay:
+        expected.add("relay-failure")
+    rows = row.get("contractChecks")
+    if not isinstance(rows, list) or len(rows) != len(expected):
+        raise ValueError("PERF03 V0 control requires every declared contract check")
+    for contract in rows:
+        if (not isinstance(contract, dict) or set(contract) != {"name", "status", "normal", "isolated"} or
+                not isinstance(contract.get("name"), str) or contract.get("name") not in expected or contract.get("status") != "Passed" or
+                canonical(contract.get("normal")) != canonical(contract.get("isolated"))):
+            raise ValueError("PERF03 V0 contract checks are duplicate, missing or failed")
+        name = contract["name"]
+        expected.remove(name)
+        outcome = ("ArithmeticException" if name in {"producer-failure", "relay-failure"} else
+                   "OperationCanceledException" if name in {"pre-cancelled-api", "cancel-after-first", "distinct-enumeration-token"} else "Completed")
+        started = name not in {"cold-disposal", "pre-cancelled-api", "relay-failure"}
+        items = (1 if name in {"early-disposal", "ambient-context", "cancel-after-first", "distinct-enumeration-token"} else
+                 1024 if name == "current-lifecycle" else 0)
+        observed = contract["normal"]
+        if (not isinstance(observed, dict) or set(observed) != {"outcome", "items", "Handlers", "Disposals", "events"} or
+                any(type(observed.get(key)) is not int for key in ("items", "Handlers", "Disposals")) or
+                observed.get("outcome") != outcome or observed["items"] != items or
+                observed["Handlers"] != int(started) or observed["Disposals"] != int(started) or
+                canonical(observed.get("events")) != canonical(([1, 2, 3, 4, 5, 100] if relay else [100]) if started else [])):
+            raise ValueError("PERF03 V0 contract outcome/startup/items/order/cleanup observations changed")
+
+
+def verify_perf03_cause_gate(request, proof, proof_path):
+    selected = perf03_selected(json.loads(request["case"]))
+    if not selected:
+        if any(request.get(name) is not None or proof.get(name) is not None for name in PERF03_FIELDS) or proof.get("perf03CauseGate") is not None:
+            raise ValueError("PERF03 diagnostic proof is attached to an unrelated case")
+        return
+    if request.get("benchmarkSuite", "usecase") != "usecase":
+        raise ValueError("PERF03 diagnostic proof requires the usecase suite")
+    implementation, variant = request.get("perf03CauseGateImplementationSha256"), request.get("perf03CauseVariant")
+    sources = request.get("perf03CauseSourceFiles")
+    if (not isinstance(implementation, str) or not HASH.fullmatch(implementation) or not isinstance(variant, str) or variant not in PERF03_VARIANTS or
+            not perf03_case_set_matches(request.get("perf03CauseCaseSet")) or
+            any(canonical(proof.get(name)) != canonical(request.get(name)) for name in PERF03_FIELDS)):
+        raise ValueError("Missing/substituted PERF03 diagnostic implementation/variant/case set")
+    perf03_require_bound_counted_evidence(variant)
+    if canonical(request.get("perf03CauseVariantMetadata")) != canonical(perf03_variant_metadata(variant)):
+        raise ValueError("PERF03 variant metadata is missing/substituted")
+    mandatory = {"perf03-sources/benchmarks/Zendiator.UseCaseBenchmarks/Perf03CauseGate.cs",
+                 "perf03-sources/benchmarks/Zendiator.UseCaseBenchmarks/Perf03CauseStreams.cs"}
+    mandatory.update("perf03-sources/src/Perf03CauseDiagnostics/" + name for name in PERF03_DIAGNOSTIC_FILES)
+    if (not isinstance(sources, dict) or not mandatory <= sources.keys() or
+            any(not isinstance(name, str) or not isinstance(value, str) or not HASH.fullmatch(value) or
+                (name not in mandatory and (not name.startswith("perf03-sources/src/Perf03CauseDiagnostics/") or
+                    any(not re.fullmatch(r"[A-Za-z0-9_.-]+", part) or part in {".", ".."}
+                        for part in name.split("/")[3:]))) or
+                request["bundleFiles"].get(name) != value for name, value in sources.items()) or digest(sources) != implementation):
+        raise ValueError("PERF03 source archive identity is missing/substituted")
+    directory = Path(request["bundleRoot"]) / "perf03-sources"
+    if filesystem_path(directory).is_symlink() or (os.name == "nt" and filesystem_path(directory).is_junction()):
+        raise ValueError("PERF03 source archive cannot use a reparse root")
+    if {"perf03-sources/" + name: value for name, value in tree_hashes(directory).items()} != sources:
+        raise ValueError("PERF03 source archive contents changed")
+    archived_variant = Path(request["bundleRoot"]) / "perf03-sources/src/Perf03CauseDiagnostics/Perf03CauseVariant.cs"
+    variants = re.findall(r'\binternal\s+const\s+string\s+Id\s*=\s*"([^"]+)"\s*;',
+                          filesystem_path(archived_variant).read_text(encoding="utf-8-sig"))
+    if variants != [variant]:
+        raise ValueError("PERF03 source archive variant differs from the declared variant")
+    extra = proof.get("perf03CauseGate")
+    if (not isinstance(extra, dict) or extra.get("schemaVersion") != 1 or extra.get("protocol") != PERF03_PROTOCOL or
+            extra.get("variant") != variant or extra.get("implementationSha256") != implementation or
+            canonical(extra.get("caseSet")) != canonical(request["perf03CauseCaseSet"]) or
+            extra.get("evidencePath") != "perf03-cause/perf03-cause.json" or
+            not same_path(proof_path.parent, request["output"])):
+        raise ValueError("Missing/incomplete PERF03 diagnostic proof")
+    directory = proof_path.parent / "perf03-cause"
+    if filesystem_path(directory).is_symlink() or (os.name == "nt" and filesystem_path(directory).is_junction()):
+        raise ValueError("PERF03 diagnostic evidence cannot use a reparse root")
+    files = tree_hashes(directory)
+    if files != {"perf03-cause.json": extra.get("evidenceSha256")}:
+        raise ValueError("PERF03 diagnostic evidence is missing or its hashes changed")
+    evidence = read(directory / "perf03-cause.json")
+    if (not isinstance(evidence, dict) or evidence.get("schemaVersion") != 1 or evidence.get("protocol") != PERF03_PROTOCOL or
+            evidence.get("variant") != variant or evidence.get("implementationSha256") != implementation or
+            canonical(evidence.get("variantMetadata")) != canonical(request["perf03CauseVariantMetadata"]) or
+            not perf03_case_set_matches(evidence.get("caseSet")) or evidence.get("pendingFractionClaim") is not False):
+        raise ValueError("PERF03 diagnostic evidence identity/limitations changed")
+    for name, method, count in (("normalInputCases", None, 24), ("isolatedControls", "FullDiagnostic", 2)):
+        expected = {canonical(case) for case in perf03_case_set() if (case["Method"] == "FullDiagnostic") == (method is not None)}
+        rows = evidence.get(name)
+        if not isinstance(rows, list) or len(rows) != count:
+            raise ValueError("PERF03 diagnostic evidence requires all 24 input cases and two isolated controls")
+        for row in rows:
+            case = row.get("case") if isinstance(row, dict) else None
+            if (not isinstance(case, dict) or not perf03_selected(case) or "Project" in case or
+                    canonical(case) not in expected or row.get("status") != "Passed" or
+                    any(type(row.get(key)) is not int for key in ("count", "sum")) or
+                    row["count"] != 1024 or row["sum"] != 523776):
+                raise ValueError("PERF03 diagnostic parity evidence is duplicate, missing or failed")
+            producer = "Iterator" if "Iterator" in case["Type"] else "Named"
+            token = "Live" if "Live" in case["Type"] else "Default"
+            relay = case["Type"].endswith("Relay5")
+            if (any(type(row.get(key)) is not int for key in ("handlers", "items", "disposals", "relayDepth")) or
+                    (row["handlers"], row["items"], row["disposals"]) != (1, 1024, 1) or
+                    row.get("producerRepresentation") != producer or row.get("tokenMode") != token or
+                    row["relayDepth"] != (5 if relay else 0) or
+                    canonical(row.get("events")) != canonical([1, 2, 3, 4, 5, 100] if relay else [100]) or
+                    row.get("enumerationTokenDefault") is not True or row.get("sourceTokenMatchesApi") is not True):
+                raise ValueError("PERF03 diagnostic producer/token/order/cleanup observations changed")
+            direct = case["Method"] == "FullDirect"
+            identities = row.get("identities")
+            if (row.get("publicEnumerationTokenApplicable") is not (not direct) or
+                    row.get("nativeDiHandlerObserved") is not (not direct) or not isinstance(identities, dict) or
+                    identities.get("requestReferenceObserved") is not (not direct) or
+                    identities.get("requestIdentityApplicable") is not (not direct) or
+                    identities.get("sourceProbeReferenceObserved") is not True or
+                    identities.get("nativeEntryReferenceObserved") is not (not direct) or
+                    identities.get("nativeScopeReferenceObserved") is not (not direct) or
+                    type(identities.get("cachedHandlerCount")) is not int or
+                    identities["cachedHandlerCount"] != (0 if direct else 1) or
+                    (identities.get("cachedHandlerType") is not None if direct else
+                     not isinstance(identities.get("cachedHandlerType"), str) or not identities["cachedHandlerType"])):
+                raise ValueError("PERF03 diagnostic typed/native-DI identity observations changed")
+            preflight = row.get("consumerPreflight")
+            if (not isinstance(preflight, dict) or
+                    any(type(preflight.get(key)) is not int or preflight[key] != 1025 for key in ("moveCalls", "consumptions")) or
+                    type(preflight.get("incompleteAtReturn")) is not int or not 0 <= preflight["incompleteAtReturn"] <= 1025 or
+                    any(type(preflight.get(key)) is not bool for key in ("firstMoveIncomplete", "eofIncomplete")) or
+                    type(preflight.get("repeatedItemIncomplete")) is not int or not 0 <= preflight["repeatedItemIncomplete"] <= 1023 or
+                    preflight["incompleteAtReturn"] != int(preflight["firstMoveIncomplete"]) + preflight["repeatedItemIncomplete"] + int(preflight["eofIncomplete"]) or
+                    preflight.get("rawDecisionSitesObserved") is not False or preflight.get("timingPendingFractionKnown") is not False):
+                raise ValueError("PERF03 diagnostic consumer preflight/limitations changed")
+            if case["Method"] == "FullDiagnostic":
+                if (row.get("normalParity") is not (variant == "V0") or row.get("sequentialEnvelopeParity") is not True or row.get("sharedEntryAndCachedHandler") is not True or
+                        row.get("sharedRequest") is not True):
+                    raise ValueError("PERF03 V0 isolated control does not prove normal-route parity")
+                verify_perf03_contract_checks(row, relay)
+                root_owned = variant == "VRoot"
+                expected_protocols = dict(status="Passed", uninstrumentedSelectedCandidate=True,
+                    producer="WorkStreamCursor", producerSubstitution=False, controlledScheduling=True,
+                    pendingDisposeRejected=True, inlineConsumptionAndNextPendingMove=True,
+                    disposalInsideContinuation=True, oldUnconsumedValueTaskInvalidationChecked=root_owned,
+                    durablePrecreatedTaskChecked=root_owned, timedPendingFractionClaim=False)
+                if canonical(row.get("selectedVariantProtocols")) != canonical(expected_protocols):
+                    raise ValueError("PERF03 selected candidate protocol evidence is missing/substituted")
+            expected.remove(canonical(case))
+    envelope = evidence.get("variantEnvelope")
+    if (not isinstance(envelope, dict) or
+            any(envelope.get(name) is not True for name in ("sequential", "oneEnumeratorPerOperation", "awaitAndConsumeBeforeNextMove", "failureAndCleanupChecked")) or
+            any(envelope.get(name) is not False for name in ("savedUnconsumedValueTask", "concurrentMoveOrDispose", "productionGuaranteesClaimed")) or
+            envelope.get("ambientContext") != "Consumer AsyncLocal preservation only; producer context unprobed" or
+            envelope.get("unsupportedProbes") != ["saved-unconsumed-value-task", "concurrent-move-dispose", "raw-pending-decision-site-counts"]):
+        raise ValueError("PERF03 diagnostic sequential envelope is missing")
+    verify_perf03_raw_preflight(request, extra, proof_path)
+    if tree_hashes(directory) != files or tree_hashes(request["bundleRoot"]) != request["bundleFiles"]:
+        raise ValueError("PERF03 diagnostic evidence/source bundle changed during verification")
+
+
 def verify_gate(request_path, proof_path):
     request, proof = read(request_path), read(proof_path)
     for key in ("protocol", "session", "case", "childPid", "childProofSha256",
@@ -359,6 +1075,7 @@ def verify_gate(request_path, proof_path):
         if not any(row.get("type", "").endswith("." + case["Type"]) and row.get("method") == case["Method"]
                    and row.get("parameters", {}) == parameters for row in outcomes):
             raise ValueError("Supplemental gate does not cover the measured method")
+    verify_perf03_cause_gate(request, proof, proof_path)
     return proof
 
 
@@ -366,7 +1083,7 @@ def ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env):
     attempt, project = ordinary_path(attempt), ordinary_path(project)
     final, final_path, loaded = child_snapshot(row, attempt)
     bundle, files, expected, runtime, build_root = prepare_bundle(row, attempt, final, project)
-    semantic = semantic_identity(final, session, project, runtime, files)
+    semantic = semantic_identity(final, session, project, runtime, files, row["Case"])
     key = digest(semantic)
     cache_root = attempt.parents[4] / "artifact-gate-cache"
     cache = cache_root / (key + ".json")
@@ -381,6 +1098,7 @@ def ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env):
                "gateDriverSha256": semantic["gateDriverSha256"],
                "structUpstreamGateImplementationSha256": semantic["structUpstreamGateImplementationSha256"],
                "consumerName": consumer_name(project), "benchmarkSuite": project_suite(project), "benchmarkGateCases": gate_count(project)}
+    request.update({name: semantic[name] for name in PERF03_FIELDS if name in semantic})
     request_path = attempt / "artifact-gate-request.json"
     write(request_path, request)
     reused = filesystem_path(cache).exists()
@@ -436,7 +1154,7 @@ def check_artifact_binding(row, attempt, session, project):
     final, final_path, _ = child_snapshot(row, attempt)
     request_path = Path(binding["requestPath"])
     request = read(request_path)
-    semantic = semantic_identity(final, session, project, request["expectedRuntime"], request["bundleFiles"])
+    semantic = semantic_identity(final, session, project, request["expectedRuntime"], request["bundleFiles"], row["Case"])
     if (binding.get("schemaVersion") != 1 or binding.get("session") != session["sessionId"] or
         binding.get("case") != canonical(row["Case"]) or binding.get("childPid") != final["pid"] or
         binding.get("childProofSha256") != sha(final_path) or binding.get("semantic") != semantic or
@@ -488,13 +1206,22 @@ def check_artifact_binding(row, attempt, session, project):
         request.get("structUpstreamGateImplementationSha256") != semantic["structUpstreamGateImplementationSha256"] or
         proven_request.get("structUpstreamGateImplementationSha256") != semantic["structUpstreamGateImplementationSha256"]):
         raise ValueError("Cached proof covers a different semantic artifact/gate implementation")
+    if any(request.get(name) != semantic.get(name) or proven_request.get(name) != semantic.get(name)
+           for name in PERF03_FIELDS):
+        raise ValueError("Cached proof covers a different PERF03 diagnostic source/variant/case set")
     verify_gate(gate_request, proof_path)
     return binding_result(path, binding)
 
 
 def binding_result(path, binding):
     suite = binding["semantic"].get("benchmarkSuite", "usecase")
-    return {"bindingSha256": sha(path), "childFinalSha256": binding["childProofSha256"], "key": binding["key"],
+    result = {"bindingSha256": sha(path), "childFinalSha256": binding["childProofSha256"], "key": binding["key"],
             "proofSha256": binding["proofSha256"], "proofReused": binding["proofReused"],
             "scope": ("389 existing benchmark gate plus separate 96 struct-upstream parity cases and three driver type classifications; focused/full-suite evidence remains separate"
                       if suite == "usecase" else f"Original {suite} semantic gate in the saved consumer; all semantic files and loaded bindings verified")}
+    if "perf03CauseVariant" in binding["semantic"]:
+        result["perf03CauseScope"] = ("Separate 24 PERF03 input parity cases and two selected diagnostic routes; "
+                                      "V0 fidelity or explicitly limited candidate sequential envelope; no timed pending-fraction claim")
+        result["perf03RawScope"] = ("Separate four ordinary/controlled counted Work preflights and 24 substituted protocol checks; "
+                                    "successful counted Work consumption only; no timed pending denominator")
+    return result

@@ -148,7 +148,17 @@ jobs:
           $projects = @(git ls-files -- '*.csproj')
           if ($LASTEXITCODE -ne 0 -or $projects.Count -eq 0) { throw 'No tracked C# projects found' }
           foreach ($project in $projects) {
-            dotnet format $project --verify-no-changes --no-restore
+            $formatArgs = @('--verify-no-changes', '--no-restore')
+            if ($project -eq 'benchmarks/Zendiator.UseCaseBenchmarks/Zendiator.UseCaseBenchmarks.csproj') {
+              # Preserve the counted snapshot bytes and line map; compilation and tests still include this file.
+              $snapshot = (Resolve-Path -LiteralPath 'src/Perf03CauseDiagnostics/CountedStreamCursorState.cs').Path
+              if ((Get-FileHash -LiteralPath $snapshot -Algorithm SHA256).Hash -cne '4A6029BC56F6365F00B0CF4C9ED4DBDA6CB4CE44C89760DCB0816A3BD54D1A55') {
+                throw 'The frozen counted cursor changed; review its provenance before changing the formatter exception.'
+              }
+              # dotnet format matches paths relative to the repository working directory.
+              $formatArgs += @('--exclude', 'src/Perf03CauseDiagnostics/CountedStreamCursorState.cs')
+            }
+            dotnet format $project @formatArgs
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 

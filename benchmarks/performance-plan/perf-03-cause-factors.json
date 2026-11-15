@@ -1,0 +1,14 @@
+[
+  {
+    "Type": "ZendiatorPerf03NamedLiveStream0",
+    "Method": "FullDiagnostic",
+    "Count": 1024,
+    "Asynchronous": true
+  },
+  {
+    "Type": "ZendiatorPerf03NamedDefaultRelay5",
+    "Method": "FullDiagnostic",
+    "Count": 1024,
+    "Asynchronous": true
+  }
+]

@@ -1,0 +1,16 @@
+# Verbatim source archives and unified patches retain historical whitespace.
+Zendiator.StreamCanonical.*.g.cs -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+StreamCursorState.cs -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+originals/*.txt -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+Counted.*.g.cs -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+CountedStreamCursorState.cs -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+counted-sites.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+CountedSiteCatalog.cs -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+origin/** -text -whitespace
+reference/** -text -whitespace
+vroot-origins/** -text -whitespace
+vroot-reference/** -text -whitespace -whitespace
+*.patch -text -whitespace
+*.patch.txt -text -whitespace
+binding.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+Perf03CountTrace.cs -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
