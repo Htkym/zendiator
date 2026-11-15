@@ -98,7 +98,7 @@ public sealed class GetUserQueryHandler : IRequestHandler<GetUserQuery, UserDto>
 
 生成された登録ではMediatorがScoped、Handler・Hook・Session FactoryがTransientになります。MediatR 12のMediatorの既定値はTransientです。登録を上書きするときは`AddZendiator`より前にサービスを登録してください。`TryAdd`による生成登録は先行する登録を保ちます。再利用するサービスはアプリケーションの並行利用に対応する必要があります。
 
-各MediatorはTransientを含む取得済みの依存を再利用します。条件を満たす非同期Hookルートは最初のHookより前にルート単位の依存セットを取得します。それ以外のルートにはそれぞれの捕捉規則が適用されます。送信や再試行のたびに新しい依存が作られるとは限りません。[開発版の捕捉規則](getting-started-0.5.0.ja.md#di-scopeの所有)では、同期Beforeルートの依存取得を含む、未公開の0.7.0での追加変更を説明しています。この節で説明した公開済みの0.6.0の動作を変えるものではありません。更新するときや構築時期・インスタンスの共有に依存するときは、その違いを確認してください。
+各MediatorはTransientを含む取得済みの依存を再利用します。条件を満たす非同期Hookルートは最初のHookより前にルート単位の依存セットを取得します。それ以外のルートにはそれぞれの捕捉規則が適用されます。送信や再試行のたびに新しい依存が作られるとは限りません。[開発版の捕捉規則](getting-started-0.5.0.ja.md#di-scopeの所有)では同期Beforeルートの依存取得を含む未公開の0.7.0での追加変更を説明しています。この節で説明した公開済みの0.6.0の動作を変えるものではありません。更新するときや構築時期・インスタンスの共有に依存するときは、その違いを確認してください。
 
 構築と破棄はDIが所有します。送信、列挙、後始末がすべて終わってからScopeを破棄してください。生成されたMediatorは`IDisposable`の所有者ではありません。ScopeやProviderの破棄後の利用は未対応です。`ValidateScopes`と`ValidateOnBuild`を有効にし、遅延解決されるルートも実際に呼び出して確認します。
 
