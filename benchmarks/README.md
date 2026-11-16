@@ -8,11 +8,34 @@ The [post-0.6.0 measurement plan](performance-plan/README.md) records the packag
 
 ## Current README comparison
 
-The [root performance tables](../README.md#performance) contain a fresh 2026-11-11 comparison of 101 selected cells at implementation `88483069db6409e092efa0d5ef63452777f577c9`, including Foundatio.Mediator 1.3.3. [Unrounded data and uncertainty](results/20261111-8848306-summary.csv) and [all numeric observations, conditions and report hashes](results/20261111-8848306-readme.json) are included. These are selected README workloads, not the full matrix described above.
+The [root performance tables](../README.md#performance) show 83 cells from the
+122-cell comparison of Zendiator 0.7.0 source, measured at
+`2bc3726ecdb7bc4d89c64ec643f45b0623d8d297`. The remaining 39 cells retain Stream0,
+Relay, first-Send and ScopeK10 diagnostics. [Unrounded results and uncertainty](results/0.7.0-2bc3726-summary.csv)
+and [all numeric observations, conditions and report hashes](results/0.7.0-2bc3726-readme.json)
+include every selected cell, including unfavorable time and allocation results.
 
-The five-library UseCase commands below do not alone reproduce those tables: Foundatio, ShortCircuit and H additionally use preserved workload definitions with a measurement entry. Keep the implementation, workload definitions, package versions and job controls together when reproducing a comparison. The historical 0.4.0 results below remain a separate measurement.
+Conditions: Windows 11 x64, Intel Core Ultra 7 258V, SDK 10.0.404, .NET 10.0.14,
+workstation GC, BenchmarkDotNet 0.15.8, Release, affinity 1, 20 warmups,
+12 measurements, requested 500 ms iterations and one launch per case.
+First/cold cases use 16,384 invocations and unroll factor 1. After BDN overhead
+adjustment and outlier handling, retained N is 9–12. The measurement window,
+package locks, measured-child identities and all 122 saved-consumer artifact
+proof bindings are recorded with the numeric observations.
 
-For new runs, the [122-cell baseline command](performance-plan/README.md#run-retain-and-decide) selects all 101 historical workload cells plus the planned Relay and Send diagnostics across the tracked UseCase, Foundatio, ShortCircuit and Hook projects. It uses a new shared measurement entry and the current package pins, so it does not reproduce the historical numbers or the missing private historical entry.
+The [122-cell command](performance-plan/README.md#run-retain-and-decide) spans
+UseCase, Foundatio, ShortCircuit and Hook projects. Use the measured source,
+matching package locks and fixed job controls; the five-library UseCase commands
+below alone do not cover these tables. These are selected README workloads,
+not the full default matrix. One machine and one launch do not establish a
+universal ranking or a controlled release-to-release gain. Zendiator's named
+Stream/Relay input differs from the peers' compiler iterators; Stream5 stage
+processing also differs, while Relay matches preprocessing-only stage work.
+
+The earlier [101-cell comparison](results/20261111-8848306-readme.json) and the
+historical 0.4.0 results below remain separate measurements. Changes to source,
+SDK, package pins and measurement infrastructure prevent a controlled
+before/after claim from comparing their numbers with the current table.
 
 ## Read the comparison
 
@@ -41,7 +64,7 @@ the historical table, use its pinned `1c41d2b` source and matching dependencies;
 running the current checkout does not reproduce that historical implementation.
 For Zendiator, Send and non-notification feature cases use a canonical composition;
 Stream and Relay use native cursor sources. Notification retains a separate legacy
-registration. The current README tables use the separate 101-cell measurement and additional definitions described above.
+registration. The current README tables select 83 cells from the separate 122-cell measurement described above.
 
 Use .NET 10, PowerShell and Python 3. Package versions are locked. From the
 repository root:

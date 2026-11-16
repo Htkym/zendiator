@@ -1,6 +1,6 @@
-# Known limitations for 0.7.0 development
+# Known limitations for 0.7.0
 
-0.7.0 is unreleased. This page describes the development contracts, including the
+This page describes the 0.7.0 contracts, including the
 [route-local capture changes](0.7.0-release-notes.md). Start with
 [getting started](../getting-started-0.5.0.md) and the
 [Stream migration guide](../migrating-stream-upstream.md). Published 0.6.0 behavior is

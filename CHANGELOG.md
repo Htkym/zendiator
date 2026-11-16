@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.0 (unreleased)
+## 0.7.0
 
 - Capture eligible closed `SendAsync` routes' synchronous Before receivers together before the first Hook callback, with route-local Transient identity and native DI ownership.
 - Perform the guarded Stream's dedicated initial scope probe at consumer-root initialization. Preserve StreamBefore checks, deferred opening and native DI ownership; keep the owning scope alive through enumeration and cleanup.

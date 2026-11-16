@@ -9,9 +9,10 @@
 ## インストール
 
 .NET 10 と C# 14 が必要です。[NuGet の Zendiator](https://www.nuget.org/packages/Zendiator) を追加します。
+以下は0.7.0を指定する例です。利用するNuGetフィードがこのバージョンを提供している必要があります。
 
 ```shell
-dotnet add package Zendiator --version 0.6.0
+dotnet add package Zendiator --version 0.7.0
 dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
 ```
 
@@ -90,8 +91,8 @@ Publish の並列実行、fire-and-forget、永続化や outbox は提供して�
 
 ## 依存のライフタイムと例外
 
-この節の依存取得の変更は未公開の[0.7.0開発版](docs/release/0.7.0-release-notes.md)を対象にします。
-インストール例で使う公開済みの0.6.0では、従来の取得方法を保ちます。
+この節の依存取得の規則は[0.7.0](docs/release/0.7.0-release-notes.md)を対象にします。
+0.6.0から更新する場合は、リリースノートの移行手順を確認してください。
 
 生成登録の既定は `IZendiator` が Scoped、Handler・Hook・session factory が Transient です。
 上書きする登録は `AddZendiator` より先に追加してください。各 Mediator は取得した依存を再利用します。
@@ -156,49 +157,50 @@ UI context への復帰や ambient state の分離は保証しません。
 旧実装との adapter や、具体型を直接呼び出すコードの変更は[移行ガイド](docs/migrating-stream-upstream.md)を確認してください。
 
 任意の [Zendiator.CodeFixes](src/Zendiator.CodeFixes/README.md) は、対応する ZEN0035 の診断に対して
-不足している `[Handler]` を追加します。バージョン 0.6.0 を `PrivateAssets="all"` 付きで導入してください。
+不足している `[Handler]` を追加します。バージョン 0.7.0 を `PrivateAssets="all"` 付きで導入してください。
 Fix All の対象は現在の文書だけで、処理順・Wrapper の動作・ライフタイムは書き換えません。
 コマンドラインのコンパイルでは IDE の修正は適用されません。
 
+[0.7.0 リリースノート](docs/release/0.7.0-release-notes.md)、
 [0.6.0 リリースノート](docs/release/0.6.0-release-notes.ja.md)と
 [MediatR からの移行ガイド](docs/migrating-from-mediatr.ja.md)も参照してください。1.0 より前の API は変更される場合があります。
 
 ## 性能比較
 
-2026-11-11 に一部の利用場面を測定しました。各セルは **平均時間 / 割当量（B/op）** です。
-時間とメモリは別の指標です。
+Zendiator 0.7.0のソースで代表的な利用場面を測定した結果です。
+各セルは **平均時間 / 割当量（B/op）** です。時間とメモリは別の指標です。
 
-|ケース|Zendiator|Immediate.Handlers 4.2.0|MediatR 14.2.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
+|ケース|Zendiator 0.7.0|Immediate.Handlers 4.3.0|MediatR 15.0.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
 |---|---:|---:|---:|---:|---:|---:|
-|Send / Behavior 0|1.21 ns / 0 B|7.18 ns / 0 B|35.18 ns / 200 B|35.84 ns / 64 B|25.84 ns / 0 B|28.20 ns / 0 B|
-|Send / Behavior 5|9.38 ns / 0 B|16.78 ns / 0 B|130.72 ns / 1,016 B|79.88 ns / 544 B|34.16 ns / 0 B|155.00 ns / 0 B|
-|同一scopeで再取得＋Send / Behavior 0|24.51 ns / 0 B|35.45 ns / 0 B|54.81 ns / 200 B|77.00 ns / 64 B|53.51 ns / 0 B|63.15 ns / 0 B|
-|同一scopeで再取得＋Send / Behavior 5|40.05 ns / 0 B|44.60 ns / 0 B|148.61 ns / 1,016 B|115.75 ns / 544 B|57.53 ns / 0 B|185.89 ns / 0 B|
-|新規scope＋1 Send＋破棄 / Behavior 5|148.91 ns / 704 B|113.39 ns / 568 B|208.90 ns / 1,400 B|151.09 ns / 920 B|406.93 ns / 1,712 B|413.65 ns / 856 B|
-|Notification / 16 subscribers / 同期|107.85 ns / 0 B|N/A|900.10 ns / 4,784 B|188.95 ns / 0 B|146.04 ns / 0 B|685.74 ns / 0 B|
-|Stream 1024件 / Behavior 5 / 同期|12.13 μs / 1,016 B|89.41 μs / 1,106 B|182.81 μs / 3,593 B|90.55 μs / 1,688 B|89.69 μs / 1,104 B|106.04 μs / 1,808 B|
-|Stream 1024件 / Behavior 5 / 非同期|147.51 μs / 116,362 B|229.28 μs / 1,753 B|448.74 μs / 4,724 B|227.71 μs / 2,338 B|226.34 μs / 1,755 B|280.33 μs / 2,538 B|
-|Stream途中終了 / 16件入力 / Behavior 5 / 同期|365.93 ns / 1,016 B|254.44 ns / 1,104 B|717.95 ns / 3,592 B|340.93 ns / 1,688 B|282.08 ns / 1,104 B|572.81 ns / 1,808 B|
-|Stream途中終了 / 16件入力 / Behavior 5 / 非同期|1.84 μs / 1,456 B|1.96 μs / 1,752 B|3.03 μs / 4,720 B|2.13 μs / 2,336 B|2.02 μs / 1,752 B|2.47 μs / 2,536 B|
-|Behavior短絡 / 3段 / 繰り返し|4.49 ns / 0 B|4.77 ns / 0 B|77.26 ns / 704 B|53.36 ns / 496 B|27.00 ns / 0 B|55.23 ns / 384 B|
-|非同期Hook成功 / 初回|0.791 μs / 480 B|1.199 μs / 504 B|1.194 μs / 1,352 B|1.006 μs / 808 B|1.042 μs / 560 B|1.733 μs / 856 B|
-|非同期Hook成功 / 繰り返し|0.030 μs / 0 B|0.049 μs / 0 B|0.557 μs / 944 B|0.515 μs / 496 B|0.067 μs / 0 B|0.488 μs / 480 B|
-|非同期Hook失敗 / 初回・外側|3.621 μs / 1,712 B|8.124 μs / 3,808 B|8.635 μs / 3,384 B|6.155 μs / 3,216 B|6.445 μs / 2,968 B|9.820 μs / 4,872 B|
+|Send / Behavior 0|1.32 ns / 0 B|7.60 ns / 0 B|41.29 ns / 200 B|42.34 ns / 64 B|28.76 ns / 0 B|31.24 ns / 0 B|
+|Send / Behavior 5|5.35 ns / 0 B|15.69 ns / 0 B|137.64 ns / 1,016 B|90.68 ns / 544 B|38.26 ns / 0 B|159.67 ns / 0 B|
+|同一scopeで再取得＋Send / Behavior 0|26.74 ns / 0 B|40.16 ns / 0 B|59.78 ns / 200 B|77.37 ns / 64 B|55.17 ns / 0 B|65.44 ns / 0 B|
+|同一scopeで再取得＋Send / Behavior 5|43.15 ns / 0 B|47.85 ns / 0 B|169.09 ns / 1,016 B|127.66 ns / 544 B|68.31 ns / 0 B|200.01 ns / 0 B|
+|新規scope＋1 Send＋破棄 / Behavior 5|104.35 ns / 624 B|120.43 ns / 568 B|217.41 ns / 1,400 B|172.70 ns / 920 B|662.06 ns / 1,712 B|310.43 ns / 856 B|
+|Notification / 16 subscribers / 同期|119.98 ns / 0 B|N/A|1014.79 ns / 4,784 B|194.24 ns / 0 B|164.72 ns / 0 B|732.58 ns / 0 B|
+|Stream 1024件 / Behavior 5 / 同期|12.42 μs / 1,016 B|93.65 μs / 1,104 B|187.00 μs / 3,594 B|94.25 μs / 1,689 B|95.00 μs / 1,105 B|110.33 μs / 1,809 B|
+|Stream 1024件 / Behavior 5 / 非同期|158.87 μs / 116,362 B|258.50 μs / 1,754 B|503.09 μs / 4,725 B|259.68 μs / 2,339 B|263.18 μs / 1,756 B|293.58 μs / 2,539 B|
+|Stream途中終了 / 16件入力 / Behavior 5 / 同期|393.74 ns / 1,016 B|286.42 ns / 1,104 B|806.12 ns / 3,592 B|380.91 ns / 1,688 B|312.13 ns / 1,104 B|625.86 ns / 1,808 B|
+|Stream途中終了 / 16件入力 / Behavior 5 / 非同期|1.98 μs / 1,456 B|2.05 μs / 1,752 B|3.17 μs / 4,720 B|2.28 μs / 2,336 B|2.16 μs / 1,752 B|2.76 μs / 2,536 B|
+|Behavior短絡 / 3段 / 繰り返し|4.67 ns / 0 B|4.63 ns / 0 B|83.07 ns / 704 B|57.47 ns / 496 B|28.47 ns / 0 B|58.94 ns / 384 B|
+|非同期Hook成功 / 初回|0.908 μs / 448 B|1.302 μs / 504 B|1.231 μs / 1,352 B|1.145 μs / 808 B|1.065 μs / 560 B|1.790 μs / 856 B|
+|非同期Hook成功 / 繰り返し|0.033 μs / 0 B|0.048 μs / 0 B|0.544 μs / 944 B|0.507 μs / 496 B|0.069 μs / 0 B|0.497 μs / 480 B|
+|非同期Hook失敗 / 初回・外側|3.757 μs / 1,680 B|8.467 μs / 3,808 B|7.011 μs / 3,448 B|6.740 μs / 3,216 B|6.239 μs / 2,968 B|10.231 μs / 4,872 B|
 
-新規 scope の値は作成・初回解決・Send・破棄を含みます。Stream は操作全体の値で、
-途中終了は 16 件の入力から 1 件だけ消費します。Hook の初回・繰り返し・外側失敗は測定範囲が異なります。
-N/A は適用できる比較結果がないことを示します。
+注記のないSendは取得済みの入口を使います。新規scopeの値は作成・初回解決・Send・破棄を含みます。
+Streamは操作全体の値で、途中終了は16件の入力から1件だけ消費します。
+Hookの初回・繰り返し・外側失敗は測定範囲が異なります。N/Aは適用できる比較結果がないことを示します。
 
-Windows 11 x64、Intel Core Ultra 7 258V、SDK 10.0.403 / runtime 10.0.14、
-BenchmarkDotNet 0.15.8、Release、affinity 1。ウォームアップ 20 回、実測 12 回、
-要求測定時間 500 ms、各ケース 1 launch です。初回・cold のケースは 16384 invocations です。
-1 launch の観測から、一般的な順位や条件を揃えた変更前後の改善は確定しません。
-Foundatio は intercepted 経路を使い、API と DI 登録の形もライブラリ間で異なります。
+APIとDI登録の形はライブラリ間で異なり、Foundatioはintercepted経路を使います。
+この比較のStream/Relay入力は、Zendiatorが名前付きcursor、比較先がコンパイラの生成するiteratorです。
+Streamの5段構成では、Zendiatorはcursorを転送し、比較先は各段で再び列挙・yieldします。
+表外のRelayは、前処理だけを行う段の処理を揃えた比較です。
+新規scopeのSendや非同期Streamの全件消費では割当量が少ない比較先があり、同期Streamの途中終了では速い比較先があります。
 
-[丸め前の結果](benchmarks/results/20261111-8848306-summary.csv)と
-[全数値観測](benchmarks/results/20261111-8848306-readme.json)に、
-測定対象のソース・表外の利用場面・ばらつきを保存しています。
-[測定範囲](benchmarks/README.md#read-the-comparison)も参照してください。
+1台のマシン・各ケース1 launchの観測から、一般的な順位や条件を揃えた版間の改善は確定しません。
+[全122件の結果とばらつき](benchmarks/results/0.7.0-2bc3726-summary.csv)、
+[全数値観測と出典](benchmarks/results/0.7.0-2bc3726-readme.json)、
+[測定条件と再現手順](benchmarks/README.ja.md#現在のreadmeの比較)に、表外39件と測定したソース版を記載しています。
 
 ## Native AOT
 

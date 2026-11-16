@@ -8,10 +8,11 @@ generated calls without runtime assembly scanning or reflective invocation.
 
 ## Install
 
-Requires .NET 10 and C# 14. Install [Zendiator from NuGet](https://www.nuget.org/packages/Zendiator):
+Requires .NET 10 and C# 14. Install [Zendiator from NuGet](https://www.nuget.org/packages/Zendiator).
+The commands target 0.7.0 and require that version in the selected feed:
 
 ```shell
-dotnet add package Zendiator --version 0.6.0
+dotnet add package Zendiator --version 0.7.0
 dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
 ```
 
@@ -90,9 +91,8 @@ Notification registration is separate from Send and Stream routes.
 
 ## Dependencies and errors
 
-The capture changes in this section describe unreleased
-[0.7.0 development](docs/release/0.7.0-release-notes.md). The installation example
-uses published 0.6.0, which retains its existing capture behavior.
+The dependency capture rules below apply to [0.7.0](docs/release/0.7.0-release-notes.md).
+Review the migration notes when upgrading from 0.6.0.
 
 Generated registration uses a Scoped `IZendiator` and Transient defaults for
 handlers, hooks and session factories. Register overrides before `AddZendiator`.
@@ -166,51 +166,57 @@ The standard Stream middleware interface now exposes `OpenAsync<TNext>`; see the
 [migration guide](docs/migrating-stream-upstream.md) for adapters and concrete-call changes.
 
 The optional [Zendiator.CodeFixes](src/Zendiator.CodeFixes/README.md) package adds a
-missing `[Handler]` for supported ZEN0035 diagnostics. Install version 0.6.0 with
+missing `[Handler]` for supported ZEN0035 diagnostics. Install version 0.7.0 with
 `PrivateAssets="all"`. Fix All is limited to the current document; it does not
 rewrite pipeline ordering, wrapper behavior or lifetimes. Command-line compilation
 does not apply IDE fixes.
 
-See the [0.6.0 release notes](docs/release/0.6.0-release-notes.md) and
+See the [0.7.0 release notes](docs/release/0.7.0-release-notes.md),
+[0.6.0 release notes](docs/release/0.6.0-release-notes.md) and
 [MediatR migration guide](docs/migrating-from-mediatr.md). Pre-1.0 APIs may change.
 
 ## Performance
 
-Selected workloads measured on 2026-11-11. Each cell shows **mean time / allocated
-bytes per operation (B/op)**; time and memory are separate metrics.
+Selected workloads measured from **Zendiator 0.7.0 source**. Each cell
+shows **mean time / allocated bytes per operation (B/op)**; time and memory are
+separate metrics.
 
-|Case|Zendiator|Immediate.Handlers 4.2.0|MediatR 14.2.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
+|Case|Zendiator 0.7.0|Immediate.Handlers 4.3.0|MediatR 15.0.0|Mediator 3.0.2|DispatchR 2.3.1|Foundatio.Mediator 1.3.3|
 |---|---:|---:|---:|---:|---:|---:|
-|Send / 0 behaviors|1.21 ns / 0 B|7.18 ns / 0 B|35.18 ns / 200 B|35.84 ns / 64 B|25.84 ns / 0 B|28.20 ns / 0 B|
-|Send / 5 behaviors|9.38 ns / 0 B|16.78 ns / 0 B|130.72 ns / 1,016 B|79.88 ns / 544 B|34.16 ns / 0 B|155.00 ns / 0 B|
-|Resolve again in the same scope + Send / 0 behaviors|24.51 ns / 0 B|35.45 ns / 0 B|54.81 ns / 200 B|77.00 ns / 64 B|53.51 ns / 0 B|63.15 ns / 0 B|
-|Resolve again in the same scope + Send / 5 behaviors|40.05 ns / 0 B|44.60 ns / 0 B|148.61 ns / 1,016 B|115.75 ns / 544 B|57.53 ns / 0 B|185.89 ns / 0 B|
-|New scope + 1 Send + dispose / 5 behaviors|148.91 ns / 704 B|113.39 ns / 568 B|208.90 ns / 1,400 B|151.09 ns / 920 B|406.93 ns / 1,712 B|413.65 ns / 856 B|
-|Notification / 16 subscribers / sync|107.85 ns / 0 B|N/A|900.10 ns / 4,784 B|188.95 ns / 0 B|146.04 ns / 0 B|685.74 ns / 0 B|
-|Stream 1024 items / 5 behaviors / sync|12.13 μs / 1,016 B|89.41 μs / 1,106 B|182.81 μs / 3,593 B|90.55 μs / 1,688 B|89.69 μs / 1,104 B|106.04 μs / 1,808 B|
-|Stream 1024 items / 5 behaviors / async|147.51 μs / 116,362 B|229.28 μs / 1,753 B|448.74 μs / 4,724 B|227.71 μs / 2,338 B|226.34 μs / 1,755 B|280.33 μs / 2,538 B|
-|Stream early break / 16-item input / 5 behaviors / sync|365.93 ns / 1,016 B|254.44 ns / 1,104 B|717.95 ns / 3,592 B|340.93 ns / 1,688 B|282.08 ns / 1,104 B|572.81 ns / 1,808 B|
-|Stream early break / 16-item input / 5 behaviors / async|1.84 μs / 1,456 B|1.96 μs / 1,752 B|3.03 μs / 4,720 B|2.13 μs / 2,336 B|2.02 μs / 1,752 B|2.47 μs / 2,536 B|
-|Behavior short-circuit / 3 stages / repeated calls|4.49 ns / 0 B|4.77 ns / 0 B|77.26 ns / 704 B|53.36 ns / 496 B|27.00 ns / 0 B|55.23 ns / 384 B|
-|Async Hook success / first call|0.791 μs / 480 B|1.199 μs / 504 B|1.194 μs / 1,352 B|1.006 μs / 808 B|1.042 μs / 560 B|1.733 μs / 856 B|
-|Async Hook success / repeated calls|0.030 μs / 0 B|0.049 μs / 0 B|0.557 μs / 944 B|0.515 μs / 496 B|0.067 μs / 0 B|0.488 μs / 480 B|
-|Async Hook failure / first call, outer Hook|3.621 μs / 1,712 B|8.124 μs / 3,808 B|8.635 μs / 3,384 B|6.155 μs / 3,216 B|6.445 μs / 2,968 B|9.820 μs / 4,872 B|
+|Send / 0 behaviors|1.32 ns / 0 B|7.60 ns / 0 B|41.29 ns / 200 B|42.34 ns / 64 B|28.76 ns / 0 B|31.24 ns / 0 B|
+|Send / 5 behaviors|5.35 ns / 0 B|15.69 ns / 0 B|137.64 ns / 1,016 B|90.68 ns / 544 B|38.26 ns / 0 B|159.67 ns / 0 B|
+|Resolve again in the same scope + Send / 0 behaviors|26.74 ns / 0 B|40.16 ns / 0 B|59.78 ns / 200 B|77.37 ns / 64 B|55.17 ns / 0 B|65.44 ns / 0 B|
+|Resolve again in the same scope + Send / 5 behaviors|43.15 ns / 0 B|47.85 ns / 0 B|169.09 ns / 1,016 B|127.66 ns / 544 B|68.31 ns / 0 B|200.01 ns / 0 B|
+|New scope + 1 Send + dispose / 5 behaviors|104.35 ns / 624 B|120.43 ns / 568 B|217.41 ns / 1,400 B|172.70 ns / 920 B|662.06 ns / 1,712 B|310.43 ns / 856 B|
+|Notification / 16 subscribers / sync|119.98 ns / 0 B|N/A|1014.79 ns / 4,784 B|194.24 ns / 0 B|164.72 ns / 0 B|732.58 ns / 0 B|
+|Stream 1024 items / 5 behaviors / sync|12.42 μs / 1,016 B|93.65 μs / 1,104 B|187.00 μs / 3,594 B|94.25 μs / 1,689 B|95.00 μs / 1,105 B|110.33 μs / 1,809 B|
+|Stream 1024 items / 5 behaviors / async|158.87 μs / 116,362 B|258.50 μs / 1,754 B|503.09 μs / 4,725 B|259.68 μs / 2,339 B|263.18 μs / 1,756 B|293.58 μs / 2,539 B|
+|Stream early break / 16-item input / 5 behaviors / sync|393.74 ns / 1,016 B|286.42 ns / 1,104 B|806.12 ns / 3,592 B|380.91 ns / 1,688 B|312.13 ns / 1,104 B|625.86 ns / 1,808 B|
+|Stream early break / 16-item input / 5 behaviors / async|1.98 μs / 1,456 B|2.05 μs / 1,752 B|3.17 μs / 4,720 B|2.28 μs / 2,336 B|2.16 μs / 1,752 B|2.76 μs / 2,536 B|
+|Behavior short-circuit / 3 stages / repeated calls|4.67 ns / 0 B|4.63 ns / 0 B|83.07 ns / 704 B|57.47 ns / 496 B|28.47 ns / 0 B|58.94 ns / 384 B|
+|Async Hook success / first call|0.908 μs / 448 B|1.302 μs / 504 B|1.231 μs / 1,352 B|1.145 μs / 808 B|1.065 μs / 560 B|1.790 μs / 856 B|
+|Async Hook success / repeated calls|0.033 μs / 0 B|0.048 μs / 0 B|0.544 μs / 944 B|0.507 μs / 496 B|0.069 μs / 0 B|0.497 μs / 480 B|
+|Async Hook failure / first call, outer Hook|3.757 μs / 1,680 B|8.467 μs / 3,808 B|7.011 μs / 3,448 B|6.740 μs / 3,216 B|6.239 μs / 2,968 B|10.231 μs / 4,872 B|
 
-New-scope cases include creation, first resolution, Send and disposal. Stream
-values cover the complete operation; early break consumes one item from a
-16-item input. Hook first-call, repeated-call and outer-failure cases have
-different boundaries. N/A means no applicable comparison result.
+Send uses an already resolved entry unless stated otherwise. New-scope cases
+include creation, first resolution, Send and disposal. Stream values cover the
+complete operation; early break consumes one item from a 16-item input. Hook
+first-call, repeated-call and outer-failure cases have different boundaries.
+N/A means no applicable comparison result.
 
-Windows 11 x64, Intel Core Ultra 7 258V, SDK 10.0.403 / runtime 10.0.14,
-BenchmarkDotNet 0.15.8, Release, affinity 1; 20 warmups, 12 measurements of
-requested 500 ms, one launch per case. First/cold cases use 16384 invocations.
-One launch does not establish a universal ranking or a controlled before/after
-improvement. Foundatio uses its intercepted path; library API and DI shapes differ.
+API and DI shapes differ; Foundatio uses its intercepted path. The measured
+Stream/Relay inputs are a named cursor for Zendiator and compiler iterators for
+peers. At Stream depth 5,
+Zendiator forwards the cursor while peers enumerate/yield again at each stage.
+The supplemental Relay cases match preprocessing-only stage work. Other libraries
+can use less memory for new-scope Send and asynchronous full Stream, or less time
+for synchronous early-stop Stream.
 
-[Unrounded results](benchmarks/results/20261111-8848306-summary.csv) and
-[full numeric observations](benchmarks/results/20261111-8848306-readme.json)
-retain the measured source, additional workloads and uncertainty.
-See [workload boundaries](benchmarks/README.md#read-the-comparison).
+One machine and one launch per case do not establish a universal ranking or a
+controlled release-to-release improvement. [All 122 results and uncertainty](benchmarks/results/0.7.0-2bc3726-summary.csv),
+[full observations and provenance](benchmarks/results/0.7.0-2bc3726-readme.json),
+and [conditions and reproduction](benchmarks/README.md#current-readme-comparison)
+include the 39 supplementary cells and the exact measured source.
 
 ## Native AOT
 
