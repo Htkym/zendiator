@@ -8,11 +8,30 @@
 
 ## 現在のREADMEの比較
 
-[ルートの性能表](../README.ja.md#性能比較)には、実装 `88483069db6409e092efa0d5ef63452777f577c9` を2026-11-11に測定した101セルを掲載しています。Foundatio.Mediator 1.3.3も含みます。[丸め前の値とばらつき](results/20261111-8848306-summary.csv)、[全数値観測・条件・report hash](results/20261111-8848306-readme.json)を保存しています。これはREADMEで選んだ利用場面の比較で、上記の全matrixではありません。
+[ルートの性能表](../README.ja.md#性能比較)には、Zendiator 0.7.0のソースを使った
+122セルの比較から83セルを掲載しています。測定したソースは
+`2bc3726ecdb7bc4d89c64ec643f45b0623d8d297`です。残り39セルにはStream0、Relay、
+初回Send、ScopeK10の診断結果があります。[丸め前の結果とばらつき](results/0.7.0-2bc3726-summary.csv)と
+[全数値観測・条件・report hash](results/0.7.0-2bc3726-readme.json)には、
+時間や割当量が不利な結果も含め、選択した全セルを保存しています。
 
-以下の5ライブラリのUseCaseコマンドだけでは、この表全体を再現できません。Foundatio、ShortCircuit、Hは、保存した処理定義に測定用の入口を組み合わせています。比較を再現するときは、実装・処理定義・package版・job条件を揃えてください。以下の0.4.0の過去の表は、別の測定として維持しています。
+条件はWindows 11 x64、Intel Core Ultra 7 258V、SDK 10.0.404、.NET 10.0.14、
+workstation GC、BenchmarkDotNet 0.15.8、Release、affinity 1、warmup20、measurement12、
+要求iteration 500 ms、各ケース1 launchです。初回・coldのケースは16,384 invocations、
+unroll factor 1です。BDNのoverhead補正と外れ値処理後のNは9〜12でした。
+測定の開始・終了時刻、package lock、測定したchildの識別情報、保存したconsumer全122件の
+artifact proofとの対応は、全数値観測とともに記録しています。
 
-新しい実行には、[122セルのbaselineコマンド](performance-plan/README.md#run-retain-and-decide)を使えます。過去の101セルすべてに、計画したRelayとSendの診断ケースを加え、リポジトリ内のUseCase、Foundatio、ShortCircuit、Hookの各プロジェクトで実行します。新しい共通の測定入口と現在の固定版を使うため、過去の数値や、未収録の非公開の測定入口を再現するものではありません。
+[122セルのコマンド](performance-plan/README.md#run-retain-and-decide)は、UseCase、Foundatio、
+ShortCircuit、Hookの各プロジェクトを使います。測定したソース版、対応するpackage lock、
+固定したjob条件を揃えてください。以下の5ライブラリのUseCaseコマンドだけでは表全体を再現できません。
+README用に選んだ利用場面の比較であり、既定の全matrixではありません。1台・1 launchの測定から、
+一般的な順位や条件を揃えた版間の改善は確定しません。ZendiatorのStream/Relayは名前付きcursor、
+比較先はコンパイラが生成するiteratorを入力に使います。Stream5は段の処理も異なり、
+Relayは前処理だけを行う段の処理を揃えています。
+
+以前の[101セルの比較](results/20261111-8848306-readme.json)と以下の0.4.0の結果は、別の測定として維持します。
+ソース、SDK、固定したpackage版、測定基盤が異なるため、現在の表との比較から条件を揃えた変更前後の改善は主張できません。
 
 ## 比較の読み方
 
@@ -41,7 +60,7 @@ FirstSendは測定iterationごとに事前作成したScopeを16384個使い、u
 現在のcheckoutを実行しても、当時の実装を再現したことにはなりません。
 ZendiatorのSendと、Notification以外のfeatureはcanonical compositionを使い、
 StreamとRelayはnative cursorを使います。Notificationは分離したlegacy登録を維持します。
-現在のREADMEの表は、上記の追加定義を含む別の101セルの測定です。
+現在のREADMEの表は、上記の別の122セルの測定から83セルを選んだものです。
 
 .NET 10、PowerShell、Python 3を用意します。パッケージ版はlock fileで固定しています。
 リポジトリのルートから実行します。

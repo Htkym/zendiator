@@ -1,20 +1,18 @@
-# Getting started with 0.7.0 development
+# Getting started with 0.7.0
 
 [日本語](getting-started-0.5.0.ja.md)
 
-0.7.0 is unreleased. This guide describes its development contracts, including
-[route-local capture changes](release/0.7.0-release-notes.md). The published
-0.6.0 packages retain their existing behavior; see the
-[0.6.0 release notes](release/0.6.0-release-notes.md).
+This guide describes the 0.7.0 contracts, including
+[route-local capture changes](release/0.7.0-release-notes.md). For 0.6.0 behavior,
+see the [0.6.0 release notes](release/0.6.0-release-notes.md).
 
-The sample commands below use matching published 0.6.0 packages from NuGet.org
-and do not exercise the new capture behavior. To try 0.7.0, build matching
-Zendiator.Abstractions and Zendiator packages from this checkout into a local
-NuGet feed. Restore the sample from that feed and NuGet.org, and pass
-`-p:ZendiatorPackageVersion=0.7.0` to both restore and run. This does not assume
-that a 0.7.0 package is available from NuGet.org.
+The commands target 0.7.0 and require matching Zendiator packages in the selected
+feed. The examples use NuGet.org; adjust the restore sources if using another feed.
+The checked-in sample projects retain a 0.6.0 default. Pass
+`-p:ZendiatorPackageVersion=0.7.0` to restore, build and run as shown below so
+that the default is not used.
 
-## Run the published 0.6.0 sample
+## Run the 0.7.0 sample
 
 The [GettingStarted project](../samples/Zendiator.Sample.GettingStarted/Zendiator.Sample.GettingStarted.csproj)
 requires .NET 10 and C# 14. Its [source](../samples/Zendiator.Sample.GettingStarted/Program.cs)
@@ -22,7 +20,7 @@ shows synchronous Send, asynchronous Send and Stream with ordered hooks.
 From the repository root:
 
 ```powershell
-$version = '0.6.0'
+$version = '0.7.0'
 $project = 'samples/Zendiator.Sample.GettingStarted/Zendiator.Sample.GettingStarted.csproj'
 
 dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
@@ -236,7 +234,7 @@ The generated `StreamAsync` therefore returns `IAsyncEnumerable<string>`.
 Run the package-based example from the repository root:
 
 ```powershell
-$version = '0.6.0'
+$version = '0.7.0'
 $project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
 
 dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
@@ -309,10 +307,8 @@ members are implementation details to inspect, not APIs to call or retain.
 ## Repair a missing handler marker
 
 Add the optional CodeFix package at the same version as `Zendiator`. Set
-`ZendiatorPackageVersion` to `0.6.0` and restore from NuGet.org for the
-published sample. For 0.7.0 development, also build Zendiator.CodeFixes 0.7.0
-from the same checkout, restore it from the local NuGet feed, and set
-`ZendiatorPackageVersion` to `0.7.0`.
+`ZendiatorPackageVersion` to `0.7.0` and restore from a feed that provides
+Zendiator.CodeFixes 0.7.0.
 
 ```xml
 <PackageReference Include="Zendiator.CodeFixes"
@@ -322,7 +318,7 @@ from the same checkout, restore it from the local NuGet feed, and set
 Restore the ComposedApp project:
 
 ```powershell
-$version = '0.6.0'
+$version = '0.7.0'
 $project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
 dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
 ```

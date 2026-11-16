@@ -1,14 +1,14 @@
-# 0.7.0開発版の使い方
+# 0.7.0の使い方
 
 [English](getting-started-0.5.0.md)
 
-0.7.0は未公開です。このガイドは[ルート単位の依存取得の変更](release/0.7.0-release-notes.md)を含む開発版の契約を説明します。公開済みの0.6.0パッケージでは従来の動作を保ちます。[0.6.0のリリースノート](release/0.6.0-release-notes.ja.md)も確認してください。
+このガイドは[ルート単位の依存取得の変更](release/0.7.0-release-notes.md)を含む0.7.0の契約を説明します。0.6.0の動作は[0.6.0のリリースノート](release/0.6.0-release-notes.ja.md)を確認してください。
 
-以下の例は公開済みの0.6.0パッケージで実行でき、新しい依存取得の動作は含みません。0.7.0を試す場合は、このソースからZendiator.AbstractionsとZendiatorの同じバージョンのパッケージを作り、ローカルNuGetフィードに置いてください。そのフィードとNuGet.orgからサンプルを復元し、復元と実行の両方に`-p:ZendiatorPackageVersion=0.7.0`を指定します。NuGet.orgに0.7.0が公開されていることを前提にはしません。
+以下のコマンドは0.7.0を指定します。利用するフィードがZendiatorの各パッケージの0.7.0を提供している必要があります。例ではNuGet.orgを使います。別のフィードを使う場合は、復元元を合わせてください。サンプルのプロジェクトファイルと下の転記には0.6.0の既定値が残っています。既定値を使わないよう、復元・ビルド・実行では以下の例のように`-p:ZendiatorPackageVersion=0.7.0`を指定してください。
 
-## 公開済み0.6.0の例を実行する
+## 0.7.0の例を実行する
 
-.NET 10 SDKとC# 14を使います。NuGet.orgから0.6.0のパッケージを取得します。
+.NET 10 SDKとC# 14を使います。0.7.0を提供するフィードからパッケージを取得します。
 
 新しいフォルダーに、次のプロジェクトファイルと`Program.cs`を保存します。[サンプルのファイル](../samples/Zendiator.Sample.GettingStarted/)をコピーしても実行できます。Zendiatorのソースプロジェクトへの`ProjectReference`は使いません。
 
@@ -155,7 +155,7 @@ public sealed class KeepAtMostForty : IStreamItemFilter<ReadNumbers, int>
 PowerShellから実行します。
 
 ```powershell
-$version = '0.6.0'
+$version = '0.7.0'
 dotnet run --project .\Zendiator.Sample.GettingStarted.csproj -c Release -p:ZendiatorPackageVersion=$version
 ```
 
@@ -259,7 +259,7 @@ Streamの入力は名前付きcursorが返す`int`です。`KeepEven`で絞り�
 リポジトリのルートから、packageを使う例を実行します。
 
 ```powershell
-$version = '0.6.0'
+$version = '0.7.0'
 $project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
 
 dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
@@ -316,7 +316,7 @@ dotnet build $project -c Release --no-restore -p:ZendiatorPackageVersion=$versio
 
 ### Handler属性を補って再buildする
 
-CodeFixを使う場合は、`Zendiator`と同じバージョンの`Zendiator.CodeFixes`を`PrivateAssets="all"`で追加し、NuGet.orgからrestoreしてください。現在のVisual Studioでプロジェクトを開き、ZEN0035の修正候補から`Add Handler attribute`を選びます。
+CodeFixを使う場合は、`Zendiator`と同じバージョンの`Zendiator.CodeFixes`を`PrivateAssets="all"`で追加し、0.7.0を提供するフィードからrestoreしてください。現在のVisual Studioでプロジェクトを開き、ZEN0035の修正候補から`Add Handler attribute`を選びます。
 
 ```xml
 <PackageReference Include="Zendiator.CodeFixes"
@@ -324,7 +324,7 @@ CodeFixを使う場合は、`Zendiator`と同じバージョンの`Zendiator.Cod
 ```
 
 ```powershell
-$version = '0.6.0'
+$version = '0.7.0'
 $project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
 dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
 ```
@@ -343,7 +343,7 @@ dotnet build $project -c Release --no-restore -p:ZendiatorPackageVersion=$versio
 
 Behaviorの並びは`Pipeline`の順序付きリストで指定します。この例のHookは要求の変換、応答の変換、Streamの項目処理という専用の契約を実装しています。既存Behaviorのretryやcacheなどの意味を、自動でHookへ置き換えるものではありません。継続の呼び出しを制御するBehaviorを移す際は、`Stage.Wrapper<T>()`の契約と対象経路を確認してください。
 
-この例は型引数を持たないclassのrequest、`int`または`string`の応答、`int`のStream、DIが所有するHandlerとHookを使います。ほかの型や経路を網羅する例ではありません。更新前に[リリースノート](release/0.6.0-release-notes.ja.md)と[既知の制限](release/known-limitations.md)を確認してください。
+この例は型引数を持たないclassのrequest、`int`または`string`の応答、`int`のStream、DIが所有するHandlerとHookを使います。ほかの型や経路を網羅する例ではありません。更新前に[0.7.0のリリースノート](release/0.7.0-release-notes.md)、[0.6.0のリリースノート](release/0.6.0-release-notes.ja.md)と[既知の制限](release/known-limitations.md)を確認してください。
 
 ### ジェネリック要求のWrapperと非ジェネリック要求を併用する
 
@@ -421,9 +421,7 @@ var closedResult = await mediator.SendAsync(new ClosedQuery(7), CancellationToke
 
 プロジェクト内で定義したHandlerを属性なしで明示登録すると、ZEN0035で登録箇所が示されます。ZEN0035はほかの生成条件の不備にも使います。診断文が属性不足を示している場合は、上の`AddNumbersHandler`のようにクラス宣言へ`[Handler]`を付けてください。
 
-`Zendiator.CodeFixes`は任意で追加するパッケージです。利用する場合は、`Zendiator`と同じ0.6.0をNuGet.orgから取得し、プロジェクトの`ZendiatorPackageVersion`を`0.6.0`に合わせてください。[導入例](../src/Zendiator.CodeFixes/README.md)のように`PrivateAssets="all"`を指定します。
-
-0.7.0開発版で使う場合は、`Zendiator.CodeFixes`も同じソースから0.7.0としてビルドし、ローカルNuGetフィードから取得してください。`ZendiatorPackageVersion`は0.7.0に合わせます。
+`Zendiator.CodeFixes`は任意で追加するパッケージです。利用する場合は、0.7.0を提供するフィードから`Zendiator`と同じバージョンを取得し、プロジェクトの`ZendiatorPackageVersion`を`0.7.0`に合わせてください。[導入例](../src/Zendiator.CodeFixes/README.md)のように`PrivateAssets="all"`を指定します。
 
 CodeFixの対象は属性不足と判断できるZEN0035だけです。Fix Allの対象は現在の文書だけです。
 

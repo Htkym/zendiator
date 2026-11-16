@@ -2,13 +2,13 @@
 
 [English](migrating-from-mediatr.md)
 
-このガイドは`IMediator`、`ISender`、`IPublisher`を使うMediatR 12のアプリケーションを、.NET 10・C# 14上のZendiator 0.6.0へ移行する手順です。後のMediatRでは登録APIが異なる場合があります。[README](../README.ja.md)と[現行の構成ガイド](getting-started-0.5.0.ja.md)も参照してください。構成ガイドは既存リンクを保つためファイル名を維持しています。現在は未公開の0.7.0の契約と、0.6.0向けと明記したサンプルを説明しています。この移行ガイドの対象は引き続き公開済みの0.6.0です。
+このガイドは`IMediator`、`ISender`、`IPublisher`を使うMediatR 12のアプリケーションを、.NET 10・C# 14上のZendiator 0.7.0へ移行する手順です。後のMediatRでは登録APIが異なる場合があります。[README](../README.ja.md)と[現行の構成ガイド](getting-started-0.5.0.ja.md)も参照してください。構成ガイドは既存リンクを保つためファイル名を維持しています。構成ガイドでは0.7.0の契約とサンプルの実行コマンドを説明しています。
 
 新しいSend・Streamルートでは、`[Handler]`を付けたHandlerを`Handlers`で選び、`Pipeline`に段を順番に並べる明示的な構成を使います。以前のアセンブリ探索、`AddOpenBehavior`、`Order`のAPIは互換経路として残っています。既存のZendiatorコードから移行するときは、[0.6.0のHandler・Stream変更](release/0.6.0-release-notes.ja.md)も適用してください。
 
 ## APIの対応
 
-| MediatR 12 | Zendiator 0.6.0 | 移行する内容 |
+| MediatR 12 | Zendiator 0.7.0 | 移行する内容 |
 |---|---|---|
 | `IRequest<TResponse>` | `IRequest<TResponse>` | 名前空間を変更する |
 | `IRequest` | `IRequest`または`ICommand` | 1型引数のHandlerから`ValueTask`を返す |
@@ -27,14 +27,14 @@
 
 ## パッケージとプロジェクト構成
 
-構成を宣言するプロジェクトへインストールします。
+構成を宣言するプロジェクトへインストールします。利用するフィードが各パッケージの0.7.0を提供している必要があります。
 
 ```shell
-dotnet add package Zendiator --version 0.6.0
+dotnet add package Zendiator --version 0.7.0
 dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
 ```
 
-`Zendiator`にはGeneratorが含まれ、`Zendiator.Abstractions`へ依存します。契約だけを定義するプロジェクトは`Zendiator.Abstractions`だけを参照できます。Zendiatorの全パッケージを同じバージョンにそろえてください。任意で追加する`Zendiator.CodeFixes`も0.6.0とし、`PrivateAssets="all"`を指定します。
+`Zendiator`にはGeneratorが含まれ、`Zendiator.Abstractions`へ依存します。契約だけを定義するプロジェクトは`Zendiator.Abstractions`だけを参照できます。Zendiatorの全パッケージを同じバージョンにそろえてください。任意で追加する`Zendiator.CodeFixes`も0.7.0とし、`PrivateAssets="all"`を指定します。
 
 生成時に調べるのは、構成を置いたコンパイルと明示的に指定したアセンブリです。実行時に任意のアセンブリを探索しません。複数プロジェクトでは契約・実装・構成の参照を明示してください。[ComposedAppサンプル](../samples/Zendiator.Sample.ComposedApp/)と[構成の診断](diagnostics/configuration.md)に例があります。
 
@@ -98,7 +98,7 @@ public sealed class GetUserQueryHandler : IRequestHandler<GetUserQuery, UserDto>
 
 生成された登録ではMediatorがScoped、Handler・Hook・Session FactoryがTransientになります。MediatR 12のMediatorの既定値はTransientです。登録を上書きするときは`AddZendiator`より前にサービスを登録してください。`TryAdd`による生成登録は先行する登録を保ちます。再利用するサービスはアプリケーションの並行利用に対応する必要があります。
 
-各MediatorはTransientを含む取得済みの依存を再利用します。条件を満たす非同期Hookルートは最初のHookより前にルート単位の依存セットを取得します。それ以外のルートにはそれぞれの捕捉規則が適用されます。送信や再試行のたびに新しい依存が作られるとは限りません。[開発版の捕捉規則](getting-started-0.5.0.ja.md#di-scopeの所有)では同期Beforeルートの依存取得を含む未公開の0.7.0での追加変更を説明しています。この節で説明した公開済みの0.6.0の動作を変えるものではありません。更新するときや構築時期・インスタンスの共有に依存するときは、その違いを確認してください。
+各MediatorはTransientを含む取得済みの依存を再利用します。条件を満たす非同期Hookルートは最初のHookより前にルート単位の依存セットを取得します。それ以外のルートにはそれぞれの捕捉規則が適用されます。送信や再試行のたびに新しい依存が作られるとは限りません。[0.7.0の捕捉規則](getting-started-0.5.0.ja.md#di-scopeの所有)では同期Beforeルートの依存取得を含む0.7.0での追加変更を説明しています。更新するときや構築時期・インスタンスの共有に依存するときは、その違いを確認してください。
 
 構築と破棄はDIが所有します。送信、列挙、後始末がすべて終わってからScopeを破棄してください。生成されたMediatorは`IDisposable`の所有者ではありません。ScopeやProviderの破棄後の利用は未対応です。`ValidateScopes`と`ValidateOnBuild`を有効にし、遅延解決されるルートも実際に呼び出して確認します。
 
@@ -175,7 +175,7 @@ MediatR 12の通常の`Send`には、複数Handlerから応答を受ける契約
 
 移行は次の順で進めます。
 
-1. Zendiatorのパッケージを0.6.0にそろえ、構成を置くプロジェクトを選ぶ。
+1. Zendiatorのパッケージを0.7.0にそろえ、構成を置くプロジェクトを選ぶ。
 2. 要求・Handlerの契約を変更し、`[Handler]`と`Handlers`を宣言する。
 3. Behaviorの意図をHookまたはWrapperへ移し、`Pipeline`で順序を保つ。
 4. 生成された入口の具体的なオーバーロードへ呼び出し側を移す。通知の登録は別に扱う。

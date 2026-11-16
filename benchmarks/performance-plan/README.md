@@ -1,5 +1,16 @@
 # Post-0.6.0 measurements
 
+## 0.7.0 README comparison
+
+The [0.7.0 summary](../results/0.7.0-2bc3726-summary.csv) and
+[full numeric evidence](../results/0.7.0-2bc3726-readme.json) cover all 122 cells
+of `post-060-full-baseline.json` at measured source
+`2bc3726ecdb7bc4d89c64ec643f45b0623d8d297`: 83 root-table cells and 39
+supplementary cells. The measurements used pre-release source, not release packages.
+See the [current comparison conditions](../README.md#current-readme-comparison).
+This single-revision comparison does not establish a controlled release-to-release
+gain or change the historical adoption decisions and unmet strict goals below.
+
 ## Disposition as of 2026-11-15
 
 [0.7.0 remains unreleased](../../docs/release/0.7.0-release-notes.md);

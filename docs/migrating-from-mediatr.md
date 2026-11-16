@@ -3,12 +3,11 @@
 [日本語](migrating-from-mediatr.ja.md)
 
 This guide moves MediatR 12 applications using `IMediator`, `ISender` and
-`IPublisher` to Zendiator 0.6.0 on .NET 10 and C# 14. Later MediatR versions may
+`IPublisher` to Zendiator 0.7.0 on .NET 10 and C# 14. Later MediatR versions may
 have different registration APIs. Start with the [README](../README.md) and
 [current configuration guide](getting-started-0.5.0.md). The configuration guide
-keeps its existing filename so published links continue to work. It now describes
-unreleased 0.7.0 contracts alongside explicitly labeled 0.6.0 samples; this
-migration guide remains for published 0.6.0.
+keeps its existing filename so published links continue to work. It describes
+0.7.0 contracts and sample commands.
 
 Use an explicit composition for new Send and Stream routes: mark handlers with
 `[Handler]`, select them with `Handlers`, and order stages in `Pipeline`. The
@@ -18,7 +17,7 @@ paths. For existing Zendiator code, also apply the
 
 ## API correspondence
 
-| MediatR 12 | Zendiator 0.6.0 | Migration |
+| MediatR 12 | Zendiator 0.7.0 | Migration |
 |---|---|---|
 | `IRequest<TResponse>` | `IRequest<TResponse>` | Replace the namespace |
 | `IRequest` | `IRequest` or `ICommand` | One-argument handler returning `ValueTask` |
@@ -39,17 +38,18 @@ and notification type erasure have different support boundaries.
 
 ## Packages and project layout
 
-Install in the project that declares the composition:
+Install in the project that declares the composition. The selected feed must
+provide the matching 0.7.0 packages:
 
 ```shell
-dotnet add package Zendiator --version 0.6.0
+dotnet add package Zendiator --version 0.7.0
 dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
 ```
 
 `Zendiator` includes the generator and depends on `Zendiator.Abstractions`.
 Contracts-only projects can reference `Zendiator.Abstractions` alone. Keep all
 Zendiator packages at the same version. The optional `Zendiator.CodeFixes` package
-is also 0.6.0 and uses `PrivateAssets="all"`.
+is also 0.7.0 and uses `PrivateAssets="all"`.
 
 Generation examines the composition's compilation and explicitly configured
 assemblies. It does not scan arbitrary assemblies at runtime. Keep contract,
@@ -139,9 +139,9 @@ Reused services must support the application's concurrent use.
 Each Mediator reuses captured dependencies, including Transients. Eligible
 asynchronous Hook routes acquire a route-local dependency set before the first
 Hook; other routes retain their own capture rules. A send or retry does not imply
-a new dependency instance. The [development capture rules](getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)
-describe additional changes for unreleased 0.7.0, including synchronous-Before
-route capture. They do not change the published 0.6.0 behavior described here.
+a new dependency instance. The [0.7.0 capture rules](getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)
+describe additional changes in 0.7.0, including synchronous-Before
+route capture.
 Review those differences before upgrading or relying on constructor timing or
 shared identity.
 
@@ -280,7 +280,7 @@ exclude struct Stream cursors.
 
 Migration order:
 
-1. Align Zendiator 0.6.0 package versions and select the composition project.
+1. Align Zendiator 0.7.0 package versions and select the composition project.
 2. Replace request/handler contracts, add `[Handler]`, and declare `Handlers`.
 3. Move behavior intent to hooks or wrappers and preserve order in `Pipeline`.
 4. Replace call sites with the facade's concrete overloads; handle notification
