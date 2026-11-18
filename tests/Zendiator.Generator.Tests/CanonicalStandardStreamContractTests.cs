@@ -52,7 +52,7 @@ public sealed partial class GeneratorTests
     public async Task Forwarding_stream_chain_preserves_pending_open_context_cancellation_and_disposal()
     {
         var source = NativeStreamFixture(
-            "c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));c.Pipeline<Items>(DispatchFamily.Stream,Stage.Wrapper<Relay<Outer>>(),Stage.Wrapper<Relay<Inner>>());",
+            "c.Handlers<Items>(DispatchFamily.Stream,typeof(Handler));c.Pipeline<Items>(DispatchFamily.Stream,Stage.Wrapper<Relay<Inner>>(),Stage.Wrapper<Relay<Outer>>());",
             """
             public sealed record Items:IStreamRequest<int>;
             public sealed class Outer; public sealed class Inner;
