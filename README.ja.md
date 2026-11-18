@@ -202,6 +202,9 @@ Streamの5段構成では、Zendiatorはcursorを転送し、比較先は各段�
 [全数値観測と出典](benchmarks/results/0.7.0-2bc3726-readme.json)、
 [測定条件と再現手順](benchmarks/README.ja.md#現在のreadmeの比較)に、表外39件と測定したソース版を記載しています。
 
+開発版 `4138d03` では、同じ代表14ケースのすべてで、正順・逆順ともにZendiatorの平均時間が最小でした。
+同期Streamの途中終了は103.64 nsと118.06 nsで、どちらも200 B/opでした。[開発版の全14行と測定条件](benchmarks/results/4138d03-representative.md)
+
 ## Native AOT
 
 パッケージを使うアプリケーションは、標準の型付き Stream 経路を含め、win-x64 の native executable として

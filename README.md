@@ -218,6 +218,9 @@ controlled release-to-release improvement. [All 122 results and uncertainty](ben
 and [conditions and reproduction](benchmarks/README.md#current-readme-comparison)
 include the 39 supplementary cells and the exact measured source.
 
+Development revision `4138d03` had the lowest mean time on all 14 representative workloads in both execution orders.
+Synchronous Stream early termination took 103.64 ns and 118.06 ns, with 200 B/op in each run. [Development results and measurement conditions (Japanese)](benchmarks/results/4138d03-representative.md)
+
 ## Native AOT
 
 Package-based consumers, including the standard typed Stream path, have been
