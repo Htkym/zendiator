@@ -34,4 +34,4 @@ internal sealed record BoundStreamHookEmission(string HookName, string ContractN
     }
 }
 
-internal sealed record BoundStructStreamCallEmission(string MethodName);
+internal sealed record BoundStructStreamCallEmission(string MethodName, bool ForwardsUpstream = false);

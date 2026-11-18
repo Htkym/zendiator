@@ -137,6 +137,31 @@ The generated operation disposes the acquired cursor, while DI still owns the
 borrowed handler and hook services. Its guarded acquisition and cleanup rules
 apply even when its input completes synchronously.
 
+## Forwarding middleware on a named cursor
+
+A closed route with a reference-type named cursor can use one guarded owner for
+a chain of sealed middleware. The generator needs the concrete, public generic
+`OpenAsync<TNext>` implementation in the same compilation for every stage. It
+recognizes a direct `return next.OpenAsync(request, token)` (including an
+expression body), optionally preceded by ordinary by-value preprocessing calls.
+Each middleware still runs in order. The upstream checks cancellation between
+stages, opens the producer on the first move and closes its cursor on early exit,
+EOF or failure. Routes with item hooks or owned sessions use individual cursors.
+
+The generator inspects the compiler input. An interceptor already bound to the
+tail call selects the ordinary cursor path. If a separate source generator
+intercepts that call later, or post-build tooling rewrites its body, keep the
+ordinary path by storing the returned operation in a local in one middleware:
+
+```csharp
+var opening = next.OpenAsync(request, token);
+return opening;
+```
+
+This keeps the full middleware ownership and reopening protocol available to
+the replacement implementation. Middleware that retains the port, substitutes a
+token or returns a different cursor already uses that protocol.
+
 ## Choose Before or middleware
 
 Use existing `IAsyncStreamBefore<TRequest>` for preprocessing that runs once per

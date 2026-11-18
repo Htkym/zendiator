@@ -79,6 +79,7 @@ public sealed partial class GeneratorTests
             public sealed record Ping(int Mode):IRequest<int>;
             [Handler]public sealed class Handler:IRequestHandler<Ping,int>{public ValueTask<int> HandleAsync(Ping r,CancellationToken t)=>throw new System.InvalidOperationException("Short circuit must not call the handler.");}
             public sealed class Wrapper(Probe p):IAsyncSendWrapper<Ping,int>{public ValueTask<int> InvokeAsync<N>(Ping r,N n,CancellationToken t) where N:IAsyncSendContinuation<Ping,int> =>p.Invoke(r.Mode);}
+            public sealed class Inner:IAsyncSendWrapper<Ping,int>{public ValueTask<int> InvokeAsync<N>(Ping r,N n,CancellationToken t) where N:IAsyncSendContinuation<Ping,int> =>throw new System.InvalidOperationException("Short circuit must not call the inner wrapper.");}
             [ZendiatorComposition("boundary")]public sealed class App;
             public static class Bridge{
             public static IServiceCollection Register(IServiceCollection s)=>s.AddZendiator<App>(c=>{c.Handlers<Ping>(DispatchFamily.SendAsync,typeof(Handler));c.Pipeline<Ping>(DispatchFamily.SendAsync,Stage.Wrapper<Wrapper>());});
@@ -87,6 +88,8 @@ public sealed partial class GeneratorTests
             """;
         if (valueWrapper)
             source = source.Replace("sealed class Wrapper", "struct Wrapper");
+        else
+            source = source.Replace("Stage.Wrapper<Wrapper>()", "Stage.Wrapper<Wrapper>(),Stage.Wrapper<Inner>()");
         var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "Boundary_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
         Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));

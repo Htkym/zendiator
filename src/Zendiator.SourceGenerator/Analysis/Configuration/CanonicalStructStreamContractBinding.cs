@@ -1,6 +1,9 @@
 using System;
 using System.Linq;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Operations;
 using static Zendiator.SourceGenerator.SymbolUtilities;
 
 namespace Zendiator.SourceGenerator;
@@ -47,7 +50,49 @@ internal static class CanonicalStructStreamContractBinding
         if (generic.Length != 1 || !Same(generic[0], method) || members.Any(m => m.GetAttributes().Any(a =>
                 a.AttributeClass?.ToDisplayString() == "System.Runtime.CompilerServices.OverloadResolutionPriorityAttribute")))
             return null;
-        return new(method.Name);
+        return new(method.Name, ForwardsUpstream(method, compilation));
+    }
+
+    private static bool ForwardsUpstream(IMethodSymbol method, Compilation compilation)
+    {
+        var syntax = method.DeclaringSyntaxReferences;
+        if (method.IsAsync || method.PartialDefinitionPart != null || method.PartialImplementationPart != null ||
+            syntax.Length != 1 || syntax[0].GetSyntax() is not MethodDeclarationSyntax declaration ||
+            declaration.Modifiers.Any(SyntaxKind.UnsafeKeyword) || !compilation.ContainsSyntaxTree(declaration.SyntaxTree))
+            return false;
+        var semantic = compilation.GetSemanticModel(declaration.SyntaxTree);
+        var tail = declaration.ExpressionBody?.Expression;
+        if (declaration.Body is { } body)
+        {
+            if (body.Statements.LastOrDefault() is not ReturnStatementSyntax last)
+                return false;
+            tail = last.Expression;
+            foreach (var statement in body.Statements.Take(body.Statements.Count - 1))
+            {
+                // Keep preprocessing calls, but exclude port escapes and changes to the forwarded arguments.
+                if (statement is not ExpressionStatementSyntax { Expression: InvocationExpressionSyntax call } ||
+                    call.DescendantNodes().Any(n => n is not (IdentifierNameSyntax or MemberAccessExpressionSyntax or
+                        ArgumentListSyntax or ArgumentSyntax or LiteralExpressionSyntax)) ||
+                    semantic.GetOperation(call) is not IInvocationOperation preprocessing ||
+                    preprocessing.TargetMethod.IsExtensionMethod ||
+                    preprocessing.TargetMethod.Parameters.Any(p => p.RefKind != RefKind.None) ||
+                    call.ArgumentList.Arguments.Any(a => a.RefKindKeyword.RawKind != 0) ||
+                    call.DescendantNodes().OfType<IdentifierNameSyntax>().Any(id =>
+                        id.Identifier.ValueText == method.Parameters[1].Name || id.Identifier.ValueText == method.Parameters[2].Name ||
+                        id.Identifier.ValueText == method.TypeParameters[0].Name))
+                    return false;
+            }
+        }
+        if (tail is not InvocationExpressionSyntax invocation)
+            return false;
+        if (semantic.GetInterceptorMethod(invocation) != null || semantic.GetOperation(invocation) is not IInvocationOperation callNext ||
+            callNext.Instance is not IParameterReferenceOperation { Parameter.Ordinal: 1 } ||
+            callNext.TargetMethod.Name != "OpenAsync" ||
+            !Same(callNext.TargetMethod.ContainingType.OriginalDefinition, compilation.GetTypeByMetadataName("Zendiator.IStreamUpstream`2")) ||
+            callNext.Arguments.Length != 2)
+            return false;
+        return callNext.Arguments.All(a => a.Value is IParameterReferenceOperation parameter &&
+            parameter.Parameter.Ordinal == (a.Parameter?.Ordinal == 0 ? 0 : 2));
     }
 
     private static bool Signature(IMethodSymbol method, INamedTypeSymbol legacy, Compilation compilation)

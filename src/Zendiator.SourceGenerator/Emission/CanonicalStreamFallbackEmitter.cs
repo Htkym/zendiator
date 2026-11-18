@@ -18,7 +18,11 @@ internal static class CanonicalStreamFallbackEmitter
         var generic = model.Generic?.TypeParameters ?? "";
         var constraints = model.Generic?.TypeConstraints ?? "";
         var item = model.ItemFlow?.Final.Name ?? h.ItemName;
+        var forwarding = ForwardingChain(model);
+        if (forwarding.Length != 0)
+            model = model with { Segments = new(new[] { model.Segments[0] }), ConsumerSegment = 0 };
         var standalone = IsStandalone(model);
+        var reuseFirst = standalone && forwarding.Length == 0;
         var factoryEnumerable = h.ReturnsEnumerable && CanonicalStreamPublicConnection.PlainZeroStageShape(model);
         var enumerableName = "Enumerable";
         var acquisitionName = "EnumerableAcquisition";
@@ -54,7 +58,7 @@ internal static class CanonicalStreamFallbackEmitter
                     { _services = services; _request = request; _api = api; }
                     internal static global::System.Collections.Generic.IAsyncEnumerable<{{item}}> CreateEnumerable(
                         global::System.IServiceProvider services, {{h.RequestName}} request, global::System.Threading.CancellationToken api) =>
-                        {{(factoryEnumerable ? "api.CanBeCanceled ? new Cursor" + model.ConsumerSegment + "(services, request, api, default, reserveFirstEnumeration: true) : new " + enumerableName + "(new(services, request, api))" : standalone ? "new Cursor" + model.ConsumerSegment + "(services, request, api, default, reserveFirstEnumeration: true)" : "new Enumerable(new(services, request, api))")}};
+                        {{(factoryEnumerable ? "api.CanBeCanceled ? new Cursor" + model.ConsumerSegment + "(services, request, api, default, reserveFirstEnumeration: true) : new " + enumerableName + "(new(services, request, api))" : reuseFirst ? "new Cursor" + model.ConsumerSegment + "(services, request, api, default, reserveFirstEnumeration: true)" : "new Enumerable(new(services, request, api))")}};
                     private Cursor{{model.ConsumerSegment}} CreateCursor(global::System.Threading.CancellationToken token)
                     {
                         if (_services is null) throw new global::System.InvalidOperationException("The Stream source is uninitialized.");
@@ -128,7 +132,7 @@ internal static class CanonicalStreamFallbackEmitter
                         }
                     }
                 """);
-        else if (!standalone)
+        else if (!reuseFirst)
             b.AppendLine($$"""
                     private sealed class Enumerable : global::System.Collections.Generic.IAsyncEnumerable<{{item}}>
                     {
@@ -139,7 +143,8 @@ internal static class CanonicalStreamFallbackEmitter
                     }
                 """);
         foreach (var segment in model.Segments)
-            EmitCursor(b, model, segment);
+            EmitCursor(b, model, segment, forwarding.LastOrDefault());
+        EmitForwardingPorts(b, h, forwarding);
         if (h.ReturnsEnumerable)
         {
             CanonicalAsyncCallEmitter.EmitCall(b, "CreateHandlerEnumerable", "global::System.Collections.Generic.IAsyncEnumerable<" + h.ItemName + ">",
@@ -171,7 +176,52 @@ internal static class CanonicalStreamFallbackEmitter
         return new(model.HintName, b.ToString());
     }
 
-    private static void EmitCursor(StringBuilder b, CanonicalStreamFallbackModel model, CanonicalStreamFallbackSegment segment)
+    private static CanonicalStreamFallbackSegment[] ForwardingChain(CanonicalStreamFallbackModel model)
+    {
+        if (model.Generic != null || model.Handler.ReturnsEnumerable || model.Handler.CursorIsValueType ||
+            model.HandlerFactory != null || model.Segments.Count < 2 || model.Segments.Any(s => s.Hooks.Count != 0) ||
+            model.Segments.Skip(1).Any(s => s.WrapperFactory != null || s.Wrapper?.StructStreamCall?.ForwardsUpstream != true))
+            return Array.Empty<CanonicalStreamFallbackSegment>();
+        return model.Segments.Skip(1).ToArray();
+    }
+
+    private static string ForwardCall(CanonicalStreamFallbackSegment segment, string request, string token)
+    {
+        var wrapper = segment.Wrapper!;
+        var receiver = Resolve("_services", wrapper.WrapperName, wrapper.WrapperName);
+        return "(" + receiver + ")." + wrapper.StructStreamCall!.MethodName + "<ForwardUpstream" + segment.Id +
+            ">(" + request + ", new ForwardUpstream" + segment.Id + "(_services), " + token + ")";
+    }
+
+    private static void EmitForwardingPorts(StringBuilder b, BoundStreamHandlerEmission handler,
+        CanonicalStreamFallbackSegment[] stages)
+    {
+        var itemCursor = "global::System.Collections.Generic.IAsyncEnumerator<" + handler.ItemName + ">";
+        for (var i = 0; i < stages.Length; i++)
+        {
+            var open = i == 0
+                ? "OpenHandler(" + Resolve("_services", handler.HandlerName, Storage(handler.HandlerName, handler.HandlerIsValueType)) + ", request, token)"
+                : ForwardCall(stages[i - 1], "request", "token");
+            b.AppendLine($$"""
+                private readonly struct ForwardUpstream{{stages[i].Id}} : global::Zendiator.IStreamUpstream<{{handler.RequestName}}, {{handler.ItemName}}>
+                {
+                    private readonly global::System.IServiceProvider _services;
+                    internal ForwardUpstream{{stages[i].Id}}(global::System.IServiceProvider services) => _services = services;
+                    public async global::System.Threading.Tasks.ValueTask<{{itemCursor}}> OpenAsync({{handler.RequestName}} request,
+                        global::System.Threading.CancellationToken token)
+                    {
+                        {{(handler.RequestIsValueType ? "" : "global::System.ArgumentNullException.ThrowIfNull(request);")}}
+                        token.ThrowIfCancellationRequested();
+                        return await {{open}}.ConfigureAwait(false)
+                            ?? throw new global::System.InvalidOperationException("A Stream handler returned a null cursor.");
+                    }
+                }
+                """);
+        }
+    }
+
+    private static void EmitCursor(StringBuilder b, CanonicalStreamFallbackModel model, CanonicalStreamFallbackSegment segment,
+        CanonicalStreamFallbackSegment? forwardingHead)
     {
         var h = model.Handler;
         var n = segment.Id;
@@ -197,7 +247,7 @@ internal static class CanonicalStreamFallbackEmitter
                         }
             """;
         var initialization = new StringBuilder();
-        EmitInitialization(initialization, model, segment, factory, receiver, referenceSource);
+        EmitInitialization(initialization, model, segment, factory, receiver, referenceSource, forwardingHead);
         var rootCheck = standalone ? "" : """
                             if (!global::System.Object.ReferenceEquals(_root, this) && _root.IsClosed)
                                 operation = MoveFailed(new global::System.ObjectDisposedException("Stream"));
@@ -365,7 +415,8 @@ internal static class CanonicalStreamFallbackEmitter
     }
 
     private static void EmitInitialization(StringBuilder b, CanonicalStreamFallbackModel model,
-        CanonicalStreamFallbackSegment segment, BoundAsyncFactoryEmission? factory, string receiver, bool referenceSource)
+        CanonicalStreamFallbackSegment segment, BoundAsyncFactoryEmission? factory, string receiver, bool referenceSource,
+        CanonicalStreamFallbackSegment? forwardingHead)
     {
         var h = model.Handler;
         if (segment.Id == model.ConsumerSegment)
@@ -389,7 +440,11 @@ internal static class CanonicalStreamFallbackEmitter
                 Acquire(b, hookFactory, Storage(segment.Hooks[i].HookName, segment.Hooks[i].HookIsValueType), "_hook" + i);
         if (factory != null)
             Acquire(b, factory, receiver, "_receiver");
-        if (segment.Wrapper is { } wrapper)
+        if (forwardingHead != null)
+        {
+            b.AppendLine("_source = (" + h.CursorName + ")await " + ForwardCall(forwardingHead, "_request", "Token") + ".ConfigureAwait(false);");
+        }
+        else if (segment.Wrapper is { } wrapper)
         {
             var structUpstream = CanonicalStructStreamUpstreamEmitter.Enabled(segment);
             var contract = structUpstream ? wrapper.WrapperName : wrapper.ContractName;

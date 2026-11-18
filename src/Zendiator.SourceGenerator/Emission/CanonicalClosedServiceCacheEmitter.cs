@@ -32,8 +32,14 @@ internal static class CanonicalClosedServiceCacheEmitter
             var id = Id(type);
             var storage = Storage(type);
             var slot = (blocked ? "block." : "") + "_service_" + id;
+            b.AppendLine($"internal {storage} Required_{id}() =>");
+            if (!blocked)
+            {
+                b.AppendLine($"global::System.Threading.Volatile.Read(ref {slot}) ?? ResolveRequired_{id}();");
+                b.AppendLine($"private {storage} ResolveRequired_{id}() =>");
+            }
             b.AppendLine($$"""
-                internal {{storage}} Required_{{id}}() => Service_{{id}}()
+                Service_{{id}}()
                     ?? throw new global::System.InvalidOperationException("No service for type '" + typeof({{type.TypeName}}) + "' has been registered.");
                 private {{storage}}? Service_{{id}}() {
                 """);
