@@ -31,6 +31,8 @@
 
 Send側では、同期成功時のwrapperの状態から例外処理用のbuilderを外した。また、既定の依存キャッシュで取得済みの受け手を読む際、非nullの参照を直接返すようにした。これらを組み合わせた製品経路の順位が上表の結果である。[wrapperの生成](../../src/Zendiator.SourceGenerator/Emission/CanonicalWrapperSourceEmitter.cs)・[依存キャッシュの生成](../../src/Zendiator.SourceGenerator/Emission/CanonicalClosedServiceCacheEmitter.cs)
 
+測定後、テストのmiddleware登録順と、生成器内の `with` 式1か所の書式を修正した。Releaseで再ビルドし、UseCaseベンチマークでZendiatorが生成した157ファイルは、改行を揃えると測定版とすべて一致した。
+
 ## 測定条件と再現
 
 Windows 11 x64（ビルド26300.9974）、Intel Core Ultra 7 258V、SDK 10.0.404、.NET 10.0.14、BenchmarkDotNet 0.15.8。Release、workstation GC、affinity mask 1、warmup 20回、計測12回、要求500 ms、順序ごとに各セル1 launchとした。4スイートのpackage lockと既存のworkloadを使った。ZendiatorのStream入力は名前付きカーソルで、競合はコンパイラ生成のiteratorを使う。Streamの各段で行う処理もライブラリ間で異なる。[公開表のケース定義と比較条件](../performance-plan/README.md#public-row-mapping-and-comparison-boundaries)

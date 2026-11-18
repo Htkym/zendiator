@@ -20,7 +20,11 @@ internal static class CanonicalStreamFallbackEmitter
         var item = model.ItemFlow?.Final.Name ?? h.ItemName;
         var forwarding = ForwardingChain(model);
         if (forwarding.Length != 0)
-            model = model with { Segments = new(new[] { model.Segments[0] }), ConsumerSegment = 0 };
+            model = model with
+            {
+                Segments = new(new[] { model.Segments[0] }),
+                ConsumerSegment = 0
+            };
         var standalone = IsStandalone(model);
         var reuseFirst = standalone && forwarding.Length == 0;
         var factoryEnumerable = h.ReturnsEnumerable && CanonicalStreamPublicConnection.PlainZeroStageShape(model);
