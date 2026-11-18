@@ -173,16 +173,14 @@ internal static class CanonicalWrapperSourceEmitter
         var result = Result(h, true);
         b.AppendLine($$"""
             private {{result}} ExecuteRegion{{index}}({{h.RequestName}} request, global::System.Threading.CancellationToken cancellationToken) {
-                var state = new WrapperBoundary{{index}} { Owner = this, Request = request, Token = cancellationToken,
-                    Builder = global::System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder<{{h.ResultName}}>.Create() };
-                state.Builder.Start(ref state);
+                var state = new WrapperBoundary{{index}} { Owner = this, Request = request, Token = cancellationToken };
+                global::System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder.Create().Start(ref state);
                 return state.Operation;
             }
             private struct WrapperBoundary{{index}} : global::System.Runtime.CompilerServices.IAsyncStateMachine {
                 internal Zendiator Owner;
                 internal {{h.RequestName}} Request;
                 internal global::System.Threading.CancellationToken Token;
-                internal global::System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder<{{h.ResultName}}> Builder;
                 internal {{result}} Operation;
                 public void MoveNext() {
                     try {
@@ -195,11 +193,12 @@ internal static class CanonicalWrapperSourceEmitter
                         Operation = pending.IsCompletedSuccessfully
                             ? new {{result}}(pending.GetAwaiter().GetResult()) : AwaitWrapper{{index}}(pending);
                     } catch (global::System.Exception failure) {
-                        Builder.SetException(failure);
-                        Operation = Builder.Task;
+                        var builder = global::System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder<{{h.ResultName}}>.Create();
+                        builder.SetException(failure);
+                        Operation = builder.Task;
                     }
                 }
-                public void SetStateMachine(global::System.Runtime.CompilerServices.IAsyncStateMachine machine) => Builder.SetStateMachine(machine);
+                public void SetStateMachine(global::System.Runtime.CompilerServices.IAsyncStateMachine machine) { }
             }
             private static async {{result}} AwaitWrapper{{index}}({{result}} pending) => await pending.ConfigureAwait(false);
             private readonly struct WrapperNext{{index}} : global::Zendiator.IAsyncSendContinuation<{{h.RequestName}}, {{h.ResultName}}> {
