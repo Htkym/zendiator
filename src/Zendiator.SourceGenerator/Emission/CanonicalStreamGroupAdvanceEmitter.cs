@@ -8,25 +8,9 @@ namespace Zendiator.SourceGenerator;
 internal static class CanonicalStreamGroupAdvanceEmitter
 {
     internal static IReadOnlyList<CanonicalStreamFallbackSegment> Chain(CanonicalStreamFallbackModel model)
-    {
-        if (model.Segments.Count <= 2 || model.Segments.Count > 6)
-            return Array.Empty<CanonicalStreamFallbackSegment>();
-        var current = model.Segments.Single(s => s.Id == model.ConsumerSegment);
-        var item = current.OutputItemName ?? model.Handler.ItemName;
-        var chain = new List<CanonicalStreamFallbackSegment> { current };
-        while (current.Wrapper != null && current.Upstream is { } upstream && current.Hooks.Count == 0
-            && (current.SourceItemName ?? model.Handler.ItemName) == item
-            && (current.OutputItemName ?? model.Handler.ItemName) == item)
-        {
-            var child = model.Segments.Single(s => s.Id == upstream);
-            if (child.Hooks.Count != 0 || (child.OutputItemName ?? model.Handler.ItemName) != item
-                || (child.SourceItemName ?? model.Handler.ItemName) != item)
-                break;
-            chain.Add(child);
-            current = child;
-        }
-        return chain.Count > 1 ? chain : Array.Empty<CanonicalStreamFallbackSegment>();
-    }
+        => model.Segments.Count <= 2
+            ? Array.Empty<CanonicalStreamFallbackSegment>()
+            : CanonicalStreamIdentityLeaseEmitter.Chain(model);
 
     internal static bool IsParent(CanonicalStreamFallbackModel model, int cursor) =>
         cursor == model.ConsumerSegment && Chain(model).Count > 1;

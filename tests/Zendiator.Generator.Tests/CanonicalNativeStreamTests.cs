@@ -24,16 +24,18 @@ public sealed partial class GeneratorTests
         """.Replace("__CONFIG__", configuration).Replace("__DECLARATIONS__", declarations).Replace("__RUN__", run);
 
     private static async Task RunNativeStreamFixture(string name, string source, string entryType = "NativeStream.Bridge",
-        Func<string, string>? generatedTransform = null)
+        Func<string, string>? generatedTransform = null, ISourceGenerator? additionalGenerator = null)
     {
-        var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(
+        var driver = SyncDriver();
+        if (additionalGenerator is not null) driver = driver.AddGenerators([additionalGenerator]);
+        driver = driver.RunGeneratorsAndUpdateCompilation(
             SyncCompilation(source, "NativeStream_" + name + "_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
         Assert.Empty(diagnostics);
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
         var transformedSources = new Dictionary<string, string>();
         if (generatedTransform is not null)
         {
-            foreach (var file in driver.GetRunResult().Results.Single().GeneratedSources)
+            foreach (var file in driver.GetRunResult().Results.SelectMany(result => result.GeneratedSources))
             {
                 var transformed = generatedTransform(file.SourceText.ToString());
                 transformedSources.Add(file.HintName, transformed);
@@ -56,7 +58,7 @@ public sealed partial class GeneratorTests
             var folder = Path.Combine(evidence, "native-stream-" + name);
             Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, "input.cs"), source);
-            foreach (var file in driver.GetRunResult().Results.Single().GeneratedSources)
+            foreach (var file in driver.GetRunResult().Results.SelectMany(result => result.GeneratedSources))
                 File.WriteAllText(Path.Combine(folder, file.HintName), file.SourceText.ToString());
             if (generatedTransform is not null)
             {

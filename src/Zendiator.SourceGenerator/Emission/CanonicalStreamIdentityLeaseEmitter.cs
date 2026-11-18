@@ -57,11 +57,21 @@ internal static class CanonicalStreamIdentityLeaseEmitter
                 internal bool TryClaimIdentityLease() => TryBeginMove();
                 internal global::System.Threading.Tasks.ValueTask<bool> MoveIdentityLeaseEndpointRaw() => MoveCoreAsync();
                 internal {{item}} ReadIdentityLeaseEndpointCurrent() => ReadSource(ref _source);
-                internal async global::System.Threading.Tasks.ValueTask<global::System.Exception?> CloseIdentityLeaseChildAsync(
+                internal global::System.Threading.Tasks.ValueTask<global::System.Exception?> CloseIdentityLeaseChildAsync(
                     global::System.Exception? error, bool disposing)
                 {
-                    var failure = await CloseClaimedAsync(error, disposing).ConfigureAwait(false);
-                    if (!disposing && error is null && failure is null) _normalEnd = true;
+                    var close = CloseClaimedAsync(error, disposing);
+                    if (disposing || error is not null) return close;
+                    if (!close.IsCompletedSuccessfully) return AwaitNormalEndAsync(close);
+                    var failure = close.GetAwaiter().GetResult();
+                    if (failure is null) _normalEnd = true;
+                    return new(failure);
+                }
+                private async global::System.Threading.Tasks.ValueTask<global::System.Exception?> AwaitNormalEndAsync(
+                    global::System.Threading.Tasks.ValueTask<global::System.Exception?> close)
+                {
+                    var failure = await close.ConfigureAwait(false);
+                    if (failure is null) _normalEnd = true;
                     return failure;
                 }
                 internal void RetireIdentityLeaseChildClose() => RetireClaimedClose();
@@ -89,10 +99,7 @@ internal static class CanonicalStreamIdentityLeaseEmitter
             internal void DetachIdentityLeaseSource(Cursor{{child}} child)
             {
                 if (global::System.Object.ReferenceEquals(_source, child))
-                {
                     _source = default!;
-                    _acquired = false;
-                }
                 {{detach}}
             """);
         if (CanonicalStreamPrivateAdvanceEmitter.IsParent(model, cursor)

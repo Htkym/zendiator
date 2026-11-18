@@ -137,30 +137,25 @@ The generated operation disposes the acquired cursor, while DI still owns the
 borrowed handler and hook services. Its guarded acquisition and cleanup rules
 apply even when its input completes synchronously.
 
-## Forwarding middleware on a named cursor
+## Forwarding or decorating a cursor
 
-A closed route with a reference-type named cursor can use one guarded owner for
-a chain of sealed middleware. The generator needs the concrete, public generic
-`OpenAsync<TNext>` implementation in the same compilation for every stage. It
-recognizes a direct `return next.OpenAsync(request, token)` (including an
-expression body), optionally preceded by ordinary by-value preprocessing calls.
-Each middleware still runs in order. The upstream checks cancellation between
-stages, opens the producer on the first move and closes its cursor on early exit,
-EOF or failure. Routes with item hooks or owned sessions use individual cursors.
-
-The generator inspects the compiler input. An interceptor already bound to the
-tail call selects the ordinary cursor path. If a separate source generator
-intercepts that call later, or post-build tooling rewrites its body, keep the
-ordinary path by storing the returned operation in a local in one middleware:
+A middleware can call `next.OpenAsync(request, token)` and return its result.
+It can also return a different cursor, for example to transform items or run
+cleanup. Consumers use the same call in both cases:
 
 ```csharp
-var opening = next.OpenAsync(request, token);
-return opening;
+await foreach (var item in mediator.StreamAsync(request, cancellationToken))
+{
+    // Process the item here.
+}
 ```
 
-This keeps the full middleware ownership and reopening protocol available to
-the replacement implementation. Middleware that retains the port, substitutes a
-token or returns a different cursor already uses that protocol.
+The mediator checks the cursor returned by each middleware when enumeration
+starts. If a chain forwards the same upstream cursors with matching tokens
+and has no intervening item hooks, the mediator can read from the end of the
+chain directly. A middleware that returns a decorator keeps control of its
+items and disposal. Returning through a local variable or an async helper
+uses the same rules. Each enumeration makes its own decision.
 
 ## Choose Before or middleware
 
