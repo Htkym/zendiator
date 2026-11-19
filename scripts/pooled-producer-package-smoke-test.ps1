@@ -223,7 +223,7 @@ function Assert-GeneratedProducer([string]$Mode) {
 }
 
 $previousPackages = $env:NUGET_PACKAGES
-$env:NUGET_PACKAGES = Join-Path $WorkingDir 'global-packages'
+$env:NUGET_PACKAGES = Join-Path $WorkingDir ('global-packages-' + [guid]::NewGuid().ToString('N'))
 try {
     $sdk = dotnet --version
     if ($LASTEXITCODE -ne 0) { throw 'Could not determine the .NET SDK version.' }

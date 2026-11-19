@@ -201,7 +201,8 @@ Console.WriteLine($"RESULT {ping} {order} {invoice}");
 return ping == 42 && order == 101 && invoice == 202 ? 0 : 1;
 "@ | Set-Content "$WorkingDir/host/Program.cs" -Encoding UTF8
 
-$env:NUGET_PACKAGES = Join-Path $WorkingDir "global-packages"
+$previousPackages = $env:NUGET_PACKAGES
+$env:NUGET_PACKAGES = Join-Path $WorkingDir ('global-packages-' + [guid]::NewGuid().ToString('N'))
 try {
     dotnet build "$WorkingDir/host/host.csproj" -c Release --configfile "$WorkingDir/NuGet.Config" -v minimal
     if ($LASTEXITCODE -ne 0) { throw "smoke build failed" }
@@ -222,6 +223,7 @@ try {
     Write-Host "DI package smoke test passed (Zendiator $PackageVersion)."
 }
 finally {
+    $env:NUGET_PACKAGES = $previousPackages
     if (($env:SMOKE_KEEP -ne "1") -and (Test-Path $WorkingDir)) {
         Remove-Item -Recurse -Force $WorkingDir
     }

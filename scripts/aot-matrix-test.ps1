@@ -356,7 +356,8 @@ public static class Program
 }
 "@ | Set-Content "$WorkingDir/asm/Program.cs" -Encoding UTF8
 
-$env:NUGET_PACKAGES = Join-Path $WorkingDir "global-packages"
+$previousPackages = $env:NUGET_PACKAGES
+$env:NUGET_PACKAGES = Join-Path $WorkingDir ('global-packages-' + [guid]::NewGuid().ToString('N'))
 $exitCode = 0
 try {
     foreach ($app in @("di", "asm")) {
@@ -385,6 +386,7 @@ catch {
     $exitCode = 1
 }
 finally {
+    $env:NUGET_PACKAGES = $previousPackages
     if (($env:SMOKE_KEEP -ne "1") -and (Test-Path $WorkingDir)) {
         Remove-Item -Recurse -Force $WorkingDir
     }
