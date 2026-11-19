@@ -48,7 +48,7 @@ internal static class BenchmarkGate
         Add(nameof(FoundatioIteratorStream5), "Full", StreamParameters(1024, true));
         Add(nameof(FoundatioIteratorRelay5), "Full", StreamParameters(1024, true));
         if (rows.Count != ExpectedCases)
-            throw new InvalidOperationException("Foundatio PERF-04 gate case selection changed.");
+            throw new InvalidOperationException("Foundatio stream comparison case selection changed.");
 
         Directory.CreateDirectory(output);
         ArtifactEvidence.Write(Path.Combine(output, "semantic-details.json"), details);

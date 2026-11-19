@@ -1,17 +1,11 @@
-"""Run one BDN case per process in a verified cross-library order.
-
-This is separate from Run-Comparison.ps1: its historical type-block results are
-never reused or merged into an interleaved run.
-"""
+"""Run one BDN case per process in a verified cross-library order."""
 
 import argparse
 import hashlib
-import math
 import os
 import re
 import shutil
 import signal
-import statistics
 import subprocess
 import sys
 import uuid
@@ -26,48 +20,7 @@ from artifact_gate import (PROTOCOL as ARTIFACT_GATE_PROTOCOL, ensure_artifact_g
 
 PROJECT = Path(__file__).resolve().parent
 REPO = PROJECT.parent.parent
-GROUPS = ("send", "features", "streams", "relay")
 PROFILE = "Release; affinity 1; 20 warmup; 12 measurement; 500 ms requested iteration; 1 launch"
-SEND_DIAGNOSTIC_INVOCATIONS = 268435456
-
-
-def send_diagnostic_profile(mode, group, cases, resume=False, max_cases=None):
-    if mode is None:
-        return PROFILE
-    if (mode not in ("adaptive", "fixed") or group != "custom" or
-            cases != [{"Type": "ZendiatorSend0", "Method": "Typed", "Lifetime": "Scoped"}] or
-            resume or max_cases is not None):
-        raise ValueError("Send diagnostic requires one Scoped ZendiatorSend0.Typed case, without resume or partial runs")
-    return PROFILE + "; Send diagnostic " + mode + (
-        f"; InvocationCount={SEND_DIAGNOSTIC_INVOCATIONS}; iteration time not enforced" if mode == "fixed" else "; adaptive pilot")
-
-
-def check_send_diagnostic(result, mode):
-    display = result["DisplayInfo"]
-    required = ("Affinity=00000001", "IterationCount=12", "IterationTime=500ms", "LaunchCount=1", "WarmupCount=20")
-    if any(not re.search(r"\b" + re.escape(token) + r"(?=[,)])", display) for token in required):
-        raise ValueError("Send diagnostic job differs from reviewed profile")
-    points = result["Measurements"]
-    select = lambda stage: [x for x in points if x["IterationMode"] == "Workload" and x["IterationStage"] == stage]
-    actual, warmup, pilot = select("Actual"), select("Warmup"), select("Pilot")
-    overhead = [x for x in points if x["IterationMode"] == "Overhead" and x["IterationStage"] == "Actual"]
-    if len(actual) != 12 or len(warmup) != 20:
-        raise ValueError("Send diagnostic requires all 12 Actual and 20 Warmup points")
-    if not overhead or any(type(x["Operations"]) is not int or x["Operations"] <= 0 or
-           type(x["Nanoseconds"]) not in (int, float) or not math.isfinite(x["Nanoseconds"]) or x["Nanoseconds"] <= 0
-           for x in actual + warmup + pilot + overhead):
-        raise ValueError("Send diagnostic has invalid raw observations")
-    operations = {x["Operations"] for x in actual + warmup + overhead}
-    explicit = re.search(r"\bInvocationCount=(\d+)\b", display)
-    if mode == "fixed":
-        if not explicit or int(explicit[1]) != SEND_DIAGNOSTIC_INVOCATIONS or pilot or operations != {SEND_DIAGNOSTIC_INVOCATIONS}:
-            raise ValueError("Fixed Send diagnostic requires exact operations and no pilot")
-    elif mode != "adaptive" or explicit or not pilot or len(operations) != 1:
-        raise ValueError("Adaptive Send diagnostic requires an adaptive pilot and no fixed job count")
-    milliseconds = [x["Nanoseconds"] / 1e6 for x in actual]
-    return {"mode": mode, "actualRows": len(actual), "warmupRows": len(warmup), "overheadRows": len(overhead), "pilotRows": len(pilot),
-            "operationsPerIteration": next(iter(operations)), "actualMilliseconds": milliseconds,
-            "actualMedianMilliseconds": statistics.median(milliseconds), "noPerformanceAdoption": True}
 
 
 def command(args, cwd=REPO):
@@ -85,13 +38,18 @@ def source_digest():
 
 
 def check_project_discovery(projects=(PROJECT,)):
+    # BDN starts from each project and searches below the nearest solution.
+    benchmark_root = PROJECT.parent
+    if not (benchmark_root / "Zendiator.Benchmarks.slnx").is_file():
+        raise ValueError("The benchmark solution is missing")
     for project in projects:
         expected = resolve_path(project / (consumer_name(project) + ".csproj"))
-        matches = sorted(resolve_path(path) for path in glob_paths(REPO, "**/" + expected.name))
+        matches = sorted(resolve_path(path) for extension in (".csproj", ".fsproj", ".vbproj")
+                         for path in glob_paths(benchmark_root, "**/" + expected.with_suffix(extension).name))
         if matches != [expected]:
             found = ", ".join(str(path) for path in matches) or "none"
-            raise ValueError("BDN requires exactly one selected benchmark project below this worktree; "
-                             f"found: {found}. Use a clean sibling worktree and a new output root.")
+            raise ValueError("BDN requires exactly one selected benchmark project below the benchmark solution; "
+                             f"found: {found}. Remove duplicate benchmark projects from that directory.")
 
 
 def check_binary_identity(session):
@@ -239,9 +197,8 @@ def check_resume_ownership(output):
 
 def clean_env():
     env = os.environ.copy()
-    for name in ("COLD_RUN", "COLD_MATRIX_FILE", "COLD_CASE", "COLD_FORMAL", "COLD_PINNED",
-                 "COLD_EXPECT_CHILD_Z_SHA", "COLD_SKIP_GATE", "COLD_GATE_PROOF", "COLD_SINGLE_CASE",
-                 "COLD_SCOPED_PAIR", "COLD_COMPETITORS", "COLD_ONLY"):
+    for name in ("COLD_RUN", "COLD_MATRIX_FILE", "COLD_PINNED",
+                 "COLD_EXPECT_CHILD_Z_SHA", "COLD_SKIP_GATE", "COLD_GATE_PROOF", "COLD_SINGLE_CASE"):
         env.pop(name, None)
     return env
 
@@ -311,8 +268,6 @@ def check_case(row, attempt, session, require_artifact_gate=True):
     record = {"attempt": attempt.name, "case": row["Case"], "childSha256": hashes[0],
               "childAssemblies": assemblies, "reportSha256": sha(reports[0]),
               "childEvidenceSha256": sha(children[0])}
-    if session.get("sendDiagnostic") is not None:
-        record["sendDiagnostic"] = check_send_diagnostic(result, session["sendDiagnostic"])
     if require_artifact_gate:
         record["artifactGate"] = check_artifact_binding(row, attempt, session, project)
     return record
@@ -400,45 +355,25 @@ def finish_group(run, plan, cases, session):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--group", choices=("all", *GROUPS, "custom"), default="all")
-    parser.add_argument("--matrix", type=Path, help="Required for --group custom; enables a focused comparison")
+    parser.add_argument("--group", choices=("custom",), default="custom")
+    parser.add_argument("--matrix", type=Path, default=PROJECT.parent / "representative.json", help="Comparison matrix (defaults to the 14 representative cases)")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--phase", choices=("all", "prepare", "case", "finish"), default="all",
-                        help="Custom-matrix worker phases for run_ab.py; normal runs use all")
-    parser.add_argument("--case-index", type=int, help="One-based case ordinal for --phase case")
-    parser.add_argument("--reverse", action="store_true", help="Reverse a custom worker's complete case plan")
+    parser.add_argument("--reverse", action="store_true", help="Run the complete case plan in reverse order")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--max-cases", type=int, help="Stop after this many completed cases; leave a resumable partial run")
-    parser.add_argument("--expect-sdk", default="10.0.401")
-    parser.add_argument("--send-diagnostic", choices=("adaptive", "fixed"), help="Separate Send0.Typed control diagnostic; fixed uses 268435456 invocations")
+    parser.add_argument("--expect-sdk", default="10.0.404")
     args = parser.parse_args()
-    if (args.group == "custom") != (args.matrix is not None):
-        parser.error("--matrix must be supplied exactly when --group custom is selected")
-    if args.phase != "all" and (args.group != "custom" or args.send_diagnostic is not None or args.max_cases is not None):
-        parser.error("Worker phases require a custom matrix without diagnostics or max-cases")
-    if (args.phase == "case") != (args.case_index is not None):
-        parser.error("--case-index must be supplied exactly for --phase case")
-    if args.phase in ("case", "finish") and not args.resume or args.phase == "prepare" and args.resume:
-        parser.error("case/finish require --resume; prepare requires a new output")
-    if args.reverse and args.phase == "all":
-        parser.error("--reverse is reserved for custom worker phases")
-    groups = GROUPS if args.group == "all" else (args.group,)
-    matrix_paths = {group: (resolve_path(args.matrix) if group == "custom" else PROJECT / f"{group}.json") for group in groups}
-    plans = {}
-    for group in groups:
-        cases = [normalize_case(case) for case in read(matrix_paths[group])]
-        plan, keys = make_plan(cases)
-        if args.reverse:
-            plan.reverse()
-        if args.case_index is not None and not 1 <= args.case_index <= len(plan):
-            parser.error("--case-index is outside the selected plan")
-        plans[group] = (cases, plan)
-        print(f"{group}: {len(plan)} cases, {keys} comparison keys; first: {plan[0]['Library']}")
-    profile = send_diagnostic_profile(args.send_diagnostic, args.group, plans[groups[0]][0], args.resume, args.max_cases)
+    group = args.group
+    matrix = resolve_path(args.matrix)
+    cases = [normalize_case(case) for case in read(matrix)]
+    plan, keys = make_plan(cases)
+    if args.reverse:
+        plan.reverse()
+    print(f"{group}: {len(plan)} cases, {keys} comparison keys; first: {plan[0]['Library']}")
     if args.dry_run:
         return
-    selected_suites = sorted({suite_name(case) for cases, _ in plans.values() for case in cases},
+    selected_suites = sorted({suite_name(case) for case in cases},
                             key=lambda name: list(SUITES).index(name))
     selected_projects = {name: project_for({"Project": name}) for name in selected_suites}
     check_project_discovery(selected_projects.values())
@@ -461,14 +396,10 @@ def main():
     else:
         filesystem_path(output).mkdir(parents=True)
     current = {"revision": command(["git", "rev-parse", "HEAD"]), "sdk": sdk,
-               "sourceDigest": source_digest(), "groups": list(groups),
-               "matrixSha256": {group: sha(matrix_paths[group]) for group in groups},
-               "profile": profile, "artifactGateProtocol": ARTIFACT_GATE_PROTOCOL,
+               "sourceDigest": source_digest(), "groups": [group],
+               "matrixSha256": {group: sha(matrix)},
+               "profile": PROFILE, "reverse": args.reverse, "artifactGateProtocol": ARTIFACT_GATE_PROTOCOL,
                "entryProtocol": "zendiator-shared-measurement-v2", "suites": selected_suites}
-    if args.phase != "all":
-        current.update(workerProtocol="zendiator-ab-worker-v1", reverse=args.reverse)
-    if args.send_diagnostic is not None:
-        current["sendDiagnostic"] = args.send_diagnostic
     if args.resume:
         session = read(output / "session.json")
         if not session.get("sessionId"):
@@ -497,114 +428,85 @@ def main():
     write_json(output / "session.json", session)
 
     completed_count = 0
-    product_hash = None
-    known_assemblies = {}
-    for group in groups:
-        cases, plan = plans[group]
-        run = output / "runs" / group
-        filesystem_path(run).mkdir(parents=True, exist_ok=True)
-        plan_file = run / "execution-plan.json"
-        if filesystem_path(plan_file).exists():
-            if read(plan_file) != plan:
-                raise ValueError(f"Plan changed: {run}")
-        else:
-            write_json(plan_file, plan)
-        proofs = {}
-        for suite in {suite_name(case) for case in cases}:
-            project = selected_projects[suite]
-            gate_output = run / "gates" / suite
-            proof = gate_output / "correctness.json"
-            expected = gate_count(project)
-            if not gate_valid(proof, expected):
-                if filesystem_path(proof).exists():
-                    raise ValueError(f"Existing gate evidence is invalid: {proof}")
-                if args.phase in ("case", "finish"):
-                    raise ValueError(f"Prepared worker gate is missing: {proof}")
-                env = clean_env()
-                env.update(COLD_RUN=str(gate_output), COLD_PINNED="1", COLD_EXPECT_CHILD_Z_SHA="SKIP")
-                run_logged(["dotnet", str(project / ("bin/Release/net10.0/" + consumer_name(project) + ".dll")), "--validate-only"], gate_output / "gate.log", env, cwd=project)
-                if not gate_valid(proof, expected):
-                    raise ValueError(f"Correctness gate failed: {gate_output}")
-            gate_manifest = read(gate_output / "manifest.json")
-            built = session["builds"][suite]
-            if (gate_manifest["runtimeSha256"] != built["runtimeSha256"] or
-                gate_manifest["assemblySha256"] != built["benchmarkSha256"] or
-                gate_manifest["generatorSha256"] != built["generatorSha256"]):
-                raise ValueError(f"Gate DLL identity differs from built DLL: {gate_output}")
-            if gate_manifest["runtime"] != ".NET 10.0.14":
-                raise ValueError("All selected suites require the pinned .NET 10.0.14 runtime")
-            for key, value in (("runtime", gate_manifest["runtime"]), ("diSha256", gate_manifest["diSha256"])):
-                if key in session and session[key] != value:
-                    raise ValueError(f"Gate {key} changed during measurement")
-                session[key] = value
-            session.setdefault("gateSha256", {})
-            gate_key = group + ":" + suite
-            proof_sha = sha(proof)
-            if gate_key in session["gateSha256"] and session["gateSha256"][gate_key] != proof_sha:
-                raise ValueError(f"Gate evidence changed: {proof}")
-            session["gateSha256"][gate_key] = proof_sha
-            proofs[suite] = proof
-        write_json(output / "session.json", session)
-        if args.phase == "prepare":
-            continue
-        for ordinal, row in enumerate(plan, 1):
-            if args.phase == "finish" or args.phase == "case" and ordinal != args.case_index:
-                continue
-            case_dir = run / "cases" / f"{ordinal:04d}"
-            if completed(row, case_dir, session):
-                completed_count += 1
-                continue
-            if args.max_cases is not None and completed_count >= args.max_cases:
-                print(f"Stopped after {completed_count} completed cases; resume with --resume")
-                return
-            if (source_digest() != session["sourceDigest"] or
-                command(["git", "rev-parse", "HEAD"]) != session["revision"] or
-                command(["dotnet", "--version"]) != session["sdk"]):
-                raise ValueError("Source or SDK changed during measurement")
-            check_binary_identity(session)
-            check_abandoned(case_dir)
-            filesystem_path(case_dir).mkdir(parents=True, exist_ok=True)
-            attempt = case_dir / f"attempt-{len(list(glob_paths(case_dir, 'attempt-*'))) + 1:04d}"
-            filesystem_path(attempt).mkdir()
-            one_case = attempt / "matrix.json"
-            write_json(one_case, [row["Case"]])
-            suite = suite_name(row["Case"])
-            project = selected_projects[suite]
+    run = output / "runs" / group
+    filesystem_path(run).mkdir(parents=True, exist_ok=True)
+    plan_file = run / "execution-plan.json"
+    if filesystem_path(plan_file).exists():
+        if read(plan_file) != plan:
+            raise ValueError(f"Plan changed: {run}")
+    else:
+        write_json(plan_file, plan)
+    proofs = {}
+    for suite in {suite_name(case) for case in cases}:
+        project = selected_projects[suite]
+        gate_output = run / "gates" / suite
+        proof = gate_output / "correctness.json"
+        expected = gate_count(project)
+        if not gate_valid(proof, expected):
+            if filesystem_path(proof).exists():
+                raise ValueError(f"Existing gate evidence is invalid: {proof}")
             env = clean_env()
-            env.update(COLD_RUN=str(attempt), COLD_MATRIX_FILE=str(one_case), COLD_PINNED="1",
-                       COLD_SKIP_GATE="1", COLD_SINGLE_CASE="1", COLD_GATE_PROOF=str(proofs[suite]), COLD_EXPECT_CHILD_Z_SHA="SKIP",
-                       ZendiatorFormalMeasurement="true")
-            benchmark_args = ["dotnet", str(project / ("bin/Release/net10.0/" + consumer_name(project) + ".dll")), "--filter", "*"]
-            if args.send_diagnostic == "fixed":
-                benchmark_args.extend(["--invocationCount", str(SEND_DIAGNOSTIC_INVOCATIONS)])
-            run_logged(benchmark_args, attempt / "run.log", env, cwd=project)
-            check_case(row, attempt, session, require_artifact_gate=False)
-            ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env)
-            write_json(case_dir / "complete.json", check_case(row, attempt, session))
+            env.update(COLD_RUN=str(gate_output), COLD_PINNED="1", COLD_EXPECT_CHILD_Z_SHA="SKIP")
+            run_logged(["dotnet", str(project / ("bin/Release/net10.0/" + consumer_name(project) + ".dll")), "--validate-only"], gate_output / "gate.log", env, cwd=project)
+            if not gate_valid(proof, expected):
+                raise ValueError(f"Correctness gate failed: {gate_output}")
+        gate_manifest = read(gate_output / "manifest.json")
+        built = session["builds"][suite]
+        if (gate_manifest["runtimeSha256"] != built["runtimeSha256"] or
+            gate_manifest["assemblySha256"] != built["benchmarkSha256"] or
+            gate_manifest["generatorSha256"] != built["generatorSha256"]):
+            raise ValueError(f"Gate DLL identity differs from built DLL: {gate_output}")
+        if gate_manifest["runtime"] != ".NET 10.0.14":
+            raise ValueError("All selected suites require the pinned .NET 10.0.14 runtime")
+        for key, value in (("runtime", gate_manifest["runtime"]), ("diSha256", gate_manifest["diSha256"])):
+            if key in session and session[key] != value:
+                raise ValueError(f"Gate {key} changed during measurement")
+            session[key] = value
+        session.setdefault("gateSha256", {})
+        gate_key = group + ":" + suite
+        proof_sha = sha(proof)
+        if gate_key in session["gateSha256"] and session["gateSha256"][gate_key] != proof_sha:
+            raise ValueError(f"Gate evidence changed: {proof}")
+        session["gateSha256"][gate_key] = proof_sha
+        proofs[suite] = proof
+    write_json(output / "session.json", session)
+    for ordinal, row in enumerate(plan, 1):
+        case_dir = run / "cases" / f"{ordinal:04d}"
+        if completed(row, case_dir, session):
             completed_count += 1
-            print(f"{group} {ordinal}/{len(plan)}: {row['Library']} {row['Case']['Type']}.{row['Case']['Method']}", flush=True)
-        if args.phase == "case":
             continue
-        child_hash = finish_group(run, plan, cases, session)
-        if product_hash and child_hash != product_hash:
-            raise ValueError("Child product DLL differs across groups")
-        product_hash = child_hash
-        group_assemblies = read(run / "run-info.json")["childAssemblyHashes"]
-        for name, digest in group_assemblies.items():
-            if name in known_assemblies and known_assemblies[name] != digest:
-                raise ValueError(f"Child assembly {name} differs across groups")
-            known_assemblies[name] = digest
+        if args.max_cases is not None and completed_count >= args.max_cases:
+            print(f"Stopped after {completed_count} completed cases; resume with --resume")
+            return
+        if (source_digest() != session["sourceDigest"] or
+            command(["git", "rev-parse", "HEAD"]) != session["revision"] or
+            command(["dotnet", "--version"]) != session["sdk"]):
+            raise ValueError("Source or SDK changed during measurement")
+        check_binary_identity(session)
+        check_abandoned(case_dir)
+        filesystem_path(case_dir).mkdir(parents=True, exist_ok=True)
+        attempt = case_dir / f"attempt-{len(list(glob_paths(case_dir, 'attempt-*'))) + 1:04d}"
+        filesystem_path(attempt).mkdir()
+        one_case = attempt / "matrix.json"
+        write_json(one_case, [row["Case"]])
+        suite = suite_name(row["Case"])
+        project = selected_projects[suite]
+        env = clean_env()
+        env.update(COLD_RUN=str(attempt), COLD_MATRIX_FILE=str(one_case), COLD_PINNED="1",
+                   COLD_SKIP_GATE="1", COLD_SINGLE_CASE="1", COLD_GATE_PROOF=str(proofs[suite]), COLD_EXPECT_CHILD_Z_SHA="SKIP",
+                   ZendiatorFormalMeasurement="true")
+        benchmark_args = ["dotnet", str(project / ("bin/Release/net10.0/" + consumer_name(project) + ".dll")), "--filter", "*"]
+        run_logged(benchmark_args, attempt / "run.log", env, cwd=project)
+        check_case(row, attempt, session, require_artifact_gate=False)
+        ensure_artifact_gate(row, attempt, session, project, run_logged, clean_env)
+        write_json(case_dir / "complete.json", check_case(row, attempt, session))
+        completed_count += 1
+        print(f"{group} {ordinal}/{len(plan)}: {row['Library']} {row['Case']['Type']}.{row['Case']['Method']}", flush=True)
+    finish_group(run, plan, cases, session)
     if source_digest() != session["sourceDigest"] or command(["git", "rev-parse", "HEAD"]) != session["revision"]:
         raise ValueError("Source changed during measurement")
-    if args.phase in ("prepare", "case"):
-        print(f"Verified {args.phase} worker: {output}")
-        return
-    analysis = [sys.executable, str(PROJECT / "analyze.py"), str(output)]
-    if args.group == "custom":
-        analysis.extend(["--matrix", str(matrix_paths["custom"])])
+    analysis = [sys.executable, str(PROJECT / "analyze.py"), str(output), "--matrix", str(matrix)]
     run_logged(analysis, output / "analyze.log", clean_env())
-    if args.group == "all":
-        run_logged([sys.executable, str(PROJECT / "make_report.py"), str(output)], output / "report.log", clean_env())
     print(f"Verified interleaved run: {output}")
 
 

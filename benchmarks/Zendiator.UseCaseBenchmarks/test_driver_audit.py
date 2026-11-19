@@ -18,54 +18,18 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import run_interleaved as driver
-import run_ab as ab
 import owned_process
-from interleaved_plan import identity, library, make_ab_plan, make_plan, normalize_case, verify_log
+from interleaved_plan import identity, library, make_plan, normalize_case, verify_log
 
 
 class ProjectPlanContracts(unittest.TestCase):
-    def baseline_cases(self):
-        peers = ("Zendiator", "MediatRHistorical", "Mediator", "DispatchR", "Immediate", "Foundatio")
-        families = [
-            ("Send0", "Typed", {"Lifetime": "Scoped"}),
-            ("Send5", "Typed", {"Lifetime": "Scoped"}),
-            ("Send0", "ResolveSend", {"Lifetime": "Scoped"}),
-            ("Send5", "ResolveSend", {"Lifetime": "Scoped"}),
-            ("Send5", "ScopeK1", {"Lifetime": "Scoped"}),
-            ("Notification16", "Dispatch", {}),
-            ("Stream5", "Full", {"Count": 1024, "Asynchronous": False}),
-            ("Stream5", "Full", {"Count": 1024, "Asynchronous": True}),
-            ("Stream5", "EarlyBreak", {"Count": 16, "Asynchronous": False}),
-            ("Stream5", "EarlyBreak", {"Count": 16, "Asynchronous": True}),
-            ("Stream0", "Full", {"Count": 1024, "Asynchronous": True}),
-            ("Stream0", "EarlyBreak", {"Count": 16, "Asynchronous": False}),
-            ("Relay5", "Full", {"Count": 1024, "Asynchronous": True}),
-            ("Relay5", "Full", {"Count": 1024, "Asynchronous": False}),
-            ("Relay5", "EarlyBreak", {"Count": 16, "Asynchronous": False}),
-            ("Relay5", "EarlyBreak", {"Count": 16, "Asynchronous": True}),
-        ]
-        cases = []
-        for family, method, parameters in families:
-            for peer in peers:
-                if family == "Notification16" and peer == "Immediate":
-                    continue
-                case = {"Type": peer + family, "Method": method, **parameters}
-                if peer == "Foundatio":
-                    case["Project"] = "foundatio"
-                cases.append(case)
-        for peer in peers:
-            prefix = "MediatR" if peer == "MediatRHistorical" else peer
-            cases.append({"Type": prefix + "ShortCircuit", "Method": "WarmDispatch", "Project": "short"})
-        for method in ("FirstSend", "WarmSend", "ColdOuterFailure"):
-            cases.extend({"Type": f"H{peer}Benchmarks", "Method": method, "Project": "hooks"} for peer in peers)
-        cases.extend({"Type": f"ZendiatorSend{depth}", "Method": "FirstSend", "Lifetime": "Scoped"} for depth in (0, 5))
-        cases.append({"Type": "ZendiatorSend5", "Method": "ScopeK10", "Lifetime": "Scoped"})
-        return cases
+    def representative_cases(self):
+        return driver.read(driver.PROJECT.parent / "representative.json")
 
-    def test_all_122_cells_rotate_across_projects_with_original_type_aliases(self):
-        cases = self.baseline_cases()
+    def test_representative_cases_retain_every_library_and_rotate_order(self):
+        cases = self.representative_cases()
         plan, keys = make_plan(cases)
-        self.assertEqual((len(plan), keys), (122, 23))
+        self.assertEqual((len(plan), keys), (83, 14))
         self.assertEqual({identity(row["Case"]) for row in plan}, {identity(case) for case in cases})
         groups = {}
         for row in plan:
@@ -74,10 +38,24 @@ class ProjectPlanContracts(unittest.TestCase):
                          ["Zendiator", "MediatRHistorical", "Mediator", "DispatchR", "Immediate", "Foundatio"])
         self.assertEqual(groups[("Send5", "Typed", "Scoped", None, None)],
                          ["MediatRHistorical", "Mediator", "DispatchR", "Immediate", "Foundatio", "Zendiator"])
-        self.assertEqual(groups[("ShortCircuit", "WarmDispatch", None, None, None)],
-                         ["Immediate", "Foundatio", "Zendiator", "MediatRHistorical", "Mediator", "DispatchR"])
-        self.assertEqual(groups[("Hooks", "FirstSend", None, None, None)],
-                         ["Foundatio", "Zendiator", "MediatRHistorical", "Mediator", "DispatchR", "Immediate"])
+
+    def test_project_discovery_matches_the_benchmark_solution_boundary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            benchmarks = root / "benchmarks"
+            project = benchmarks / "Zendiator.UseCaseBenchmarks"
+            project.mkdir(parents=True)
+            name = project.name + ".csproj"
+            (project / name).touch()
+            (benchmarks / "Zendiator.Benchmarks.slnx").touch()
+            archive = root / ".local"
+            archive.mkdir()
+            (archive / name).touch()
+            with patch.object(driver, "PROJECT", project):
+                driver.check_project_discovery([project])
+                (benchmarks / name).with_suffix(".fsproj").touch()
+                with self.assertRaisesRegex(ValueError, "exactly one"):
+                    driver.check_project_discovery([project])
 
     def test_project_canonicalization_rejects_wrong_projects_and_false_hook_prefixes(self):
         case = {"Type": "ZendiatorSend0", "Method": "Typed", "Lifetime": "Scoped"}
@@ -95,7 +73,7 @@ class ProjectPlanContracts(unittest.TestCase):
             library({"Type": "HZendiatorUnknown", "Method": "WarmSend"})
 
     def test_cross_project_log_keeps_exact_case_identity_and_order(self):
-        plan, _ = make_plan(self.baseline_cases())
+        plan, _ = make_plan(self.representative_cases())
         lines = []
         for row in plan:
             case = row["Case"]
@@ -110,117 +88,6 @@ class ProjectPlanContracts(unittest.TestCase):
                 path.write_text("".join(invalid), encoding="utf-8")
                 with self.assertRaises(ValueError):
                     verify_log(plan, path)
-
-
-class RevisionComparisonContracts(unittest.TestCase):
-    cases = [{"Type": "ZendiatorSend0", "Method": "Typed", "Lifetime": "Scoped"},
-             {"Type": "ImmediateSend0", "Method": "Typed", "Lifetime": "Scoped"},
-             {"Type": "ZendiatorSend5", "Method": "ScopeK1", "Lifetime": "Scoped"}]
-
-    def test_adjacent_revision_pairs_balance_the_first_side_and_reverse_exactly(self):
-        forward = make_ab_plan(self.cases)
-        self.assertEqual([row["Side"] for row in forward],
-                         ["baseline", "candidate", "candidate", "baseline", "candidate", "baseline"])
-        for first, second in zip(forward[::2], forward[1::2]):
-            self.assertEqual(first["Case"], second["Case"])
-            self.assertNotEqual(first["Side"], second["Side"])
-        reverse = make_ab_plan(self.cases, reverse=True)
-        self.assertEqual([(row["Side"], row["Case"]) for row in reverse],
-                         [(row["Side"], row["Case"]) for row in reversed(forward)])
-        worker, _ = make_plan(self.cases)
-        for row in reverse:
-            self.assertEqual(row["Case"], list(reversed(worker))[row["CaseIndex"] - 1]["Case"])
-        with self.assertRaisesRegex(ValueError, "empty"):
-            make_ab_plan([])
-
-    def result(self, mean=10.0, lower=9.5, upper=10.5):
-        return {"Statistics": {"Mean": mean, "N": 11,
-                "ConfidenceInterval": {"Level": 12, "Lower": lower, "Upper": upper, "Margin": (upper - lower) / 2}},
-                "Memory": {"BytesAllocatedPerOperation": 704}}
-
-    def test_comparison_keeps_effective_n_and_classifies_only_disjoint_intervals(self):
-        baseline = ab.statistics(self.result())
-        self.assertEqual((baseline["N"], baseline["ConfidenceLevel"]), (11, 12))
-        for mean, lower, upper, classification in ((8, 7.5, 8.5, "improvement"),
-                (12, 11.5, 12.5, "regression"), (10, 9.5, 10.5, "overlap"), (9, 8.5, 9.5, "overlap")):
-            candidate = ab.statistics(self.result(mean, lower, upper))
-            result = ab.compare(baseline, candidate)
-            self.assertEqual(result["classification"], classification)
-            self.assertEqual(result["meanRatioCandidateOverBaseline"], mean / 10)
-        candidate["ConfidenceLevel"] = 11
-        with self.assertRaisesRegex(ValueError, "levels differ"):
-            ab.compare(baseline, candidate)
-        for value in (None, float("nan"), float("inf"), True):
-            with self.subTest(value=value), self.assertRaises(ValueError):
-                ab.statistics(self.result(value))
-        missing = self.result()
-        del missing["Statistics"]["ConfidenceInterval"]["Level"]
-        with self.assertRaisesRegex(ValueError, "confidence level"):
-            ab.statistics(missing)
-
-    def test_changed_controls_and_source_identity_are_rejected(self):
-        revisions = {side: "a" * 40 for side in ab.SIDES}
-        snapshots = [{"revision": "a" * 40, "sourceDigest": "A", "controls": {"lock": "same"}},
-                     {"revision": "a" * 40, "sourceDigest": "B", "controls": {"lock": "changed"}}]
-        with patch.object(ab, "inspect_source", side_effect=snapshots):
-            with self.assertRaisesRegex(ValueError, "package locks differ"):
-                ab.check_sources({side: Path(side) for side in ab.SIDES}, revisions)
-        snapshots[1]["controls"]["lock"] = "same"
-        # Git blobs match across LF/CRLF checkouts; each side retains its own actual byte digest.
-        blob = "100644 blob " + "a" * 40 + "\tbenchmarks/example.cs\0"
-        with tempfile.TemporaryDirectory() as directory:
-            roots = {side: Path(directory) / side for side in ab.SIDES}
-            for side, content in zip(ab.SIDES, (b"line\n", b"line\r\n")):
-                path = roots[side] / "benchmarks/example.cs"
-                path.parent.mkdir(parents=True)
-                path.write_bytes(content)
-            def git(args, cwd):
-                return {("git", "rev-parse", "--show-toplevel"): str(cwd), ("git", "rev-parse", "HEAD"): "a" * 40,
-                        ("git", "status", "--porcelain=v1", "-uall"): "",
-                        ("git", "ls-tree", "-r", "--full-tree", "-z", "HEAD"): blob}[tuple(args)]
-            with patch.object(ab, "command", side_effect=git):
-                accepted = ab.check_sources(roots, revisions)
-            self.assertEqual(accepted["baseline"]["controls"], accepted["candidate"]["controls"])
-            self.assertNotEqual(accepted["baseline"]["sourceDigest"], accepted["candidate"]["sourceDigest"])
-        expected = {side: dict(snapshots[index]) for index, side in enumerate(ab.SIDES)}
-        expected["baseline"] = dict(expected["baseline"], sourceDigest="changed")
-        with patch.object(ab, "inspect_source", side_effect=snapshots):
-            with self.assertRaisesRegex(ValueError, "immutable source identity changed"):
-                ab.check_sources({side: Path(side) for side in ab.SIDES}, revisions, expected)
-
-    def test_matching_cases_must_still_use_the_fixed_runtime_and_peer_bindings(self):
-        runtime = dict.fromkeys(ab.RUNTIME_FIELDS)
-        runtime.update(frameworkVersion="10.0.14", architecture="X64", serverGC=False)
-        assemblies = [{"name": name, "sha256": "A"} for name in (
-            "Microsoft.Extensions.DependencyInjection", "Microsoft.Extensions.DependencyInjection.Abstractions", "System.Private.CoreLib")]
-        evidence = {"child": {"runtimeEvidence": runtime, "assemblies": assemblies}}
-        ab.check_pair(evidence, evidence, {"Library": "Zendiator"})
-        for field, value in (("serverGC", True), ("architecture", "Arm64"), ("frameworkVersion", "10.0.15")):
-            changed = {"child": {"runtimeEvidence": dict(runtime, **{field: value}), "assemblies": assemblies}}
-            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "workstation GC"):
-                ab.check_pair(changed, changed, {"Library": "Zendiator"})
-        changed = {"child": {"runtimeEvidence": runtime, "assemblies": [dict(item, sha256="B") for item in assemblies]}}
-        with self.assertRaisesRegex(ValueError, "different peer"):
-            ab.check_pair(evidence, changed, {"Library": "Zendiator"})
-    def test_trace_rejects_reordering_uncertain_steps_overlap_and_substitution(self):
-        plan = make_ab_plan(self.cases)
-        with tempfile.TemporaryDirectory() as directory, patch.object(ab, "check_owned_markers"):
-            workers = {side: {"sessionId": side + "-session"} for side in ab.SIDES}
-            records = []
-            for index, row in enumerate(plan):
-                marker = Path(directory) / row["Side"] / "runs/custom/cases" / f'{row["CaseIndex"]:04d}' / "complete.json"
-                marker.parent.mkdir(parents=True)
-                marker.write_text("{}", encoding="utf-8")
-                records.append({"row": row, "state": "complete", "workerSessionId": workers[row["Side"]]["sessionId"],
-                                "startUtc": "2026-11-13T00:00:00+00:00", "endUtc": "2026-11-13T00:00:01+00:00",
-                                "startMonotonicNs": 10 * index, "endMonotonicNs": 10 * index + 5,
-                                "completePath": str(marker), "completeSha256": ab.sha(marker)})
-            ab.verify_trace(Path(directory), plan, records, workers)
-            for modified in (dict(records[0], row=plan[1]), dict(records[0], state="running"),
-                             dict(records[0], endMonotonicNs=11), dict(records[0], completeSha256="changed"),
-                             dict(records[0], workerSessionId="other-session")):
-                with self.assertRaises(ValueError):
-                    ab.verify_trace(Path(directory), plan, [modified, *records[1:]], workers)
 
 
 class AggregateReportContracts(unittest.TestCase):
@@ -283,38 +150,6 @@ class AggregateReportContracts(unittest.TestCase):
                 result, _ = self.analyze(cases, reports)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(error, result.stderr)
-
-
-    def test_report_reads_new_and_legacy_gate_layouts_and_prefers_new(self):
-        for layout in ("legacy", "new", "mixed"):
-            with self.subTest(layout=layout), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                fields = ("Group", "Type", "Method", "Count", "Asynchronous", "MeanNs", "AllocatedBytes")
-                with (root / "all-results.csv").open("w", encoding="utf-8", newline="") as stream:
-                    writer = csv.DictWriter(stream, fieldnames=fields)
-                    writer.writeheader()
-                    writer.writerow(dict(zip(fields, ("relay", "ZendiatorRelay5", "Full", 16, False, 42, 0))))
-                driver.write_json(root / "runs/send/run-info.json", {"revision": "synthetic", "sdk": "10.0.404"})
-                for kind in (("legacy", "new") if layout == "mixed" else (layout,)):
-                    gate_root = "gates/usecase/" if kind == "new" else ""
-                    driver.write_json(root / ("runs/send/" + gate_root + "manifest.json"), {
-                        "runtime": ".NET 10.0.14",
-                        "packageVersions": {"MediatR": "15.0.0" if kind == "new" else "14.2.0"}})
-                    driver.write_json(root / ("runs/relay/" + gate_root + "correctness.json"), [{
-                        "suite": "RelayTiming", "library": "Zendiator", "behaviors": 5,
-                        "eventsAtCreation": kind == "legacy", "eventsAtEnumerator": False,
-                        "failureStage": "move-call" if kind == "new" else "creation"}])
-                result = subprocess.run([sys.executable, str(Path(__file__).with_name("make_report.py")), str(root)],
-                                        capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                report = (root / "RESULT.ja.md").read_text(encoding="utf-8")
-                self.assertIn("| Zendiator | 5 |", report)
-                if layout != "legacy":
-                    self.assertIn("MediatR 15.0.0", report)
-                    self.assertNotIn("MediatR 14.2.0", report)
-                    self.assertIn("MoveNextAsync", report)
-                else:
-                    self.assertIn("MediatR 14.2.0", report)
 
 
 class ArtifactContracts(unittest.TestCase):
@@ -455,30 +290,6 @@ class ArtifactContracts(unittest.TestCase):
             with (root / "all-results.csv").open(newline="") as file:
                 row = next(csv.DictReader(file))
             self.assertEqual((row["Lifetime"], row["Count"], row["Asynchronous"]), ("", "", ""))
-
-
-class SendDiagnosticContracts(unittest.TestCase):
-    def test_diagnostic_rejects_other_workloads_and_resumable_partial_runs(self):
-        case = {"Type": "ZendiatorSend0", "Method": "Typed", "Lifetime": "Scoped"}
-        for group, cases, resume, partial in (("send", [case], False, None), ("custom", [dict(case, Method="ScopeK1")], False, None),
-                                             ("custom", [case], True, None), ("custom", [case], False, 1)):
-            with self.subTest(group=group, cases=cases), self.assertRaisesRegex(ValueError, "Send diagnostic"):
-                driver.send_diagnostic_profile("fixed", group, cases, resume, partial)
-
-    def test_fixed_cli_misconfiguration_or_short_report_cannot_pass_diagnostic_gate(self):
-        count = driver.SEND_DIAGNOSTIC_INVOCATIONS
-        display = f"Comparison(Affinity=00000001, InvocationCount={count}, IterationCount=12, IterationTime=500ms, LaunchCount=1, WarmupCount=20)"
-        points = [{"IterationMode": "Workload", "IterationStage": stage, "Operations": count, "Nanoseconds": 500000000}
-                  for stage, rows in (("Warmup", 20), ("Actual", 12)) for _ in range(rows)]
-        points.insert(0, {"IterationMode": "Overhead", "IterationStage": "Actual", "Operations": count, "Nanoseconds": 250000000})
-        result = {"DisplayInfo": display, "Measurements": points}
-        self.assertEqual(driver.check_send_diagnostic(result, "fixed")["actualRows"], 12)
-        for bad in ({"DisplayInfo": display.replace("InvocationCount=" + str(count), "InvocationCount=16"), "Measurements": points},
-                    {"DisplayInfo": display, "Measurements": points[:-1]},
-                    {"DisplayInfo": display, "Measurements": points + [dict(points[1], IterationStage="Pilot")]},
-                    {"DisplayInfo": display, "Measurements": [dict(x, Operations=16) for x in points]}):
-            with self.subTest(bad=bad), self.assertRaises(ValueError):
-                driver.check_send_diagnostic(bad, "fixed")
 
 
 class ProcessIdentityContracts(unittest.TestCase):
@@ -660,7 +471,6 @@ class ProcessIdentityContracts(unittest.TestCase):
         with patch.object(owned_process, "process_snapshot", side_effect=RuntimeError("identity denied")):
             with self.assertRaisesRegex(RuntimeError, "identity denied"):
                 driver.process_alive(identity)
-
 
 
 @unittest.skipUnless(os.environ.get("ZENDIATOR_DRIVER_PROCESS_FIXTURES") == "1", "process fixture opt-in required")

@@ -318,6 +318,5 @@ $(if($lib -eq 'Zendiator'){'        await Correctness.TypedStream("Zendiator",'+
 }
 Add-ExtraGate
 $lines.Add('} }')
-Add-Perf04Inputs
 $content = (($lines -join "`n") + "`n").Replace("`r`n", "`n")
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'GeneratedCases.cs'), $content, [Text.UTF8Encoding]::new($false))

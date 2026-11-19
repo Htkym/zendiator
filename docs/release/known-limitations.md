@@ -1,247 +1,45 @@
-# 1.x compatibility and known limitations
+# Compatibility, lifetimes and supported deployments
 
-Version `1.0.0-rc.1` is the candidate for the public contracts below.
-It retains the [0.7.0 dependency capture rules](0.7.0-release-notes.md).
-[Release candidate notes](1.0.0-rc.1-release-notes.md) · [Getting started](../getting-started-0.5.0.md)
+`1.0.0-rc.1` targets .NET 10 and C# 14. Reference matching versions of `Zendiator` and `Zendiator.Abstractions` and rebuild the consuming projects when you upgrade. [Release notes](1.0.0-rc.1-release-notes.md) · [Upgrade guide](../upgrading.md)
 
 ## API and compatibility boundaries
 
-| Layer | What applications can depend on |
-|---|---|
-| Public API | Documented request, handler, Hook, middleware and configuration contracts; generated registration methods and the public `IZendiator` / `Zendiator` facade, including its typed dispatch entries. |
-| Execution contract | Dispatch order, dependency capture and scope lifetime, synchronous versus awaited failures, cancellation, single consumption of `ValueTask`, and Stream ownership and cleanup as described below. |
-| Generated implementation | Private and internal generated type names, field and cache layouts, slot numbers, call-site interceptors and helper boundaries are implementation details. Use the public facade rather than inspecting or extending those structures. |
+From 1.0.0 onward, incompatible changes to a documented public API or its documented behavior require a new major version. This covers the request, handler, hook, middleware and configuration contracts, generated DI registration methods, and typed calls on the generated `IZendiator` and `Zendiator` facade. Applications can also rely on dispatch order, dependency reuse, cancellation and ownership as described here.
 
-Public runtime helpers used by generated code are versioned together with the
-source generator. Use matching versions of `Zendiator` and `Zendiator.Abstractions` and rebuild
-consumers when upgrading. A helper's visibility does not turn the generated
-Mediator's current base type or storage layout into an application extension point.
-See the [generated route contract](../design/0.5.0-route-and-stream-contract.md)
-for the current implementation and ownership rules.
-
-Starting with 1.0.0, breaking a documented public API or its observable
-execution contract requires a new major version. The stable contract includes
-the generated facade's callable methods, receiver identity and construction
-timing as described below, and when an operation owns and releases a Stream
-cursor. Release notes describe changes that affect applications and any migration.
-
-The `GeneratePooledProducerAttribute` opt-in is experimental. Its supported
-method bodies and diagnostics may change in 1.x. Its versioning exception
-applies only to that opt-in. [Pooled producer support](../design/pooled-producer-interceptors.md)
+Use the facade to dispatch and the public stage contracts to extend it. Generated type names, base classes, storage layout, call-site interceptors and runtime helpers used by generated code can change when you rebuild. The optional `[GeneratePooledProducer]` feature is experimental. Its accepted method bodies and diagnostics may change within 1.x. [Pooled producer methods](../pooled-producer.md)
 
 ## Dependency capture and lifetime
 
-Each Mediator reuses captured dependencies, including Transient services and
-implementation factories. A new send or retry does not imply a new instance.
-Eligible closed SendAsync hook routes, including synchronous Before hooks,
-capture a route-local set on first dispatch and resolve all receivers before the
-first hook. Unused downstream receivers may be constructed even when an outer hook
-fails. Separate routes can capture different Transients of the same type; use
-Scoped or Singleton registration when identity must be shared.
+By default the mediator is Scoped and its registered dependencies are Transient. The mediator reuses the dependencies it has resolved across calls, including services produced by an implementation factory. Another route, another mediator or a separate resolution from DI may receive a different Transient instance. Register a service as Scoped or Singleton before `AddZendiator` when its identity must be shared. DI owns disposal of borrowed services.
 
-Receivers used only through route-local sets have no separate per-type Mediator
-capture. Its explicit `IServiceProvider` interface forwards their resolution to
-the original provider. A type also used by a direct route retains that route's
-per-type capture. Explicit EagerDependencies keeps an affected synchronous-Before-only
-route on direct capture and preserves its injected instances and acquisition
-timing. See the [capture contract](../getting-started-0.5.0.md#route-local-capture-for-asynchronous-hooks)
-for eligibility and custom-provider requirements.
+On eligible closed `SendAsync` routes, the first dispatch resolves the handler and hooks together after the initial request and cancellation checks and before the first callback. An outer hook can fail after downstream receivers have already been constructed. This behavior includes routes with only synchronous Before hooks when the handler and hooks are borrowed reference types, there are at least two distinct receiver types, and the route has no wrapper or session factory. On these routes, resolution and Before hooks run during the call, which returns the handler's original `ValueTask`.
 
-Concurrent first resolutions can activate several Transients. Successful callers
-use the publication winner; losing objects remain DI-owned. A resolution failure
-still reports its own error even if another caller publishes an instance. Failures
-and null results are not cached as successful activations.
+A receiver used only by such groups is resolved through the original provider when requested via the mediator's explicit `IServiceProvider`. A type also used by a direct route can have a separate instance captured by that route. When first calls run concurrently, DI can construct more than one Transient. Successful callers use the instance retained for the route. Each failing resolution reports its own failure, and a later call can retry after a failure or a null result.
 
-Keep the scope alive until dispatch, enumeration or HTTP serialization and final
-cleanup finish. Using a Mediator after scope disposal is unsupported. Scope disposal
-does not cancel or join pending operations. Independent Stream owners do not make
-shared handlers, hooks or sinks safe for concurrent use.
+For supported closed Send routes, `EagerDependencies` on the composition marker selects services for constructor injection when DI resolves the mediator. Selecting a receiver of a synchronous-Before-only route keeps that route's per-type capture and uses the injected service. Unlisted receivers follow their usual resolution timing. `ClosedServiceCacheMode.Inline` (the default) and `ClosedServiceCacheMode.LazyBlocks` control storage for closed routes. Both retain the same service lifetimes and resolve lazy services on demand.
 
-`ValidateOnBuild` can inspect the declared constructor dependency graph of
-registered route sets, but not every dispatch dependency, arbitrary DI factory
-body or open generic closure. Enable `ValidateScopes` and exercise the routes
-your application uses, especially after changing lifetimes. A Singleton Mediator
-must not capture Scoped services.
+Use the generated registration even with a custom provider. The provider must be able to resolve registered receiver groups and their constructor dependencies. `ValidateOnBuild` checks the dependency graphs that DI can inspect. Exercise your open generic routes and service factories as well. Use `ValidateScopes` to catch invalid dependencies, such as a Singleton mediator capturing a Scoped service.
 
-Closed storage is inline by default. Explicit lazy blocks can reduce retained empty
-slots for some sparse compositions, but add block allocation and access costs for
-others. Open generic cache promotion also has a cost. See the
-[storage tradeoffs](../getting-started-0.5.0.md#closed-dependency-storage); neither
-choice establishes a gain for all scopes.
+Keep the owning scope alive until dispatch, enumeration and awaited cleanup finish. Disposing the scope neither cancels nor waits for pending work. A shared handler, hook or sink must support the concurrency your application allows.
 
-## Completion and ambient context
+## Completion, cancellation and failures
 
-Eligible plain `SendAsync` routes can fail synchronously before returning their
-original `ValueTask`. Put both the call and its await inside a `try` block. Consume
-the returned operation once; do not separately consume its `AsTask()` conversion.
+Await each returned `ValueTask` once. A plain `SendAsync` can throw during the call before it returns the operation. Put both the call and the await inside the same `try` block.
 
-Stream follows ordinary call and await context flow. Synchronous changes to
-`AsyncLocal`, culture or `SynchronizationContext` can be visible to subsequent
-callbacks or the caller; synchronous and pending completion need not expose the
-same changes. Internal helpers are not ambient-state isolation boundaries. The
-framework does not suppress `ExecutionContext`, replay an enumeration-wide saved
-context, or guarantee a return to a UI context. Keep guaranteed operation data in
-the request, cursor or session, and balance ambient scopes around their awaited use.
+Before hooks run in registration order. After hooks unwind in reverse. On asynchronous hook routes, an error callback receives the current exception and can replace it. A failing cleanup takes precedence over a prior failure. A stage must finish using its continuation within the operation and call it sequentially.
 
-Segments with asynchronous Filter/Map hooks use one async move loop for source waits,
-hooks and rejected-item retries. A synchronous hook's ambient change can reach the
-next source pull after rejection, while synchronous source changes are restored
-before outer cleanup or the caller resumes. Cleanup can thus observe different
-ambient state than with the former helper boundaries. Keep cleanup resource identity
-in explicit operation state.
+Cancellation is cooperative. Pass the caller's token to dispatch and to the I/O your handler starts. Keep operation state needed after an await in the request, cursor or session. Synchronous callbacks can change ambient values such as `AsyncLocal`, culture or synchronization context. Which callbacks observe a change can depend on whether an await suspends.
 
 ## Stream ownership and use
 
-`StreamAsync` returns standard `IAsyncEnumerable<T>`. Guarded enumerations have
-independent owners and acquire dependencies and input on the first move. A flat
-iterator route without Before, hooks, middleware or owned sessions and with two
-noncancelable tokens instead acquires its input at `GetAsyncEnumerator`. The
-producer's operation contract applies to this direct path, and the consumer must
-await disposal even after EOF or failure. Forward the actual cancellation tokens;
-do not remove cancellation to select the direct path. See the
-[input and lifetime guide](../streaming-iterators.md#choose-an-input-contract).
-An unconsumed guarded standalone source still allocates its first owner.
+`StreamAsync` returns an `IAsyncEnumerable<T>`. Each enumeration needs its own cursor, even when the mediator shares handler instances. A flat iterator route with two noncancelable tokens can acquire the cursor at `GetAsyncEnumerator`. Other routes initialize on their first move. Use `await foreach` or await `DisposeAsync` on a manually acquired cursor, including after early exit and on error. [Input contracts and cleanup](../streaming.md#choose-an-input-contract)
 
-The guarded consumer root performs its dedicated initial scope probe when its
-first move starts initialization. Inner upstream opening and reopening do not
-repeat that probe. StreamBefore still checks scope before later Before callbacks
-and before opening the route, including after a pending callback. Native service
-resolution can also fail after disposal, but cached receivers need not query DI
-again. These checks do not support disposing the scope while enumeration or
-awaited cleanup is active.
+On guarded routes, `Current` is valid after a successful move until the next accepted operation. Overlapping moves or a disposal during a pending move fail. During disposal, new moves fail and repeated disposal waits for the same result. Owned cursors and sessions are disposed once in reverse order. An upstream can reopen only after normal end of input and successful cleanup. A flat route that exposes the producer's cursor directly follows the producer's rules.
 
-Use each enumerator sequentially. Await a pending move before another move or
-disposal. On guarded paths, overlapping operations throw without canceling or
-joining the first operation; pending disposal rejects new moves and shares
-completion with repeated disposal. Cancellation cannot immediately stop I/O that
-ignores its token.
-
-On guarded paths, `Current` is valid after a successful move until the next accepted operation. EOF,
-failure and disposal invalidate it. Custom cursors and `ValueTask` sources must obey
-the .NET awaiter and single-consumption contracts; duplicate continuation delivery
-and continuation registration that throws after accepting the callback are not
-supported recovery paths.
-
-On guarded paths, owned cursors and sessions are cleaned up once in reverse ownership order. Cleanup
-failure takes precedence under ordinary `try/finally` rules. Borrowed DI services,
-the provider and sink are not disposed by the generated owner. Middleware can reopen
-its upstream only after normal EOF and completed cleanup; failure or early disposal
-prevents restart. Explicit reopening can duplicate already delivered items, and no
-automatic retry is supplied.
-
-An asynchronous item-processing frame can retain rejected input references while
-waiting for the next source item. Longer waits can mean longer retention. Release
-after the pending operation settled and the cursor was disposed was observed in
-representative checks; no general lifetime or retained-memory bound is established.
-B/op results for value-type items do not include the memory cost of keeping a
-reference graph alive.
-
-`StreamSource(...).ConsumeAsync(...)` uses a fresh private owner. Its plan is not an
-enumerable, and value-type sinks are passed by value: retain results in shared
-reference state. This terminal does not promise lower time or allocation than
-standard enumeration.
-
-## HTTP and asynchronous work
-
-Return `StreamAsync` naturally as `IAsyncEnumerable<T>` from an ASP.NET Core action.
-Keep the request scope alive through serialization and cleanup, pass the request's
-cancellation token, and do not return a source from an already disposed action-local
-scope. The host serializer owns JSON framing and options. Once a response has
-started, a later source or serializer failure may leave an incomplete response.
-
-Functional HTTP integration does not establish HTTP throughput or external-I/O
-performance. A `Task.Yield` workload is not a substitute for database, network or
-storage behavior. Standard enumeration, typed consumption and HTTP are separate
-performance evaluations.
-
-## Performance evidence
-
-Scope creation, cold resolution, asynchronous suspension, middleware and cleanup
-have separate costs. Compare results for the operation and completion mode the
-application uses. In the measured development revision the confidence intervals
-overlap for asynchronous Stream early termination.
-
-The async Filter/Map comparison used a synchronous source with 1024 inputs and 1536
-pending hook operations backed by synthetic ThreadPool scheduling. Full enumeration
-showed lower time and allocation in that workload. Synchronous-completion and Early
-intervals still included no improvement; Early accepted its first input. These results
-do not establish gains for a pending source, five middleware stages, real I/O or HTTP.
-
-The [README comparison](../../README.md#performance) identifies the measured
-development revision and 0.7.0 results, including uncertainty and allocations.
-Results from different source versions or
-protocols must not be combined into a single-version ranking. The native Zendiator
-cursor and competitors' compiler iterators are part of their complete product
-paths, so a difference cannot be attributed to dispatch alone.
-
-## CodeFix boundaries
-
-The optional [CodeFix package](../../src/Zendiator.CodeFixes/README.md) adds a missing
-handler marker and supports Fix All in the current document. It does not migrate
-pipeline order, lifetimes, wrappers or other behavior automatically. The command-line
-compiler does not apply code fixes; the IDE supplies Roslyn Workspaces assemblies.
+A sink passed to `StreamSource(...).ConsumeAsync(...)` belongs to the caller. Zendiator awaits each item callback, and a `false` result stops consumption normally. Each operation can hold references to items while it awaits input or a callback. Keep the DI scope alive through HTTP serialization when the result is returned from an endpoint. [Stream guide](../streaming.md)
 
 ## Native AOT and dispatch boundaries
 
-### Verified deployment configurations
+Windows x64 Native AOT execution has been verified for package consumers using DI registration or assembly attributes, registered reference-type generic closures, typed Stream middleware with a struct cursor and upstream, and typed sink consumption. Coverage also includes explicit eager dependencies, a closed Send route with synchronous Before hooks, and the opt-in pooled producer. Use the RID and route types you deploy for your own Native AOT check. Other RIDs have not been verified here.
 
-The following coverage is for 0.6.0 packages built from source commit
-[`cf580cccd61e46a61f161971eb67916f15f967df`](https://github.com/Htkym/zendiator/commit/cf580cccd61e46a61f161971eb67916f15f967df)
-and the [successful CI run](https://github.com/Htkym/zendiator/actions/runs/43354564626/job/131653389381).
-Every row targets `net10.0` and uses Release on Windows x64. Package consumers use
-local packed packages and an isolated package cache, without `ProjectReference`
-to Zendiator repository projects.
-Native AOT rows publish self-contained `win-x64` executables and then run them;
-publish success alone is not the execution result.
-
-| Consumption and configuration | Managed build and run | Native AOT publish | Native run | Reproducible check |
-|---|---|---|---|---|
-| Multi-project package consumer and DI consumer | Passed | Not exercised | Not exercised | [Package smoke](../../scripts/package-smoke-test.ps1), [DI package smoke](../../scripts/di-package-smoke-test.ps1) |
-| DI-first and assembly-attribute package consumers, including registered reference-type generic closures | Build passed; managed run not exercised | Passed | Passed | [AOT matrix](../../scripts/aot-matrix-test.ps1) |
-| Package consumer with the opt-in pooled producer and C# 14 interceptors | Passed | Passed | Passed | [Pooled producer smoke](../../scripts/pooled-producer-package-smoke-test.ps1) |
-| Package consumer with standard typed Stream middleware, struct Cursor and struct upstream, adapter interoperability, typed consumption and explicit `EagerDependencies` | Passed | Passed | Passed | [Standard Stream smoke](../../scripts/struct-upstream-package-smoke-test.ps1) |
-| In-repository `Sample.Host` with `ProjectReference` | Passed | Not exercised | Not exercised | [CI sample step](../../.github/workflows/ci.yml) |
-
-The linked CI environment step records the SDK and installed runtimes. Its setup
-selects `10.0.x`; this table does not assert a fixed SDK or runtime patch. Coverage
-is limited to the listed fixtures and source revision, rather than every
-composition or every package with the same version number.
-
-Other RIDs and `ProjectReference`-based Native AOT have no execution coverage in
-this table. They are unverified, rather than confirmed unsupported. No validation
-of other target frameworks is claimed here. Route-local dependency sets for asynchronous Hook routes
-are also not exercised by these Native AOT fixtures. Explicit `EagerDependencies`
-is a separate configuration and does not establish that coverage. Native AOT
-functional checks do not establish the performance measured under JIT.
-
-### Later synchronous-Before carrier coverage
-
-Separately, 0.7.0 development packages from source
-[`0a25f24ff68c43dbbc9dd6d1a12c9eca289c5d98`](https://github.com/Htkym/zendiator/commit/0a25f24ff68c43dbbc9dd6d1a12c9eca289c5d98)
-passed the [PERF-01 CI run](https://github.com/Htkym/zendiator/actions/runs/43423479131/job/131878954485).
-Its [standard Stream package smoke](https://github.com/Htkym/zendiator/blob/0a25f24ff68c43dbbc9dd6d1a12c9eca289c5d98/scripts/struct-upstream-package-smoke-test.ps1)
-adds a closed SendAsync route with two synchronous Before hooks and a borrowed
-reference-type handler. Managed execution and the `win-x64` Native AOT executable
-both require `CARRIER_DEPENDENCY_PACKAGE_OK`, alongside the existing Stream and
-eager-dependency markers. The carrier fixture checks construction before the first
-callback, route-set reuse, native DI disposal and `ValidateOnBuild`.
-
-This is historical coverage of that synchronous-Before fixture, not a new result
-for the current integrated head. It does not change the earlier matrix's source
-revision or establish asynchronous-Hook carrier coverage, other RIDs, all route
-shapes or an AOT speed improvement.
-
-### Generic closure and dispatch limits
-
-The AOT matrix executes the listed reference-type generic Send and Stream
-closures. Its value-type generic request probe expects the known open-generic DI
-closure failure; the Stream probe accepts either correct execution or the specific
-DI value-type/Native AOT limitation. A passing matrix therefore does not establish
-general support for open-generic DI handlers closed over value-type arguments.
-This limitation is separate from struct Cursors and struct upstream connections,
-which the standard Stream fixture publishes and runs.
-
-Parallel Publish and runtime-object request/Stream dispatch are unsupported.
-Notification type erasure is a separate supported path. User stages must follow
-the sequential continuation and upstream-ownership contracts; retaining or invoking
-continuations concurrently after their operation completes is not supported.
+Under Native AOT, DI can fail to close open generic Send or Stream handlers over value-type arguments. This limitation is separate from using a struct as a Stream cursor or upstream. For Send and Stream, dispatch a statically typed request. Runtime-object dispatch is unsupported for these families. Notifications can use type erasure for registered closed notification types. `PublishAsync` awaits subscribers sequentially and stops at the first failure. [Request and notification example](../getting-started.md#send-a-request-and-publish-a-notification)

@@ -1,27 +1,11 @@
 # Zendiator.CodeFixes
 
-Optional C# code fixes for the Zendiator 1.0 release candidate. The runtime and
-source generator remain in the `Zendiator` package; this package is installed
-separately and is not a runtime dependency.
+When ZEN0035 identifies a handler that is missing its attribute, the **Add Handler attribute** action in Visual Studio adds `[Handler]` to that type. Fix All applies the change within the current document. Review the handler selection and pipeline order in your application.
 
-Use the same version as Zendiator:
+Install the optional code fix in the project that contains the handler. Use the same version as Zendiator.
 
 ```xml
-<PackageReference Include="Zendiator.CodeFixes"
-                  Version="$(ZendiatorPackageVersion)"
-                  PrivateAssets="all" />
+<PackageReference Include="Zendiator.CodeFixes" Version="1.0.0-rc.1" PrivateAssets="all" />
 ```
 
-Set `ZendiatorPackageVersion` to the matching Zendiator version, for example
-`1.0.0-rc.1`, and restore from a feed that provides that version.
-
-The fix adds `[Handler]` when a ZEN0035 diagnostic identifies a missing
-handler marker. Fix All is limited to the current document. It does not rewrite
-Behavior order, continuations, scopes, or other migration semantics.
-
-The assembly is supplied as a C# analyzer asset and is built against Roslyn C#
-Workspaces 4.14.0. Roslyn and Workspaces assemblies are supplied by the development
-host, not bundled into this package. The command-line compiler does not apply code
-fixes.
-
-The code fix is available in the current version of Visual Studio.
+Restore the package and open the suggested fix on the diagnostic in your editor.
