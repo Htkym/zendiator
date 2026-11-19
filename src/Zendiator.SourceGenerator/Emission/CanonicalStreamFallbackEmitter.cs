@@ -198,8 +198,8 @@ internal static class CanonicalStreamFallbackEmitter
             """;
         var initialization = new StringBuilder();
         EmitInitialization(initialization, model, segment, factory, receiver, referenceSource);
-        var rootCheck = standalone ? "" : """
-                            if (!global::System.Object.ReferenceEquals(_root, this) && _root.IsClosed)
+        var rootCheck = parent == null ? "" : """
+                            if (_root.IsClosed)
                                 operation = MoveFailed(new global::System.ObjectDisposedException("Stream"));
                             else
             """;
@@ -549,6 +549,7 @@ internal static class CanonicalStreamFallbackEmitter
                         private Cursor{{upstream}}? _active;{{(privateIdentityParent ? "\ninternal Cursor" + upstream + "? MatchIdentity(global::System.Collections.Generic.IAsyncEnumerator<" + item + "> source) { var active = _active; return global::System.Object.ReferenceEquals(source, active) ? active : null; }" : "")}}
                         {{(privateIdentityParent ? "internal void DetachIdentity(Cursor" + upstream + " child) { if (global::System.Object.ReferenceEquals(_active, child)) _active = null; }" : "")}}
                         private int _opening;
+                        {{(privateIdentityParent ? "internal bool IsIdle => global::System.Threading.Volatile.Read(ref _opening) == 0 && _active is null;" : "")}}
                         public global::System.Threading.Tasks.ValueTask<global::System.Collections.Generic.IAsyncEnumerator<{{item}}>> OpenAsync(
                             {{handler.RequestName}} request, global::System.Threading.CancellationToken token)
                         {

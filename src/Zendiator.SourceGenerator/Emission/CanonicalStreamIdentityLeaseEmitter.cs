@@ -52,7 +52,25 @@ internal static class CanonicalStreamIdentityLeaseEmitter
             EmitEdge(b, model, chain[index + 1].Id, cursor);
         if (index > 0)
         {
-            var item = chain[index].OutputItemName ?? model.Handler.ItemName;
+            var segment = chain[index];
+            var item = segment.OutputItemName ?? model.Handler.ItemName;
+            var closeDetached = "";
+            if (index + 1 < chain.Count && segment.Hooks.Count == 0 && segment.WrapperFactory?.CleanupContractName == null)
+            {
+                var structPort = CanonicalStructStreamUpstreamEmitter.Enabled(segment);
+                var idle = structPort
+                    ? "global::System.Threading.Volatile.Read(ref _upstreamOpening) == 0 && _upstreamActive is null"
+                    : "(_upstream is null || _upstream.IsIdle)";
+                closeDetached = $$"""
+                    if (_source is null && {{idle}})
+                    {
+                        var detachedFailure = CloseDetachedClaim(error, disposing);
+                        {{(structPort ? "" : "_upstream = null;")}}
+                        if (!disposing && detachedFailure is null) _normalEnd = true;
+                        return new(detachedFailure);
+                    }
+                    """;
+            }
             b.AppendLine($$"""
                 internal bool TryClaimIdentityLease() => TryBeginMove();
                 internal global::System.Threading.Tasks.ValueTask<bool> MoveIdentityLeaseEndpointRaw() => MoveCoreAsync();
@@ -60,6 +78,7 @@ internal static class CanonicalStreamIdentityLeaseEmitter
                 internal global::System.Threading.Tasks.ValueTask<global::System.Exception?> CloseIdentityLeaseChildAsync(
                     global::System.Exception? error, bool disposing)
                 {
+                    {{closeDetached}}
                     var close = CloseClaimedAsync(error, disposing);
                     if (disposing || error is not null) return close;
                     if (!close.IsCompletedSuccessfully) return AwaitNormalEndAsync(close);

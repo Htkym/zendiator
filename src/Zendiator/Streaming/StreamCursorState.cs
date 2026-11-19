@@ -347,15 +347,14 @@ public abstract class StreamCursorState : IAsyncDisposable
     /// <summary>Closes a claimed owner without releasing its gate or publishing disposal.</summary>
     protected ValueTask<Exception?> CloseClaimedAsync(Exception? error, bool disposing)
     {
-        if (Volatile.Read(ref _busy) != 1 || _closed || Volatile.Read(ref _cleanupComplete))
-            throw new InvalidOperationException("The Stream close requires a live claimed owner.");
+        BeginClaimedClose();
 
         var cleanupTransferred = false;
         try
         {
             try
             {
-                var cleanup = BeginClose();
+                var cleanup = _started ? DisposeCoreAsync() : default;
                 if (!cleanup.IsCompleted)
                 {
                     cleanupTransferred = true;
@@ -376,6 +375,30 @@ public abstract class StreamCursorState : IAsyncDisposable
         }
 
         return new(PrepareClaimedClose(error, disposing));
+    }
+
+    /// <summary>Closes a claimed owner whose generated cleanup has no remaining resources.</summary>
+    /// <remarks>Only use after detaching the owned source and verifying that all upstream and session cleanup is empty.</remarks>
+    protected Exception? CloseDetachedClaim(Exception? error, bool disposing)
+    {
+        BeginClaimedClose();
+        try
+        {
+            DisposeLinkedToken();
+        }
+        catch (Exception cleanupError)
+        {
+            error = cleanupError;
+        }
+
+        return PrepareClaimedClose(error, disposing);
+    }
+
+    private void BeginClaimedClose()
+    {
+        if (Volatile.Read(ref _busy) != 1 || _closed || Volatile.Read(ref _cleanupComplete))
+            throw new InvalidOperationException("The Stream close requires a live claimed owner.");
+        MarkClosed();
     }
 
     private async ValueTask<Exception?> CompleteClaimedCloseAsync(ValueTask cleanup, Exception? error, bool disposing)
@@ -415,21 +438,25 @@ public abstract class StreamCursorState : IAsyncDisposable
 
         var completion = Volatile.Read(ref _disposeCompletion);
         var error = _disposeError;
-        // Notification may reenter; the gate release is the final owner access.
-        if (Interlocked.CompareExchange(ref _busy, 0, 1) != 1)
+        if (Volatile.Read(ref _busy) != 1)
             throw new InvalidOperationException("The Stream close no longer owns its claim.");
+        // Only the lease owns the Move gate. Public Dispose rejects a Move claim before it can join.
+        // Notification may reenter; the gate release is the final owner access.
+        Volatile.Write(ref _busy, 0);
         completion?.Complete(error);
     }
 
     private ValueTask BeginClose()
     {
         var wasClosed = _closed;
+        MarkClosed();
+        return !wasClosed && _started ? DisposeCoreAsync() : default;
+    }
+
+    private void MarkClosed()
+    {
         Volatile.Write(ref _closed, true);
         _hasCurrent = false;
-        if (wasClosed)
-            return default;
-
-        return _started ? DisposeCoreAsync() : default;
     }
 
     private async ValueTask<bool> CompleteMoveAsync(ValueTask cleanup, Exception? error)
