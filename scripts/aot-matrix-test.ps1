@@ -357,7 +357,7 @@ public static class Program
 "@ | Set-Content "$WorkingDir/asm/Program.cs" -Encoding UTF8
 
 $previousPackages = $env:NUGET_PACKAGES
-$env:NUGET_PACKAGES = Join-Path $WorkingDir ('global-packages-' + [guid]::NewGuid().ToString('N'))
+$env:NUGET_PACKAGES = Join-Path $WorkingDir ('pkg-' + [IO.Path]::GetRandomFileName())
 $exitCode = 0
 try {
     foreach ($app in @("di", "asm")) {

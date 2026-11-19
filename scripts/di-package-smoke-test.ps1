@@ -202,7 +202,7 @@ return ping == 42 && order == 101 && invoice == 202 ? 0 : 1;
 "@ | Set-Content "$WorkingDir/host/Program.cs" -Encoding UTF8
 
 $previousPackages = $env:NUGET_PACKAGES
-$env:NUGET_PACKAGES = Join-Path $WorkingDir ('global-packages-' + [guid]::NewGuid().ToString('N'))
+$env:NUGET_PACKAGES = Join-Path $WorkingDir ('pkg-' + [IO.Path]::GetRandomFileName())
 try {
     dotnet build "$WorkingDir/host/host.csproj" -c Release --configfile "$WorkingDir/NuGet.Config" -v minimal
     if ($LASTEXITCODE -ne 0) { throw "smoke build failed" }

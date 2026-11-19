@@ -279,7 +279,7 @@ public sealed class CarrierHandler : IRequestHandler<CarrierRequest, int>, IDisp
 '@ | Set-Content -LiteralPath (Join-Path $WorkingDir 'Program.cs') -Encoding UTF8
 
 $previousPackages = $env:NUGET_PACKAGES
-$env:NUGET_PACKAGES = Join-Path $WorkingDir ('global-packages-' + [guid]::NewGuid().ToString('N'))
+$env:NUGET_PACKAGES = Join-Path $WorkingDir ('pkg-' + [IO.Path]::GetRandomFileName())
 try {
     dotnet build $project -c Release --configfile $config -v minimal
     if ($LASTEXITCODE -ne 0) { throw 'Struct upstream package build failed.' }
