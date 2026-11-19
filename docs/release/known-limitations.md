@@ -1,11 +1,8 @@
-# Known limitations for 0.7.0
+# 1.x compatibility and known limitations
 
-This page describes the 0.7.0 contracts, including the
-[route-local capture changes](0.7.0-release-notes.md). Start with
-[getting started](../getting-started-0.5.0.md) and the
-[Stream migration guide](../migrating-stream-upstream.md). Published 0.6.0 behavior is
-described in its [release notes](0.6.0-release-notes.md). Historical 0.4.0 APIs and
-results remain in the [0.4.0 release notes](0.4.0-release-notes.md).
+Version `1.0.0-rc.1` is the candidate for the public contracts below.
+It retains the [0.7.0 dependency capture rules](0.7.0-release-notes.md).
+[Release candidate notes](1.0.0-rc.1-release-notes.md) · [Getting started](../getting-started-0.5.0.md)
 
 ## API and compatibility boundaries
 
@@ -16,16 +13,21 @@ results remain in the [0.4.0 release notes](0.4.0-release-notes.md).
 | Generated implementation | Private and internal generated type names, field and cache layouts, slot numbers, call-site interceptors and helper boundaries are implementation details. Use the public facade rather than inspecting or extending those structures. |
 
 Public runtime helpers used by generated code are versioned together with the
-source generator. Keep Zendiator packages at matching versions and rebuild
+source generator. Use matching versions of `Zendiator` and `Zendiator.Abstractions` and rebuild
 consumers when upgrading. A helper's visibility does not turn the generated
 Mediator's current base type or storage layout into an application extension point.
 See the [generated route contract](../design/0.5.0-route-and-stream-contract.md)
 for the current implementation and ownership rules.
 
-Changes to public APIs or observable execution contracts are recorded in release
-notes with their reason, impact and migration steps. Adopted breaking contract
-changes require a new minor release; a change to generated layout alone does not
-justify changing the documented execution contract.
+Starting with 1.0.0, breaking a documented public API or its observable
+execution contract requires a new major version. The stable contract includes
+the generated facade's callable methods, receiver identity and construction
+timing as described below, and when an operation owns and releases a Stream
+cursor. Release notes describe changes that affect applications and any migration.
+
+The `GeneratePooledProducerAttribute` opt-in is experimental. Its supported
+method bodies and diagnostics may change in 1.x. Its versioning exception
+applies only to that opt-in. [Pooled producer support](../design/pooled-producer-interceptors.md)
 
 ## Dependency capture and lifetime
 
@@ -154,11 +156,10 @@ performance evaluations.
 
 ## Performance evidence
 
-No universal allocation-free or non-regression guarantee is made. Scope creation,
-cold resolution, asynchronous suspension, middleware and cleanup have separate
-costs. Improvements in one synchronous enumeration case do not establish a lead for
-Streams that genuinely suspend; competitive superiority for those paths remains
-unestablished. Early termination and some pending paths retain adverse observations.
+Scope creation, cold resolution, asynchronous suspension, middleware and cleanup
+have separate costs. Compare results for the operation and completion mode the
+application uses. In the measured development revision the confidence intervals
+overlap for asynchronous Stream early termination.
 
 The async Filter/Map comparison used a synchronous source with 1024 inputs and 1536
 pending hook operations backed by synthetic ThreadPool scheduling. Full enumeration
@@ -166,9 +167,9 @@ showed lower time and allocation in that workload. Synchronous-completion and Ea
 intervals still included no improvement; Early accepted its first input. These results
 do not establish gains for a pending source, five middleware stages, real I/O or HTTP.
 
-The [README comparison](../../README.md#performance) identifies its measured
-0.6.0-preparation source and raw results, including unfavorable time and allocation
-results. Historical 0.4.0 tables and other limited comparisons are separate evidence. Results from different source versions or
+The [README comparison](../../README.md#performance) identifies the measured
+development revision and 0.7.0 results, including uncertainty and allocations.
+Results from different source versions or
 protocols must not be combined into a single-version ranking. The native Zendiator
 cursor and competitors' compiler iterators are part of their complete product
 paths, so a difference cannot be attributed to dispatch alone.

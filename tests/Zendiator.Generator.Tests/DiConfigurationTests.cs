@@ -1,6 +1,8 @@
+using System.Runtime.Loader;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Zendiator.SourceGenerator;
 using Xunit;
 
@@ -8,59 +10,90 @@ namespace Zendiator.Generator.Tests;
 
 public sealed class DiConfigurationTests
 {
-    [Fact]
-    public void Interception_connection_guard_fixes_message_and_location_for_unsupported_call_target()
+    [Theory]
+    [InlineData("ZendiatorServiceCollectionExtensions.AddZendiator(services)", true)]
+    [InlineData("ZendiatorServiceCollectionExtensions.AddZendiator(configure: c => c.Namespace = \"App.Generated\", services: services)", true)]
+    [InlineData("((ZendiatorServiceCollectionExtensions.AddZendiator))(services)", false)]
+    public void Static_registration_requires_an_interceptable_call_target(string call, bool supported)
     {
-        const string member = "ZendiatorServiceCollectionExtensions.AddZendiator";
-        const string message = "AddZendiator call cannot be connected to generated registration. Keep the call inside an ordinary method body.";
-        foreach (var parenthesized in new[] { true, false })
+        var source = Head + "public static class Startup { public static IServiceCollection Register(IServiceCollection services) => " + call + "; }";
+        var result = Run(source, supported);
+        if (supported)
+            Assert.NotEmpty(result.GeneratedTrees);
+        else
         {
-            var call = (parenthesized ? "((" + member + "))" : member) + "(services)";
-            var source = Head + "public static class Startup { public static IServiceCollection Register(IServiceCollection services)=>" + call + "; }";
-            var input = Compilation(source, "ConnectionGuard");
-            var tree = input.SyntaxTrees.Single();
-            Assert.Empty(input.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
-            var invocation = Assert.Single(tree.GetRoot().DescendantNodes().OfType<InvocationExpressionSyntax>());
-            var target = invocation.Expression;
-            if (parenthesized)
-            {
-                target = Assert.IsType<ParenthesizedExpressionSyntax>(target).Expression;
-                target = Assert.IsType<ParenthesizedExpressionSyntax>(target).Expression;
-            }
-            Assert.Equal(member, Assert.IsType<MemberAccessExpressionSyntax>(target).ToString());
-            var semantic = input.GetSemanticModel(tree);
-            var method = Assert.IsAssignableFrom<IMethodSymbol>(semantic.GetSymbolInfo(invocation).Symbol);
-            Assert.Equal("AddZendiator", method.Name);
-            Assert.Equal(MethodKind.Ordinary, method.MethodKind);
-            Assert.Equal("ZendiatorServiceCollectionExtensions", method.ContainingType.Name);
-            Assert.Equal("Zendiator.DependencyInjection", method.ContainingNamespace.ToDisplayString());
-            Assert.True(SymbolEqualityComparer.Default.Equals(method.ContainingAssembly,
-                input.GetTypeByMetadataName("Zendiator.DependencyInjection.ZendiatorConfiguration")!.ContainingAssembly));
-            var location = semantic.GetInterceptableLocation(invocation);
-            var result = new GenerationAnalysis(System.Collections.Immutable.ImmutableArray<INamedTypeSymbol>.Empty,
-                System.Collections.Immutable.ImmutableArray.Create(invocation), input, CancellationToken.None).Generate();
-            if (parenthesized)
-            {
-                Assert.Null(location);
-                var diagnostic = Assert.Single(result.Diagnostics);
-                Assert.Equal("ZEN0020", diagnostic.Id);
-                Assert.Equal(message, diagnostic.GetMessage());
-                Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
-                Assert.Same(tree, diagnostic.Location.SourceTree);
-                Assert.Equal(source.IndexOf(call, StringComparison.Ordinal), diagnostic.Location.SourceSpan.Start);
-                Assert.Equal(call.Length, diagnostic.Location.SourceSpan.Length);
-                Assert.Equal(call, tree.GetText().ToString(diagnostic.Location.SourceSpan));
-                Assert.Null(result.Model);
-                Assert.Null(result.Target);
-            }
-            else
-            {
-                Assert.NotNull(location);
-                Assert.Empty(result.Diagnostics);
-                Assert.NotNull(result.Model);
-                Assert.NotNull(result.Target);
-            }
+            var diagnostic = Assert.Single(result.Diagnostics);
+            Assert.Equal("ZEN0020", diagnostic.Id);
+            Assert.Equal(call, source.Substring(diagnostic.Location.SourceSpan.Start, diagnostic.Location.SourceSpan.Length));
         }
+    }
+
+    [Fact]
+    public void Conditional_registration_preserves_null_short_circuit_and_evaluates_receiver_once()
+    {
+        var source = Head + """
+            [ZendiatorComposition("app")] public sealed class Marker;
+            public sealed record Ping : IRequest<int>;
+            [Handler] public sealed class PingHandler : IRequestHandler<Ping,int>
+            {
+                public ValueTask<int> HandleAsync(Ping p, CancellationToken ct) => new(42);
+            }
+            public static class Startup
+            {
+                public static IServiceCollection? Register(Func<IServiceCollection?> get) =>
+                    get()?.@AddZendiator<Marker>(c => c.Handlers<Ping>(DispatchFamily.SendAsync, typeof(PingHandler)));
+            }
+            """;
+        Driver().RunGeneratorsAndUpdateCompilation(Compilation(source, "ConditionalRegistration"), out var output, out var diagnostics);
+        Assert.Empty(diagnostics);
+        using var bytes = new MemoryStream();
+        var emitted = output.Emit(bytes);
+        Assert.True(emitted.Success, string.Join(Environment.NewLine, emitted.Diagnostics));
+        bytes.Position = 0;
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(bytes);
+        var register = assembly.GetType("App.Startup")!.GetMethod("Register")!
+            .CreateDelegate<Func<Func<IServiceCollection?>, IServiceCollection?>>();
+        var calls = 0;
+        IServiceCollection? services = null;
+        IServiceCollection? Get()
+        {
+            calls++;
+            return services;
+        }
+        Assert.Null(register(Get));
+        services = new ServiceCollection();
+        Assert.Same(services, register(Get));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == assembly.GetType("App.Generated.Marker.IZendiator"));
+        Assert.Equal(2, calls);
+    }
+
+    [Fact]
+    public async Task Only_package_registration_method_groups_get_a_build_error()
+    {
+        var input = Compilation(Head + """
+            [ZendiatorComposition("app")] public sealed class Marker;
+            public static class Other { public static void AddZendiator() { } }
+            public static class Startup
+            {
+                public static void Register(IServiceCollection services)
+                {
+                    Func<IServiceCollection, Action<ZendiatorConfiguration>, IServiceCollection> open =
+                        ZendiatorServiceCollectionExtensions.AddZendiator<Marker>;
+                    Func<Action<ZendiatorConfiguration>, IServiceCollection> closed = services.AddZendiator<Marker>;
+                    Action unrelated = Other.AddZendiator;
+                    _ = nameof(ZendiatorServiceCollectionExtensions.AddZendiator);
+                }
+            }
+            """);
+        Assert.Empty(input.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        var diagnostics = await input.WithAnalyzers([new RegistrationCallAnalyzer()]).GetAnalyzerDiagnosticsAsync();
+        Assert.Equal(new[] { "ZendiatorServiceCollectionExtensions.AddZendiator<Marker>", "services.AddZendiator<Marker>" },
+            diagnostics.OrderBy(d => d.Location.SourceSpan.Start).Select(d =>
+            {
+                Assert.Equal("ZEN0020", d.Id);
+                Assert.Equal(DiagnosticSeverity.Error, d.Severity);
+                return d.Location.SourceTree!.GetText().ToString(d.Location.SourceSpan);
+            }));
     }
 
     private const string Services = "global::Microsoft.Extensions.DependencyInjection.IServiceCollection";
@@ -196,11 +229,11 @@ public sealed class DiConfigurationTests
     }
 
     [Fact]
-    public void Bare_call_without_attributes_is_silent_for_now()
+    public void Bare_call_without_attributes_generates_default_registration()
     {
         var result = Run(Head + Fixtures + "public sealed class App { public void Register(" + Services + " services) { services.AddZendiator(); } }", true);
         Assert.Empty(result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error));
-        Assert.Empty(result.GeneratedTrees);
+        Assert.Contains(result.GeneratedTrees, tree => tree.FilePath.EndsWith("Zendiator.Interceptors.g.cs", StringComparison.Ordinal));
     }
 
     [Fact]

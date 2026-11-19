@@ -39,10 +39,7 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
             static (node, _) => node is TypeDeclarationSyntax,
             static (ctx, _) => (INamedTypeSymbol)ctx.TargetSymbol).Collect();
         var invocations = context.SyntaxProvider.CreateSyntaxProvider(
-            static (node, _) => node is InvocationExpressionSyntax
-            {
-                Expression: MemberAccessExpressionSyntax { Name.Identifier.Text: "AddZendiator" }
-            },
+            static (node, _) => node is InvocationExpressionSyntax call && CalledName(call)?.Identifier.ValueText == "AddZendiator",
             static (ctx, _) => (InvocationExpressionSyntax)ctx.Node);
         var invocationBindings = invocations.Collect();
         var compositionBindings = invocations.Combine(context.CompilationProvider).Combine(markedBindings).Combine(markedModel)
@@ -272,5 +269,19 @@ public sealed class ZendiatorGenerator : IIncrementalGenerator
             foreach (var diagnostic in r.Diagnostics)
                 ctx.ReportDiagnostic(diagnostic);
         });
+    }
+
+    internal static SimpleNameSyntax? CalledName(InvocationExpressionSyntax call)
+    {
+        var target = call.Expression;
+        while (target is ParenthesizedExpressionSyntax parentheses)
+            target = parentheses.Expression;
+        return target switch
+        {
+            MemberAccessExpressionSyntax member => member.Name,
+            MemberBindingExpressionSyntax conditional => conditional.Name,
+            SimpleNameSyntax name => name,
+            _ => null
+        };
     }
 }

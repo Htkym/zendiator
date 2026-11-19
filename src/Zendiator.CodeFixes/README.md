@@ -1,6 +1,6 @@
 # Zendiator.CodeFixes
 
-Optional C# code fixes for the Zendiator 0.7.0 API. The runtime and
+Optional C# code fixes for the Zendiator 1.0 release candidate. The runtime and
 source generator remain in the `Zendiator` package; this package is installed
 separately and is not a runtime dependency.
 
@@ -13,7 +13,7 @@ Use the same version as Zendiator:
 ```
 
 Set `ZendiatorPackageVersion` to the matching Zendiator version, for example
-`0.7.0`, and restore from a feed that provides that version.
+`1.0.0-rc.1`, and restore from a feed that provides that version.
 
 The fix adds `[Handler]` when a ZEN0035 diagnostic identifies a missing
 handler marker. Fix All is limited to the current document. It does not rewrite

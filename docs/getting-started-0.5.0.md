@@ -1,18 +1,12 @@
-# Getting started with 0.7.0
+# Getting started with 1.0.0-rc.1
 
 [日本語](getting-started-0.5.0.ja.md)
 
-This guide describes the 0.7.0 contracts, including
-[route-local capture changes](release/0.7.0-release-notes.md). For 0.6.0 behavior,
-see the [0.6.0 release notes](release/0.6.0-release-notes.md).
+Use .NET 10, C# 14 and a NuGet feed that contains the release candidate.
+The sample projects default to `1.0.0-rc.1`.
+[Release notes](release/1.0.0-rc.1-release-notes.md)
 
-The commands target 0.7.0 and require matching Zendiator packages in the selected
-feed. The examples use NuGet.org; adjust the restore sources if using another feed.
-The checked-in sample projects retain a 0.6.0 default. Pass
-`-p:ZendiatorPackageVersion=0.7.0` to restore, build and run as shown below so
-that the default is not used.
-
-## Run the 0.7.0 sample
+## Run the sample
 
 The [GettingStarted project](../samples/Zendiator.Sample.GettingStarted/Zendiator.Sample.GettingStarted.csproj)
 requires .NET 10 and C# 14. Its [source](../samples/Zendiator.Sample.GettingStarted/Program.cs)
@@ -20,11 +14,10 @@ shows synchronous Send, asynchronous Send and Stream with ordered hooks.
 From the repository root:
 
 ```powershell
-$version = '0.7.0'
 $project = 'samples/Zendiator.Sample.GettingStarted/Zendiator.Sample.GettingStarted.csproj'
 
-dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
-dotnet run --project $project -c Release --no-restore -p:ZendiatorPackageVersion=$version
+dotnet restore $project
+dotnet run --project $project -c Release --no-restore
 ```
 
 Expected output:
@@ -234,11 +227,10 @@ The generated `StreamAsync` therefore returns `IAsyncEnumerable<string>`.
 Run the package-based example from the repository root:
 
 ```powershell
-$version = '0.7.0'
 $project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
 
-dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
-dotnet run --project $project -c Release --no-restore -p:ZendiatorPackageVersion=$version
+dotnet restore $project
+dotnet run --project $project -c Release --no-restore
 ```
 
 Expected output:
@@ -284,7 +276,7 @@ Keep the existing `$project` and `$version`, and emit the compiler's generated
 files into the project's `obj` directory:
 
 ```powershell
-dotnet build $project -c Release --no-restore -p:ZendiatorPackageVersion=$version -p:EmitCompilerGeneratedFiles=true -p:CompilerGeneratedFilesOutputPath=obj/generated
+dotnet build $project -c Release --no-restore -p:EmitCompilerGeneratedFiles=true -p:CompilerGeneratedFilesOutputPath=obj/generated
 ```
 
 Recursively inspect the current build's generated files under that project's
@@ -307,8 +299,8 @@ members are implementation details to inspect, not APIs to call or retain.
 ## Repair a missing handler marker
 
 Add the optional CodeFix package at the same version as `Zendiator`. Set
-`ZendiatorPackageVersion` to `0.7.0` and restore from a feed that provides
-Zendiator.CodeFixes 0.7.0.
+`ZendiatorPackageVersion` to `1.0.0-rc.1` and restore from a feed that provides
+the matching CodeFix package.
 
 ```xml
 <PackageReference Include="Zendiator.CodeFixes"
@@ -318,9 +310,8 @@ Zendiator.CodeFixes 0.7.0.
 Restore the ComposedApp project:
 
 ```powershell
-$version = '0.7.0'
 $project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
-dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
+dotnet restore $project
 ```
 
 Open the project in current Visual Studio. If `RefreshInventoryHandler` is missing
@@ -333,7 +324,7 @@ is absent, check that the generator is loaded and the contracts are supported.
 After applying the fix, rebuild:
 
 ```powershell
-dotnet build $project -c Release --no-restore -p:ZendiatorPackageVersion=$version
+dotnet build $project -c Release --no-restore
 ```
 
 Migrate registration order, wrapper retry/cache logic and scope boundaries manually.

@@ -1,7 +1,7 @@
 # Configuration diagnostics
 
-This index covers Zendiator 0.6.0 diagnostics. Read the full diagnostic message
-and its source location: they name the affected type, registration or expression.
+This index covers the release candidate's configuration diagnostics. The full
+message and its source location identify the affected type, registration or expression.
 Generator diagnostics have severity Error; the lifetime analyzer reports Warnings.
 Suppressing an error does not enable a rejected route. Fix C# compiler errors
 reported for the same declaration before diagnosing its generated route.
@@ -33,7 +33,7 @@ contract diagnostics below.
 | <a id="zen0017"></a>ZEN0017 | A configuration lambda, statement or argument is not statically supported. | Use a synchronous lambda with direct recorder calls and supported constant/`typeof` arguments; remove dynamic control flow and unsupported calls. |
 | <a id="zen0018"></a>ZEN0018 | A configuration value, assembly, order or registration is invalid or duplicated. | Correct the named assignment or registration, keeping one value for each setting and unique behavior order values. |
 | <a id="zen0019"></a>ZEN0019 | Retained ID for ambiguous registration binding; it is not emitted by the 0.6.0 generator. | Check the actual generator/package version and full message before changing registration; current conflicts use the diagnostics above. |
-| <a id="zen0020"></a>ZEN0020 | An `AddZendiator` call cannot connect to generated registration. | Keep the call in an ordinary method body and use the supported registration shape. |
+| <a id="zen0020"></a>ZEN0020 | An `AddZendiator` call cannot connect to generated registration, or the method itself is used as a delegate. | Call the method directly. When passing registration as a callback, put the direct call inside a lambda or a helper method. |
 
 ## Lifetime warnings
 
@@ -55,7 +55,7 @@ safe scope usage across arbitrary asynchronous control flow. See the
 | <a id="zen0026"></a>ZEN0026 | A stage's request, response/item or session types do not match its route. | Trace each type through the route and correct the contract/registration; see [type mismatch](#zen0026-stage-type-mismatch). |
 | <a id="zen0027"></a>ZEN0027 | A stage/factory has multiple applicable contracts for the same phase, including a combined Stream Filter and Map. | Split the competing capabilities into separate stage types or supply an explicit adapter for the intended contract. |
 | <a id="zen0028"></a>ZEN0028 | Pipeline declarations overlap or disagree on an authoritative order. | Keep one nonoverlapping request list and one explicit stage order; the generator does not infer open/closed specialization priority. |
-| <a id="zen0029"></a>ZEN0029 | A dispatch family is absent, ambiguous, unknown or unsupported for the selected metadata. | Select a known `DispatchFamily` and a contract supported by that family. Notifications use their separate registration API. |
+| <a id="zen0029"></a>ZEN0029 | A dispatch family is absent, ambiguous, unknown or unsupported for the selected metadata. | For named Send and Stream routes, select the matching family. For notifications, register the subscriber assembly with the non-generic `AddZendiator`. [Send and Publish example](../../README.md#use-send-and-publish-together) |
 | <a id="zen0030"></a>ZEN0030 | An asynchronous hook or session factory is placed on a synchronous route. | Use the synchronous hook/factory contract or choose an asynchronous dispatch family and matching handler; blocking conversion is unsupported. |
 | <a id="zen0031"></a>ZEN0031 | A capability or handler has a different response/void/item shape from its route. | Align every selected handler and stage with the route's result shape. |
 | <a id="zen0033"></a>ZEN0033 | Generated code cannot access a stage or session factory. | Correct the named type/member accessibility and its assembly reference. |

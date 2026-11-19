@@ -37,7 +37,7 @@ $files = foreach ($id in @('Zendiator.Abstractions', 'Zendiator', 'Zendiator.Cod
       if ($extension -eq 'nupkg') {
         if ($id -eq 'Zendiator.CodeFixes') {
           $allowedEntries += @('README.md', 'analyzers/dotnet/cs/Zendiator.CodeFixes.dll')
-        } else { $allowedEntries += @('README.md', 'icon.png', "lib/net10.0/$id.dll", "lib/net10.0/$id.xml") }
+        } else { $allowedEntries += @('README.md', 'icon.png', "lib/net10.0/$id.dll", "lib/net10.0/$id.xml", "buildTransitive/$id.targets") }
         if ($id -eq 'Zendiator') { $allowedEntries += @('analyzers/dotnet/cs/Zendiator.SourceGenerator.dll', 'buildTransitive/Zendiator.props') }
       } else { $allowedEntries += "lib/net10.0/$id.pdb" }
       $normalizedEntries = $entries | ForEach-Object {

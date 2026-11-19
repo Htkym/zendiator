@@ -1,14 +1,10 @@
-# 0.7.0の使い方
+# 1.0.0-rc.1の使い方
 
 [English](getting-started-0.5.0.md)
 
-このガイドは[ルート単位の依存取得の変更](release/0.7.0-release-notes.md)を含む0.7.0の契約を説明します。0.6.0の動作は[0.6.0のリリースノート](release/0.6.0-release-notes.ja.md)を確認してください。
+.NET 10 と C# 14 を使います。NuGet の復元元にリリース候補のパッケージを含むフィードを設定してください。サンプルの既定のバージョンは `1.0.0-rc.1` です。[リリース候補の変更点](release/1.0.0-rc.1-release-notes.md)
 
-以下のコマンドは0.7.0を指定します。利用するフィードがZendiatorの各パッケージの0.7.0を提供している必要があります。例ではNuGet.orgを使います。別のフィードを使う場合は、復元元を合わせてください。サンプルのプロジェクトファイルと下の転記には0.6.0の既定値が残っています。既定値を使わないよう、復元・ビルド・実行では以下の例のように`-p:ZendiatorPackageVersion=0.7.0`を指定してください。
-
-## 0.7.0の例を実行する
-
-.NET 10 SDKとC# 14を使います。0.7.0を提供するフィードからパッケージを取得します。
+## サンプルを実行する
 
 新しいフォルダーに、次のプロジェクトファイルと`Program.cs`を保存します。[サンプルのファイル](../samples/Zendiator.Sample.GettingStarted/)をコピーしても実行できます。Zendiatorのソースプロジェクトへの`ProjectReference`は使いません。
 
@@ -23,7 +19,7 @@
     <LangVersion>14.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ZendiatorPackageVersion Condition="'$(ZendiatorPackageVersion)' == ''">0.6.0</ZendiatorPackageVersion>
+    <ZendiatorPackageVersion Condition="'$(ZendiatorPackageVersion)' == ''">1.0.0-rc.1</ZendiatorPackageVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Zendiator" Version="$(ZendiatorPackageVersion)" />
@@ -155,8 +151,7 @@ public sealed class KeepAtMostForty : IStreamItemFilter<ReadNumbers, int>
 PowerShellから実行します。
 
 ```powershell
-$version = '0.7.0'
-dotnet run --project .\Zendiator.Sample.GettingStarted.csproj -c Release -p:ZendiatorPackageVersion=$version
+dotnet run --project .\Zendiator.Sample.GettingStarted.csproj -c Release
 ```
 
 実行すると、次の3行を出力します。
@@ -259,11 +254,10 @@ Streamの入力は名前付きcursorが返す`int`です。`KeepEven`で絞り�
 リポジトリのルートから、packageを使う例を実行します。
 
 ```powershell
-$version = '0.7.0'
 $project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
 
-dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
-dotnet run --project $project -c Release --no-restore -p:ZendiatorPackageVersion=$version
+dotnet restore $project
+dotnet run --project $project -c Release --no-restore
 ```
 
 期待する出力は次のとおりです。
@@ -301,7 +295,7 @@ StreamAsync: number=20, number=40
 上の`$project`と`$version`を使い、コンパイラの生成ファイルをプロジェクトの`obj`内へ出力します。
 
 ```powershell
-dotnet build $project -c Release --no-restore -p:ZendiatorPackageVersion=$version -p:EmitCompilerGeneratedFiles=true -p:CompilerGeneratedFilesOutputPath=obj/generated
+dotnet build $project -c Release --no-restore -p:EmitCompilerGeneratedFiles=true -p:CompilerGeneratedFilesOutputPath=obj/generated
 ```
 
 プロジェクトの`obj/generated`以下を再帰的に調べ、今回のbuildで生成したファイルを確認します。固定のhashではなく、`ComposedApp.Generated.App`やHandler・段の型名を検索してください。`obj`には古いbuildの出力が残る場合があるため、今実行したbuildのファイルであることを確かめます。
@@ -316,7 +310,7 @@ dotnet build $project -c Release --no-restore -p:ZendiatorPackageVersion=$versio
 
 ### Handler属性を補って再buildする
 
-CodeFixを使う場合は、`Zendiator`と同じバージョンの`Zendiator.CodeFixes`を`PrivateAssets="all"`で追加し、0.7.0を提供するフィードからrestoreしてください。現在のVisual Studioでプロジェクトを開き、ZEN0035の修正候補から`Add Handler attribute`を選びます。
+CodeFixを使う場合は、`Zendiator`と同じバージョンの`Zendiator.CodeFixes`を`PrivateAssets="all"`で追加し、リリース候補を提供するフィードからrestoreしてください。現在のVisual Studioでプロジェクトを開き、ZEN0035の修正候補から`Add Handler attribute`を選びます。
 
 ```xml
 <PackageReference Include="Zendiator.CodeFixes"
@@ -324,9 +318,8 @@ CodeFixを使う場合は、`Zendiator`と同じバージョンの`Zendiator.Cod
 ```
 
 ```powershell
-$version = '0.7.0'
 $project = 'samples/Zendiator.Sample.ComposedApp/Zendiator.Sample.ComposedApp.csproj'
-dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api.nuget.org/v3/index.json
+dotnet restore $project
 ```
 
 たとえばComposedAppの`RefreshInventoryHandler`に属性が欠けている場合、候補を一意に特定でき、属性を追加した後のApp全体を生成できるときに修正できます。同じAppのType登録も保持します。変更する利用者コードはHandler属性だけです。曖昧な候補、不正な契約、未採用の構成を推測して直すことはありません。候補が出ない場合は、generatorの読み込みと契約を確認してください。
@@ -334,7 +327,7 @@ dotnet restore $project -p:ZendiatorPackageVersion=$version --source https://api
 修正後はComposedAppを再buildします。登録順、wrapperのretryやcache、scopeの境界は手動で移行してください。既存のwrapper本文は意図を確認せずhookへ変換しません。
 
 ```powershell
-dotnet build $project -c Release --no-restore -p:ZendiatorPackageVersion=$version
+dotnet build $project -c Release --no-restore
 ```
 
 ## 0.4.0から移るとき
@@ -421,7 +414,7 @@ var closedResult = await mediator.SendAsync(new ClosedQuery(7), CancellationToke
 
 プロジェクト内で定義したHandlerを属性なしで明示登録すると、ZEN0035で登録箇所が示されます。ZEN0035はほかの生成条件の不備にも使います。診断文が属性不足を示している場合は、上の`AddNumbersHandler`のようにクラス宣言へ`[Handler]`を付けてください。
 
-`Zendiator.CodeFixes`は任意で追加するパッケージです。利用する場合は、0.7.0を提供するフィードから`Zendiator`と同じバージョンを取得し、プロジェクトの`ZendiatorPackageVersion`を`0.7.0`に合わせてください。[導入例](../src/Zendiator.CodeFixes/README.md)のように`PrivateAssets="all"`を指定します。
+`Zendiator.CodeFixes`は任意で追加するパッケージです。利用する場合は、`Zendiator`と同じバージョンをプロジェクトの`ZendiatorPackageVersion`に指定してください。[導入例](../src/Zendiator.CodeFixes/README.md)のように`PrivateAssets="all"`を指定します。
 
 CodeFixの対象は属性不足と判断できるZEN0035だけです。Fix Allの対象は現在の文書だけです。
 

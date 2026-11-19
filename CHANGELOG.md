@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0-rc.1
+
+- Register named compositions through conditional calls such as `services?.AddZendiator<App>(...)`. Taking the registration method as a delegate now reports ZEN0020 at build time.
+- Use the actual cursor and cancellation token returned through the Stream pipeline to select forwarding. Direct returns and returns through a local variable use the same ownership rules at any middleware depth.
+- Document the 1.x public API and DI lifetime guarantees, how to use Send and Publish together, and which pooled producer features remain experimental.
+- Check that NuGet resolves matching runtime and Abstractions versions. Package and consumer compatibility checks now compare release candidates with the preceding release tag.
+
+See the [RC upgrade and verification notes](docs/release/1.0.0-rc.1-release-notes.md).
+
 ## 0.7.0
 
 - Capture eligible closed `SendAsync` routes' synchronous Before receivers together before the first Hook callback, with route-local Transient identity and native DI ownership.

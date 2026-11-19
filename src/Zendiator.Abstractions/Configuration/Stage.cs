@@ -9,7 +9,10 @@ public enum DispatchFamily
     /// <summary>Synchronous handlers in the declared branch order.</summary>
     SendAllSync,
     Stream,
-    /// <summary>Sequential notification subscribers.</summary>
+    /// <summary>
+    /// Sequential notifications. Register subscribers with assembly-based AddZendiator.
+    /// Named composition Handlers and Pipeline support Send and Stream.
+    /// </summary>
     Notification
 }
 

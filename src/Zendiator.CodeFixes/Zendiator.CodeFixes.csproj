@@ -6,7 +6,7 @@
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <DevelopmentDependency>true</DevelopmentDependency>
     <Description>Optional C# code fixes for explicit Zendiator handler registrations.</Description>
-    <PackageReleaseNotes>Zendiator.CodeFixes 0.7.0 retains the supported Handler marker fix. Fix All remains document-scoped. Use matching Zendiator package versions; lifetime migration remains manual.</PackageReleaseNotes>
+    <PackageReleaseNotes>The 1.0.0-rc.1 code fix adds the missing Handler marker for supported ZEN0035 diagnostics. Fix All applies to the current document.</PackageReleaseNotes>
     <ImplicitUsings>disable</ImplicitUsings>
     <IsRoslynComponent>true</IsRoslynComponent>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>

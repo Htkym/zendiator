@@ -9,16 +9,16 @@
 ## インストール
 
 .NET 10 と C# 14 が必要です。[NuGet の Zendiator](https://www.nuget.org/packages/Zendiator) を追加します。
-以下は0.7.0を指定する例です。利用するNuGetフィードがこのバージョンを提供している必要があります。
+リリース候補を提供するNuGetフィードを選んでください。
 
 ```shell
-dotnet add package Zendiator --version 0.7.0
+dotnet add package Zendiator --version 1.0.0-rc.1
 dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
 ```
 
 `Zendiator` には Source Generator が含まれ、`Zendiator.Abstractions` に依存します。
 契約だけを定義するプロジェクトでは `Zendiator.Abstractions` 単体を参照できます。
-Zendiator の各パッケージは同じバージョンに揃えてください。ライセンスは MIT です。
+アプリケーション内の `Zendiator` と `Zendiator.Abstractions` は同じバージョンに揃えてください。ライセンスは MIT です。
 
 ## 最初のリクエスト
 
@@ -87,12 +87,35 @@ Wrapper の retry、cache、継続呼び出しは、アプリケーションで�
 
 呼び出し側では具体的なリクエスト型を使います。実行時の object によるリクエスト配送、
 Publish の並列実行、fire-and-forget、永続化や outbox は提供していません。
-通知の登録は Send と Stream の経路とは別です。
+
+### 同じ Mediator から Send と Publish を呼ぶ
+
+型引数のない `AddZendiator` にメッセージとハンドラーのアセンブリを登録すると、一つの `IZendiator` からリクエストと通知を送れます。通知の購読者は `INotificationHandler<TNotification>` を実装します。次の例は Sample.Application と Sample.Contracts の型を使います。
+
+```csharp
+services.AddZendiator(configuration =>
+{
+    configuration.Namespace = "Zendiator.Sample.Application.Generated";
+    configuration.RegisterServicesFromAssemblyContaining<ApplicationAssemblyMarker>();
+    configuration.RegisterServicesFromAssemblyContaining<ContractsAssemblyMarker>();
+});
+```
+
+同じ DI スコープから `IZendiator` を取得し、リクエストの完了後に通知を送ります。
+
+```csharp
+var mediator = scope.ServiceProvider.GetRequiredService<
+    global::Zendiator.Sample.Application.Generated.IZendiator>();
+var id = Guid.NewGuid();
+await mediator.SendAsync(new PurgeHouseholdCommand(id));
+await mediator.PublishAsync(new HouseholdPurged(id));
+```
+
+`AddZendiator<App>` は Send と Stream の処理順を明示する登録方式です。この方式の `Handlers` や `Pipeline` に `DispatchFamily.Notification` を渡すと ZEN0029 が出ます。一つのアプリケーションで両方の登録方式を使う例は、[サンプルの登録処理](samples/Zendiator.Sample.Application/DependencyInjection.cs)と[実行プログラム](samples/Zendiator.Sample.Host/Program.cs)にあります。
 
 ## 依存のライフタイムと例外
 
-この節の依存取得の規則は[0.7.0](docs/release/0.7.0-release-notes.md)を対象にします。
-0.6.0から更新する場合は、リリースノートの移行手順を確認してください。
+リリース候補は[0.7.0の依存取得の規則](docs/release/0.7.0-release-notes.md)を引き継ぎます。1.0.0以降、公開APIと文書で保証する実行時の挙動に互換性のない変更を加える場合は、メジャーバージョンを上げます。これには受け手の再利用、フック実行前の依存取得、DIによる破棄が含まれます。[1.xの互換性方針](docs/release/known-limitations.md#api-and-compatibility-boundaries)
 
 生成登録の既定は `IZendiator` が Scoped、Handler・Hook・session factory が Transient です。
 上書きする登録は `AddZendiator` より先に追加してください。各 Mediator は取得した依存を再利用します。
@@ -148,6 +171,8 @@ guard 付きの経路は最初の Move で入力を取得します。取消不�
 UI context への復帰や ambient state の分離は保証しません。
 [入力と所有権](docs/streaming-iterators.md)、[実行上の制約](docs/release/known-limitations.md)も参照してください。
 
+private な入力生成メソッドに付ける `[GeneratePooledProducer]` は、明示的に有効にする実験機能です。受理するメソッドの書き方と診断は1.xでも変わることがあります。通常のStreamハンドラーとミドルウェアには、標準のStreamの互換性方針が適用されます。[実験機能の適用範囲](docs/design/pooled-producer-interceptors.md)
+
 ## 移行と IDE 支援
 
 0.6.0 では `ZendiatorHandlerAttribute` を `HandlerAttribute` に変更しました。
@@ -157,13 +182,12 @@ UI context への復帰や ambient state の分離は保証しません。
 旧実装との adapter や、具体型を直接呼び出すコードの変更は[移行ガイド](docs/migrating-stream-upstream.md)を確認してください。
 
 任意の [Zendiator.CodeFixes](src/Zendiator.CodeFixes/README.md) は、対応する ZEN0035 の診断に対して
-不足している `[Handler]` を追加します。バージョン 0.7.0 を `PrivateAssets="all"` 付きで導入してください。
+不足している `[Handler]` を追加します。本体に合わせたバージョンを `PrivateAssets="all"` 付きで導入してください。
 Fix All の対象は現在の文書だけで、処理順・Wrapper の動作・ライフタイムは書き換えません。
 コマンドラインのコンパイルでは IDE の修正は適用されません。
 
-[0.7.0 リリースノート](docs/release/0.7.0-release-notes.md)、
-[0.6.0 リリースノート](docs/release/0.6.0-release-notes.ja.md)と
-[MediatR からの移行ガイド](docs/migrating-from-mediatr.ja.md)も参照してください。1.0 より前の API は変更される場合があります。
+[リリース候補の変更点](docs/release/1.0.0-rc.1-release-notes.md)と
+[MediatR からの移行ガイド](docs/migrating-from-mediatr.ja.md)も参照してください。
 
 ## 性能比較
 

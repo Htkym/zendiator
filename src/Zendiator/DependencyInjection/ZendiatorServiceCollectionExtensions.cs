@@ -6,13 +6,13 @@ namespace Zendiator.DependencyInjection;
 /// <summary>DI registration entry points. Generation connects supported calls; uninterrupted calls fail fast.</summary>
 public static class ZendiatorServiceCollectionExtensions
 {
-    /// <summary>Adds the explicitly selected handlers for a named 0.5 composition. Requires canonical generation support.</summary>
+    /// <summary>Registers the routes declared for a named composition at the call site.</summary>
     public static IServiceCollection AddZendiator<TComposition>(this IServiceCollection services, Action<ZendiatorConfiguration> configure)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configure);
         throw new InvalidOperationException(
-            "The 0.5 canonical generation backend is not connected to this composition. Rebuild with canonical generation support.");
+            "No registration was generated for this AddZendiator<TComposition> call. Call it directly with a configuration lambda and rebuild the calling project with the Zendiator source generator enabled.");
     }
 
     /// <summary>Adds Zendiator with default configuration for the calling compilation.</summary>

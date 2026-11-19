@@ -6,30 +6,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$feed = [System.Security.SecurityElement]::Escape((Resolve-Path $PackagesDir).Path)
 $WorkingDir = [IO.Path]::GetFullPath($WorkingDir)
 New-Item -ItemType Directory -Path $WorkingDir -Force | Out-Null
 $project = Join-Path $WorkingDir 'StructUpstreamSmoke.csproj'
 $config = Join-Path $WorkingDir 'NuGet.Config'
-@"
-<configuration>
-  <packageSources>
-    <clear />
-    <add key="local" value="$feed" />
-    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-  </packageSources>
-  <packageSourceMapping>
-    <clear />
-    <packageSource key="local">
-      <package pattern="Zendiator" />
-      <package pattern="Zendiator.Abstractions" />
-    </packageSource>
-    <packageSource key="nuget.org">
-      <package pattern="*" />
-    </packageSource>
-  </packageSourceMapping>
-</configuration>
-"@ | Set-Content -LiteralPath $config -Encoding UTF8
+& "$PSScriptRoot/Write-PackageSmokeConfig.ps1" -Path $config -PackagesDir $PackagesDir
 @"
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><LangVersion>14.0</LangVersion><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><IsAotCompatible>true</IsAotCompatible><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup>

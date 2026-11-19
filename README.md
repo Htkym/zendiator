@@ -9,16 +9,17 @@ generated calls without runtime assembly scanning or reflective invocation.
 ## Install
 
 Requires .NET 10 and C# 14. Install [Zendiator from NuGet](https://www.nuget.org/packages/Zendiator).
-The commands target 0.7.0 and require that version in the selected feed:
+Choose a NuGet feed containing the release candidate.
 
 ```shell
-dotnet add package Zendiator --version 0.7.0
+dotnet add package Zendiator --version 1.0.0-rc.1
 dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
 ```
 
 `Zendiator` includes the source generator and depends on `Zendiator.Abstractions`.
-A contracts-only project can reference `Zendiator.Abstractions` alone. Keep all
-Zendiator packages at the same version. The library is MIT licensed.
+A contracts-only project can reference `Zendiator.Abstractions` alone. Use the
+same version of `Zendiator` and `Zendiator.Abstractions` throughout the application.
+The library is MIT licensed.
 
 ## Quick start
 
@@ -87,12 +88,46 @@ See the [configuration guide](docs/getting-started-0.5.0.md) and
 
 Use concrete request types at call sites. Runtime-object request dispatch,
 parallel Publish, fire-and-forget and persistence/outbox are not supplied.
-Notification registration is separate from Send and Stream routes.
+
+### Use Send and Publish together
+
+The assembly-based `AddZendiator` registration generates a single facade for
+requests and notifications. Select the assemblies that define the messages and
+their handlers. A subscriber implements `INotificationHandler<TNotification>`.
+The following registration uses the types from Sample.Application and Sample.Contracts.
+
+```csharp
+services.AddZendiator(configuration =>
+{
+    configuration.Namespace = "Zendiator.Sample.Application.Generated";
+    configuration.RegisterServicesFromAssemblyContaining<ApplicationAssemblyMarker>();
+    configuration.RegisterServicesFromAssemblyContaining<ContractsAssemblyMarker>();
+});
+```
+
+Resolve that facade from the application's scope to call both operations.
+
+```csharp
+var mediator = scope.ServiceProvider.GetRequiredService<
+    global::Zendiator.Sample.Application.Generated.IZendiator>();
+var id = Guid.NewGuid();
+await mediator.SendAsync(new PurgeHouseholdCommand(id));
+await mediator.PublishAsync(new HouseholdPurged(id));
+```
+
+The named `AddZendiator<App>` API configures explicit Send and Stream pipelines.
+It reports ZEN0029 if you pass `DispatchFamily.Notification` to `Handlers` or
+`Pipeline`. An application can use both registration styles, as shown in the
+[sample registration](samples/Zendiator.Sample.Application/DependencyInjection.cs)
+and [runnable host](samples/Zendiator.Sample.Host/Program.cs).
 
 ## Dependencies and errors
 
-The dependency capture rules below apply to [0.7.0](docs/release/0.7.0-release-notes.md).
-Review the migration notes when upgrading from 0.6.0.
+The release candidate retains the [0.7.0 dependency capture rules](docs/release/0.7.0-release-notes.md).
+Starting with 1.0.0, changes that break the documented public API or observable
+execution contract require a new major version. This includes receiver reuse,
+construction before hooks and DI ownership. See the
+[1.x compatibility policy](docs/release/known-limitations.md#api-and-compatibility-boundaries).
 
 Generated registration uses a Scoped `IZendiator` and Transient defaults for
 handlers, hooks and session factories. Register overrides before `AddZendiator`.
@@ -157,6 +192,11 @@ them to select a path. UI-context return and ambient-state isolation are not
 guaranteed. See [input and ownership](docs/streaming-iterators.md) and
 [execution rules](docs/release/known-limitations.md).
 
+`[GeneratePooledProducer]` is an experimental opt-in for private producer
+helpers. Its accepted method bodies and diagnostics can change in 1.x.
+Ordinary Stream handlers and middleware use the stable Stream contracts.
+[Experimental producer support](docs/design/pooled-producer-interceptors.md)
+
 ## Migration and IDE support
 
 0.6.0 renames `ZendiatorHandlerAttribute` to `HandlerAttribute`. Change
@@ -166,14 +206,13 @@ The standard Stream middleware interface now exposes `OpenAsync<TNext>`; see the
 [migration guide](docs/migrating-stream-upstream.md) for adapters and concrete-call changes.
 
 The optional [Zendiator.CodeFixes](src/Zendiator.CodeFixes/README.md) package adds a
-missing `[Handler]` for supported ZEN0035 diagnostics. Install version 0.7.0 with
+missing `[Handler]` for supported ZEN0035 diagnostics. Use the matching version with
 `PrivateAssets="all"`. Fix All is limited to the current document; it does not
 rewrite pipeline ordering, wrapper behavior or lifetimes. Command-line compilation
 does not apply IDE fixes.
 
-See the [0.7.0 release notes](docs/release/0.7.0-release-notes.md),
-[0.6.0 release notes](docs/release/0.6.0-release-notes.md) and
-[MediatR migration guide](docs/migrating-from-mediatr.md). Pre-1.0 APIs may change.
+See the [release candidate notes](docs/release/1.0.0-rc.1-release-notes.md)
+and [MediatR migration guide](docs/migrating-from-mediatr.md).
 
 ## Performance
 

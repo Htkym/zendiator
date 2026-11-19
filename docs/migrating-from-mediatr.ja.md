@@ -2,13 +2,13 @@
 
 [English](migrating-from-mediatr.md)
 
-このガイドは`IMediator`、`ISender`、`IPublisher`を使うMediatR 12のアプリケーションを、.NET 10・C# 14上のZendiator 0.7.0へ移行する手順です。後のMediatRでは登録APIが異なる場合があります。[README](../README.ja.md)と[現行の構成ガイド](getting-started-0.5.0.ja.md)も参照してください。構成ガイドは既存リンクを保つためファイル名を維持しています。構成ガイドでは0.7.0の契約とサンプルの実行コマンドを説明しています。
+このガイドは`IMediator`、`ISender`、`IPublisher`を使うMediatR 12のアプリケーションを、.NET 10・C# 14上のZendiator 1.0.0-rc.1へ移行する手順です。後のMediatRでは登録APIが異なる場合があります。[README](../README.ja.md)と[現行の構成ガイド](getting-started-0.5.0.ja.md)も参照してください。構成ガイドは既存リンクを保つためファイル名を維持しています。構成ガイドでは1.0.0-rc.1の契約とサンプルの実行コマンドを説明しています。
 
 新しいSend・Streamルートでは、`[Handler]`を付けたHandlerを`Handlers`で選び、`Pipeline`に段を順番に並べる明示的な構成を使います。以前のアセンブリ探索、`AddOpenBehavior`、`Order`のAPIは互換経路として残っています。既存のZendiatorコードから移行するときは、[0.6.0のHandler・Stream変更](release/0.6.0-release-notes.ja.md)も適用してください。
 
 ## APIの対応
 
-| MediatR 12 | Zendiator 0.7.0 | 移行する内容 |
+| MediatR 12 | Zendiator 1.0.0-rc.1 | 移行する内容 |
 |---|---|---|
 | `IRequest<TResponse>` | `IRequest<TResponse>` | 名前空間を変更する |
 | `IRequest` | `IRequest`または`ICommand` | 1型引数のHandlerから`ValueTask`を返す |
@@ -27,14 +27,14 @@
 
 ## パッケージとプロジェクト構成
 
-構成を宣言するプロジェクトへインストールします。利用するフィードが各パッケージの0.7.0を提供している必要があります。
+構成を宣言するプロジェクトへインストールします。利用するフィードが各パッケージの1.0.0-rc.1を提供している必要があります。
 
 ```shell
-dotnet add package Zendiator --version 0.7.0
+dotnet add package Zendiator --version 1.0.0-rc.1
 dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
 ```
 
-`Zendiator`にはGeneratorが含まれ、`Zendiator.Abstractions`へ依存します。契約だけを定義するプロジェクトは`Zendiator.Abstractions`だけを参照できます。Zendiatorの全パッケージを同じバージョンにそろえてください。任意で追加する`Zendiator.CodeFixes`も0.7.0とし、`PrivateAssets="all"`を指定します。
+`Zendiator`にはGeneratorが含まれ、`Zendiator.Abstractions`へ依存します。契約だけを定義するプロジェクトは`Zendiator.Abstractions`だけを参照できます。どのプロジェクトでも本体とAbstractionsは同じバージョンにそろえてください。任意の `Zendiator.CodeFixes` を追加する場合は本体に合わせたバージョンを選び、`PrivateAssets="all"` を指定します。
 
 生成時に調べるのは、構成を置いたコンパイルと明示的に指定したアセンブリです。実行時に任意のアセンブリを探索しません。複数プロジェクトでは契約・実装・構成の参照を明示してください。[ComposedAppサンプル](../samples/Zendiator.Sample.ComposedApp/)と[構成の診断](diagnostics/configuration.md)に例があります。
 
@@ -175,7 +175,7 @@ MediatR 12の通常の`Send`には、複数Handlerから応答を受ける契約
 
 移行は次の順で進めます。
 
-1. Zendiatorのパッケージを0.7.0にそろえ、構成を置くプロジェクトを選ぶ。
+1. Zendiatorのパッケージを1.0.0-rc.1にそろえ、構成を置くプロジェクトを選ぶ。
 2. 要求・Handlerの契約を変更し、`[Handler]`と`Handlers`を宣言する。
 3. Behaviorの意図をHookまたはWrapperへ移し、`Pipeline`で順序を保つ。
 4. 生成された入口の具体的なオーバーロードへ呼び出し側を移す。通知の登録は別に扱う。

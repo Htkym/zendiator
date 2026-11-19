@@ -1,6 +1,6 @@
 # Opt-in pooled producer methods
 
-This experimental opt-in targets private, parameterless `async ValueTask<bool>` producer helpers in top-level non-generic partial classes. It generates a helper in the same class using the .NET pooling async ValueTask builder and intercepts supported explicit source calls to the original helper. The cursor instance is not pooled. Existing mediator contracts, input work, `Task.Yield`, and consumer logic remain unchanged.
+This experimental opt-in targets private, parameterless `async ValueTask<bool>` producer helpers in top-level non-generic partial classes. Its supported method bodies and diagnostics may change in 1.x. It generates a helper in the same class using the .NET pooling async ValueTask builder and intercepts supported explicit source calls to the original helper. The cursor instance is not pooled. Existing mediator contracts, input work, `Task.Yield`, and consumer logic remain unchanged.
 
 ```csharp
 public sealed partial class Cursor(CancellationToken token)

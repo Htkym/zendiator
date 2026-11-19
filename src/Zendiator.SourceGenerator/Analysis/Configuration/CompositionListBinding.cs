@@ -214,7 +214,8 @@ internal sealed partial class CompositionListBinding
             }
             if (family == BoundDispatchFamily.Notification)
             {
-                Reject("UnsupportedDispatchFamily", declaration.Anchor, "Notification callback metadata and execution are not connected yet.");
+                Reject("UnsupportedDispatchFamily", declaration.Anchor,
+                    "Register notification subscribers with RegisterServicesFromAssemblyContaining<T>() in the non-generic AddZendiator call.");
                 output.Add(Model(null, null, Array.Empty<BoundHandlerModel>(), Array.Empty<BoundStageModel>(), declaration.HandlerList));
                 continue;
             }

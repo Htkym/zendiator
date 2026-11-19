@@ -31,19 +31,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$feed = (Resolve-Path $PackagesDir).Path
 New-Item -ItemType Directory -Path "$WorkingDir/contracts", "$WorkingDir/app", "$WorkingDir/host" -Force | Out-Null
 
-@"
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <packageSources>
-    <clear />
-    <add key="local" value="$feed" />
-    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-  </packageSources>
-</configuration>
-"@ | Set-Content "$WorkingDir/NuGet.Config" -Encoding UTF8
+& "$PSScriptRoot/Write-PackageSmokeConfig.ps1" -Path "$WorkingDir/NuGet.Config" -PackagesDir $PackagesDir
 
 @"
 <Project Sdk="Microsoft.NET.Sdk">

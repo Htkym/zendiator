@@ -291,6 +291,13 @@ internal static class CompositionSelectionDiscovery
         {
             var composition = catalog.Compositions[index];
             var location = current[index].Invocation.GetLocation();
+            if (current[index].RegistrationCallSite == null && composition.GeneratedNamespace != null &&
+                !composition.CompilerOwnsHandlerError && composition.Errors.Count == 0)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(GeneratorDiagnostics.InterceptionConnectionFailure, location,
+                    "AddZendiator cannot be intercepted at this location. Call the method directly on the service collection."));
+                continue;
+            }
             var prior = Enumerable.Range(0, index).Where(i => catalog.Compositions[i].Identity == composition.Identity ||
                 catalog.Compositions[i].Key == composition.Key).DefaultIfEmpty(-1).First();
             if (prior >= 0)
@@ -353,7 +360,7 @@ internal static class CompositionSelectionDiscovery
                 if (composition.Errors.Count == 0 && composition.Facts.Count == 0 && composition.Pipelines.Count == 0 &&
                     (!composition.CompilerOwnsHandlerError || composition.Handlers.Count != 0))
                     context.ReportDiagnostic(Diagnostic.Create(GeneratorDiagnostics.UnsupportedGenerationShape, location,
-                        $"Composition {composition.Key} requires the 0.5 canonical generation backend, which is not connected yet."));
+                        $"Composition {composition.Key} has no dispatch routes. Declare a request and its handler with Handlers<TRequest> inside the AddZendiator configuration lambda."));
             }
         }
     }
