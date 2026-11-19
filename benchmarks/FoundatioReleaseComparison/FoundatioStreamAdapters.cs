@@ -114,3 +114,11 @@ public sealed class FoundatioStreamWrapper5Middleware
             yield return item;
     }
 }
+
+public class FoundatioIteratorStream5 : FoundatioStream5
+{
+}
+
+public class FoundatioIteratorRelay5 : FoundatioRelay5
+{
+}

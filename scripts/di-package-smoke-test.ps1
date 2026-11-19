@@ -20,19 +20,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$feed = (Resolve-Path $PackagesDir).Path
 New-Item -ItemType Directory -Path "$WorkingDir/contracts", "$WorkingDir/app0", "$WorkingDir/app1", "$WorkingDir/app2", "$WorkingDir/host" -Force | Out-Null
 
-@"
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <packageSources>
-    <clear />
-    <add key="local" value="$feed" />
-    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-  </packageSources>
-</configuration>
-"@ | Set-Content "$WorkingDir/NuGet.Config" -Encoding UTF8
+& "$PSScriptRoot/Write-PackageSmokeConfig.ps1" -Path "$WorkingDir/NuGet.Config" -PackagesDir $PackagesDir
 
 @"
 <Project Sdk="Microsoft.NET.Sdk">
@@ -211,7 +201,8 @@ Console.WriteLine($"RESULT {ping} {order} {invoice}");
 return ping == 42 && order == 101 && invoice == 202 ? 0 : 1;
 "@ | Set-Content "$WorkingDir/host/Program.cs" -Encoding UTF8
 
-$env:NUGET_PACKAGES = Join-Path $WorkingDir "global-packages"
+$previousPackages = $env:NUGET_PACKAGES
+$env:NUGET_PACKAGES = Join-Path $WorkingDir ('pkg-' + [IO.Path]::GetRandomFileName())
 try {
     dotnet build "$WorkingDir/host/host.csproj" -c Release --configfile "$WorkingDir/NuGet.Config" -v minimal
     if ($LASTEXITCODE -ne 0) { throw "smoke build failed" }
@@ -232,6 +223,7 @@ try {
     Write-Host "DI package smoke test passed (Zendiator $PackageVersion)."
 }
 finally {
+    $env:NUGET_PACKAGES = $previousPackages
     if (($env:SMOKE_KEEP -ne "1") -and (Test-Path $WorkingDir)) {
         Remove-Item -Recurse -Force $WorkingDir
     }

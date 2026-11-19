@@ -19,7 +19,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $feed = (Resolve-Path $PackagesDir).Path
-$escapedFeed = [System.Security.SecurityElement]::Escape($feed)
 $escapedVersion = [System.Security.SecurityElement]::Escape($PackageVersion)
 New-Item -ItemType Directory -Path $WorkingDir, $OutDir -Force | Out-Null
 $OutDir = (Resolve-Path $OutDir).Path
@@ -27,16 +26,7 @@ $WorkingDir = (Resolve-Path $WorkingDir).Path
 $project = Join-Path $WorkingDir 'PooledProducerSmoke.csproj'
 $config = Join-Path $WorkingDir 'NuGet.Config'
 
-@"
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <packageSources>
-    <clear />
-    <add key="local" value="$escapedFeed" />
-    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-  </packageSources>
-</configuration>
-"@ | Set-Content $config -Encoding UTF8
+& "$PSScriptRoot/Write-PackageSmokeConfig.ps1" -Path $config -PackagesDir $PackagesDir
 
 # Deliberately no ProjectReference or hand-written InterceptorsNamespaces setting.
 @"
@@ -233,7 +223,7 @@ function Assert-GeneratedProducer([string]$Mode) {
 }
 
 $previousPackages = $env:NUGET_PACKAGES
-$env:NUGET_PACKAGES = Join-Path $WorkingDir 'global-packages'
+$env:NUGET_PACKAGES = Join-Path $WorkingDir ('pkg-' + [IO.Path]::GetRandomFileName())
 try {
     $sdk = dotnet --version
     if ($LASTEXITCODE -ne 0) { throw 'Could not determine the .NET SDK version.' }

@@ -76,14 +76,9 @@ jobs:
         working-directory: benchmarks/Zendiator.UseCaseBenchmarks
         run: dotnet ./bin/Release/net10.0/Zendiator.UseCaseBenchmarks.dll --validate-only
 
-      - name: Pack
-        run: |
-          dotnet pack src/Zendiator.Abstractions/Zendiator.Abstractions.csproj -c Release --no-build -o artifacts/packages
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          dotnet pack src/Zendiator/Zendiator.csproj -c Release --no-build -o artifacts/packages
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          dotnet pack src/Zendiator.CodeFixes/Zendiator.CodeFixes.csproj -c Release --no-build -o artifacts/packages
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Pack and check compatibility with the preceding release
+        shell: pwsh
+        run: ./scripts/Pack-CompatibleRelease.ps1
 
       - name: Verify package contents and freeze checksums
         shell: pwsh

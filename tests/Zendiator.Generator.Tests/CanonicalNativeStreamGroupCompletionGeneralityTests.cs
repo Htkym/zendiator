@@ -5,14 +5,19 @@ namespace Zendiator.Generator.Tests;
 public sealed partial class GeneratorTests
 {
     [Fact]
-    public async Task Native_stream_group_completion_keeps_three_stage_iterator_and_native_endpoints_general()
+    public async Task Native_stream_deep_group_forwards_child_token_and_completes_iterator_and_native_endpoints()
     {
-        var source = NativeStreamFixture("""
+        const int depth = 8;
+        var roles = Enumerable.Range(1, depth).ToArray();
+        string Stages(string request) => string.Join(", ", roles.Select(role => $"Stage.Wrapper<Relay{role}<{request}>>()"));
+        var relays = string.Join("\n", roles.Select(role =>
+            $"public sealed class Relay{role}<T>(Probe p):Relay<T>(p,{role}) where T:IStreamRequest<int>;"));
+        var source = NativeStreamFixture($$"""
             c.Handlers<IteratorItems>(DispatchFamily.Stream,typeof(IteratorHandler));
-            c.Pipeline<IteratorItems>(DispatchFamily.Stream,Stage.Wrapper<Relay1<IteratorItems>>(),Stage.Wrapper<Relay2<IteratorItems>>(),Stage.Wrapper<Relay3<IteratorItems>>());
+            c.Pipeline<IteratorItems>(DispatchFamily.Stream,{{Stages("IteratorItems")}});
             c.Handlers<NativeItems>(DispatchFamily.Stream,typeof(NativeHandler));
-            c.Pipeline<NativeItems>(DispatchFamily.Stream,Stage.Wrapper<Relay1<NativeItems>>(),Stage.Wrapper<Relay2<NativeItems>>(),Stage.Wrapper<Relay3<NativeItems>>());
-            """, """
+            c.Pipeline<NativeItems>(DispatchFamily.Stream,{{Stages("NativeItems")}});
+            """, relays + $"\npublic static class Fixture {{ public const int Depth = {depth}; }}\n" + """
             public sealed record IteratorItems(int Count,bool Controlled):IStreamRequest<int>;
             public sealed record NativeItems(int Count):IStreamRequest<int>;
             public sealed class Payload{public readonly byte[] Bytes=new byte[65536];}
@@ -62,20 +67,23 @@ public sealed partial class GeneratorTests
                 public void OnCompleted(Action<object?> continuation,object? state,short token,System.Threading.Tasks.Sources.ValueTaskSourceOnCompletedFlags flags)=>p.RetentionGate!.OnCompleted(continuation,state,token,flags);
             }
             public abstract class Relay<T>(Probe p,int role):IStreamMiddleware<T,int>,IDisposable where T:IStreamRequest<int>{
-                public ValueTask<IAsyncEnumerator<int>> OpenAsync(T request,IStreamUpstream<T,int> next,CancellationToken token){p.Token(token);p.OpenOrder.Add(role);return next.OpenAsync(request,token);}
+                public ValueTask<IAsyncEnumerator<int>> OpenAsync(T request,IStreamUpstream<T,int> next,CancellationToken token){
+                    if(p.OpenOrder.Count==0){
+                        Check.That(token==default,"the outer owner receives the caller token");
+                        token=p.ExpectedToken;
+                    }else p.Token(token);
+                    p.OpenOrder.Add(role);return next.OpenAsync(request,token);
+                }
                 public void Dispose()=>p.BorrowedDisposals++;
             }
-            public sealed class Relay1<T>(Probe p):Relay<T>(p,1) where T:IStreamRequest<int>;
-            public sealed class Relay2<T>(Probe p):Relay<T>(p,2) where T:IStreamRequest<int>;
-            public sealed class Relay3<T>(Probe p):Relay<T>(p,3) where T:IStreamRequest<int>;
             public sealed class Held(IAsyncEnumerator<int> owner,ValueTask<bool> consumed,WeakReference payload){
                 public readonly IAsyncEnumerator<int> Owner=owner;public readonly ValueTask<bool> Consumed=consumed;public readonly WeakReference Payload=payload;
             }
             public static class Retention{
                 [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
                 public static Held Create(global::NativeStream.Generated.Reads.IZendiator mediator,Probe p){
-                    var owner=mediator.StreamAsync(new NativeItems(2)).GetAsyncEnumerator(p.ExpectedToken);
-                    var initial=owner.MoveNextAsync();Check.That(initial.IsCompletedSuccessfully&&initial.GetAwaiter().GetResult(),"retention opens three owners with one synchronous item");
+                    var owner=mediator.StreamAsync(new NativeItems(2)).GetAsyncEnumerator();
+                    var initial=owner.MoveNextAsync();Check.That(initial.IsCompletedSuccessfully&&initial.GetAwaiter().GetResult(),"retention opens the middleware with one synchronous item");
                     var payload=new Payload();var weak=new WeakReference(payload);ValueTask<bool> pending;
                     try{Probe.Ambient.Value=payload;pending=owner.MoveNextAsync();}finally{Probe.Ambient.Value=null;}
                     var gate=p.RetentionGate!;
@@ -100,8 +108,8 @@ public sealed partial class GeneratorTests
                 await using var provider=services.BuildServiceProvider();var scope=provider.CreateAsyncScope();
                 var mediator=scope.ServiceProvider.GetRequiredService<global::NativeStream.Generated.Reads.IZendiator>();
                 IAsyncEnumerable<int> feed=mode=="native-controlled-early"?mediator.StreamAsync(new NativeItems(count)):mediator.StreamAsync(new IteratorItems(count,controlled));
-                var cursor=feed.GetAsyncEnumerator(token.Token);
-                Check.That(p.Handled==0&&p.RawMoves==0&&p.OpenOrder.Count==0,"all three endpoints acquire lazily on their first Move");
+                var cursor=feed.GetAsyncEnumerator();
+                Check.That(p.Handled==0&&p.RawMoves==0&&p.OpenOrder.Count==0,"the endpoints acquire lazily on their first Move");
                 Check.Invalid(()=>{_=cursor.Current;});var values=new List<int>();
                 while(true){
                     var operation=cursor.MoveNextAsync();var expectedItem=values.Count<count;
@@ -114,7 +122,7 @@ public sealed partial class GeneratorTests
                     var moved=await operation.ConfigureAwait(false);
                     Check.That(p.Reads==values.Count,"publication and cleanup never pre-read lazy Current");
                     if(!moved)break;
-                    Check.That(p.OpenOrder.Count==3&&p.OpenOrder.Distinct().Count()==3,"exactly three independent middleware owners open");
+                    Check.That(p.OpenOrder.Count==Fixture.Depth&&p.OpenOrder.Distinct().Count()==Fixture.Depth,"each middleware opens once");
                     values.Add(cursor.Current);Check.That(values[^1]==values.Count-1,"values retain source order");
                     if(!full)break;
                 }
@@ -126,21 +134,22 @@ public sealed partial class GeneratorTests
                 await cursor.DisposeAsync();await cursor.DisposeAsync();
                 Check.That(p.SourceDisposals==1&&!await cursor.MoveNextAsync()&&p.BorrowedDisposals==0,"closed cursor is idempotent and DI receivers remain borrowed");
                 Check.Invalid(()=>{_=cursor.Current;});await scope.DisposeAsync();
-                Check.That(p.BorrowedDisposals==4,"DI alone disposes the handler and its three middleware receivers");
+                Check.That(p.BorrowedDisposals==Fixture.Depth+1,"DI disposes the handler and every middleware receiver");
             }
-            var retainedProbe=new Probe{RetentionGate=new(true,"manual")};var retainedServices=new ServiceCollection();retainedServices.AddSingleton(retainedProbe);Register(retainedServices);
+            using var retainedToken=new CancellationTokenSource();
+            var retainedProbe=new Probe{RetentionGate=new(true,"manual"),ExpectedToken=retainedToken.Token};var retainedServices=new ServiceCollection();retainedServices.AddSingleton(retainedProbe);Register(retainedServices);
             await using var retainedProvider=retainedServices.BuildServiceProvider();var retainedScope=retainedProvider.CreateAsyncScope();
             var retainedMediator=retainedScope.ServiceProvider.GetRequiredService<global::NativeStream.Generated.Reads.IZendiator>();
             var held=Retention.Create(retainedMediator,retainedProbe);
             try{
                 for(var round=0;round<3;round++){GC.Collect();GC.WaitForPendingFinalizers();GC.Collect();}
                 Check.That(!Retention.Alive(held.Payload),"the group cache releases captured context while owner and consumed ValueTask stay held");
-                Check.That(retainedProbe.OpenOrder.Count==3&&retainedProbe.RawMoves==2&&retainedProbe.Reads==0&&retainedProbe.SourceDisposals==0,"retention observation does not pull, read Current or dispose the held owner");
+                Check.That(retainedProbe.OpenOrder.Count==Fixture.Depth&&retainedProbe.RawMoves==2&&retainedProbe.Reads==0&&retainedProbe.SourceDisposals==0,"retention observation does not pull, read Current or dispose the held owner");
                 GC.KeepAlive(held);
             }finally{await held.Owner.DisposeAsync();GC.KeepAlive(held);}
             Check.That(retainedProbe.SourceDisposals==1&&retainedProbe.BorrowedDisposals==0,"the independently held group source still performs one cleanup");
-            await retainedScope.DisposeAsync();Check.That(retainedProbe.BorrowedDisposals==4,"DI retains its handler and three middleware disposal responsibilities");
+            await retainedScope.DisposeAsync();Check.That(retainedProbe.BorrowedDisposals==Fixture.Depth+1,"DI disposes the handler and every middleware receiver");
             """);
-        await RunNativeStreamFixture("group-completion-three-stage-generality", source);
+        await RunNativeStreamFixture("deep-group-completion", source);
     }
 }

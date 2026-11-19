@@ -1,0 +1,10 @@
+<Project>
+  <Target Name="_ZendiatorCheckPackageVersions" AfterTargets="ResolveAssemblyReferences">
+    <PropertyGroup>
+      <_ZendiatorRuntimeVersion>@(ReferencePath->WithMetadataValue('NuGetPackageId', 'Zendiator')->Metadata('NuGetPackageVersion')->Distinct())</_ZendiatorRuntimeVersion>
+      <_ZendiatorContractVersion>@(ReferencePath->WithMetadataValue('NuGetPackageId', 'Zendiator.Abstractions')->Metadata('NuGetPackageVersion')->Distinct())</_ZendiatorContractVersion>
+    </PropertyGroup>
+    <Error Condition="'$(_ZendiatorRuntimeVersion)' != '' and '$(_ZendiatorContractVersion)' != '' and '$(_ZendiatorRuntimeVersion)' != '$(_ZendiatorContractVersion)'"
+           Text="Zendiator $(_ZendiatorRuntimeVersion) and Zendiator.Abstractions $(_ZendiatorContractVersion) were resolved. Reference the same package version in all projects and restore again." />
+  </Target>
+</Project>

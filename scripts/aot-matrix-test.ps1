@@ -19,16 +19,7 @@ New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 New-Item -ItemType Directory -Path "$WorkingDir/di", "$WorkingDir/asm" -Force | Out-Null
 "feed=$feed`nversion=$PackageVersion`nrid=win-x64`nsdk=$(dotnet --version)" | Set-Content "$OutDir/env.txt" -Encoding UTF8
 
-@"
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <packageSources>
-    <clear />
-    <add key="local" value="$feed" />
-    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-  </packageSources>
-</configuration>
-"@ | Set-Content "$WorkingDir/NuGet.Config" -Encoding UTF8
+& "$PSScriptRoot/Write-PackageSmokeConfig.ps1" -Path "$WorkingDir/NuGet.Config" -PackagesDir $PackagesDir
 
 @"
 <Project Sdk="Microsoft.NET.Sdk">
@@ -365,7 +356,8 @@ public static class Program
 }
 "@ | Set-Content "$WorkingDir/asm/Program.cs" -Encoding UTF8
 
-$env:NUGET_PACKAGES = Join-Path $WorkingDir "global-packages"
+$previousPackages = $env:NUGET_PACKAGES
+$env:NUGET_PACKAGES = Join-Path $WorkingDir ('pkg-' + [IO.Path]::GetRandomFileName())
 $exitCode = 0
 try {
     foreach ($app in @("di", "asm")) {
@@ -394,6 +386,7 @@ catch {
     $exitCode = 1
 }
 finally {
+    $env:NUGET_PACKAGES = $previousPackages
     if (($env:SMOKE_KEEP -ne "1") -and (Test-Path $WorkingDir)) {
         Remove-Item -Recurse -Force $WorkingDir
     }

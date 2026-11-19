@@ -15,8 +15,7 @@ if len(sys.argv) not in (2, 4) or (len(sys.argv) == 4 and sys.argv[2] != "--matr
     raise SystemExit("Usage: python analyze.py OUTPUT_ROOT [--matrix FOCUSED_MATRIX]")
 OUTPUT = resolve_path(sys.argv[1])
 FIELDS = ("Type", "Method", "Lifetime", "Count", "Asynchronous", "Project")
-MATRICES = ({"custom": resolve_path(sys.argv[3])} if len(sys.argv) == 4 else
-            {group: ROOT / f"{group}.json" for group in ("send", "features", "streams", "relay")})
+MATRICES = {"custom": resolve_path(sys.argv[3]) if len(sys.argv) == 4 else ROOT.parent / "representative.json"}
 
 
 def key(case):

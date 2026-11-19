@@ -13,5 +13,6 @@
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="/" />
     <None Include="../../docs/icon/icon.png" Pack="true" PackagePath="/" />
+    <None Include="buildTransitive/Zendiator.Abstractions.targets" Pack="true" PackagePath="buildTransitive/" />
   </ItemGroup>
 </Project>

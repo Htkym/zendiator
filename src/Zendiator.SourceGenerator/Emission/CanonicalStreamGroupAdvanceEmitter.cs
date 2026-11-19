@@ -8,25 +8,9 @@ namespace Zendiator.SourceGenerator;
 internal static class CanonicalStreamGroupAdvanceEmitter
 {
     internal static IReadOnlyList<CanonicalStreamFallbackSegment> Chain(CanonicalStreamFallbackModel model)
-    {
-        if (model.Segments.Count <= 2 || model.Segments.Count > 6)
-            return Array.Empty<CanonicalStreamFallbackSegment>();
-        var current = model.Segments.Single(s => s.Id == model.ConsumerSegment);
-        var item = current.OutputItemName ?? model.Handler.ItemName;
-        var chain = new List<CanonicalStreamFallbackSegment> { current };
-        while (current.Wrapper != null && current.Upstream is { } upstream && current.Hooks.Count == 0
-            && (current.SourceItemName ?? model.Handler.ItemName) == item
-            && (current.OutputItemName ?? model.Handler.ItemName) == item)
-        {
-            var child = model.Segments.Single(s => s.Id == upstream);
-            if (child.Hooks.Count != 0 || (child.OutputItemName ?? model.Handler.ItemName) != item
-                || (child.SourceItemName ?? model.Handler.ItemName) != item)
-                break;
-            chain.Add(child);
-            current = child;
-        }
-        return chain.Count > 1 ? chain : Array.Empty<CanonicalStreamFallbackSegment>();
-    }
+        => model.Segments.Count <= 2
+            ? Array.Empty<CanonicalStreamFallbackSegment>()
+            : CanonicalStreamIdentityLeaseEmitter.Chain(model);
 
     internal static bool IsParent(CanonicalStreamFallbackModel model, int cursor) =>
         cursor == model.ConsumerSegment && Chain(model).Count > 1;
@@ -47,13 +31,6 @@ internal static class CanonicalStreamGroupAdvanceEmitter
         if (index < 0)
             return "";
         var b = new StringBuilder();
-        if (index + 1 < chain.Count)
-        {
-            var child = chain[index + 1].Id;
-            b.AppendLine("private Cursor" + child + "? _identitySource;");
-            if (index != 0)
-                b.AppendLine("internal Cursor" + child + "? GroupIdentitySource => _identitySource;");
-        }
         b.AppendLine("internal global::System.Threading.Tasks.ValueTask<bool> CompleteGroupResult(bool moved, global::System.Exception? error) => error is not null ? MoveFailed(error) : moved ? MoveSucceeded(true) : EndAsync();");
         if (index == 0)
             EmitConsumer(b, chain);
@@ -96,7 +73,7 @@ internal static class CanonicalStreamGroupAdvanceEmitter
             if (i + 1 < children.Length)
             {
                 var nextId = children[i + 1].Id;
-                b.AppendLine("var next" + nextId + " = " + target + ".GroupIdentitySource;");
+                b.AppendLine("var next" + nextId + " = " + target + ".IdentitySource;");
                 b.AppendLine("if (next" + nextId + " is null) { pending = " + target + ".MoveGroupRaw(); goto Observing; }");
                 b.AppendLine(target + ".CheckGroupToken();");
             }

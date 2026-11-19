@@ -31,19 +31,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$feed = (Resolve-Path $PackagesDir).Path
 New-Item -ItemType Directory -Path "$WorkingDir/contracts", "$WorkingDir/app", "$WorkingDir/host" -Force | Out-Null
 
-@"
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <packageSources>
-    <clear />
-    <add key="local" value="$feed" />
-    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-  </packageSources>
-</configuration>
-"@ | Set-Content "$WorkingDir/NuGet.Config" -Encoding UTF8
+& "$PSScriptRoot/Write-PackageSmokeConfig.ps1" -Path "$WorkingDir/NuGet.Config" -PackagesDir $PackagesDir
 
 @"
 <Project Sdk="Microsoft.NET.Sdk">
@@ -153,7 +143,8 @@ namespace Smoke.Host;
 public sealed partial class Zendiator;
 "@ | Set-Content "$WorkingDir/host/Mediator.cs" -Encoding UTF8
 
-$env:NUGET_PACKAGES = Join-Path $WorkingDir "global-packages"
+$previousPackages = $env:NUGET_PACKAGES
+$env:NUGET_PACKAGES = Join-Path $WorkingDir ('pkg-' + [IO.Path]::GetRandomFileName())
 try {
     dotnet build "$WorkingDir/host/host.csproj" -c Release --configfile "$WorkingDir/NuGet.Config" -v minimal
     if ($LASTEXITCODE -ne 0) { throw "smoke build failed" }
@@ -224,6 +215,7 @@ public static class LifetimeMisuse
     Write-Host "Package smoke test passed (Zendiator $PackageVersion)."
 }
 finally {
+    $env:NUGET_PACKAGES = $previousPackages
     if (($env:SMOKE_KEEP -ne "1") -and (Test-Path $WorkingDir)) {
         Remove-Item -Recurse -Force $WorkingDir
     }

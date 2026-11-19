@@ -32,52 +32,6 @@ if (args.Length > 0 && args[0] == "--validate-struct-upstream")
     return;
 }
 
-if (args.Length > 0 && args[0] == "--validate-native-pooling")
-{
-    if (args.Length != 2)
-        throw new ArgumentException("--validate-native-pooling requires one output directory");
-    await NativePoolingGate.Run(Path.GetFullPath(args[1]));
-    return;
-}
-
-if (args.Length > 0 && args[0] == "--validate-same-producer")
-{
-    if (args.Length != 2)
-        throw new ArgumentException("--validate-same-producer requires one output directory");
-    await SameProducerStreamGate.Run(Path.GetFullPath(args[1]));
-    return;
-}
-
-if (args.Length > 0 && args[0] == "--validate-perf04-input")
-{
-    if (args.Length != 3 || args[2].Length != 64 ||
-        args[2].Any(c => !(c is >= '0' and <= '9' or >= 'A' and <= 'F')))
-        throw new ArgumentException("--validate-perf04-input requires an output directory and uppercase SHA256 implementation identity");
-    await Perf04InputGate.Run(Path.GetFullPath(args[1]), args[2]);
-    Console.WriteLine("PERF04_INPUT_SEMANTIC_ONLY: saved bundle/request/cache validation and benchmarking not performed");
-    return;
-}
-
-if (args.Length > 0 && args[0] == "--validate-perf03-cause")
-{
-    if (args.Length != 3 || args[2].Length != 64 ||
-        args[2].Any(c => !(c is >= '0' and <= '9' or >= 'A' and <= 'F')))
-        throw new ArgumentException("--validate-perf03-cause requires an output directory and a 64-character uppercase SHA256 implementation identity");
-    await Perf03CauseGate.Run(Path.GetFullPath(args[1]), args[2]);
-    Console.WriteLine("PERF03_CAUSE_SEMANTIC_ONLY: 24 input cases, 2 controls and 17 paired contract probes; saved bundle/request/cache validation and benchmarking not performed");
-    return;
-}
-
-if (args.Length > 0 && args[0] == "--validate-perf03-raw")
-{
-    if (args.Length != 4 || args[2].Length != 64 ||
-        args[2].Any(c => !(c is >= '0' and <= '9' or >= 'A' and <= 'F')))
-        throw new ArgumentException("--validate-perf03-raw requires an output directory, uppercase SHA256 implementation identity and counted site-map path");
-    await Perf03RawPreflightGate.Run(Path.GetFullPath(args[1]), args[2], Path.GetFullPath(args[3]));
-    Console.WriteLine("PERF03_RAW_SEMANTIC_ONLY: saved bundle/request/cache validation not performed");
-    return;
-}
-
 if (!File.Exists("Zendiator.UseCaseBenchmarks.csproj"))
     throw new InvalidOperationException("Run from the use-case benchmark directory.");
 if (args.Contains("--help"))
@@ -160,86 +114,32 @@ File.WriteAllText(Path.Combine(output, "manifest.json"), JsonSerializer.Serializ
 }, new JsonSerializerOptions { WriteIndented = true }));
 if (args.Contains("--validate-only"))
     return;
-if (args.Contains("--breakdown"))
-    throw new NotSupportedException("The legacy allocation diagnostic is outside this canonical comparison adapter.");
-if (args.Contains("--stream-breakdown"))
-{
-    await StreamAllocationProfile.Run(output);
-    return;
-}
-if (args.Contains("--inspect"))
-{
-    var zero = new ZendiatorSend0 { Lifetime = "Scoped" };
-    var five = new ZendiatorSend5 { Lifetime = "Scoped" };
-    zero.Setup();
-    five.Setup();
-    try
-    {
-        for (var round = 0; round < 3; round++)
-        {
-            for (var i = 0; i < 200000; i++)
-                if (await zero.ScopeK1() != 42 || await five.ScopeK1() != 42)
-                    throw new InvalidOperationException("Diagnostic result mismatch.");
-            Thread.Sleep(300);
-        }
-    }
-    finally
-    {
-        zero.Cleanup();
-        five.Cleanup();
-    }
-    Console.WriteLine("JIT diagnostic passed.");
-    return;
-}
-var formal = Environment.GetEnvironmentVariable("COLD_FORMAL") == "1";
-var coldOnly = Environment.GetEnvironmentVariable("COLD_ONLY") == "1";
-var competitors = Environment.GetEnvironmentVariable("COLD_COMPETITORS") == "1";
-var scopedPair = Environment.GetEnvironmentVariable("COLD_SCOPED_PAIR") == "1";
-var selectedCase = Environment.GetEnvironmentVariable("COLD_CASE");
-var matrixFile = Environment.GetEnvironmentVariable("COLD_MATRIX_FILE");
-var matrix = matrixFile is null ? null : JsonSerializer.Deserialize<MatrixCase[]>(File.ReadAllText(matrixFile))
-    ?? throw new InvalidOperationException("Matrix file was empty.");
-var singleCase = Environment.GetEnvironmentVariable("COLD_SINGLE_CASE") == "1";
-if (singleCase && (!skipGate || matrix is null || matrix.Length != 1))
-    throw new InvalidOperationException("A single-case run requires one matrix entry and a verified parent gate.");
-var selectedLifetime = Environment.GetEnvironmentVariable("COLD_LIFETIME") ?? "Scoped";
-var pinned = Environment.GetEnvironmentVariable("COLD_PINNED") == "1";
-var job = Job.Default.WithId("Comparison").WithWarmupCount(matrix is not null || formal ? 20 : 10)
-    .WithIterationCount(matrix is not null || formal ? 12 : 8)
-    .WithLaunchCount(matrix is not null ? 1 : formal ? 3 : selectedCase is not null ? 1 : 2)
-    .WithIterationTime(TimeInterval.FromMilliseconds(matrix is not null || formal ? 500 : 300));
-if (pinned)
-    job = job.WithAffinity(new IntPtr(1));
+var matrixFile = Environment.GetEnvironmentVariable("COLD_MATRIX_FILE")
+    ?? throw new InvalidOperationException("A fixed matrix is required for measurement; use run_interleaved.py.");
+var matrix = JsonSerializer.Deserialize<MatrixCase[]>(File.ReadAllText(matrixFile))
+    ?? throw new InvalidOperationException("The matrix was empty.");
+if (Environment.GetEnvironmentVariable("COLD_SINGLE_CASE") != "1" || matrix.Length != 1 || !skipGate)
+    throw new InvalidOperationException("The shared driver must select one case after its suite gate.");
+var selected = matrix[0];
 Environment.SetEnvironmentVariable("COLD_CAPTURE_CHILD", "1");
-var config = DefaultConfig.Instance.AddJob(job).AddExporter(JsonExporter.Full).WithArtifactsPath(output).WithOptions(ConfigOptions.KeepBenchmarkFiles)
-    .AddFilter(new SimpleFilter(b =>
-    {
-        var name = b.Descriptor.Type.Name;
-        var method = b.Descriptor.WorkloadMethod.Name;
-        var lifetime = b.Parameters.Items.FirstOrDefault(p => p.Name == "Lifetime")?.Value as string;
-        if (matrix is not null)
-            return matrix.Any(c => c.Type == name && c.Method == method
-            && c.Lifetime == lifetime
-            && (c.Count is null || Equals(b.Parameters.Items.FirstOrDefault(p => p.Name == "Count")?.Value, c.Count.Value))
-            && (c.Asynchronous is null || Equals(b.Parameters.Items.FirstOrDefault(p => p.Name == "Asynchronous")?.Value, c.Asynchronous.Value))
-            && (!singleCase || b.Parameters.Items.Count() == (c.Lifetime is null ? 0 : 1)
-                + (c.Count is null ? 0 : 1) + (c.Asynchronous is null ? 0 : 1)));
-        if (selectedCase is not null)
-            return name + "." + method == selectedCase && lifetime == selectedLifetime;
-        if (name.StartsWith("Direct") || lifetime != "Scoped")
-            return false;
-        if (scopedPair)
-            return method == "ScopeK1" && name is "ZendiatorSend0" or "ImmediateSend0";
-        if (competitors)
-            return method == "ScopeK1" && name is "ZendiatorSend0" or "MediatRHistoricalSend0" or "ImmediateSend0" or "DispatchRSend0" or "MediatorSend0";
-        if (coldOnly)
-            return method == "ScopeK1" && name is "ZendiatorSend0" or "MediatRHistoricalSend0";
-        return name == "ZendiatorSend0" && method is "Typed" or "ScopeK1"
-            || name == "ZendiatorSend5" && method is "Typed" or "ScopeK1"
-            || name == "MediatRHistoricalSend0" && method == "ScopeK1";
-    }));
-if (matrix is not null)
-    config = config.WithOrderer(new InterleavedOrderer()).WithOptions(ConfigOptions.JoinSummary | ConfigOptions.KeepBenchmarkFiles);
+var job = Job.Default.WithId("Comparison").WithWarmupCount(20).WithIterationCount(12)
+    .WithLaunchCount(1).WithIterationTime(TimeInterval.FromMilliseconds(500));
+if (Environment.GetEnvironmentVariable("COLD_PINNED") == "1")
+    job = job.WithAffinity(new IntPtr(1));
+var config = DefaultConfig.Instance.AddJob(job).AddExporter(JsonExporter.Full)
+    .WithArtifactsPath(output)
+    .WithOrderer(new InterleavedOrderer()).WithOptions(ConfigOptions.JoinSummary | ConfigOptions.KeepBenchmarkFiles)
+    .AddFilter(new SimpleFilter(benchmark => benchmark.Descriptor.Type.Name == selected.Type &&
+        benchmark.Descriptor.WorkloadMethod.Name == selected.Method &&
+        benchmark.Parameters.Items.Count() == (selected.Lifetime is null ? 0 : 1) +
+            (selected.Count is null ? 0 : 1) + (selected.Asynchronous is null ? 0 : 1) &&
+        benchmark.Parameters.Items.All(parameter => parameter.Name switch
+        {
+            "Lifetime" => Equals(parameter.Value, selected.Lifetime),
+            "Count" => Equals(parameter.Value, selected.Count),
+            "Asynchronous" => Equals(parameter.Value, selected.Asynchronous),
+            _ => false
+        })));
 var summaries = BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, config);
 ArtifactEvidence.Write(Path.Combine(output, "build-artifacts.json"), new
 {
@@ -261,7 +161,7 @@ File.WriteAllText(Path.Combine(output, "outcome.json"), JsonSerializer.Serialize
     failures,
     validationErrors = summaries.Count(s => s.HasCriticalValidationErrors)
 }, new JsonSerializerOptions { WriteIndented = true }));
-if (cases != (matrix is not null ? matrix.Length : selectedCase is not null ? 1 : scopedPair ? 2 : competitors ? 5 : coldOnly ? 2 : 5) || failures != 0 || summaries.Any(s => s.HasCriticalValidationErrors))
+if (cases != 1 || failures != 0 || summaries.Any(s => s.HasCriticalValidationErrors))
     throw new InvalidOperationException("Incomplete comparison; inspect retained logs.");
 
 internal sealed record MatrixCase(string Type, string Method, string? Lifetime = null, int? Count = null, bool? Asynchronous = null);

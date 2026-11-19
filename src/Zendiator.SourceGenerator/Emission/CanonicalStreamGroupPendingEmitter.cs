@@ -8,8 +8,8 @@ internal static class CanonicalStreamGroupPendingEmitter
 {
     internal static string Emit(CanonicalStreamFallbackModel model, IReadOnlyList<CanonicalStreamFallbackSegment> chain)
     {
-        if (chain.Count < 2 || chain.Count > 6)
-            throw new ArgumentException("A private Stream prefix requires one to five hidden owners.", nameof(chain));
+        if (chain.Count < 2)
+            throw new ArgumentException("A private Stream prefix requires a consumer and an upstream owner.", nameof(chain));
         var cursor = chain[0].Id;
         var children = chain.Skip(1).ToArray();
         var runner = Name(model, "PendingTaskRunner");

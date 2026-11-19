@@ -67,7 +67,7 @@ internal sealed partial class GenerationAnalysis
                     {
                         // A type-argument error inside a named composition belongs to the compiler.
                         var typeArgumentLambda = invocation.ArgumentList?.Arguments.LastOrDefault()?.Expression as LambdaExpressionSyntax;
-                        if (invocation.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax } && typeArgumentLambda != null &&
+                        if (ZendiatorGenerator.CalledName(invocation) is GenericNameSyntax && typeArgumentLambda != null &&
                             model.GetDiagnostics(typeArgumentLambda.Span, ct).Any(d => d.Severity == DiagnosticSeverity.Error &&
                                 typeArgumentLambda.DescendantNodes().OfType<GenericNameSyntax>().Any(n => n.Span.Contains(d.Location.SourceSpan))))
                             continue;
@@ -78,7 +78,7 @@ internal sealed partial class GenerationAnalysis
                     }
                     continue;
                 }
-                var original = method.OriginalDefinition;
+                var original = (method.ReducedFrom ?? method).OriginalDefinition;
                 if (original.ContainingType?.Name != "ZendiatorServiceCollectionExtensions")
                     continue;
                 if (original.ContainingType.ContainingNamespace?.ToDisplayString() != "Zendiator.DependencyInjection")
@@ -110,7 +110,8 @@ internal sealed partial class GenerationAnalysis
                     boundDiCalls.Add((invocation, null, method.ReducedFrom != null));
                     continue;
                 }
-                var lambdaArg = invocation.ArgumentList?.Arguments.LastOrDefault();
+                var args = invocation.ArgumentList?.Arguments ?? default;
+                var lambdaArg = args.FirstOrDefault(a => a.NameColon?.Name.Identifier.ValueText == last!.Name) ?? args.LastOrDefault();
                 if (lambdaArg?.Expression is LiteralExpressionSyntax literal &&
                     literal.RawKind == (int)SyntaxKind.NullLiteralExpression)
                 {

@@ -1,119 +1,49 @@
-# Use-case benchmarks
+# Mediator performance comparison
 
-[日本語版](README.ja.md)
+[日本語](README.ja.md)
 
-The checked-in fixture pins Immediate.Handlers 4.3.0, DispatchR.Mediator 2.3.1, Mediator 3.0.2 and MediatR 15.0.0. These pins apply to new runs; the historical tables below retain their original versions. It uses each library's documented entry and registration. The full matrix contains Send 125, features 55, streams 120 and relay 60 cases, across 74 comparison keys. Unsupported combinations remain unmeasured.
+Zendiator recorded the lowest mean time in all 14 workloads below, both in the original execution order and when that order was reversed. The comparison used Zendiator revision `0d53c53` before the 1.0.0 release, Immediate.Handlers 4.3.0, MediatR 15.0.0, Mediator 3.0.2, DispatchR.Mediator 2.3.1 and Foundatio.Mediator 1.3.3. Immediate.Handlers has no corresponding notification case, so that row compares five libraries.
 
-The [post-0.6.0 measurement plan](performance-plan/README.md) records the package sources, exact case-to-row mapping, Stream processing differences and focused baseline command. New pins alone establish no new performance result.
+## Time per operation
 
-## Current README comparison
+The two runs are shown separately. Each peer column gives the fastest competing library in that run. “Immediate” means Immediate.Handlers. The [full results](results/0d53c53-representative-summary.csv) include the mean, 99.9% confidence interval and allocated bytes for every library in each run.
 
-The [root performance tables](../README.md#performance) show 83 cells from the
-122-cell comparison of Zendiator 0.7.0 source, measured at
-`2bc3726ecdb7bc4d89c64ec643f45b0623d8d297`. The remaining 39 cells retain Stream0,
-Relay, first-Send and ScopeK10 diagnostics. [Unrounded results and uncertainty](results/0.7.0-2bc3726-summary.csv)
-and [all numeric observations, conditions and report hashes](results/0.7.0-2bc3726-readme.json)
-include every selected cell, including unfavorable time and allocation results.
+| Workload | Unit | Zendiator, forward | Fastest peer, forward | Zendiator, reverse | Fastest peer, reverse |
+|---|---|---:|---|---:|---|
+| Send, no middleware | ns | 1.645 | Immediate 11.82 | 1.739 | Immediate 11.41 |
+| Send, five synchronous Before hooks | ns | 6.708 | Immediate 20.95 | 6.397 | Immediate 20.25 |
+| Resolve again in the same scope and send, no middleware | ns | 36.69 | Immediate 47.57 | 35.25 | Immediate 44.22 |
+| Resolve again in the same scope and send, five stages | ns | 36.98 | Immediate 58.94 | 35.57 | Immediate 59.94 |
+| Create a scope, send once and dispose, five stages | ns | 126.38 | Immediate 173.62 | 135.44 | Immediate 159.43 |
+| Publish to 16 synchronous subscribers | ns | 140.12 | Mediator 229.14 | 145.94 | DispatchR 204.91 |
+| Read all 1,024 items, synchronous input, five stages | µs | 15.22 | Immediate 110.91 | 15.12 | Mediator 110.22 |
+| Read all 1,024 items, asynchronous input, five stages | µs | 201.29 | DispatchR 317.36 | 192.90 | DispatchR 323.66 |
+| Read one item and dispose, synchronous input, five stages | ns | 317.31 | Immediate 385.47 | 296.50 | DispatchR 379.99 |
+| Read one item and dispose, asynchronous input, five stages | µs | 2.260 | Immediate 2.508 | 2.048 | Immediate 2.283 |
+| First of three middleware stages returns early, warm | ns | 4.830 | Immediate 6.008 | 4.635 | Immediate 5.444 |
+| Async hooks, successful first call | µs | 1.023 | DispatchR 1.335 | 0.995 | DispatchR 1.231 |
+| Async hooks, successful warm call | ns | 37.93 | Immediate 58.05 | 36.08 | Immediate 57.34 |
+| Async hooks, outer hook fails on first call | µs | 4.422 | Mediator 7.776 | 4.578 | DispatchR 7.846 |
 
-Conditions: Windows 11 x64, Intel Core Ultra 7 258V, SDK 10.0.404, .NET 10.0.14,
-workstation GC, BenchmarkDotNet 0.15.8, Release, affinity 1, 20 warmups,
-12 measurements, requested 500 ms iterations and one launch per case.
-First/cold cases use 16,384 invocations and unroll factor 1. After BDN overhead
-adjustment and outlier handling, retained N is 9–12. The measurement window,
-package locks, measured-child identities and all 122 saved-consumer artifact
-proof bindings are recorded with the numeric observations.
+In 13 workloads, Zendiator’s upper confidence bound was below the lower bound of every competing library in both orders. For asynchronous stream early exit, the intervals overlapped in both runs. Time and allocation also tell different stories. For full asynchronous enumeration in the forward run, Zendiator averaged 201.29 µs and allocated 116,322 B per operation. DispatchR averaged 317.36 µs and allocated 1,756 B.
 
-The [122-cell command](performance-plan/README.md#run-retain-and-decide) spans
-UseCase, Foundatio, ShortCircuit and Hook projects. Use the measured source,
-matching package locks and fixed job controls; the five-library UseCase commands
-below alone do not cover these tables. These are selected README workloads,
-not the full default matrix. One machine and one launch do not establish a
-universal ranking or a controlled release-to-release gain. Zendiator's named
-Stream/Relay input differs from the peers' compiler iterators; Stream5 stage
-processing also differs, while Relay matches preprocessing-only stage work.
+## What the workloads include
 
-The earlier [101-cell comparison](results/20261111-8848306-readme.json) and the
-historical 0.4.0 results below remain separate measurements. Changes to source,
-SDK, package pins and measurement infrastructure prevent a controlled
-before/after claim from comparing their numbers with the current table.
+All workloads register services and build the DI provider before timing begins. The five-stage Send workload uses five synchronous Before hooks in Zendiator. Each returns the original request. Send uses an already resolved mediator unless the row includes scope creation or resolution. In the short-circuit case the first middleware returns before the handler runs. The async hook APIs complete synchronously in these workloads. The first-call hook measurements include resolving the mediator in an existing scope.
 
-## Read the comparison
+Full stream enumeration reads 1,024 items. Early exit reads the first of 16 items and includes disposal. Zendiator uses a named cursor, which the five middleware stages forward. Competitors use compiler-generated iterators that enumerate and yield items at each stage. The timings include the cost of those different input implementations.
 
-The [historical results below](#historical-040-results) show eight balanced examples from the 2026-10-08 full run at source `1c41d2b105073d2dc9be2c0e8684fdce2fa11f55`. [Selected unrounded data](results/20261008-1c41d2b-summary.csv) includes Mean, confidence-interval Error, StdDev, standard error, retained N and managed allocated bytes.
+## Run the comparison
 
-That run used Windows 11 x64, Intel Core Ultra 7 258V, SDK 10.0.401, .NET 10.0.12, DI 10.0.12, BenchmarkDotNet 0.15.8, Release, affinity mask 1, 20 warmups, 12 measurements, requested 500 ms iterations and one launch per case. Libraries were rotated within comparison-key order using the interleaved driver. The 394-case correctness gate and each saved consumer's artifact gate passed. BDN retained 9–12 statistical observations per case after overhead adjustment and outlier handling.
+The recorded runs used Windows 11 x64, .NET SDK 10.0.404, .NET 10.0.14, BenchmarkDotNet 0.15.8, Release, workstation GC and a single logical processor. Each of the 83 library/workload combinations ran in its own process, with 20 warmups, 12 measurement iterations and a requested iteration time of 500 ms.
 
-The cases distinguish operations with different boundaries:
-
-| Case | Timed operation |
-|---|---|
-| Typed | Send through an already resolved entry |
-| ResolveSend | Resolve the entry again in the same scope, then Send |
-| ScopeK1 / ScopeK10 | Create a scope, first resolve, send 1 / 10 times, dispose |
-| ScopeOnly / ScopeResolve | Scope creation/disposal, without / with first entry resolution |
-| FirstSend | First entry resolution and Send; scope creation/disposal is outside the measurement |
-| Stream | Creation or the specified consumption, including its disposal |
-| Relay | Synchronous preprocessing that directly returns the next enumerable |
-
-FirstSend uses 16384 pre-created scopes per measured iteration, unroll factor 1. Stream totals are whole-operation values, not per-item costs. Handlers are lightweight; Notification and Stream include suspended cases, but Send handlers complete synchronously. API shapes and DI registrations differ. One launch does not establish independent-run reproducibility, application startup or HTTP/I/O latency, a causal before/after gain, or a universal ranking.
-
-## Reproduce
-
-Commands run the fixtures at the source revision you have checked out. To reproduce
-the historical table, use its pinned `1c41d2b` source and matching dependencies;
-running the current checkout does not reproduce that historical implementation.
-For Zendiator, Send and non-notification feature cases use a canonical composition;
-Stream and Relay use native cursor sources. Notification retains a separate legacy
-registration. The current README tables select 83 cells from the separate 122-cell measurement described above.
-
-Use .NET 10, PowerShell and Python 3. Package versions are locked. From the
-repository root:
+Use Python 3 and the specified .NET SDK and runtime. Start with a clean Git checkout. From its root, run the [representative workloads](representative.json) once in each order. Give each run a new output directory outside the repository.
 
 ```powershell
-pwsh -NoProfile -File benchmarks/Run-Comparison.ps1 -Group smoke
+$driver = 'benchmarks/Zendiator.UseCaseBenchmarks/run_interleaved.py'
+$matrix = 'benchmarks/representative.json'
+python $driver --group custom --matrix $matrix --expect-sdk 10.0.404 --output ../zendiator-forward
+python $driver --group custom --matrix $matrix --expect-sdk 10.0.404 --output ../zendiator-reverse --reverse
 ```
 
-`-Group all` runs the full checked-in matrix in library-type blocks, which differs
-from the comparison-key rotation used for the historical table. Raw BenchmarkDotNet
-JSON and logs accompany the results. The measured source, dependencies, workload and
-execution order are part of a comparison; the command alone does not establish
-matching conditions or a current-release ranking.
-
-## Stream comparison boundaries
-
-Current Zendiator Stream fixtures use named typed cursors and a canonical
-composition; competitors use their own producer and registration shapes.
-Full/EarlyBreak use standard enumeration through StreamAsync. FullTyped and
-EarlyBreakTyped use StreamSource(...).ConsumeAsync(...) with a class sink.
-The typed plan is not IAsyncEnumerable and creates a private owner per consumption.
-EarlyBreak16 consumes one item from a 16-item input, not 16 items.
-
-Standard enumeration, typed terminals and HTTP are separate evaluations. A native
-cursor and a compiler-generated iterator have different production costs, so these
-are complete product-path comparisons, not isolated dispatcher timings. A protocol
-change or a lower allocation count alone does not establish a speedup; typed
-consumption does not guarantee lower time or allocation.
-## Historical 0.4.0 results
-
-These results belong to the historical source below, not the current implementation.
-
-These selected observations help distinguish steady-state dispatch from first use and stream consumption. Lower mean time and lower managed allocation are separate benefits.
-
-|Operation|Zendiator Mean ns|B/op|Peer|Mean ns|B/op|
-|---|---:|---:|---|---:|---:|
-|Resolve + Send in an existing scope; 5 behaviors|32.25|0|Immediate|46.07|0|
-|New scope + first resolve + Send + dispose; 0 behaviors|79.43|376|Immediate|96.47|368|
-|New scope + first resolve + Send + dispose; 5 behaviors|169.08|568|Immediate|121.61|568|
-|First resolve + Send in a pre-created scope; 5 behaviors|807.98|440|Immediate|605.65|440|
-|Synchronous notification; 16 subscribers|121.77|0|DispatchR|175.40|0|
-|Synchronous stream; all 1024 items; 0 behaviors|14,190.35|216|Immediate|14,222.54|144|
-|Synchronous stream; early break from a 16-item input; 0 behaviors|62.57|216|Immediate|42.84|144|
-|Synchronous relay; all 1024 items; 5 preprocessing stages|15,028.75|216|DispatchR|13,610.87|144|
-
-The existing-scope Send above has a lower observed mean than Immediate, while first resolve with behaviors and the one-send new-scope workload have higher means. The 1024-item Stream0 time difference is only about 0.23%; it does not establish a ranking, and Zendiator allocates 72 B more. Partial stream consumption and relay remain unfavorable in these examples.
-
-Source snapshot `1c41d2b105073d2dc9be2c0e8684fdce2fa11f55`, measured 2026-10-08: Windows 11 x64, Intel Core Ultra 7 258V, SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8, Release, affinity mask 1, 20 warmups, 12 measurements, requested 500 ms iterations, 1 launch per case. Peers shown are Immediate.Handlers 4.2.0 and DispatchR.Mediator 2.3.1; DI is 10.0.12.
-
-Means are after BDN overhead adjustment and outlier handling; retained N is 9–12. The [unrounded selected data](results/20261008-1c41d2b-summary.csv) separates Mean, confidence-interval Error, StdDev, N and allocation. The full run covered 360 cases across 74 comparison keys. One launch does not establish independent-run reproducibility, universal non-regression, or a controlled before/after improvement.
-
-Handlers are deliberately lightweight. API shapes and DI registrations differ between libraries. ScopeK1 includes creation and disposal; FirstSend excludes them. Stream/relay figures include the complete benchmark operation, not one item. The relay behaviors synchronously preprocess and directly return the next enumerable. These results do not predict application startup, HTTP latency or asynchronous I/O. See the [benchmark instructions above](#reproduce) for the fixture and reproduction conditions.
+These commands measure the version you have checked out. The CSV records the two runs of revision `0d53c53`.

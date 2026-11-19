@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="../src/Zendiator/Zendiator.csproj" />
+    <Project Path="../src/Zendiator.Abstractions/Zendiator.Abstractions.csproj" />
+    <Project Path="../src/Zendiator.SourceGenerator/Zendiator.SourceGenerator.csproj" />
+  </Folder>
+  <Project Path="Zendiator.UseCaseBenchmarks/Zendiator.UseCaseBenchmarks.csproj" />
+  <Project Path="FoundatioReleaseComparison/FoundatioReleaseComparison.csproj" />
+  <Project Path="HPeerComparison/HPeerComparison.csproj" />
+  <Project Path="ShortCircuitComparison/ShortCircuitComparison.csproj" />
+</Solution>

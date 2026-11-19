@@ -22,6 +22,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6.0.0
@@ -56,7 +57,6 @@ jobs:
         run: |
           $locks = @(
             'benchmarks/Zendiator.UseCaseBenchmarks/packages.lock.json'
-            'benchmarks/Zendiator.BeforeRelayBenchmarks/packages.lock.json'
             'benchmarks/HPeerComparison/packages.lock.json'
             'benchmarks/ShortCircuitComparison/packages.lock.json'
             'benchmarks/FoundatioReleaseComparison/packages.lock.json'
@@ -97,17 +97,9 @@ jobs:
             }
           }
 
-      - name: Run Stream Before example
-        working-directory: benchmarks/Zendiator.BeforeRelayBenchmarks
-        run: dotnet ./bin/Release/net10.0/Zendiator.BeforeRelayBenchmarks.dll --example
-
-      - name: Pack
-        run: |
-          dotnet pack src/Zendiator.Abstractions/Zendiator.Abstractions.csproj -c Release --no-build -o artifacts/packages
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          dotnet pack src/Zendiator/Zendiator.csproj -c Release --no-build -o artifacts/packages
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          dotnet pack src/Zendiator.CodeFixes/Zendiator.CodeFixes.csproj -c Release --no-build -o artifacts/packages
+      - name: Pack and check compatibility with the preceding release
+        shell: pwsh
+        run: ./scripts/Pack-CompatibleRelease.ps1
 
       - name: Restore remaining project dependencies for formatting
         shell: pwsh
@@ -120,17 +112,7 @@ jobs:
           $feed = (Resolve-Path artifacts/packages).Path
           $packages = Join-Path $env:RUNNER_TEMP 'format-consumer-packages'
           $config = Join-Path $env:RUNNER_TEMP 'format.NuGet.Config'
-          $escapedFeed = [System.Security.SecurityElement]::Escape($feed)
-          @"
-          <?xml version="1.0" encoding="utf-8"?>
-          <configuration>
-            <packageSources>
-              <clear />
-              <add key="local" value="$escapedFeed" />
-              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-            </packageSources>
-          </configuration>
-          "@ | Set-Content $config -Encoding UTF8
+          ./scripts/Write-PackageSmokeConfig.ps1 -Path $config -PackagesDir $feed
           foreach ($project in $projects | Where-Object { $_ -notin $solutionProjects }) {
             [xml]$xml = Get-Content $project -Raw
             $consumesPackage = @($xml.SelectNodes('//PackageReference') | Where-Object { $_.Include -eq 'Zendiator' }).Count -gt 0
@@ -148,17 +130,7 @@ jobs:
           $projects = @(git ls-files -- '*.csproj')
           if ($LASTEXITCODE -ne 0 -or $projects.Count -eq 0) { throw 'No tracked C# projects found' }
           foreach ($project in $projects) {
-            $formatArgs = @('--verify-no-changes', '--no-restore')
-            if ($project -eq 'benchmarks/Zendiator.UseCaseBenchmarks/Zendiator.UseCaseBenchmarks.csproj') {
-              # Preserve the counted snapshot bytes and line map; compilation and tests still include this file.
-              $snapshot = (Resolve-Path -LiteralPath 'src/Perf03CauseDiagnostics/CountedStreamCursorState.cs').Path
-              if ((Get-FileHash -LiteralPath $snapshot -Algorithm SHA256).Hash -cne '4A6029BC56F6365F00B0CF4C9ED4DBDA6CB4CE44C89760DCB0816A3BD54D1A55') {
-                throw 'The frozen counted cursor changed; review its provenance before changing the formatter exception.'
-              }
-              # dotnet format matches paths relative to the repository working directory.
-              $formatArgs += @('--exclude', 'src/Perf03CauseDiagnostics/CountedStreamCursorState.cs')
-            }
-            dotnet format $project @formatArgs
+            dotnet format $project --verify-no-changes --no-restore
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
