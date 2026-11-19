@@ -167,6 +167,8 @@ Fix All の対象は現在の文書だけで、処理順・Wrapper の動作・�
 
 ## 性能比較
 
+開発版 `0d53c53` では、代表14ケースすべてで正順・逆順ともにZendiatorの平均時間が最小でした。同期Streamを1件で打ち切るケースは317.31 nsと296.50 nsで、どちらも976 B/opでした。非同期Streamの途中終了だけは競合と信頼区間が重なりました。[開発版の全14行と測定条件](benchmarks/results/0d53c53-representative.ja.md)
+
 Zendiator 0.7.0のソースで代表的な利用場面を測定した結果です。
 各セルは **平均時間 / 割当量（B/op）** です。時間とメモリは別の指標です。
 
@@ -201,9 +203,6 @@ Streamの5段構成では、Zendiatorはcursorを転送し、比較先は各段�
 [全122件の結果とばらつき](benchmarks/results/0.7.0-2bc3726-summary.csv)、
 [全数値観測と出典](benchmarks/results/0.7.0-2bc3726-readme.json)、
 [測定条件と再現手順](benchmarks/README.ja.md#現在のreadmeの比較)に、表外39件と測定したソース版を記載しています。
-
-開発版 `4138d03` では、同じ代表14ケースのすべてで、正順・逆順ともにZendiatorの平均時間が最小でした。
-同期Streamの途中終了は103.64 nsと118.06 nsで、どちらも200 B/opでした。[開発版の全14行と測定条件](benchmarks/results/4138d03-representative.md)
 
 ## Native AOT
 

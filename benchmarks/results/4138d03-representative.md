@@ -1,5 +1,7 @@
 # 開発版の代表14ケースの測定結果
 
+この記録は過去の開発版を対象にしている。測定した版では、別のソース生成器がミドルウェアの戻り値を装飾すると、型変換に失敗してカーソルが破棄されなかった。その後、Mediator が実際の戻り値から転送を判定するように修正した。以下の速度と順位は修正前の値である。
+
 コミット `4138d03f0a3315a630fb8250cd97260aad396d47` では、READMEの代表14ケースすべてでZendiatorの平均時間が最小だった。正順・逆順のどちらでも、Zendiatorの信頼区間の上限が、その行で測定した全競合の下限を下回った。各順序で83セルを測定した。NotificationはImmediate.Handlersに該当する結果がないため5社、ほかの行は6社で比較した。[丸め前の全166件、信頼区間、割当量、測定記録のハッシュ](4138d03-representative-summary.csv)
 
 ## 平均時間
@@ -27,7 +29,7 @@
 
 ## 実装
 
-5段がそれぞれ前処理を行い、同じ要求とトークンで開いた上流カーソルをそのまま返す場合、生成コードは各段のmiddlewareを呼び、1個のカーソルで列挙と破棄を管理する。入力の取得時期、段間のキャンセル確認、非同期Openのコンテキスト境界を保つ。適用対象は、全段の転送をコンパイル時に確認できる、参照型の名前付き入力カーソルを使う経路である。[適用条件とinterceptorを使う場合の扱い](../../docs/streaming-iterators.md#forwarding-middleware-on-a-named-cursor)
+測定した版は、名前付きの参照型カーソルを使う経路で、各段が上流を直接返すとソースの構文から推定し、1個のカーソルで列挙と破棄を管理した。別のソース生成器がその戻り値を装飾すると、推定と実際の戻り値が食い違うため、この実装は取り下げた。[修正版の仕組みと測定結果](0d53c53-representative.ja.md)
 
 Send側では、同期成功時のwrapperの状態から例外処理用のbuilderを外した。また、既定の依存キャッシュで取得済みの受け手を読む際、非nullの参照を直接返すようにした。これらを組み合わせた製品経路の順位が上表の結果である。[wrapperの生成](../../src/Zendiator.SourceGenerator/Emission/CanonicalWrapperSourceEmitter.cs)・[依存キャッシュの生成](../../src/Zendiator.SourceGenerator/Emission/CanonicalClosedServiceCacheEmitter.cs)
 

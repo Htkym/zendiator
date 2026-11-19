@@ -1,5 +1,7 @@
 # 同期Streamを1件で打ち切るときの改善案
 
+実装と再測定は `0d53c53` まで完了した。以下は0.7.0の測定から立てた当初の計画である。[修正後の仕組み、互換性の確認、測定結果](../results/0d53c53-representative.ja.md)
+
 READMEの代表ケースで明確に差があるのは、16件の入力に5段のBehaviorを通し、最初の1件を読んで破棄する `stream5-early-sync` である。Zendiatorの393.74 nsに対し、最速のImmediate.Handlersは286.42 nsだった。丸め前の平均値で計算すると、並ぶには1回あたり107.33 ns、Zendiatorの所要時間の約27.3%を削る必要がある。まず、上流を切り離した後の中間段の破棄を軽くする。そこで足りない分は、初回に5個の子カーソルを開く費用から探す。[READMEの性能比較](../../README.ja.md#性能比較)・[丸め前の測定値](../results/0.7.0-2bc3726-summary.csv)
 
 ## 現在の差
@@ -41,7 +43,7 @@ Zendiatorの割当量はすでに6社で最小で、Immediateより88 B少ない
 
 開始の費用が大きければ、こちらを先に試す。各段の `OpenUpstreamAsync` は子カーソルを作って親に登録し、直後の `OpenForMiddlewareAsync` が `TryBeginMove` で排他を取得して保留操作を確認する。初期化の所有権を確保した状態で新しい子を親に公開すれば、この取得を省ける可能性がある。公開後のMove、上流の再オープン、親が先に閉じる場合、保留・失敗時の解放を含め、公開時点から排他が有効であることを確かめる。破棄の変更とは別に測る。[子を生成する箇所](../../src/Zendiator.SourceGenerator/Emission/CanonicalStructStreamUpstreamEmitter.cs#L15)・[初期化の入口](../../src/Zendiator.SourceGenerator/Emission/CanonicalStreamFallbackEmitter.cs#L333)・[排他と保留操作の検査](../../src/Zendiator/Streaming/StreamCursorState.cs#L86)
 
-両案を測っても差が残り、子の生成・所有権の引き渡しが主因と確認できた場合は、中間カーソル自体を省ける条件を調べる。候補は、ソースを確認できるsealedな実装が、前処理の後で `return next.OpenAsync(request, token)` を一度だけ行う連鎖である。元のmiddlewareは順番どおりに呼ぶ。全段で `next` やカーソルが外部に保存されず、要求・トークン・実行コンテキスト・例外の伝わり方まで保てると確認できるルートに限る。ほかのルートには現行のカーソルを使う。この案は生成の可否を調べる段階で、短縮幅は未測定である。[型付き呼び出しの選択条件](../../src/Zendiator.SourceGenerator/Analysis/Configuration/CanonicalStructStreamContractBinding.cs)・[上流の所有権と再オープンの契約](../../src/Zendiator.Abstractions/Streams/IStreamUpstream.cs)
+開発版 `4138d03` では、ミドルウェアが `return next.OpenAsync(request, token)` と書かれている場合に中間カーソルを省いた。この版では、別のソース生成器が戻り値を装飾すると最初の読み出しで型変換に失敗し、開いた列挙子が破棄されなかった。この方法は取り下げた。修正版は、各段が実際に返した列挙子、所有者、トークンを確認して転送経路を選ぶ。利用者は通常どおりミドルウェアを登録して `StreamAsync` を呼べる。[上流の所有権と再オープンの契約](../../src/Zendiator.Abstractions/Streams/IStreamUpstream.cs)・[利用例](../../docs/streaming-iterators.md#forwarding-or-decorating-a-cursor)
 
 ## 最速になったかを判定する
 

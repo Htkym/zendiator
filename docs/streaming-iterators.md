@@ -146,7 +146,7 @@ cleanup. Consumers use the same call in both cases:
 ```csharp
 await foreach (var item in mediator.StreamAsync(request, cancellationToken))
 {
-    // Process the item here.
+    Console.WriteLine(item);
 }
 ```
 

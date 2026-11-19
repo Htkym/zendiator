@@ -177,6 +177,8 @@ See the [0.7.0 release notes](docs/release/0.7.0-release-notes.md),
 
 ## Performance
 
+Development revision `0d53c53` had the lowest mean time on all 14 representative workloads in both execution orders. Stopping a synchronous Stream after one item took 317.31 ns and 296.50 ns, with 976 B/op in both runs. Asynchronous Stream early termination was the only workload whose confidence interval overlapped a competitor's. [Development results and measurement conditions (Japanese)](benchmarks/results/0d53c53-representative.ja.md)
+
 Selected workloads measured from **Zendiator 0.7.0 source**. Each cell
 shows **mean time / allocated bytes per operation (B/op)**; time and memory are
 separate metrics.
@@ -217,9 +219,6 @@ controlled release-to-release improvement. [All 122 results and uncertainty](ben
 [full observations and provenance](benchmarks/results/0.7.0-2bc3726-readme.json),
 and [conditions and reproduction](benchmarks/README.md#current-readme-comparison)
 include the 39 supplementary cells and the exact measured source.
-
-Development revision `4138d03` had the lowest mean time on all 14 representative workloads in both execution orders.
-Synchronous Stream early termination took 103.64 ns and 118.06 ns, with 200 B/op in each run. [Development results and measurement conditions (Japanese)](benchmarks/results/4138d03-representative.md)
 
 ## Native AOT
 

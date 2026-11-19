@@ -27,7 +27,8 @@ public sealed partial class GeneratorTests
         Func<string, string>? generatedTransform = null, ISourceGenerator? additionalGenerator = null)
     {
         var driver = SyncDriver();
-        if (additionalGenerator is not null) driver = driver.AddGenerators([additionalGenerator]);
+        if (additionalGenerator is not null)
+            driver = driver.AddGenerators([additionalGenerator]);
         driver = driver.RunGeneratorsAndUpdateCompilation(
             SyncCompilation(source, "NativeStream_" + name + "_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
         Assert.Empty(diagnostics);
