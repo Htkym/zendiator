@@ -2,7 +2,7 @@
 
 [English](getting-started.md)
 
-Zendiatorは.NET 10とC# 14で使えます。[GettingStartedサンプル](../samples/Zendiator.Sample.GettingStarted/Program.cs)では、同期リクエストで足し算をし、非同期リクエストの前後であいさつ文を整え、Streamから数値を受け取ります。`1.0.0-rc.1` を取得できるNuGetフィードを設定し、リポジトリのルートで実行してください。
+Zendiatorは.NET 10とC# 14で使えます。[GettingStartedサンプル](../samples/Zendiator.Sample.GettingStarted/Program.cs)では、同期リクエストで足し算をし、非同期リクエストの前後であいさつ文を整え、Streamから数値を受け取ります。リポジトリのルートで次のコマンドを実行してください。
 
 ```shell
 dotnet run --project samples/Zendiator.Sample.GettingStarted -c Release

@@ -2,7 +2,7 @@
 
 [日本語](getting-started.ja.md)
 
-Zendiator targets .NET 10 and C# 14. The [GettingStarted sample](../samples/Zendiator.Sample.GettingStarted/Program.cs) includes a synchronous calculation, a greeting with two hooks and a Stream. With a NuGet feed that provides `1.0.0-rc.1`, run it from the repository root.
+Zendiator targets .NET 10 and C# 14. The [GettingStarted sample](../samples/Zendiator.Sample.GettingStarted/Program.cs) includes a synchronous calculation, a greeting with two hooks and a Stream. Run it from the repository root.
 
 ```shell
 dotnet run --project samples/Zendiator.Sample.GettingStarted -c Release

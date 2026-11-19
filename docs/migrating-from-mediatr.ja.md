@@ -2,14 +2,14 @@
 
 [English](migrating-from-mediatr.md)
 
-MediatRの `ISender`、`IPublisher`、`IMediator` を使っているアプリでは、リクエストとその呼び出し元を一組ずつZendiatorに移せます。APIの対応表はMediatR 12と15を対象としています。Zendiator 1.0.0-rc.1には.NET 10とC# 14が必要です。
+MediatRの `ISender`、`IPublisher`、`IMediator` を使っているアプリでは、リクエストとその呼び出し元を一組ずつZendiatorに移せます。APIの対応表はMediatR 12と15を対象としています。Zendiator 1.0.0には.NET 10とC# 14が必要です。
 
 ## リクエストとハンドラー
 
-RCを提供するNuGetフィードを選び、ハンドラーを登録するプロジェクトに次のパッケージを追加します。リクエストや通知の型だけを定義するプロジェクトでは、`Zendiator.Abstractions` だけを参照できます。アプリ全体で `Zendiator` と `Zendiator.Abstractions` のバージョンをそろえてください。
+ハンドラーを登録するプロジェクトに、次のNuGetパッケージを追加します。リクエストや通知の型だけを定義するプロジェクトでは、`Zendiator.Abstractions` だけを参照できます。アプリ全体で `Zendiator` と `Zendiator.Abstractions` のバージョンをそろえてください。
 
 ```shell
-dotnet add package Zendiator --version 1.0.0-rc.1
+dotnet add package Zendiator --version 1.0.0
 dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
 ```
 

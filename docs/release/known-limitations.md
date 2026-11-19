@@ -1,6 +1,6 @@
 # Compatibility, lifetimes and supported deployments
 
-`1.0.0-rc.1` targets .NET 10 and C# 14. Reference matching versions of `Zendiator` and `Zendiator.Abstractions` and rebuild the consuming projects when you upgrade. [Release notes](1.0.0-rc.1-release-notes.md) · [Upgrade guide](../upgrading.md)
+`1.0.0` targets .NET 10 and C# 14. Reference matching versions of `Zendiator` and `Zendiator.Abstractions` and rebuild the consuming projects when you upgrade. [Release notes](1.0.0-release-notes.md) · [Upgrade guide](../upgrading.md)
 
 ## API and compatibility boundaries
 

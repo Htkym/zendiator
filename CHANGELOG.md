@@ -1,12 +1,12 @@
 # Changelog
 
-## 1.0.0-rc.1
+## 1.0.0
 
 - Conditional DI registration honors a null receiver. Assigning the registration method itself to a delegate now reports ZEN0020 during the build.
 - Stream middleware can forward or decorate a cursor. The mediator selects the forwarding path using the cursor actually returned and its cancellation token.
 - PackageReference builds report a version mismatch between Zendiator and Zendiator.Abstractions.
 
-See the [release notes](docs/release/1.0.0-rc.1-release-notes.md) and the [upgrade guide](docs/upgrading.md).
+See the [release notes](docs/release/1.0.0-release-notes.md) and the [upgrade guide](docs/upgrading.md).
 
 ## 0.7.0
 

@@ -1,16 +1,16 @@
-# Upgrading Zendiator to 1.0.0-rc.1
+# Upgrading Zendiator to 1.0.0
 
 [日本語](upgrading.ja.md)
 
-If you use 0.7.0, keep your request and handler definitions. The RC keeps the 0.7.0 DI lifetime rules. The changes you may see when upgrading are a build error for mismatched packages, a diagnostic for registration delegates, and a fix for Stream middleware that returns a decorated cursor.
+If you use 0.7.0, keep your request and handler definitions. The DI lifetime rules are the same in 0.7.0 and 1.0.0. The changes you may see when upgrading are a build error for mismatched packages, a diagnostic for registration delegates, and a fix for Stream middleware that returns a decorated cursor.
 
 ## Update the packages together
 
-Use a feed that provides `1.0.0-rc.1`. Update the project that registers Zendiator, then update any project that explicitly references `Zendiator.Abstractions`. Replace the paths below with your project paths. If you manage versions centrally, update both entries there.
+Update the project that registers Zendiator, then update any project that explicitly references `Zendiator.Abstractions`. Replace the paths below with your project paths. If you manage versions centrally, update both entries there.
 
 ```shell
-dotnet add App/App.csproj package Zendiator --version 1.0.0-rc.1
-dotnet add Contracts/Contracts.csproj package Zendiator.Abstractions --version 1.0.0-rc.1
+dotnet add App/App.csproj package Zendiator --version 1.0.0
+dotnet add Contracts/Contracts.csproj package Zendiator.Abstractions --version 1.0.0
 dotnet build App/App.csproj
 ```
 

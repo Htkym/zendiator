@@ -288,7 +288,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.0, )",
-          "Zendiator.Abstractions": "[1.0.0-rc.1, )"
+          "Zendiator.Abstractions": "[1.0.0, )"
         }
       },
       "zendiator.abstractions": {

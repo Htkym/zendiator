@@ -14,14 +14,14 @@ The comparison covered requests, notifications, streams and hooks. Zendiator had
 | Notify 16 synchronous subscribers | 140.12 ns | Mediator · 229.14 ns | 0 B |
 | Read one item from a synchronous stream and dispose it, five middleware stages | 317.31 ns | Immediate.Handlers · 385.47 ns | 976 B |
 
-The measurements predate `1.0.0-rc.1`. The asynchronous stream that stops after one item was the only workload whose confidence interval overlapped a competitor’s in both runs. [All 14 results, allocations and measurement conditions](benchmarks/README.md)
+These measurements used a commit from before the `1.0.0` release. The asynchronous stream that stops after one item was the only workload whose confidence interval overlapped a competitor’s in both runs. [All 14 results, allocations and measurement conditions](benchmarks/README.md)
 
 ## Install
 
-Use .NET 10 and C# 14. To try the release candidate, select a NuGet feed that contains `1.0.0-rc.1` and add the following packages.
+Add the following NuGet packages to a project that uses .NET 10 and C# 14.
 
 ```shell
-dotnet add package Zendiator --version 1.0.0-rc.1
+dotnet add package Zendiator --version 1.0.0
 dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
 ```
 
@@ -90,4 +90,4 @@ Use a named composition like `AddZendiator<App>` for an explicit Send or Stream 
 - [DI lifetimes, compatibility and Native AOT support](docs/release/known-limitations.md)
 - [Configuration diagnostics](docs/diagnostics/configuration.md) · [IDE fixes for missing handler attributes](src/Zendiator.CodeFixes/README.md)
 
-[Release notes](docs/release/1.0.0-rc.1-release-notes.md) · [MIT license](LICENSE)
+[Release notes](docs/release/1.0.0-release-notes.md) · [MIT license](LICENSE)

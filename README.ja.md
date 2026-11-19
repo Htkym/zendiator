@@ -14,14 +14,14 @@ Zendiatorは.NET 10向けの高速なMediatorです。**同期Beforeフックを
 | 同期処理を行う16個のハンドラーに通知 | 140.12 ns | Mediator（229.14 ns） | 0 B |
 | 5段のミドルウェアを通る同期ストリームを1件読んで破棄 | 317.31 ns | Immediate.Handlers（385.47 ns） | 976 B |
 
-測定は `1.0.0-rc.1` の作成前に行いました。非同期ストリームを1件で打ち切るケースだけは、どちらの測定順でも競合と信頼区間が重なりました。[全14ケースの結果、割り当て量と測定条件](benchmarks/README.ja.md)
+測定には `1.0.0` のリリース前のコミットを使いました。非同期ストリームを1件で打ち切るケースだけは、どちらの測定順でも競合と信頼区間が重なりました。[全14ケースの結果、割り当て量と測定条件](benchmarks/README.ja.md)
 
 ## インストール
 
-.NET 10とC# 14を使います。リリース候補を試すには、`1.0.0-rc.1` を入手できるNuGetフィードを選び、次のコマンドを実行してください。
+.NET 10とC# 14を使うプロジェクトに、次のNuGetパッケージを追加してください。
 
 ```shell
-dotnet add package Zendiator --version 1.0.0-rc.1
+dotnet add package Zendiator --version 1.0.0
 dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
 ```
 
@@ -90,4 +90,4 @@ public sealed class GreetHandler : IRequestHandler<Greet, string>
 - [DIのライフタイム、互換性、Native AOTの対応範囲（英語）](docs/release/known-limitations.md)
 - [構成の診断（英語）](docs/diagnostics/configuration.md)・[ハンドラー属性を補うIDEの修正機能（英語）](src/Zendiator.CodeFixes/README.md)
 
-[リリースノート（英語）](docs/release/1.0.0-rc.1-release-notes.md)・[MITライセンス](LICENSE)
+[リリースノート（英語）](docs/release/1.0.0-release-notes.md)・[MITライセンス](LICENSE)

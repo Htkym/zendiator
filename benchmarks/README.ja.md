@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-リクエスト、通知、ストリーム、フックの代表14ケースを、正順と逆順で測定しました。Zendiatorの平均時間は14ケースすべてで、どちらの順序でも最も短くなりました。測定に使ったのはリリース候補の作成前のZendiator（`0d53c53`）、Immediate.Handlers 4.3.0、MediatR 15.0.0、Mediator 3.0.2、DispatchR.Mediator 2.3.1、Foundatio.Mediator 1.3.3です。通知はImmediate.Handlersに対応するケースがないため、5ライブラリで比較しました。
+リクエスト、通知、ストリーム、フックの代表14ケースを、正順と逆順で測定しました。Zendiatorの平均時間は14ケースすべてで、どちらの順序でも最も短くなりました。測定に使ったのは1.0.0のリリース前のZendiator（`0d53c53`）、Immediate.Handlers 4.3.0、MediatR 15.0.0、Mediator 3.0.2、DispatchR.Mediator 2.3.1、Foundatio.Mediator 1.3.3です。通知はImmediate.Handlersに対応するケースがないため、5ライブラリで比較しました。
 
 ## 1回あたりの平均時間
 

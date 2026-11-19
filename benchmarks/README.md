@@ -2,7 +2,7 @@
 
 [日本語](README.ja.md)
 
-Zendiator recorded the lowest mean time in all 14 workloads below, both in the original execution order and when that order was reversed. The comparison used Zendiator revision `0d53c53` before the 1.0 release candidate, Immediate.Handlers 4.3.0, MediatR 15.0.0, Mediator 3.0.2, DispatchR.Mediator 2.3.1 and Foundatio.Mediator 1.3.3. Immediate.Handlers has no corresponding notification case, so that row compares five libraries.
+Zendiator recorded the lowest mean time in all 14 workloads below, both in the original execution order and when that order was reversed. The comparison used Zendiator revision `0d53c53` before the 1.0.0 release, Immediate.Handlers 4.3.0, MediatR 15.0.0, Mediator 3.0.2, DispatchR.Mediator 2.3.1 and Foundatio.Mediator 1.3.3. Immediate.Handlers has no corresponding notification case, so that row compares five libraries.
 
 ## Time per operation
 

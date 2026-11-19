@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <IsPackable>false</IsPackable>
-    <Version>1.0.0-rc.1</Version>
+    <Version>1.0.0</Version>
     <Authors>tkym</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/Htkym/zendiator</RepositoryUrl>
@@ -13,7 +13,7 @@
     <PackageProjectUrl>https://github.com/Htkym/zendiator</PackageProjectUrl>
     <PackageTags>mediator;source-generator;CQRS;AOT</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>1.0.0-rc.1 covers DI registration diagnostics, Stream cursor ownership and the 1.x compatibility policy. Update Zendiator packages together and rebuild consumers. See docs/release/1.0.0-rc.1-release-notes.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>1.0.0 covers DI registration diagnostics, Stream cursor ownership and the 1.x compatibility policy. Update Zendiator packages together and rebuild consumers. See docs/release/1.0.0-release-notes.md.</PackageReleaseNotes>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>
