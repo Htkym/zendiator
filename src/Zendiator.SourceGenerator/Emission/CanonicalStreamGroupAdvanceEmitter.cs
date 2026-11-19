@@ -31,13 +31,6 @@ internal static class CanonicalStreamGroupAdvanceEmitter
         if (index < 0)
             return "";
         var b = new StringBuilder();
-        if (index + 1 < chain.Count)
-        {
-            var child = chain[index + 1].Id;
-            b.AppendLine("private Cursor" + child + "? _identitySource;");
-            if (index != 0)
-                b.AppendLine("internal Cursor" + child + "? GroupIdentitySource => _identitySource;");
-        }
         b.AppendLine("internal global::System.Threading.Tasks.ValueTask<bool> CompleteGroupResult(bool moved, global::System.Exception? error) => error is not null ? MoveFailed(error) : moved ? MoveSucceeded(true) : EndAsync();");
         if (index == 0)
             EmitConsumer(b, chain);
@@ -80,7 +73,7 @@ internal static class CanonicalStreamGroupAdvanceEmitter
             if (i + 1 < children.Length)
             {
                 var nextId = children[i + 1].Id;
-                b.AppendLine("var next" + nextId + " = " + target + ".GroupIdentitySource;");
+                b.AppendLine("var next" + nextId + " = " + target + ".IdentitySource;");
                 b.AppendLine("if (next" + nextId + " is null) { pending = " + target + ".MoveGroupRaw(); goto Observing; }");
                 b.AppendLine(target + ".CheckGroupToken();");
             }

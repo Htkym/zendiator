@@ -207,9 +207,9 @@ internal static class CanonicalStreamFallbackEmitter
         while (model.Generic?.Parameters.Contains(completionLocal) == true)
             completionLocal = "_" + completionLocal;
         var repeatedMove = CanonicalStreamGroupAdvanceEmitter.IsParent(model, n)
-            ? "else if (_identitySource is { } child) return AdvanceGroup(child); else operation = ObserveMove(MoveCoreAsync());"
+            ? "else if (IdentitySource is { } child) return AdvanceGroup(child); else operation = ObserveMove(MoveCoreAsync());"
             : CanonicalStreamPrivateAdvanceEmitter.IsParent(model, n)
-            ? "else if (_identitySource is { } child) operation = AdvanceIdentity(child); else operation = ObserveMove(MoveCoreAsync());"
+            ? "else if (IdentitySource is { } child) operation = AdvanceIdentity(child); else operation = ObserveMove(MoveCoreAsync());"
             : standalone && segment.Hooks.Count == 0 ? $$"""
                             else
                             {
@@ -236,7 +236,7 @@ internal static class CanonicalStreamFallbackEmitter
                         {{(referenceSource ? "" : "private bool _acquired;")}}
                         {{(standalone ? "" : "private bool _normalEnd;\ninternal bool CanReopen => _normalEnd && !HasPendingOperation;")}}
                         internal Cursor{{n}}(global::System.IServiceProvider services, {{h.RequestName}} request,
-                            global::System.Threading.CancellationToken api, global::System.Threading.CancellationToken enumeration{{(standalone ? ", bool reserveFirstEnumeration = false" : ", global::Zendiator.Streaming.StreamCursorState? root")}}) : base(api, enumeration{{(standalone ? ", reserveFirstEnumeration" : "")}})
+                            global::System.Threading.CancellationToken api, global::System.Threading.CancellationToken enumeration{{(standalone ? ", bool reserveFirstEnumeration = false" : ", global::Zendiator.Streaming.StreamCursorState? root")}}) : base(api, enumeration{{(standalone ? ", reserveFirstEnumeration" : parent != null ? ", reserveFirstEnumeration: false, claimInitialMove: true" : "")}})
                         { _services = services; _request = request; {{(standalone ? "" : "_root = root ?? this;")}} }
             """);
         if (segment.Hooks.Count != 0)
@@ -334,7 +334,6 @@ internal static class CanonicalStreamFallbackEmitter
                         {
                             try
                             {
-                                if (!TryBeginMove()) throw new global::System.ObjectDisposedException("Stream");
                                 try
                                 {
                                     if (_root.IsClosed) throw new global::System.ObjectDisposedException("Stream");
@@ -406,7 +405,7 @@ internal static class CanonicalStreamFallbackEmitter
             }
             b.AppendLine("""    ?? throw new global::System.InvalidOperationException("A Stream middleware returned a null cursor.");""");
             if (HasIdentitySource(model, segment.Id))
-                b.AppendLine(structUpstream ? "_identitySource = MatchUpstreamIdentity(_source);" : "_identitySource = _upstream.MatchIdentity(_source);");
+                b.AppendLine(structUpstream ? "_sourceIsUpstream = MatchUpstreamIdentity(_source) is not null;" : "_sourceIsUpstream = _upstream.MatchIdentity(_source) is not null;");
         }
         else
         {
@@ -505,7 +504,7 @@ internal static class CanonicalStreamFallbackEmitter
         if (segment.Hooks.Count != 0)
             b.AppendLine("_current = default!;");
         if (privateIdentityParent)
-            b.AppendLine("_identitySource = null;");
+            b.AppendLine("_sourceIsUpstream = false;");
         var leaseCleanup = identityLeaseParent ? "var leaseError = await DisposeIdentityLeaseAsync().ConfigureAwait(false); if (leaseError is not null) global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(leaseError).Throw(); " : "";
         b.AppendLine(referenceSource
             ? "try { " + leaseCleanup + "var source = _source; if (source is not null) { _source = default!; await DisposeSource(ref source).ConfigureAwait(false); } }"

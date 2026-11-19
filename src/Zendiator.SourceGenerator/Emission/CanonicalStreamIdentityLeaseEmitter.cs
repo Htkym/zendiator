@@ -87,6 +87,13 @@ internal static class CanonicalStreamIdentityLeaseEmitter
         var structUpstream = CanonicalStructStreamUpstreamEmitter.Enabled(model.Segments.Single(s => s.Id == cursor));
         var match = structUpstream ? "MatchUpstreamIdentity(_source)" : "_upstream?.MatchIdentity(_source)";
         var detach = structUpstream ? "DetachUpstreamIdentity(child);" : "_upstream?.DetachIdentity(child);";
+        if (CanonicalStreamPrivateAdvanceEmitter.IsParent(model, cursor)
+            || CanonicalStreamGroupAdvanceEmitter.HasIdentitySource(model, cursor))
+            b.AppendLine($$"""
+                // Snapshot identity at Open. The upstream may reopen after the returned cursor reaches EOF.
+                private bool _sourceIsUpstream;
+                internal Cursor{{child}}? IdentitySource => _sourceIsUpstream ? (Cursor{{child}}?)_source : null;
+                """);
         b.AppendLine($$"""
             internal Cursor{{child}}? LeaseIdentitySource
             {
@@ -101,11 +108,8 @@ internal static class CanonicalStreamIdentityLeaseEmitter
                 if (global::System.Object.ReferenceEquals(_source, child))
                     _source = default!;
                 {{detach}}
+            }
             """);
-        if (CanonicalStreamPrivateAdvanceEmitter.IsParent(model, cursor)
-            || CanonicalStreamGroupAdvanceEmitter.HasIdentitySource(model, cursor))
-            b.AppendLine("if (global::System.Object.ReferenceEquals(_identitySource, child)) _identitySource = null;");
-        b.AppendLine("}");
     }
 
     private static void EmitRoot(StringBuilder b, CanonicalStreamFallbackModel model,

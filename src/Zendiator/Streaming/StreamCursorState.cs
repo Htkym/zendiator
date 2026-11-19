@@ -29,10 +29,19 @@ public abstract class StreamCursorState : IAsyncDisposable
     /// <summary>Creates a cursor owner without acquiring dependencies or combining tokens.</summary>
     protected StreamCursorState(CancellationToken apiToken = default, CancellationToken enumerationToken = default,
         bool reserveFirstEnumeration = false)
+        : this(apiToken, enumerationToken, reserveFirstEnumeration, claimInitialMove: false)
     {
+    }
+
+    /// <summary>Creates an owner with its initial move already claimed when opening a fresh middleware child.</summary>
+    protected StreamCursorState(CancellationToken apiToken, CancellationToken enumerationToken,
+        bool reserveFirstEnumeration, bool claimInitialMove)
+    {
+        if (reserveFirstEnumeration && claimInitialMove)
+            throw new ArgumentException("A cursor cannot reserve an enumeration and claim a move at the same time.");
         _apiToken = apiToken;
         _enumerationToken = enumerationToken;
-        _busy = reserveFirstEnumeration ? -1 : 0;
+        _busy = claimInitialMove ? 1 : reserveFirstEnumeration ? -1 : 0;
     }
 
     /// <summary>The original API token, retained when creating an independent enumeration.</summary>

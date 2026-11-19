@@ -41,7 +41,6 @@ internal static class CanonicalStreamPrivateAdvanceEmitter
         while (model.Generic?.Parameters.Contains(runner) == true)
             runner = "_" + runner;
         return $$"""
-                        private Cursor{{inner.Id}}? _identitySource;
                         private global::System.Threading.Tasks.ValueTask<bool> AdvanceIdentity(Cursor{{inner.Id}} child)
                         {
                             Token.ThrowIfCancellationRequested();
