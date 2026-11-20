@@ -5,6 +5,7 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <DevelopmentDependency>true</DevelopmentDependency>
+    <PackageIcon>icon.png</PackageIcon>
     <Description>Optional C# code fixes for explicit Zendiator handler registrations.</Description>
     <PackageReleaseNotes>The 1.0.0 code fix adds the missing Handler marker for supported ZEN0035 diagnostics. Fix All applies to the current document.</PackageReleaseNotes>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -17,5 +18,6 @@
     <Compile Include="../Zendiator.SourceGenerator/Diagnostics/MissingHandlerAttribute.cs" Link="MissingHandlerAttribute.cs" />
     <None Include="$(TargetPath)" Pack="true" PackagePath="analyzers/dotnet/cs" />
     <None Update="README.md" Pack="true" PackagePath="/" />
+    <None Include="../../docs/icon/icon.png" Pack="true" PackagePath="/" />
   </ItemGroup>
 </Project>

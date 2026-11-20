@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 if ($SourceCommit -notmatch '^[0-9a-fA-F]{40}$') { throw 'Expected a full source commit SHA.' }
 
 $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
+$iconHash = (Get-FileHash -LiteralPath 'docs/icon/icon.png' -Algorithm SHA256).Hash
 $files = foreach ($id in @('Zendiator.Abstractions', 'Zendiator', 'Zendiator.CodeFixes')) {
   $extensions = if ($id -eq 'Zendiator.CodeFixes') { @('nupkg') } else { @('nupkg', 'snupkg') }
   foreach ($extension in $extensions) {
@@ -35,9 +36,10 @@ $files = foreach ($id in @('Zendiator.Abstractions', 'Zendiator', 'Zendiator.Cod
       }
       $allowedEntries = @("$id.nuspec", '[Content_Types].xml', '_rels/.rels', 'package/services/metadata/core-properties/nuget.psmdcp')
       if ($extension -eq 'nupkg') {
+        $allowedEntries += @('README.md', 'icon.png')
         if ($id -eq 'Zendiator.CodeFixes') {
-          $allowedEntries += @('README.md', 'analyzers/dotnet/cs/Zendiator.CodeFixes.dll')
-        } else { $allowedEntries += @('README.md', 'icon.png', "lib/net10.0/$id.dll", "lib/net10.0/$id.xml", "buildTransitive/$id.targets") }
+          $allowedEntries += 'analyzers/dotnet/cs/Zendiator.CodeFixes.dll'
+        } else { $allowedEntries += @("lib/net10.0/$id.dll", "lib/net10.0/$id.xml", "buildTransitive/$id.targets") }
         if ($id -eq 'Zendiator') { $allowedEntries += @('analyzers/dotnet/cs/Zendiator.SourceGenerator.dll', 'buildTransitive/Zendiator.props') }
       } else { $allowedEntries += "lib/net10.0/$id.pdb" }
       $normalizedEntries = $entries | ForEach-Object {
@@ -65,8 +67,12 @@ $files = foreach ($id in @('Zendiator.Abstractions', 'Zendiator', 'Zendiator.Cod
       if ($metadata.version -ne $version -or $metadata.repository.commit -ne $SourceCommit) {
         throw "Package version/source mismatch in $file"
       }
-      if ($extension -eq 'nupkg' -and $id -ne 'Zendiator.CodeFixes' -and $metadata.icon -ne 'icon.png') {
-        throw "Missing package icon metadata in $file"
+      if ($extension -eq 'nupkg') {
+        if ($metadata.icon -ne 'icon.png') { throw "Missing package icon metadata in $file" }
+        $icon = $archive.GetEntry('icon.png').Open()
+        try {
+          if ((Get-FileHash -InputStream $icon -Algorithm SHA256).Hash -ne $iconHash) { throw "Package icon differs from source in $file" }
+        } finally { $icon.Dispose() }
       }
       if ($id -eq 'Zendiator.CodeFixes') {
         if ($metadata.developmentDependency -ne 'true' -or $metadata.readme -ne 'README.md' -or
