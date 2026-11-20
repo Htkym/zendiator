@@ -4,7 +4,7 @@
 
 ## ケース別の測定結果
 
-Windows 11 x64上で、.NET 10.0.14のReleaseビルドをBenchmarkDotNet 0.15.8で測定しました。表は1回あたりの「処理時間 / 割り当て量」で、正順と逆順の平均です。
+Windows 11 x64上で、.NET 10.0.14のReleaseビルドをBenchmarkDotNet 0.15.8で測定しました。
 
 | ケース | Zendiator 1.0.1 | Immediate.Handlers 4.3.0 | MediatR 15.0.0 | Mediator 3.0.2 | DispatchR.Mediator 2.3.1 | Foundatio.Mediator 1.3.3 |
 |---|---:|---:|---:|---:|---:|---:|

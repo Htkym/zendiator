@@ -4,7 +4,7 @@
 
 ## Results by workload
 
-We measured Release builds on Windows 11 x64 with .NET 10.0.14 and BenchmarkDotNet 0.15.8. Each cell shows **time / bytes allocated per operation**, averaged over the forward and reverse runs.
+We measured Release builds on Windows 11 x64 with .NET 10.0.14 and BenchmarkDotNet 0.15.8.
 
 | Workload | Zendiator 1.0.1 | Immediate.Handlers 4.3.0 | MediatR 15.0.0 | Mediator 3.0.2 | DispatchR.Mediator 2.3.1 | Foundatio.Mediator 1.3.3 |
 |---|---:|---:|---:|---:|---:|---:|
