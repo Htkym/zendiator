@@ -23,10 +23,16 @@ internal static class CanonicalRouteDependenciesEmitter
         b.AppendLine("internal sealed class " + plan.Name + " {");
         for (var i = 0; i < plan.Types.Count; i++)
             b.AppendLine("internal readonly " + plan.Types[i] + " Service" + i + ";");
+        b.AppendLine("[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
         b.AppendLine("public " + plan.Name + "(" + string.Join(", ", plan.Types.Select((type, i) => type + " service" + i)) + ") {");
         for (var i = 0; i < plan.Types.Count; i++)
-            b.AppendLine("Service" + i + " = service" + i + " ?? throw new global::System.InvalidOperationException(\"No service for type '\" + typeof(" + plan.Types[i] + ") + \"' has been registered.\");");
-        b.AppendLine("}\n}");
+            b.AppendLine("Service" + i + " = service" + i + " ?? MissingService<" + plan.Types[i] + ">();");
+        b.AppendLine("""
+            }
+            private static T MissingService<T>() =>
+                throw new global::System.InvalidOperationException("No service for type '" + typeof(T) + "' has been registered.");
+            }
+            """);
     }
 
     internal static void Acquire(StringBuilder b, CanonicalRouteDependenciesPlan? plan)

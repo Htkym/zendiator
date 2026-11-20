@@ -42,13 +42,14 @@ public sealed partial class GeneratorTests
                 public sealed class D;public sealed class E;public sealed class F;
                 public sealed record Ping<T>(int Value):ISyncRequest<int>;
                 public sealed record Closed<T>(int Value):ISyncRequest<int>;
-                [Handler]public sealed class Handler<T>:ISyncRequestHandler<Ping<T>,int>,ISyncRequestHandler<Closed<T>,int>,IDisposable {
+                [Handler]public class Handler<T>:ISyncRequestHandler<Ping<T>,int>,ISyncRequestHandler<Closed<T>,int>,IDisposable {
                     private readonly Probe probe;
                     public Handler(Probe probe){this.probe=probe;probe.Construct(this);}
                     public int Handle(Ping<T> request,CancellationToken token)=>probe.Hit(this,request.Value);
                     public int Handle(Closed<T> request,CancellationToken token)=>probe.Hit(this,request.Value);
                     public void Dispose()=>probe.Release(this);
                 }
+                public sealed class Derived<T>(Probe probe):Handler<T>(probe);
                 [ZendiatorComposition("generic-cache")]public sealed class Composition;
                 public static class Bridge {
                     public static IServiceCollection Register(IServiceCollection services)=>services.AddZendiator<Composition>(c=>{
@@ -199,6 +200,46 @@ public sealed partial class GeneratorTests
             Assert.Equal(2, tracked.Lookups[second.GetType()]);
         }
         Assert.Equal(probe.Created.Count, probe.Released.Count);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Inline_closed_service_keeps_the_first_published_value_for_its_registered_type(bool derivedFirst)
+    {
+        var fixture = GenericCache.Value;
+        var probe = new MultiLifetimeProbe();
+        IServiceCollection services = new ServiceCollection();
+        services.AddSingleton(probe);
+        fixture.Register.Invoke(null, [services]);
+        var registered = fixture.Handlers[0].GetGenericTypeDefinition().MakeGenericType(typeof(int));
+        var derived = registered.Assembly.GetType("GenericCache.Derived`1")!.MakeGenericType(typeof(int));
+        var useDerived = derivedFirst;
+        services.AddTransient(registered, provider =>
+        {
+            var implementation = useDerived ? derived : registered;
+            useDerived = !useDerived;
+            return ActivatorUtilities.CreateInstance(provider, implementation);
+        });
+        using var provider = services.BuildServiceProvider();
+        using (var scope = provider.CreateScope())
+        {
+            var tracked = new GenericCacheLookupProvider(scope.ServiceProvider);
+            var mediator = fixture.Create(tracked);
+            tracked.AfterResolution = (_, _) =>
+            {
+                tracked.AfterResolution = null;
+                Assert.Equal(1, fixture.Dispatch(mediator, 6, 1));
+            };
+            Assert.Equal(2, fixture.Dispatch(mediator, 6, 2));
+            Assert.Equal(3, fixture.Dispatch(mediator, 8, 3));
+            var winner = probe.Calls[0];
+            Assert.Equal(derivedFirst ? registered : derived, winner.GetType());
+            Assert.All(probe.Calls, receiver => Assert.Same(winner, receiver));
+            Assert.Same(winner, ((IServiceProvider)mediator).GetService(registered));
+            Assert.Equal(2, tracked.Lookups[registered]);
+        }
+        Assert.Equal(2, probe.Released.Count);
     }
 
     [Fact]

@@ -18,9 +18,11 @@ internal static class CanonicalGenericServiceCacheEmitter
                     if (entry.Key == serviceType) return (T)entry.Value;
             }
             var resolved = (T?)_services.GetService(serviceType);
-            if (resolved is null) return null;
+            return resolved is null ? null : PublishGenericService(serviceType, resolved);
+        }
+        private T PublishGenericService<T>(global::System.Type serviceType, T resolved) where T : class {
             while (true) {
-                snapshot = global::System.Threading.Volatile.Read(ref _genericServices);
+                var snapshot = global::System.Threading.Volatile.Read(ref _genericServices);
                 if (snapshot is global::System.Collections.Concurrent.ConcurrentDictionary<global::System.Type, object> slots)
                     return (T)slots.GetOrAdd(serviceType, resolved);
                 var count = 0;
