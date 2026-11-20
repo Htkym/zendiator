@@ -2,7 +2,11 @@
 
 [日本語](README.ja.md)
 
-Zendiator is a fast, source-generated mediator for .NET 10. **Sending a request through five synchronous Before hooks took 7.01–9.58 ns on average and allocated 0 B per call.** The mediator and request were ready before timing began. Define a handler and call `SendAsync`. The source generator connects the request to the handler at build time.
+Zendiator is an in-process mediator for .NET 10 and C# 14. Its source generator connects requests to handlers at build time and generates registration code for `Microsoft.Extensions.DependencyInjection`. Use `SendAsync` to send a request, `PublishAsync` to notify subscribers and `StreamAsync` to read an asynchronous stream.
+
+**Sending a request through five synchronous Before hooks took 7.01–9.58 ns on average and allocated 0 B per call.** The mediator and request were ready before timing began.
+
+[Send your first request](#send-your-first-request) · [Using Zendiator as a MediatR alternative](docs/migrating-from-mediatr.md) · [Native AOT configurations verified on Windows x64](docs/release/known-limitations.md#native-aot-and-dispatch-boundaries)
 
 ## Performance
 
@@ -57,7 +61,7 @@ Zendiator’s upper 99.9% confidence bound for mean time fell below every peer�
 Add the following NuGet packages to a project that uses .NET 10 and C# 14.
 
 ```shell
-dotnet add package Zendiator --version 1.0.0
+dotnet add package Zendiator --version 1.0.1
 dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
 ```
 
@@ -126,4 +130,4 @@ Use a named composition like `AddZendiator<App>` for an explicit Send or Stream 
 - [DI lifetimes, compatibility and Native AOT support](docs/release/known-limitations.md)
 - [Configuration diagnostics](docs/diagnostics/configuration.md) · [IDE fixes for missing handler attributes](src/Zendiator.CodeFixes/README.md)
 
-[Release notes](docs/release/1.0.0-release-notes.md) · [MIT license](LICENSE)
+[Release notes](docs/release/1.0.1-release-notes.md) · [MIT license](LICENSE)

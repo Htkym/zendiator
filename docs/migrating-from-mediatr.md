@@ -2,14 +2,14 @@
 
 [日本語](migrating-from-mediatr.ja.md)
 
-If your application uses MediatR's `ISender`, `IPublisher` or `IMediator`, you can migrate one request and its callers at a time. The API comparison below covers MediatR 12 and 15. Zendiator 1.0.0 targets .NET 10 and C# 14.
+If your application uses MediatR's `ISender`, `IPublisher` or `IMediator`, you can migrate one request and its callers at a time. The API comparison below covers MediatR 12 and 15. Zendiator 1.0.1 targets .NET 10 and C# 14.
 
 ## Requests and handlers
 
 Add these NuGet packages to the project that registers your handlers. A separate project that defines only request or notification types can reference `Zendiator.Abstractions` alone. Use the same version for `Zendiator` and `Zendiator.Abstractions` across the application.
 
 ```shell
-dotnet add package Zendiator --version 1.0.0
+dotnet add package Zendiator --version 1.0.1
 dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
 ```
 

@@ -1,6 +1,8 @@
-# Zendiator 1.0.0への更新
+# Zendiator 1.0.1への更新
 
 [English](upgrading.md)
+
+1.0.0から更新する場合は、利用しているZendiatorパッケージのバージョンをそろえて再ビルドしてください。1.0.1で生成されるMediatorでは、依存先のキャッシュの既定値が `ClosedServiceCacheMode.Auto` に変わります。以前の配置を使うには、構成マーカーの `ClosedServiceCache` に `ClosedServiceCacheMode.Inline` を指定します。[キャッシュの設定](release/known-limitations.md#dependency-capture-and-lifetime)
 
 0.7.0を使っているアプリでは、既存のリクエストとハンドラーの定義をそのまま使えます。DIのライフタイムも0.7.0と同じです。1.0.0では、本体とAbstractionsのバージョンが異なる場合や、登録メソッドを直接デリゲートに代入した場合にビルド時にエラーが出ます。また、Streamのミドルウェアが上流を包む列挙子を返した場合の処理が修正されています。
 
@@ -9,8 +11,8 @@
 Zendiatorを登録するプロジェクトと、`Zendiator.Abstractions` を明示的に参照しているプロジェクトを更新します。次のパスはアプリのプロジェクトに合わせて置き換えてください。パッケージのバージョンを一元管理している場合は、管理元の両方のバージョンを更新します。
 
 ```shell
-dotnet add App/App.csproj package Zendiator --version 1.0.0
-dotnet add Contracts/Contracts.csproj package Zendiator.Abstractions --version 1.0.0
+dotnet add App/App.csproj package Zendiator --version 1.0.1
+dotnet add Contracts/Contracts.csproj package Zendiator.Abstractions --version 1.0.1
 dotnet build App/App.csproj
 ```
 

@@ -2,7 +2,11 @@
 
 [English](README.md)
 
-Zendiatorは.NET 10向けの高速なMediatorです。**同期Beforeフックを5つ通したリクエスト送信は平均7.01～9.58 nsで、1回あたりのメモリ割り当ては0 Bでした。** この測定ではMediatorとリクエストを計測前に用意しています。ハンドラーを定義して `SendAsync` を呼ぶと、ビルド時に生成したコードがリクエストをハンドラーに渡します。
+Zendiatorは、.NET 10とC# 14向けのプロセス内メディエーターです。ソースジェネレーターがビルド時にリクエストとハンドラーを結び付け、`Microsoft.Extensions.DependencyInjection` の登録コードを生成します。`SendAsync` でリクエストを送り、`PublishAsync` で購読者に通知し、`StreamAsync` で非同期ストリームを読み取れます。
+
+**同期Beforeフックを5つ通したリクエスト送信は平均7.01～9.58 nsで、1回あたりのメモリ割り当ては0 Bでした。** この測定ではMediatorとリクエストを計測前に用意しています。
+
+[最初のリクエストを送る](#最初のリクエストを送る)・[MediatRの代替として使う際の移行手順](docs/migrating-from-mediatr.ja.md)・[Windows x64で検証したNative AOT構成（英語）](docs/release/known-limitations.md#native-aot-and-dispatch-boundaries)
 
 ## 性能
 
@@ -57,7 +61,7 @@ Zendiatorの平均時間の99.9%信頼区間の上限が全比較先の下限を
 .NET 10とC# 14を使うプロジェクトに、次のNuGetパッケージを追加してください。
 
 ```shell
-dotnet add package Zendiator --version 1.0.0
+dotnet add package Zendiator --version 1.0.1
 dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
 ```
 
@@ -126,4 +130,4 @@ public sealed class GreetHandler : IRequestHandler<Greet, string>
 - [DIのライフタイム、互換性、Native AOTの対応範囲（英語）](docs/release/known-limitations.md)
 - [構成の診断（英語）](docs/diagnostics/configuration.md)・[ハンドラー属性を補うIDEの修正機能（英語）](src/Zendiator.CodeFixes/README.md)
 
-[リリースノート（英語）](docs/release/1.0.0-release-notes.md)・[MITライセンス](LICENSE)
+[リリースノート（英語）](docs/release/1.0.1-release-notes.md)・[MITライセンス](LICENSE)
