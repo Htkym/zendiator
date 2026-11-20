@@ -10,47 +10,70 @@ Zendiator is an in-process mediator for .NET 10 and C# 14. Its source generator 
 
 ## Performance
 
-The measurements used Windows x64, .NET 10.0.14 and Zendiator revision `f2973af`. Each cell gives the **mean time / bytes allocated per operation**. The two runs measured the same 83 combinations in opposite orders. Immediate.Handlers has no corresponding notification workload, shown as `N/A`.
+We compared Zendiator 1.0.1, Immediate.Handlers 4.3.0, MediatR 15.0.0, Mediator 3.0.2, DispatchR.Mediator 2.3.1 and Foundatio.Mediator 1.3.3 on Windows x64 with .NET 10.0.14. Immediate.Handlers has no matching notification workload, shown as `N/A`. We measured the remaining 83 library and workload combinations in forward and reverse order.
 
-Zendiator had the lowest mean time in all 14 workloads in both orders. It allocated fewer bytes than every competitor in 7 workloads and tied at 0 B in the other 7.
+Zendiator had the lowest mean time in all 14 workloads in both orders. It allocated fewer bytes than every competitor in seven workloads and tied at 0 B in the other seven.
 
-### Forward order
+[Time and allocation for all six libraries by workload](benchmarks/README.md#results-by-workload)
 
-| Workload | Zendiator | Immediate.Handlers 4.3.0 | MediatR 15.0.0 | Mediator 3.0.2 | DispatchR.Mediator 2.3.1 | Foundatio.Mediator 1.3.3 |
+### Mean time in forward order
+
+| Workload | Zendiator 1.0.1 | Immediate 4.3.0 | MediatR 15.0.0 | Mediator 3.0.2 | DispatchR 2.3.1 | Foundatio 1.3.3 |
 |---|---:|---:|---:|---:|---:|---:|
-| Send, 0 stages | 2.04 ns / 0 B | 13.19 ns / 0 B | 70.45 ns / 200 B | 70.59 ns / 64 B | 45.65 ns / 0 B | 44.90 ns / 0 B |
-| Send, 5 stages | 9.58 ns / 0 B | 26.84 ns / 0 B | 239.07 ns / 1,016 B | 153.75 ns / 544 B | 52.36 ns / 0 B | 235.80 ns / 0 B |
-| Resolve again in the same scope and send, 0 stages | 33.52 ns / 0 B | 54.41 ns / 0 B | 82.66 ns / 200 B | 114.87 ns / 64 B | 79.80 ns / 0 B | 86.41 ns / 0 B |
-| Resolve again in the same scope and send, 5 stages | 35.75 ns / 0 B | 57.85 ns / 0 B | 197.13 ns / 1,016 B | 147.42 ns / 544 B | 83.03 ns / 0 B | 226.87 ns / 0 B |
-| Create a scope, send once and dispose, 5 stages | 131.93 ns / 560 B | 155.14 ns / 568 B | 268.97 ns / 1,400 B | 227.14 ns / 920 B | 774.62 ns / 1,712 B | 389.28 ns / 856 B |
-| Notify 16 synchronous subscribers | 143.94 ns / 0 B | N/A | 1,249.78 ns / 4,784 B | 230.08 ns / 0 B | 209.27 ns / 0 B | 1,006.80 ns / 0 B |
-| Stream, all 1,024 items, 5 stages, sync | 15.242 µs / 928 B | 108.246 µs / 1,104 B | 216.464 µs / 3,593 B | 108.292 µs / 1,688 B | 106.468 µs / 1,104 B | 127.324 µs / 1,808 B |
-| Stream, all 1,024 items, 5 stages, async | 167.413 µs / 1,586 B | 311.844 µs / 1,755 B | 624.129 µs / 4,726 B | 329.834 µs / 2,340 B | 316.544 µs / 1,756 B | 352.939 µs / 2,539 B |
-| Stream, 1 of 16 items, 5 stages, sync | 306.07 ns / 928 B | 348.98 ns / 1,104 B | 951.59 ns / 3,592 B | 453.85 ns / 1,688 B | 377.63 ns / 1,104 B | 741.37 ns / 1,808 B |
-| Stream, 1 of 16 items, 5 stages, async | 1.985 µs / 1,256 B | 2.477 µs / 1,752 B | 3.764 µs / 4,720 B | 2.655 µs / 2,336 B | 2.426 µs / 1,752 B | 2.979 µs / 2,536 B |
-| Short-circuit at first of 3 stages, warm | 4.88 ns / 0 B | 5.72 ns / 0 B | 111.61 ns / 704 B | 72.43 ns / 496 B | 36.11 ns / 0 B | 72.04 ns / 384 B |
-| Async hooks, successful first call | 1.050 µs / 448 B | 1.518 µs / 504 B | 1.570 µs / 1,352 B | 1.341 µs / 808 B | 1.296 µs / 560 B | 2.182 µs / 856 B |
-| Async hooks, successful warm call | 37.28 ns / 0 B | 60.46 ns / 0 B | 626.77 ns / 944 B | 582.95 ns / 2,909 B | 82.83 ns / 0 B | 600.53 ns / 480 B |
-| Async hooks, outer hook fails on first call | 5.755 µs / 1,744 B | 10.522 µs / 3,808 B | 10.140 µs / 3,384 B | 9.811 µs / 3,216 B | 7.679 µs / 2,968 B | 12.730 µs / 4,872 B |
+| Send, 0 stages | 2.04 ns | 13.19 ns | 70.45 ns | 70.59 ns | 45.65 ns | 44.90 ns |
+| Send, 5 stages | 9.58 ns | 26.84 ns | 239.07 ns | 153.75 ns | 52.36 ns | 235.80 ns |
+| Resolve again in the same scope and send, 0 stages | 33.52 ns | 54.41 ns | 82.66 ns | 114.87 ns | 79.80 ns | 86.41 ns |
+| Resolve again in the same scope and send, 5 stages | 35.75 ns | 57.85 ns | 197.13 ns | 147.42 ns | 83.03 ns | 226.87 ns |
+| Create a scope, send once and dispose, 5 stages | 131.93 ns | 155.14 ns | 268.97 ns | 227.14 ns | 774.62 ns | 389.28 ns |
+| Notify 16 synchronous subscribers | 143.94 ns | N/A | 1,249.78 ns | 230.08 ns | 209.27 ns | 1,006.80 ns |
+| Stream, all 1,024 items, 5 stages, sync | 15.242 µs | 108.246 µs | 216.464 µs | 108.292 µs | 106.468 µs | 127.324 µs |
+| Stream, all 1,024 items, 5 stages, async | 167.413 µs | 311.844 µs | 624.129 µs | 329.834 µs | 316.544 µs | 352.939 µs |
+| Stream, 1 of 16 items, 5 stages, sync | 306.07 ns | 348.98 ns | 951.59 ns | 453.85 ns | 377.63 ns | 741.37 ns |
+| Stream, 1 of 16 items, 5 stages, async | 1.985 µs | 2.477 µs | 3.764 µs | 2.655 µs | 2.426 µs | 2.979 µs |
+| Short-circuit at first of 3 stages, warm | 4.88 ns | 5.72 ns | 111.61 ns | 72.43 ns | 36.11 ns | 72.04 ns |
+| Async hooks, successful first call | 1.050 µs | 1.518 µs | 1.570 µs | 1.341 µs | 1.296 µs | 2.182 µs |
+| Async hooks, successful warm call | 37.28 ns | 60.46 ns | 626.77 ns | 582.95 ns | 82.83 ns | 600.53 ns |
+| Async hooks, outer hook fails on first call | 5.755 µs | 10.522 µs | 10.140 µs | 9.811 µs | 7.679 µs | 12.730 µs |
 
-### Reverse order
+### Mean time in reverse order
 
-| Workload | Zendiator | Immediate.Handlers 4.3.0 | MediatR 15.0.0 | Mediator 3.0.2 | DispatchR.Mediator 2.3.1 | Foundatio.Mediator 1.3.3 |
+| Workload | Zendiator 1.0.1 | Immediate 4.3.0 | MediatR 15.0.0 | Mediator 3.0.2 | DispatchR 2.3.1 | Foundatio 1.3.3 |
 |---|---:|---:|---:|---:|---:|---:|
-| Send, 0 stages | 1.65 ns / 0 B | 9.22 ns / 0 B | 44.16 ns / 200 B | 45.71 ns / 64 B | 32.68 ns / 0 B | 36.79 ns / 0 B |
-| Send, 5 stages | 7.01 ns / 0 B | 19.67 ns / 0 B | 163.85 ns / 1,016 B | 105.94 ns / 544 B | 42.02 ns / 0 B | 183.77 ns / 0 B |
-| Resolve again in the same scope and send, 0 stages | 30.94 ns / 0 B | 45.13 ns / 0 B | 78.22 ns / 200 B | 80.41 ns / 64 B | 61.66 ns / 0 B | 77.75 ns / 0 B |
-| Resolve again in the same scope and send, 5 stages | 46.74 ns / 0 B | 55.50 ns / 0 B | 195.29 ns / 1,016 B | 145.44 ns / 544 B | 77.08 ns / 0 B | 222.15 ns / 0 B |
-| Create a scope, send once and dispose, 5 stages | 121.22 ns / 560 B | 149.34 ns / 568 B | 252.29 ns / 1,400 B | 211.64 ns / 920 B | 531.21 ns / 1,712 B | 379.11 ns / 856 B |
-| Notify 16 synchronous subscribers | 145.13 ns / 0 B | N/A | 1,165.25 ns / 4,784 B | 228.70 ns / 0 B | 209.78 ns / 0 B | 1,004.07 ns / 0 B |
-| Stream, all 1,024 items, 5 stages, sync | 14.783 µs / 928 B | 106.837 µs / 1,104 B | 211.958 µs / 3,592 B | 109.380 µs / 1,689 B | 105.834 µs / 1,105 B | 126.890 µs / 1,808 B |
-| Stream, all 1,024 items, 5 stages, async | 164.840 µs / 1,586 B | 314.962 µs / 1,755 B | 603.728 µs / 4,726 B | 311.326 µs / 2,339 B | 311.871 µs / 1,756 B | 353.159 µs / 2,539 B |
-| Stream, 1 of 16 items, 5 stages, sync | 306.55 ns / 928 B | 346.99 ns / 1,104 B | 1,002.63 ns / 3,592 B | 448.07 ns / 1,688 B | 377.74 ns / 1,104 B | 747.24 ns / 1,808 B |
-| Stream, 1 of 16 items, 5 stages, async | 2.224 µs / 1,256 B | 2.395 µs / 1,752 B | 5.922 µs / 4,720 B | 2.814 µs / 2,336 B | 2.427 µs / 1,752 B | 3.066 µs / 2,536 B |
-| Short-circuit at first of 3 stages, warm | 6.39 ns / 0 B | 7.23 ns / 0 B | 121.07 ns / 704 B | 78.65 ns / 496 B | 46.14 ns / 0 B | 82.39 ns / 384 B |
-| Async hooks, successful first call | 0.995 µs / 448 B | 1.905 µs / 504 B | 1.550 µs / 1,352 B | 1.357 µs / 808 B | 1.379 µs / 560 B | 2.126 µs / 856 B |
-| Async hooks, successful warm call | 45.68 ns / 0 B | 62.46 ns / 0 B | 934.94 ns / 944 B | 642.18 ns / 2,892 B | 81.59 ns / 0 B | 599.94 ns / 480 B |
-| Async hooks, outer hook fails on first call | 5.229 µs / 1,680 B | 11.194 µs / 3,808 B | 10.144 µs / 3,448 B | 8.254 µs / 3,216 B | 8.459 µs / 2,968 B | 13.546 µs / 4,872 B |
+| Send, 0 stages | 1.65 ns | 9.22 ns | 44.16 ns | 45.71 ns | 32.68 ns | 36.79 ns |
+| Send, 5 stages | 7.01 ns | 19.67 ns | 163.85 ns | 105.94 ns | 42.02 ns | 183.77 ns |
+| Resolve again in the same scope and send, 0 stages | 30.94 ns | 45.13 ns | 78.22 ns | 80.41 ns | 61.66 ns | 77.75 ns |
+| Resolve again in the same scope and send, 5 stages | 46.74 ns | 55.50 ns | 195.29 ns | 145.44 ns | 77.08 ns | 222.15 ns |
+| Create a scope, send once and dispose, 5 stages | 121.22 ns | 149.34 ns | 252.29 ns | 211.64 ns | 531.21 ns | 379.11 ns |
+| Notify 16 synchronous subscribers | 145.13 ns | N/A | 1,165.25 ns | 228.70 ns | 209.78 ns | 1,004.07 ns |
+| Stream, all 1,024 items, 5 stages, sync | 14.783 µs | 106.837 µs | 211.958 µs | 109.380 µs | 105.834 µs | 126.890 µs |
+| Stream, all 1,024 items, 5 stages, async | 164.840 µs | 314.962 µs | 603.728 µs | 311.326 µs | 311.871 µs | 353.159 µs |
+| Stream, 1 of 16 items, 5 stages, sync | 306.55 ns | 346.99 ns | 1,002.63 ns | 448.07 ns | 377.74 ns | 747.24 ns |
+| Stream, 1 of 16 items, 5 stages, async | 2.224 µs | 2.395 µs | 5.922 µs | 2.814 µs | 2.427 µs | 3.066 µs |
+| Short-circuit at first of 3 stages, warm | 6.39 ns | 7.23 ns | 121.07 ns | 78.65 ns | 46.14 ns | 82.39 ns |
+| Async hooks, successful first call | 0.995 µs | 1.905 µs | 1.550 µs | 1.357 µs | 1.379 µs | 2.126 µs |
+| Async hooks, successful warm call | 45.68 ns | 62.46 ns | 934.94 ns | 642.18 ns | 81.59 ns | 599.94 ns |
+| Async hooks, outer hook fails on first call | 5.229 µs | 11.194 µs | 10.144 µs | 8.254 µs | 8.459 µs | 13.546 µs |
+
+### Bytes allocated per operation
+
+A single value applies to both orders. Where allocations differed, the cell shows forward / reverse.
+
+| Workload | Zendiator 1.0.1 | Immediate 4.3.0 | MediatR 15.0.0 | Mediator 3.0.2 | DispatchR 2.3.1 | Foundatio 1.3.3 |
+|---|---:|---:|---:|---:|---:|---:|
+| Send, 0 stages | 0 | 0 | 200 | 64 | 0 | 0 |
+| Send, 5 stages | 0 | 0 | 1,016 | 544 | 0 | 0 |
+| Resolve again in the same scope and send, 0 stages | 0 | 0 | 200 | 64 | 0 | 0 |
+| Resolve again in the same scope and send, 5 stages | 0 | 0 | 1,016 | 544 | 0 | 0 |
+| Create a scope, send once and dispose, 5 stages | 560 | 568 | 1,400 | 920 | 1,712 | 856 |
+| Notify 16 synchronous subscribers | 0 | N/A | 4,784 | 0 | 0 | 0 |
+| Stream, all 1,024 items, 5 stages, sync | 928 | 1,104 | 3,593 / 3,592 | 1,688 / 1,689 | 1,104 / 1,105 | 1,808 |
+| Stream, all 1,024 items, 5 stages, async | 1,586 | 1,755 | 4,726 | 2,340 / 2,339 | 1,756 | 2,539 |
+| Stream, 1 of 16 items, 5 stages, sync | 928 | 1,104 | 3,592 | 1,688 | 1,104 | 1,808 |
+| Stream, 1 of 16 items, 5 stages, async | 1,256 | 1,752 | 4,720 | 2,336 | 1,752 | 2,536 |
+| Short-circuit at first of 3 stages, warm | 0 | 0 | 704 | 496 | 0 | 384 |
+| Async hooks, successful first call | 448 | 504 | 1,352 | 808 | 560 | 856 |
+| Async hooks, successful warm call | 0 | 0 | 944 | 2,909 / 2,892 | 0 | 480 |
+| Async hooks, outer hook fails on first call | 1,744 / 1,680 | 3,808 | 3,384 / 3,448 | 3,216 | 2,968 | 4,872 |
 
 The five-stage Send uses five synchronous Before hooks in Zendiator. Early stream exit includes reading one item and disposing the enumerator. Zendiator’s stream stages forward the input cursor. Each competing stage enumerates the upstream sequence and yields its items. The Zendiator input cursor in this run opts into `[GeneratePooledProducer]` for its asynchronous move helper, a feature available since 1.0.0.
 
