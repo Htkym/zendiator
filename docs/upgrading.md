@@ -1,6 +1,8 @@
-# Upgrading Zendiator to 1.0.0
+# Upgrading Zendiator to 1.0.1
 
 [日本語](upgrading.ja.md)
+
+If you use 1.0.0, update your Zendiator packages together and rebuild. The generated mediator now defaults to `ClosedServiceCacheMode.Auto`. Set `ClosedServiceCache` to `ClosedServiceCacheMode.Inline` on the composition marker if you need the previous cache layout. [Cache modes](release/known-limitations.md#dependency-capture-and-lifetime)
 
 If you use 0.7.0, keep your request and handler definitions. The DI lifetime rules are the same in 0.7.0 and 1.0.0. The changes you may see when upgrading are a build error for mismatched packages, a diagnostic for registration delegates, and a fix for Stream middleware that returns a decorated cursor.
 
@@ -9,8 +11,8 @@ If you use 0.7.0, keep your request and handler definitions. The DI lifetime rul
 Update the project that registers Zendiator, then update any project that explicitly references `Zendiator.Abstractions`. Replace the paths below with your project paths. If you manage versions centrally, update both entries there.
 
 ```shell
-dotnet add App/App.csproj package Zendiator --version 1.0.0
-dotnet add Contracts/Contracts.csproj package Zendiator.Abstractions --version 1.0.0
+dotnet add App/App.csproj package Zendiator --version 1.0.1
+dotnet add Contracts/Contracts.csproj package Zendiator.Abstractions --version 1.0.1
 dotnet build App/App.csproj
 ```
 

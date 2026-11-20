@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1
+
+- Stream cursors use less memory for cancellation. With the existing `[GeneratePooledProducer]` option enabled on the input cursor, reading 1,024 asynchronous items through five middleware stages allocated 1,586 B per operation.
+- `ClosedServiceCacheMode.Auto` is the default for named compositions. In the five-stage Send benchmark, creating a scope, sending once and disposing the scope now allocates 560 B, down from 624 B in 1.0.0.
+- The optional `Zendiator.CodeFixes` package now includes the Zendiator NuGet icon.
+
+[Release notes](docs/release/1.0.1-release-notes.md) · [Benchmark results](benchmarks/README.md)
+
 ## 1.0.0
 
 - Conditional DI registration honors a null receiver. Assigning the registration method itself to a delegate now reports ZEN0020 during the build.

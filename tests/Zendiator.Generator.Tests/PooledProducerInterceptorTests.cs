@@ -194,13 +194,13 @@ public sealed partial class GeneratorTests
     {
         using var resource = typeof(GeneratorTests).Assembly.GetManifestResourceStream("Zendiator.PooledProducer.WorkSource")!;
         using var reader = new StreamReader(resource);
-        var original = "using System;using System.Collections.Generic;using System.Threading;using System.Threading.Tasks;\n" + await reader.ReadToEndAsync();
-        var selected = original.Replace("public sealed class WorkStreamCursor(", "public sealed partial class WorkStreamCursor(")
-            .Replace("private async ValueTask<bool> MovePendingAsync()", "[Zendiator.GeneratePooledProducer] private async ValueTask<bool> MovePendingAsync()");
-        async Task<string> Run(string source)
+        var selected = "using System;using System.Collections.Generic;using System.Threading;using System.Threading.Tasks;\n" + await reader.ReadToEndAsync();
+        var original = selected.Replace("[Zendiator.GeneratePooledProducer]", "");
+        async Task<string> Run(string source, bool pooled)
         {
-            SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "NativeProducer_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
+            var driver = SyncDriver().RunGeneratorsAndUpdateCompilation(SyncCompilation(source, "NativeProducer_" + Guid.NewGuid().ToString("N")), out var output, out var diagnostics);
             Assert.Empty(diagnostics);
+            Assert.Equal(pooled, driver.GetRunResult().GeneratedTrees.Any(t => t.ToString().Contains("PoolingAsyncValueTaskMethodBuilder", StringComparison.Ordinal)));
             using var bytes = new MemoryStream();
             var emit = output.Emit(bytes);
             Assert.True(emit.Success, string.Join("\n", emit.Diagnostics));
@@ -250,7 +250,7 @@ public sealed partial class GeneratorTests
             load.Unload();
             return result;
         }
-        Assert.Equal(await Run(original), await Run(selected));
+        Assert.Equal(await Run(original, false), await Run(selected, true));
     }
 
     [Fact]

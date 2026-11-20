@@ -5,7 +5,7 @@ When ZEN0035 identifies a handler that is missing its attribute, the **Add Handl
 Install the optional code fix in the project that contains the handler. Use the same version as Zendiator.
 
 ```xml
-<PackageReference Include="Zendiator.CodeFixes" Version="1.0.0" PrivateAssets="all" />
+<PackageReference Include="Zendiator.CodeFixes" Version="1.0.1" PrivateAssets="all" />
 ```
 
 Restore the package and open the suggested fix on the diagnostic in your editor.

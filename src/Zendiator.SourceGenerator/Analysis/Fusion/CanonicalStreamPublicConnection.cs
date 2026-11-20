@@ -28,7 +28,7 @@ internal sealed record CanonicalStreamPublicComposition(CanonicalSyncComposition
     {
         get; init;
     }
-    public bool LazyClosedServiceCache
+    public ClosedCacheLayout ClosedCache
     {
         get; init;
     }
@@ -94,7 +94,7 @@ internal static class CanonicalStreamPublicConnection
                 Generic = generic,
                 OpenRegistration = open,
                 FinalItemName = canonical.ItemFlow?.Final.Name,
-                LazyClosedServiceCache = c.LazyClosedServiceCache,
+                ClosedCache = c.ClosedCache,
                 DeclaredStages = route.StreamDeclaredStages,
                 BoxedDependencies = new(Boxed(canonical).Distinct())
             });
@@ -177,7 +177,7 @@ internal static class CanonicalStreamPublicConnection
             yield return new("Zendiator.Canonical.Stream.Public." + CanonicalSplitSourceEmitter.Id(c.Registration.Namespace) + ".g.cs", Source(c))
             {
                 BoxedDependencies = c.BoxedDependencies,
-                LazyClosedServiceCache = c.LazyClosedServiceCache
+                ClosedCache = c.ClosedCache
             };
     }
     internal static string Source(CanonicalStreamPublicComposition c)

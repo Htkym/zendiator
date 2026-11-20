@@ -88,7 +88,7 @@ internal static class CanonicalMultiEmissionNormalizer
             {
                 StableKey = r.StreamStableKey!,
                 BoxedDependencies = r.Stream!.BoxedDependencies,
-                LazyClosedServiceCache = r.Stream.LazyClosedServiceCache
+                ClosedCache = r.Stream.ClosedCache
             }));
 
     internal static CanonicalSyncInterceptorModel BindCallSites(CanonicalMultiEmissionModel model,

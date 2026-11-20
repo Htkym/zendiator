@@ -1,5 +1,13 @@
 namespace Zendiator.SourceGenerator;
 
+// These values match ClosedServiceCacheMode in the abstractions assembly.
+internal enum ClosedCacheLayout
+{
+    Inline = 0,
+    LazyBlocks = 1,
+    Auto = 2
+}
+
 /// <summary>Early, symbol-free metadata. This is discovery input, not a validated execution plan.</summary>
 internal sealed record MarkedHandlerContract(
     string Contract, string Request, string? Result, string Implementation, string DefinitionConstraints);
@@ -50,7 +58,7 @@ internal sealed record CompositionSelectionModel(string Identity, string Key,
     {
         get; init;
     }
-    public bool LazyClosedServiceCache
+    public ClosedCacheLayout ClosedCache
     {
         get; init;
     }

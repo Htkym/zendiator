@@ -2,36 +2,34 @@
 
 [日本語](README.ja.md)
 
-Zendiator recorded the lowest mean time in all 14 workloads below, both in the original execution order and when that order was reversed. The comparison used Zendiator revision `0d53c53` before the 1.0.0 release, Immediate.Handlers 4.3.0, MediatR 15.0.0, Mediator 3.0.2, DispatchR.Mediator 2.3.1 and Foundatio.Mediator 1.3.3. Immediate.Handlers has no corresponding notification case, so that row compares five libraries.
+## Results by workload
 
-## Time per operation
+We measured Release builds on Windows 11 x64 with .NET 10.0.14 and BenchmarkDotNet 0.15.8.
 
-The two runs are shown separately. Each peer column gives the fastest competing library in that run. “Immediate” means Immediate.Handlers. The [full results](results/0d53c53-representative-summary.csv) include the mean, 99.9% confidence interval and allocated bytes for every library in each run.
+| Workload | Zendiator 1.0.1 | Immediate.Handlers 4.3.0 | MediatR 15.0.0 | Mediator 3.0.2 | DispatchR.Mediator 2.3.1 | Foundatio.Mediator 1.3.3 |
+|---|---:|---:|---:|---:|---:|---:|
+| Send, 0 stages | 1.84 ns / 0 B | 11.20 ns / 0 B | 57.30 ns / 200 B | 58.15 ns / 64 B | 39.16 ns / 0 B | 40.85 ns / 0 B |
+| Send, 5 stages | 8.29 ns / 0 B | 23.26 ns / 0 B | 201.46 ns / 1,016 B | 129.84 ns / 544 B | 47.19 ns / 0 B | 209.79 ns / 0 B |
+| Resolve again in the same scope and send, 0 stages | 32.23 ns / 0 B | 49.77 ns / 0 B | 80.44 ns / 200 B | 97.64 ns / 64 B | 70.73 ns / 0 B | 82.08 ns / 0 B |
+| Resolve again in the same scope and send, 5 stages | 41.24 ns / 0 B | 56.67 ns / 0 B | 196.21 ns / 1,016 B | 146.43 ns / 544 B | 80.05 ns / 0 B | 224.51 ns / 0 B |
+| Create a scope, send once and dispose, 5 stages | 126.58 ns / 560 B | 152.24 ns / 568 B | 260.63 ns / 1,400 B | 219.39 ns / 920 B | 652.91 ns / 1,712 B | 384.20 ns / 856 B |
+| Notify 16 synchronous subscribers | 144.53 ns / 0 B | N/A | 1,207.51 ns / 4,784 B | 229.39 ns / 0 B | 209.52 ns / 0 B | 1,005.43 ns / 0 B |
+| Stream, all 1,024 items, 5 stages, sync | 15.013 µs / 928 B | 107.542 µs / 1,104 B | 214.211 µs / 3,592.5 B | 108.836 µs / 1,688.5 B | 106.151 µs / 1,104.5 B | 127.107 µs / 1,808 B |
+| Stream, all 1,024 items, 5 stages, async | 166.127 µs / 1,586 B | 313.403 µs / 1,755 B | 613.929 µs / 4,726 B | 320.580 µs / 2,339.5 B | 314.207 µs / 1,756 B | 353.049 µs / 2,539 B |
+| Stream, 1 of 16 items, 5 stages, sync | 306.31 ns / 928 B | 347.98 ns / 1,104 B | 977.11 ns / 3,592 B | 450.96 ns / 1,688 B | 377.69 ns / 1,104 B | 744.31 ns / 1,808 B |
+| Stream, 1 of 16 items, 5 stages, async | 2.105 µs / 1,256 B | 2.436 µs / 1,752 B | 4.843 µs / 4,720 B | 2.735 µs / 2,336 B | 2.426 µs / 1,752 B | 3.022 µs / 2,536 B |
+| Short-circuit at first of 3 stages, warm | 5.64 ns / 0 B | 6.48 ns / 0 B | 116.34 ns / 704 B | 75.54 ns / 496 B | 41.13 ns / 0 B | 77.22 ns / 384 B |
+| Async hooks, successful first call | 1.023 µs / 448 B | 1.711 µs / 504 B | 1.560 µs / 1,352 B | 1.349 µs / 808 B | 1.338 µs / 560 B | 2.154 µs / 856 B |
+| Async hooks, successful warm call | 41.48 ns / 0 B | 61.46 ns / 0 B | 780.85 ns / 944 B | 612.56 ns / 2,900.5 B | 82.21 ns / 0 B | 600.23 ns / 480 B |
+| Async hooks, outer hook fails on first call | 5.492 µs / 1,712 B | 10.858 µs / 3,808 B | 10.142 µs / 3,416 B | 9.032 µs / 3,216 B | 8.069 µs / 2,968 B | 13.138 µs / 4,872 B |
 
-| Workload | Unit | Zendiator, forward | Fastest peer, forward | Zendiator, reverse | Fastest peer, reverse |
-|---|---|---:|---|---:|---|
-| Send, no middleware | ns | 1.645 | Immediate 11.82 | 1.739 | Immediate 11.41 |
-| Send, five synchronous Before hooks | ns | 6.708 | Immediate 20.95 | 6.397 | Immediate 20.25 |
-| Resolve again in the same scope and send, no middleware | ns | 36.69 | Immediate 47.57 | 35.25 | Immediate 44.22 |
-| Resolve again in the same scope and send, five stages | ns | 36.98 | Immediate 58.94 | 35.57 | Immediate 59.94 |
-| Create a scope, send once and dispose, five stages | ns | 126.38 | Immediate 173.62 | 135.44 | Immediate 159.43 |
-| Publish to 16 synchronous subscribers | ns | 140.12 | Mediator 229.14 | 145.94 | DispatchR 204.91 |
-| Read all 1,024 items, synchronous input, five stages | µs | 15.22 | Immediate 110.91 | 15.12 | Mediator 110.22 |
-| Read all 1,024 items, asynchronous input, five stages | µs | 201.29 | DispatchR 317.36 | 192.90 | DispatchR 323.66 |
-| Read one item and dispose, synchronous input, five stages | ns | 317.31 | Immediate 385.47 | 296.50 | DispatchR 379.99 |
-| Read one item and dispose, asynchronous input, five stages | µs | 2.260 | Immediate 2.508 | 2.048 | Immediate 2.283 |
-| First of three middleware stages returns early, warm | ns | 4.830 | Immediate 6.008 | 4.635 | Immediate 5.444 |
-| Async hooks, successful first call | µs | 1.023 | DispatchR 1.335 | 0.995 | DispatchR 1.231 |
-| Async hooks, successful warm call | ns | 37.93 | Immediate 58.05 | 36.08 | Immediate 57.34 |
-| Async hooks, outer hook fails on first call | µs | 4.422 | Mediator 7.776 | 4.578 | DispatchR 7.846 |
-
-In 13 workloads, Zendiator’s upper confidence bound was below the lower bound of every competing library in both orders. For asynchronous stream early exit, the intervals overlapped in both runs. Time and allocation also tell different stories. For full asynchronous enumeration in the forward run, Zendiator averaged 201.29 µs and allocated 116,322 B per operation. DispatchR averaged 317.36 µs and allocated 1,756 B.
+[Results and 99.9% confidence intervals by execution order (CSV)](results/f2973af-representative-summary.csv) · [1.0.0 control run (CSV)](results/8140637-allocation-baseline.csv)
 
 ## What the workloads include
 
 All workloads register services and build the DI provider before timing begins. The five-stage Send workload uses five synchronous Before hooks in Zendiator. Each returns the original request. Send uses an already resolved mediator unless the row includes scope creation or resolution. In the short-circuit case the first middleware returns before the handler runs. The async hook APIs complete synchronously in these workloads. The first-call hook measurements include resolving the mediator in an existing scope.
 
-Full stream enumeration reads 1,024 items. Early exit reads the first of 16 items and includes disposal. Zendiator uses a named cursor, which the five middleware stages forward. Competitors use compiler-generated iterators that enumerate and yield items at each stage. The timings include the cost of those different input implementations.
+Full stream enumeration reads 1,024 items. Early exit reads the first of 16 items and includes disposal. Zendiator uses a named cursor, which the five middleware stages forward. Competitors use compiler-generated iterators that enumerate and yield items at each stage. The timings include the cost of those different input implementations. Every asynchronous input executes one `Task.Yield()` per item. The Zendiator cursor in this run marks its asynchronous helper with `[GeneratePooledProducer]`, available since 1.0.0. [Producer example](../docs/pooled-producer.md)
 
 ## Run the comparison
 
@@ -46,4 +44,4 @@ python $driver --group custom --matrix $matrix --expect-sdk 10.0.404 --output ..
 python $driver --group custom --matrix $matrix --expect-sdk 10.0.404 --output ../zendiator-reverse --reverse
 ```
 
-These commands measure the version you have checked out. The CSV records the two runs of revision `0d53c53`.
+These commands measure the checked-out code. The 1.0.1 benchmarks used the runtime and source generator included in the release, before the package version was updated. [Source used for the benchmarks](https://github.com/Htkym/zendiator/commit/f2973af7aba8726147a7481961f69f424cae3a78) · [1.0.1 results](results/f2973af-representative-summary.csv) · [1.0.0 prerelease results](results/0d53c53-representative-summary.csv)

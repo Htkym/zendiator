@@ -41,16 +41,23 @@ public sealed partial class GeneratorTests
                 public sealed class A;public sealed class B;public sealed class C;
                 public sealed class D;public sealed class E;public sealed class F;
                 public sealed record Ping<T>(int Value):ISyncRequest<int>;
-                [Handler]public sealed class Handler<T>:ISyncRequestHandler<Ping<T>,int>,IDisposable {
+                public sealed record Closed<T>(int Value):ISyncRequest<int>;
+                [Handler]public class Handler<T>:ISyncRequestHandler<Ping<T>,int>,ISyncRequestHandler<Closed<T>,int>,IDisposable {
                     private readonly Probe probe;
                     public Handler(Probe probe){this.probe=probe;probe.Construct(this);}
                     public int Handle(Ping<T> request,CancellationToken token)=>probe.Hit(this,request.Value);
+                    public int Handle(Closed<T> request,CancellationToken token)=>probe.Hit(this,request.Value);
                     public void Dispose()=>probe.Release(this);
                 }
+                public sealed class Derived<T>(Probe probe):Handler<T>(probe);
                 [ZendiatorComposition("generic-cache")]public sealed class Composition;
                 public static class Bridge {
-                    public static IServiceCollection Register(IServiceCollection services)=>services.AddZendiator<Composition>(c=>
-                        c.Handlers(typeof(Ping<>),DispatchFamily.SendSync,typeof(Handler<>)));
+                    public static IServiceCollection Register(IServiceCollection services)=>services.AddZendiator<Composition>(c=>{
+                        c.Handlers(typeof(Ping<>),DispatchFamily.SendSync,typeof(Handler<>));
+                        c.Handlers<Closed<int>>(DispatchFamily.SendSync,typeof(Handler<int>));
+                        c.Handlers<Closed<bool>>(DispatchFamily.SendSync,typeof(Handler<bool>));
+                        c.Handlers<Closed<long>>(DispatchFamily.SendSync,typeof(Handler<long>));
+                    });
                     public static object Create(IServiceProvider services)=>new global::GenericCache.Generated.Composition.Zendiator(services);
                     public static int Dispatch(object mediator,int key,int value){
                         var entry=(global::GenericCache.Generated.Composition.IZendiator)mediator;
@@ -58,6 +65,8 @@ public sealed partial class GeneratorTests
                             0=>entry.Send(new Ping<A>(value)),1=>entry.Send(new Ping<B>(value)),
                             2=>entry.Send(new Ping<C>(value)),3=>entry.Send(new Ping<D>(value)),
                             4=>entry.Send(new Ping<E>(value)),5=>entry.Send(new Ping<F>(value)),
+                            6=>entry.Send(new Closed<int>(value)),7=>entry.Send(new Closed<bool>(value)),
+                            8=>entry.Send(new Ping<int>(value)),
                             _=>throw new ArgumentOutOfRangeException(nameof(key))
                         };
                     }
@@ -151,6 +160,86 @@ public sealed partial class GeneratorTests
                 GC.KeepAlive(mediator);
             }
         }
+    }
+
+    [Fact]
+    public void Mixed_closed_and_open_routes_keep_the_reentrant_winner_for_the_same_service_type()
+    {
+        var fixture = GenericCache.Value;
+        var probe = new MultiLifetimeProbe();
+        IServiceCollection services = new ServiceCollection();
+        services.AddSingleton(probe);
+        fixture.Register.Invoke(null, [services]);
+        var secondType = fixture.Handlers[0].GetGenericTypeDefinition().MakeGenericType(typeof(bool));
+        var invalidSecondary = true;
+        services.AddTransient(secondType, p => invalidSecondary ? new object() : ActivatorUtilities.CreateInstance(p, secondType));
+        using var provider = services.BuildServiceProvider();
+        using (var scope = provider.CreateScope())
+        {
+            var tracked = new GenericCacheLookupProvider(scope.ServiceProvider);
+            var mediator = fixture.Create(tracked);
+            tracked.AfterResolution = (_, _) =>
+            {
+                tracked.AfterResolution = null;
+                Assert.Throws<InvalidCastException>(() => fixture.Dispatch(mediator, 7, -1));
+                invalidSecondary = false;
+                Assert.Equal(20, fixture.Dispatch(mediator, 7, 20));
+                Assert.Equal(30, fixture.Dispatch(mediator, 6, 30));
+            };
+            Assert.Equal(10, fixture.Dispatch(mediator, 6, 10));
+            var first = probe.Calls[1];
+            var second = probe.Calls[0];
+            Assert.Same(first, probe.Calls[2]);
+            for (var i = 0; i < fixture.Handlers.Length; i++)
+                Assert.Equal(i, fixture.Dispatch(mediator, i, i));
+            Assert.Equal(40, fixture.Dispatch(mediator, 8, 40));
+            Assert.Same(first, probe.Calls[^1]);
+            Assert.Same(first, ((IServiceProvider)mediator).GetService(first.GetType()));
+            Assert.Same(second, ((IServiceProvider)mediator).GetService(second.GetType()));
+            Assert.Equal(2, tracked.Lookups[first.GetType()]);
+            Assert.Equal(2, tracked.Lookups[second.GetType()]);
+        }
+        Assert.Equal(probe.Created.Count, probe.Released.Count);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Inline_closed_service_keeps_the_first_published_value_for_its_registered_type(bool derivedFirst)
+    {
+        var fixture = GenericCache.Value;
+        var probe = new MultiLifetimeProbe();
+        IServiceCollection services = new ServiceCollection();
+        services.AddSingleton(probe);
+        fixture.Register.Invoke(null, [services]);
+        var registered = fixture.Handlers[0].GetGenericTypeDefinition().MakeGenericType(typeof(int));
+        var derived = registered.Assembly.GetType("GenericCache.Derived`1")!.MakeGenericType(typeof(int));
+        var useDerived = derivedFirst;
+        services.AddTransient(registered, provider =>
+        {
+            var implementation = useDerived ? derived : registered;
+            useDerived = !useDerived;
+            return ActivatorUtilities.CreateInstance(provider, implementation);
+        });
+        using var provider = services.BuildServiceProvider();
+        using (var scope = provider.CreateScope())
+        {
+            var tracked = new GenericCacheLookupProvider(scope.ServiceProvider);
+            var mediator = fixture.Create(tracked);
+            tracked.AfterResolution = (_, _) =>
+            {
+                tracked.AfterResolution = null;
+                Assert.Equal(1, fixture.Dispatch(mediator, 6, 1));
+            };
+            Assert.Equal(2, fixture.Dispatch(mediator, 6, 2));
+            Assert.Equal(3, fixture.Dispatch(mediator, 8, 3));
+            var winner = probe.Calls[0];
+            Assert.Equal(derivedFirst ? registered : derived, winner.GetType());
+            Assert.All(probe.Calls, receiver => Assert.Same(winner, receiver));
+            Assert.Same(winner, ((IServiceProvider)mediator).GetService(registered));
+            Assert.Equal(2, tracked.Lookups[registered]);
+        }
+        Assert.Equal(2, probe.Released.Count);
     }
 
     [Fact]
