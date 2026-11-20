@@ -158,6 +158,7 @@ public sealed class StreamCursorProtocolTests
         Assert.Throws<InvalidOperationException>(() => { _ = cursor.MoveNextAsync(); });
         Assert.Throws<InvalidOperationException>(() => cursor.Current);
         Assert.True(cursor.Claim(enumeration.Token));
+        Assert.Equal(default, cursor.CancellationToken);
         Assert.False(cursor.Claim(other.Token));
         Assert.True(await cursor.MoveNextAsync());
         other.Cancel();

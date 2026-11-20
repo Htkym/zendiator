@@ -45,12 +45,12 @@ internal static class CanonicalRouteServiceEmitter
         var ns = root.Members.OfType<NamespaceDeclarationSyntax>().Single();
         var mediator = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "Zendiator");
         var registrar = ns.Members.OfType<ClassDeclarationSyntax>().Single(c => c.Identifier.ValueText == "ZendiatorGeneratedRegistrar");
-        var fragment = Fragment(root, ns, mediator, registrar, file.BoxedDependencies, file.LazyClosedServiceCache);
+        var fragment = Fragment(root, ns, mediator, registrar, file.BoxedDependencies, file.ClosedCache);
         var b = CanonicalSplitSourceEmitter.Header(fragment.Externs);
         b.Append("namespace ").Append(fragment.Namespace).AppendLine(" {");
         foreach (var member in ns.Members.Where(m => m != mediator && m != registrar))
             b.AppendLine(member.ToFullString());
-        CanonicalSplitSourceEmitter.Mediator(b, fragment.Dependencies, fragment.LazyClosedServiceCache, Route(ns, mediator));
+        CanonicalSplitSourceEmitter.Mediator(b, fragment.Dependencies, fragment.ClosedCache, Route(ns, mediator));
         b.AppendLine(fragment.Registrar).AppendLine("}");
         return CanonicalSplitSourceEmitter.File(file.HintName, b.ToString(), root, ns, mediator, fragment);
     }
@@ -147,7 +147,7 @@ internal static class CanonicalRouteServiceEmitter
     }
 
     internal static CanonicalCompositionFragment Fragment(CompilationUnitSyntax root, NamespaceDeclarationSyntax ns,
-        ClassDeclarationSyntax mediator, ClassDeclarationSyntax registrar, EquatableArray<string> boxedDependencies, bool lazyClosedServiceCache, EquatableArray<string> eagerDependencies = default)
+        ClassDeclarationSyntax mediator, ClassDeclarationSyntax registrar, EquatableArray<string> boxedDependencies, ClosedCacheLayout closedCache, EquatableArray<string> eagerDependencies = default)
     {
         var eager = new HashSet<string>(eagerDependencies.Select(type => TypeKey(SyntaxFactory.ParseTypeName(type))), StringComparer.Ordinal);
         var direct = new HashSet<string>(StringComparer.Ordinal);
@@ -168,10 +168,10 @@ internal static class CanonicalRouteServiceEmitter
         carried.ExceptWith(eager);
         var dependencies = Dependencies(ns).Where(type => !carried.Contains(TypeKey(type))).ToArray();
         return new(ns.Name.ToString(), registrar.ToFullString(), new(root.Externs.Select(e => e.WithLeadingTrivia().WithTrailingTrivia().ToString())),
-            new(dependencies.Select(type => new CanonicalServiceDependency(TypeKey(type), !Closed(type), boxed.Contains(TypeKey(type))))), lazyClosedServiceCache, eagerDependencies);
+            new(dependencies.Select(type => new CanonicalServiceDependency(TypeKey(type), !Closed(type), boxed.Contains(TypeKey(type))))), closedCache, eagerDependencies);
     }
 
-    internal static string Services(IEnumerable<CanonicalServiceDependency> dependencies, bool lazyClosedServiceCache, EquatableArray<string> eagerDependencies = default)
+    internal static string Services(IEnumerable<CanonicalServiceDependency> dependencies, ClosedCacheLayout closedCache, EquatableArray<string> eagerDependencies = default)
     {
         var values = dependencies.ToArray();
         var closed = values.Where(type => !type.Open).ToArray();
@@ -190,7 +190,10 @@ internal static class CanonicalRouteServiceEmitter
         {
             b.AppendLine(CanonicalGenericServiceCacheEmitter.Members());
         }
-        CanonicalClosedServiceCacheEmitter.AppendMembers(b, closed, lazyClosedServiceCache);
+        if (closedCache == ClosedCacheLayout.Auto && open.Length != 0 && closed.Length > 2 && eagerDependencies.Count == 0)
+            CanonicalClosedServiceCacheEmitter.AppendSharedMembers(b, closed);
+        else
+            CanonicalClosedServiceCacheEmitter.AppendMembers(b, closed, closedCache == ClosedCacheLayout.LazyBlocks);
         if (eagerDependencies.Count != 0)
         {
             var selected = new HashSet<string>(eagerDependencies.Select(type => TypeKey(SyntaxFactory.ParseTypeName(type))), StringComparer.Ordinal);
@@ -201,7 +204,7 @@ internal static class CanonicalRouteServiceEmitter
                 var type = eager[i];
                 b.AppendLine("global::System.ArgumentNullException.ThrowIfNull(eager" + i + ");");
                 var block = System.Array.IndexOf(closed, type) / 16;
-                var slot = lazyClosedServiceCache ? "(_serviceBlock_" + block + " ??= new ServiceBlock_" + block + "())." : "";
+                var slot = closedCache == ClosedCacheLayout.LazyBlocks ? "(_serviceBlock_" + block + " ??= new ServiceBlock_" + block + "())." : "";
                 b.AppendLine(slot + "_service_" + CanonicalSplitSourceEmitter.Id(type.TypeName) + " = eager" + i + ";");
             }
             b.AppendLine("}");
@@ -212,7 +215,7 @@ internal static class CanonicalRouteServiceEmitter
         if (open.Length != 0)
             b.AppendLine($$"""
             if (serviceType.IsConstructedGenericType && ({{string.Join(" || ", open.Select(t => "serviceType.GetGenericTypeDefinition() == typeof(" + t.TypeName + ")"))}})) {
-                return GenericService(serviceType);
+                return GenericService<object>(serviceType);
             }
             """);
         b.AppendLine("return _services.GetService(serviceType); }");

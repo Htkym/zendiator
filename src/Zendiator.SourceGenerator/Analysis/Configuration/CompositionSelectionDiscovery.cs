@@ -55,7 +55,7 @@ internal static class CompositionSelectionDiscovery
             var useLocalHandlers = false;
             var hasExplicitSelection = false;
             var compilerOwned = false;
-            var lazyClosedServiceCache = false;
+            var closedCache = ClosedCacheLayout.Auto;
             var eagerDependencies = new List<string>();
             if (method.Arity == 1 && method.TypeArguments[0] is INamedTypeSymbol composition)
             {
@@ -105,10 +105,10 @@ internal static class CompositionSelectionDiscovery
                     {
                         if (argument.Value.Kind == TypedConstantKind.Error)
                             compilerOwned = true;
-                        else if (argument.Value.Value is int mode && mode is 0 or 1)
-                            lazyClosedServiceCache = mode == 1;
+                        else if (argument.Value.Value is int mode && mode is 0 or 1 or 2)
+                            closedCache = (ClosedCacheLayout)mode;
                         else
-                            errors.Add("ClosedServiceCache must be ClosedServiceCacheMode.Inline or ClosedServiceCacheMode.LazyBlocks.");
+                            errors.Add("ClosedServiceCache must be ClosedServiceCacheMode.Auto, ClosedServiceCacheMode.Inline or ClosedServiceCacheMode.LazyBlocks.");
                     }
                 }
             }
@@ -221,7 +221,7 @@ internal static class CompositionSelectionDiscovery
                 HasExplicitSelection = hasExplicitSelection,
                 ExplicitHandlerTypes = new(explicitHandlerNames),
                 CatalogMarkerTypes = new(catalogMarkerNames),
-                LazyClosedServiceCache = lazyClosedServiceCache,
+                ClosedCache = closedCache,
                 EagerDependencies = new(eagerDependencies),
                 ExternAliases = CanonicalSymbolName.Aliases(compilation)
             };

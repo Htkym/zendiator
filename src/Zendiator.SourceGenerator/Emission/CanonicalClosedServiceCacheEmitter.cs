@@ -7,6 +7,36 @@ internal static class CanonicalClosedServiceCacheEmitter
 {
     private const int BlockSize = 16;
 
+    internal static void AppendSharedMembers(StringBuilder b, CanonicalServiceDependency[] closed)
+    {
+        // Mixed compositions already have storage for arbitrary service types. Keep one closed receiver inline.
+        b.AppendLine("""
+            private global::System.Type? _firstClosedType;
+            private object? _firstClosedService;
+            private T? ClosedService<T>(global::System.Type type) where T : class {
+                var first = global::System.Threading.Volatile.Read(ref _firstClosedType)
+                    ?? global::System.Threading.Interlocked.CompareExchange(ref _firstClosedType, type, null) ?? type;
+                if (first != type) return GenericService<T>(type);
+                if (global::System.Threading.Volatile.Read(ref _firstClosedService) is T cached) return cached;
+                var resolved = (T?)_services.GetService(type);
+                return resolved is null ? null : (T)(global::System.Threading.Interlocked.CompareExchange(ref _firstClosedService, resolved, null) ?? resolved);
+            }
+            """);
+        foreach (var type in closed)
+        {
+            var id = Id(type);
+            var storage = Storage(type);
+            b.AppendLine($$"""
+                internal {{storage}} Required_{{id}}() =>
+                    global::System.Threading.Volatile.Read(ref _firstClosedType) == typeof({{type.TypeName}})
+                        && global::System.Threading.Volatile.Read(ref _firstClosedService) is {{storage}} cached ? cached : ResolveRequired_{{id}}();
+                private {{storage}} ResolveRequired_{{id}}() => Service_{{id}}()
+                    ?? throw new global::System.InvalidOperationException("No service for type '" + typeof({{type.TypeName}}) + "' has been registered.");
+                private {{storage}}? Service_{{id}}() => ClosedService<{{storage}}>(typeof({{type.TypeName}}));
+                """);
+        }
+    }
+
     internal static void AppendMembers(StringBuilder b, CanonicalServiceDependency[] closed, bool blocked)
     {
         if (blocked)

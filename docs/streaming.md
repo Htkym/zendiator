@@ -51,6 +51,8 @@ await foreach (var number in mediator.StreamAsync(new ReadNumbers(6), token))
 
 Use `IStreamHandler<TRequest, TItem>.Handle` to return an `IAsyncEnumerable<TItem>`. If your input already has a cursor with its own state, implement `IStreamSourceHandler<TRequest, TItem, TCursor>.OpenAsync`. The cursor can be a class or a struct. Select one input contract per request and provide a fresh cursor on each enumeration. DI may reuse the handler.
 
+If a custom cursor calls a `private async ValueTask<bool>` helper for each item, each call that suspends allocates a state machine. A partial cursor class can apply `[GeneratePooledProducer]` to a supported helper to reuse that state. Await each returned `ValueTask<bool>` once. [Supported methods and example](pooled-producer.md)
+
 Creating the enumerable does not open the input. The point at which the input opens depends on the route and the cancellation tokens.
 
 | Route | When the input opens | Who handles cleanup |

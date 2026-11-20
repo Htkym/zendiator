@@ -9,23 +9,23 @@ internal static class CanonicalGenericServiceCacheEmitter
             internal readonly object Value = value;
             internal readonly GenericServiceEntry? Next = next;
         }
-        private object? GenericService(global::System.Type serviceType) {
+        private T? GenericService<T>(global::System.Type serviceType) where T : class {
             var snapshot = global::System.Threading.Volatile.Read(ref _genericServices);
             if (snapshot is global::System.Collections.Concurrent.ConcurrentDictionary<global::System.Type, object> dictionary) {
-                if (dictionary.TryGetValue(serviceType, out var cached)) return cached;
+                if (dictionary.TryGetValue(serviceType, out var cached)) return (T)cached;
             } else {
                 for (var entry = (GenericServiceEntry?)snapshot; entry is not null; entry = entry.Next)
-                    if (entry.Key == serviceType) return entry.Value;
+                    if (entry.Key == serviceType) return (T)entry.Value;
             }
-            var resolved = _services.GetService(serviceType);
+            var resolved = (T?)_services.GetService(serviceType);
             if (resolved is null) return null;
             while (true) {
                 snapshot = global::System.Threading.Volatile.Read(ref _genericServices);
                 if (snapshot is global::System.Collections.Concurrent.ConcurrentDictionary<global::System.Type, object> slots)
-                    return slots.GetOrAdd(serviceType, resolved);
+                    return (T)slots.GetOrAdd(serviceType, resolved);
                 var count = 0;
                 for (var entry = (GenericServiceEntry?)snapshot; entry is not null; entry = entry.Next) {
-                    if (entry.Key == serviceType) return entry.Value;
+                    if (entry.Key == serviceType) return (T)entry.Value;
                     count++;
                 }
                 object updated;

@@ -51,6 +51,8 @@ await foreach (var number in mediator.StreamAsync(new ReadNumbers(6), token))
 
 `IAsyncEnumerable<TItem>` を返すハンドラーは `IStreamHandler<TRequest, TItem>.Handle` を実装します。入力元がすでに独自のカーソルを持つ場合は、`IStreamSourceHandler<TRequest, TItem, TCursor>.OpenAsync` が使えます。カーソルの型にはクラスと構造体の両方を使えます。リクエストごとにどちらかのインターフェイスを選び、列挙のたびに独立したカーソルを返してください。DI がハンドラーを再利用する場合も同じです。
 
+独自のカーソルが項目ごとに `private async ValueTask<bool>` メソッドで待機すると、呼び出すたびに状態機械が割り当てられます。カーソルを `partial` クラスにし、対象のメソッドに `[GeneratePooledProducer]` を付けると、待機に使う状態機械を再利用できます。返された `ValueTask<bool>` は1回だけ待機してください。[対応するメソッドと実装例](pooled-producer.md)
+
 `StreamAsync` を呼んだ時点では、入力を開きません。入力を開くタイミングは、登録した処理とキャンセルトークンによって決まります。
 
 | 条件 | 入力を開くタイミング | 後始末 |

@@ -125,7 +125,7 @@ public static class Work
 }
 
 // Native cursor for the new Zendiator protocol. Work.Stream above remains unchanged for peers.
-public sealed class WorkStreamCursor(int count, bool asynchronous, Probe? probe,
+public sealed partial class WorkStreamCursor(int count, bool asynchronous, Probe? probe,
     CancellationToken token) : IAsyncEnumerator<int>
 {
     private int _index;
@@ -171,6 +171,7 @@ public sealed class WorkStreamCursor(int count, bool asynchronous, Probe? probe,
         }
     }
 
+    [Zendiator.GeneratePooledProducer]
     private async ValueTask<bool> MovePendingAsync()
     {
         try

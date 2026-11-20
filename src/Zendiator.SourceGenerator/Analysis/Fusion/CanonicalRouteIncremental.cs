@@ -33,7 +33,7 @@ internal sealed record CanonicalRouteText(string Key, string Namespace, string R
     {
         get; init;
     }
-    public bool LazyClosedServiceCache
+    public ClosedCacheLayout ClosedCache
     {
         get; init;
     }
@@ -111,7 +111,7 @@ internal static class CanonicalRouteIncremental
             row.Route.Input.Route.Family, source)
         {
             StableKey = row.Route.Input.Composition.Identity + "|" + row.Route.Input.Route.Family + "|" + row.Route.Input.Route.Request,
-            LazyClosedServiceCache = row.Route.Input.Composition.LazyClosedServiceCache,
+            ClosedCache = row.Route.Input.Composition.ClosedCache,
             EagerDependencies = row.Route.Input.Composition.EagerDependencies,
             StreamCanonicalFile = row.StreamCanonical is { } canonical ? CanonicalStreamFallbackEmitter.Emit(canonical) : null
         };

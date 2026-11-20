@@ -7,5 +7,8 @@ public enum ClosedServiceCacheMode
     Inline = 0,
 
     /// <summary>Allocates groups of slots after their first successful native resolution.</summary>
-    LazyBlocks = 1
+    LazyBlocks = 1,
+
+    /// <summary>Shares the open-generic cache in mixed compositions when it saves space for closed dependencies.</summary>
+    Auto = 2
 }

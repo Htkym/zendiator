@@ -13,8 +13,8 @@ namespace Zendiator.Streaming;
 public abstract class StreamCursorState : IAsyncDisposable
 {
     private readonly CancellationToken _apiToken;
-    private CancellationToken _enumerationToken;
     private CancellationTokenSource? _linked;
+    // Holds the enumeration token until the first Move computes the effective token.
     private CancellationToken _token;
     // -1 reserves the first enumeration, -2 binds its token; 0/1/2 are ready/Move/Dispose.
     private int _busy;
@@ -40,7 +40,7 @@ public abstract class StreamCursorState : IAsyncDisposable
         if (reserveFirstEnumeration && claimInitialMove)
             throw new ArgumentException("A cursor cannot reserve an enumeration and claim a move at the same time.");
         _apiToken = apiToken;
-        _enumerationToken = enumerationToken;
+        _token = enumerationToken;
         _busy = claimInitialMove ? 1 : reserveFirstEnumeration ? -1 : 0;
     }
 
@@ -53,16 +53,16 @@ public abstract class StreamCursorState : IAsyncDisposable
         if (Interlocked.CompareExchange(ref _busy, -2, -1) != -1)
             return false;
 
-        _enumerationToken = enumerationToken;
+        _token = enumerationToken;
         Volatile.Write(ref _busy, 0);
         return true;
     }
 
     /// <summary>The effective token, initialized by the first successful call to TryStart.</summary>
-    protected CancellationToken Token => _token;
+    protected CancellationToken Token => Volatile.Read(ref _started) ? _token : default;
 
     /// <summary>The effective API and enumeration token after initialization begins.</summary>
-    public CancellationToken CancellationToken => _token;
+    public CancellationToken CancellationToken => Token;
 
     /// <summary>Whether EOF, failure, or disposal has begun closing this owner.</summary>
     public bool IsClosed => Volatile.Read(ref _closed);
@@ -128,10 +128,13 @@ public abstract class StreamCursorState : IAsyncDisposable
         if (_started)
             return false;
 
-        _started = true;
-        _token = !_apiToken.CanBeCanceled ? _enumerationToken
-            : !_enumerationToken.CanBeCanceled || _apiToken == _enumerationToken ? _apiToken
-            : (_linked = CancellationTokenSource.CreateLinkedTokenSource(_apiToken, _enumerationToken)).Token;
+        var enumerationToken = _token;
+        // Observers may read Token while linking; cleanup must still run if linking fails.
+        _token = default;
+        Volatile.Write(ref _started, true);
+        _token = !_apiToken.CanBeCanceled ? enumerationToken
+            : !enumerationToken.CanBeCanceled || _apiToken == enumerationToken ? _apiToken
+            : (_linked = CancellationTokenSource.CreateLinkedTokenSource(_apiToken, enumerationToken)).Token;
         _token.ThrowIfCancellationRequested();
         return true;
     }
